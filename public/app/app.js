@@ -1,0 +1,32 @@
+/* RELAI app entry — wires routes to page modules. All pages are ES modules under /assets/. */
+import { registerRoutes, render } from './core/router.js';
+import { shell } from './shell.js';
+import { authPage } from './auth.js';
+import { homePage, projectsPage } from './project/list.js';
+import { projectFormPage } from './project/form.js';
+import { overviewPage } from './project/overview.js';
+import { phasePage } from './project/phase.js';
+import { reportPage } from './project/report.js';
+import { requirementsPage } from './requirements/page.js';
+import { wbsPage } from './wbs/page.js';
+import { changesPage } from './changes/page.js';
+import { raidPage } from './raid/page.js';
+import { testsPage } from './testing/page.js';
+import { settingsPage } from './settings.js';
+
+registerRoutes([
+  [/^\/app\/?$/, homePage],
+  [/^\/app\/projects\/?$/, projectsPage],
+  [/^\/app\/projects\/new\/?$/, projectFormPage],
+  [/^\/app\/projects\/([\w-]+)\/?$/, overviewPage],
+  [/^\/app\/projects\/([\w-]+)\/edit\/?$/, projectFormPage],
+  [/^\/app\/projects\/([\w-]+)\/phases\/([A-Z_]+)\/?$/, phasePage],
+  [/^\/app\/projects\/([\w-]+)\/reports\/([\w-]+)\/?$/, reportPage],
+  [/^\/app\/projects\/([\w-]+)\/requirements\/?$/, requirementsPage],
+  [/^\/app\/projects\/([\w-]+)\/wbs\/?$/, wbsPage],
+  [/^\/app\/projects\/([\w-]+)\/changes\/?$/, changesPage],
+  [/^\/app\/projects\/([\w-]+)\/issues\/?$/, raidPage],
+  [/^\/app\/projects\/([\w-]+)\/tests\/?$/, testsPage],
+  [/^\/app\/settings\/?$/, settingsPage],
+], { shell, auth: authPage });
+render();
