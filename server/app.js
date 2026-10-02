@@ -24,6 +24,8 @@ import { requireAction, requireOwner, listMembers, addMember, changeRole, remove
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
+import { mountIntegrationRoutes } from './integrations/routes.js';
+import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
 
@@ -246,7 +248,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const stats = (await M.projectStats(db, project));
     const def = (await D.loadDefinition(db, project));
     return { project: { ...project, progress: guide.progress }, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
-      definition: { progress: def.progress, needs_review: def.needs_review, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) } };
+      definition: { progress: def.progress, needs_review: def.needs_review, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
+      jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
   };
 
   app.get(`${base}/:pid`, guard, wrap(async (req, res) => {
@@ -407,7 +410,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const project = (await loadProject(req, res));
     if (!project) return;
     const r = (await loadReq(req, res, project));
-    if (r) res.json({ requirement: r });
+    if (r) res.json({ requirement: { ...r, jira: (await executionForRequirement(db, project.id, r.id)) } });   // read-only trace via WBS (no requirement↔Jira table)
   }));
 
   app.patch(`${rbase}/:rid`, guard, wrap(async (req, res) => {
@@ -465,7 +468,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- WBS ---------- */
   const wbase = `${base}/:pid/wbs`;
-  const wbsResponse = async (project) => ({ ...(await W.loadTree(db, project)), summary: (await W.wbsStats(db, project.id)) });
+  const wbsResponse = async (project) => ({ ...(await W.loadTree(db, project)), summary: (await W.wbsStats(db, project.id)), jira: (await wbsExecutionMap(db, project.id)) });   // jira: null unless the project is mapped (Phase 12)
   const loadWbs = async (req, res, project) => {
     const w = (await W.getWbs(db, project, req.params.wid2 || req.params.iid));
     if (!w) fail(res, 404, 'not_found', 'WBS 항목을 찾을 수 없습니다.');
@@ -501,7 +504,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const project = (await loadProject(req, res));
     if (!project) return;
     const w = (await loadWbs(req, res, project));
-    if (w) res.json({ item: w });
+    if (w) res.json({ item: { ...w, jira: (await executionForWbs(db, project.id, w.id)) } });
   }));
 
   app.patch(`${wbase}/:iid`, guard, wrap(async (req, res) => {
@@ -895,6 +898,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(`${base}/:pid/attention`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const items = (await M.attentionAll(db, project.id)); res.json({ items, total: items.length }); }));
   mountDashboardRoute({ app, db, guard, wrap, loadProject, base });
   mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base });   // Phase 11 AI (draft/candidate endpoints + approval commits)
+  mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base });   // Phase 12 integrations (Jira)
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };

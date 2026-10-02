@@ -7,6 +7,7 @@ import { neutralize } from './prompts.js';
 import { attentionAll, upcomingDates } from '../metrics.js';
 import { projectHealth } from '../health.js';
 import { REQ_TYPES } from '../requirements.js';
+import { jiraContextLines } from '../integrations/jira/sync.js';
 
 const clip = (s, n) => { const t = neutralize(String(s ?? '').replace(/\s+/g, ' ').trim()); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 const lines = (title, rows, fn, empty = '(없음)') => `## ${title}\n${rows.length ? rows.map(fn).join('\n') : empty}`;
@@ -94,6 +95,9 @@ export async function assistantContext(db, project, question) {
     const wbs = await wbsRows(db, project.id, { limit: 120 });
     parts.push(lines(`WBS (${wbs.length}건)`, wbs, wbsLine));
     keep('WBS', wbs.map((w) => ({ ...w, display_id: w.wbs_code })), (w) => `wbs?sel=${w.id}`);
+    // Jira execution (Phase 12): DB snapshots only — never a live Jira call for an AI request. WBS progress and Jira execution stay separate figures.
+    const jira = await jiraContextLines(db, project.id, 40);
+    if (jira && jira.summary.total) parts.push(`## Jira 실행 (${jira.project_key}, 스냅샷 기준)\n연결 Issue ${jira.summary.total}개 · Done ${jira.summary.done} · In Progress ${jira.summary.in_progress} · To Do ${jira.summary.todo} (Jira 실행률 ${jira.summary.rate}% — WBS 진행률과 별개 지표)\n${jira.lines.join('\n')}`);
   }
   if (always || intents.includes('scope') || intents.includes('change')) {
     const reqs = await requirementRows(db, project.id, { limit: 120 });

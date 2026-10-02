@@ -805,3 +805,145 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   name       TEXT NOT NULL,
   applied_at timestamptz NOT NULL DEFAULT now()
 );
+
+/* ---------- Integration foundation + Jira Cloud (Phase 12) ----------
+ * One connection per (workspace, provider). Tokens are AES-256-GCM encrypted (integrations/crypto.js) and never leave the
+ * server. Project mapping = 1 RELAI project ↔ 1 Jira project. Entity links reference wbs_items.id (stable), never wbs_code.
+ * A Jira issue can be linked to one WBS item at a time (partial unique index on live links). */
+CREATE TABLE IF NOT EXISTS integration_connections (
+  id                       TEXT PRIMARY KEY,
+  workspace_id             TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider                 TEXT NOT NULL CHECK (provider IN ('JIRA')),
+  status                   TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','ACTIVE','ERROR','DISABLED')),
+  external_account_id      TEXT,
+  external_account_name    TEXT,
+  cloud_id                 TEXT,
+  site_url                 TEXT,
+  auth_type                TEXT NOT NULL DEFAULT 'OAUTH2',
+  access_token_encrypted   TEXT,
+  refresh_token_encrypted  TEXT,
+  access_token_expires_at  timestamptz,
+  scopes                   TEXT NOT NULL DEFAULT '',
+  webhook_secret           TEXT,                            -- random path segment of this connection's webhook URL
+  last_error               TEXT,
+  connected_by             TEXT REFERENCES users(id),
+  connected_at             timestamptz,
+  last_synced_at           timestamptz,
+  disabled_at              timestamptz,
+  created_at               timestamptz NOT NULL DEFAULT now(),
+  updated_at               timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (workspace_id, provider)
+);
+CREATE TABLE IF NOT EXISTS integration_oauth_states (
+  state         TEXT PRIMARY KEY,
+  workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider      TEXT NOT NULL,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  redirect_uri  TEXT NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+CREATE TABLE IF NOT EXISTS integration_project_mappings (
+  id                      TEXT PRIMARY KEY,
+  connection_id           TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+  project_id              TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  external_project_id     TEXT NOT NULL,
+  external_project_key    TEXT NOT NULL,
+  external_project_name   TEXT NOT NULL DEFAULT '',
+  leaf_issue_type_id      TEXT,
+  leaf_issue_type_name    TEXT,
+  group_issue_type_id     TEXT,
+  group_issue_type_name   TEXT,
+  auto_complete_leaf_wbs  BOOLEAN NOT NULL DEFAULT false,
+  status                  TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REMOVED')),
+  removed_at              timestamptz,
+  created_by              TEXT REFERENCES users(id),
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  updated_at              timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ipm_project_active ON integration_project_mappings(project_id) WHERE status = 'ACTIVE';
+CREATE TABLE IF NOT EXISTS integration_entity_links (
+  id                    TEXT PRIMARY KEY,
+  connection_id         TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+  project_id            TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  wbs_item_id           TEXT NOT NULL REFERENCES wbs_items(id) ON DELETE CASCADE,   -- stable id; wbs_code is display-only
+  external_entity_type  TEXT NOT NULL DEFAULT 'ISSUE',
+  external_entity_id    TEXT NOT NULL,
+  external_key          TEXT NOT NULL,
+  link_role             TEXT NOT NULL CHECK (link_role IN ('EXECUTION','EPIC')),
+  status                TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','MISSING','ERROR','REMOVED')),
+  created_by            TEXT REFERENCES users(id),
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now(),
+  last_synced_at        timestamptz,
+  removed_at            timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_iel_external_live ON integration_entity_links(connection_id, external_entity_id) WHERE status <> 'REMOVED';
+CREATE INDEX IF NOT EXISTS idx_iel_wbs ON integration_entity_links(wbs_item_id, status);
+CREATE INDEX IF NOT EXISTS idx_iel_project ON integration_entity_links(project_id, status);
+CREATE TABLE IF NOT EXISTS integration_activity (
+  id          TEXT PRIMARY KEY,
+  seq         BIGSERIAL,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  provider    TEXT NOT NULL,
+  action      TEXT NOT NULL,          -- PROJECT_MAPPED | PROJECT_UNMAPPED | ISSUE_LINKED | ISSUE_UNLINKED | ISSUE_CREATED | AUTO_COMPLETED | SYNC_FAILED
+  summary     TEXT NOT NULL,
+  wbs_item_id TEXT,
+  actor_id    TEXT REFERENCES users(id),
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_iact_project ON integration_activity(project_id, created_at);
+/* v17: snapshots, idempotent event log, sync runs, webhook registrations */
+CREATE TABLE IF NOT EXISTS jira_issue_snapshots (
+  integration_link_id  TEXT PRIMARY KEY REFERENCES integration_entity_links(id) ON DELETE CASCADE,
+  external_key         TEXT NOT NULL,
+  summary              TEXT NOT NULL DEFAULT '',
+  issue_type           TEXT,
+  status_id            TEXT,
+  status_name          TEXT,
+  status_category      TEXT,           -- new | indeterminate | done (Jira statusCategory.key)
+  assignee_account_id  TEXT,
+  assignee_name        TEXT,
+  external_updated_at  timestamptz,
+  browser_url          TEXT,
+  synced_at            timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS integration_events (
+  id                 TEXT PRIMARY KEY,
+  connection_id      TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+  provider           TEXT NOT NULL,
+  external_event_id  TEXT,
+  event_type         TEXT NOT NULL,
+  payload_hash       TEXT NOT NULL,
+  status             TEXT NOT NULL DEFAULT 'RECEIVED' CHECK (status IN ('RECEIVED','PROCESSED','IGNORED','FAILED')),
+  error              TEXT,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  processed_at       timestamptz,
+  UNIQUE (connection_id, payload_hash)
+);
+CREATE TABLE IF NOT EXISTS integration_sync_runs (
+  id             TEXT PRIMARY KEY,
+  connection_id  TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+  project_id     TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  trigger        TEXT NOT NULL CHECK (trigger IN ('MANUAL','WEBHOOK','SCHEDULED')),
+  status         TEXT NOT NULL DEFAULT 'RUNNING' CHECK (status IN ('RUNNING','SUCCESS','PARTIAL','FAILED')),
+  items_total    INTEGER NOT NULL DEFAULT 0,
+  items_success  INTEGER NOT NULL DEFAULT 0,
+  items_failed   INTEGER NOT NULL DEFAULT 0,
+  started_at     timestamptz NOT NULL DEFAULT now(),
+  finished_at    timestamptz,
+  error_summary  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_isr_conn ON integration_sync_runs(connection_id, started_at);
+CREATE TABLE IF NOT EXISTS integration_webhooks (
+  id                   TEXT PRIMARY KEY,
+  connection_id        TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+  project_mapping_id   TEXT REFERENCES integration_project_mappings(id) ON DELETE CASCADE,
+  external_webhook_id  TEXT NOT NULL,
+  jql                  TEXT NOT NULL DEFAULT '',
+  events               TEXT NOT NULL DEFAULT '',
+  expires_at           timestamptz,
+  status               TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','EXPIRED','DELETED','ERROR')),
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  updated_at           timestamptz NOT NULL DEFAULT now()
+);

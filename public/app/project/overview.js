@@ -66,7 +66,7 @@ const executionPanel = (g, dash, p) => {
       <a class="exec__k" href="${u}/wbs?f=overdue" data-link><span>지연 작업</span><b class="${t.delayed ? 'is-crit' : ''}">${t.delayed || 0}</b></a>
       <a class="exec__k" href="${u}/wbs" data-link><span>진행 중 / 완료</span><b>${w.in_progress || 0} / ${w.completed || 0}</b></a>
       ${raw(ms ? html`<a class="exec__k" href="${u}/wbs?sel=${ms.id}" data-link><span>다음 마일스톤</span><b class="${ms.days_left < 0 ? 'is-crit' : ''}">${d}</b><small>${ms.title}</small></a>` : html`<span class="exec__k"><span>다음 마일스톤</span><b class="dim">-</b><small>등록된 마일스톤 없음</small></span>`)}
-    </div></section>`;
+    </div>${raw(g.jira ? html`<div class="exec__jira"><span class="exec__jl">Jira 실행 <small class="mono">${g.jira.project_key}</small></span>${raw(g.jira.total ? html`<b>${g.jira.total}개 연결</b><span>${g.jira.done} Done · ${g.jira.in_progress} In Progress · ${g.jira.todo} To Do</span><em title="연결된 Jira Issue 중 Done 비율 — WBS 진행률과 별개">실행률 ${g.jira.rate}%</em>${raw(g.jira.missing ? html`<span class="is-warn">찾을 수 없음 ${g.jira.missing}</span>` : '')}` : '<span class="dim">아직 연결된 Jira Issue가 없습니다. WBS 작업의 Jira 실행 탭에서 연결하세요.</span>')}${raw(g.jira.connection_status !== 'ACTIVE' ? '<span class="chip chip--fail">연결 확인 필요</span>' : '')}</div>` : '')}</section>`;
 };
 
 /** 확인 필요 + 7일 내 일정 (exceptions only). */

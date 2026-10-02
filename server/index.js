@@ -1,5 +1,6 @@
 import { openDb } from './db.js';
 import { createApp } from './app.js';
+import { startInProcessScheduler } from './integrations/scheduler.js';
 
 const port = Number(process.env.PORT || 3000);
 if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) { console.error('SESSION_SECRET is required in production'); process.exit(1); }
@@ -7,6 +8,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) { cons
 const db = await openDb();
 const app = createApp(db);
 const server = app.listen(port, () => console.log(`RELAI listening on http://localhost:${port} (${process.env.NODE_ENV || 'development'})`));
+startInProcessScheduler(db);   // only when INTEGRATION_SCHEDULER_INTERVAL_MIN > 0; external cron (scripts/integration-cron.js) is the recommended scheduler
 
 /* Graceful shutdown: stop accepting connections, let in-flight requests finish, then close the pool. */
 let shuttingDown = false;

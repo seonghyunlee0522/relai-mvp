@@ -27,6 +27,8 @@ export const migrations = [
     await db.run(`WITH RECURSIVE t AS (SELECT id, 0 AS d FROM wbs_items WHERE parent_id IS NULL UNION ALL SELECT w.id, t.d + 1 FROM wbs_items w JOIN t ON w.parent_id = t.id)
       UPDATE wbs_items w SET depth = t.d FROM t WHERE t.id = w.id AND w.depth <> t.d`);
   } },
+  { version: 16, name: 'integration foundation: connections, oauth states, project mappings, entity links, activity (Phase 12)', up() {} },
+  { version: 17, name: 'jira snapshots, integration events (idempotency), sync runs, webhook registrations (Phase 12)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

@@ -15,6 +15,7 @@ export const POLICY = {
   workspace_settings: ['OWNER', 'ADMIN'],  // rename etc.
   billing: ['OWNER'],                      // Phase 10: upgrade, payment method, cancel, resume, plan change
   workspace_delete: ['OWNER'],
+  integration_manage: ['OWNER', 'ADMIN'],   // Phase 12: connect / disconnect external integrations (Jira). MEMBERs still link/create issues inside mapped projects.
 };
 
 /** Express middleware factory. Must run after requireMember (needs req.role). 403 keeps the workspace visible (the caller IS a member). */

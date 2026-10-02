@@ -8,6 +8,7 @@ import { USAGE_SORTS, allWorkspacesUsage } from './usage.js';
 import { PLANS } from './plans.js';
 import { billingStatus, listSubscriptions, getSubscription, listPayments, getPayment } from './billing-admin.js';
 import { aiUsageOverview, workspaceAiUsage, grantCredits } from './ai/admin.js';
+import { adminIntegrations } from './integrations/routes.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -49,6 +50,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
   app.get('/api/admin/ai/usage', guard, wrap(async (req, res) => res.json(await aiUsageOverview(db))));
   app.get('/api/admin/workspaces/:id/ai', guard, wrap(async (req, res) => { const d = await workspaceAiUsage(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', 'Workspace를 찾을 수 없습니다.'); }));
   app.post('/api/admin/workspaces/:id/ai/credits', guard, action((req) => grantCredits(db, admin(req), req.params.id, req.body)));
+
+  /* Integrations (Phase 12): connection health + sync failures only; never credentials or issue content. */
+  app.get('/api/admin/integrations', guard, wrap(async (req, res) => res.json(await adminIntegrations(db))));
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 

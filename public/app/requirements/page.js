@@ -331,6 +331,7 @@ export async function requirementsPage(id) {
     const acc = r.acceptances && r.acceptances.length ? r.acceptances[0] : null;
     return traceStrip([
       { label: 'WBS', value: live.length, href: `${u}/wbs?requirement=${r.id}`, tone: live.length ? '' : r.scope === 'IN_SCOPE' ? 'warn' : 'muted' },
+      ...(r.jira && r.jira.total ? [{ label: 'Jira', value: `${r.jira.done}/${r.jira.total} Done`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
       { label: 'Changes', value: r.changes ? r.changes.length : 0, href: `${u}/changes?requirement=${r.id}`, tone: r.changes && r.changes.length ? '' : 'muted' },
       { label: 'Issues', value: issues, sub: risks ? `Risk ${risks}` : '', href: `${u}/issues?requirement=${r.id}`, tone: issues ? 'warn' : 'muted' },
       { label: 'Tests', value: t.total, sub: t.total ? `${t.pass} Pass · ${t.fail} Fail` : '', href: `${u}/tests?requirement=${r.id}`, tone: t.fail ? 'crit' : t.total && t.verification === 'VERIFIED' ? 'ok' : t.total ? '' : 'muted' },
@@ -343,7 +344,7 @@ export async function requirementsPage(id) {
     const byType = Object.keys(LINK_TYPE).map((t) => [t, live.filter((l) => l.link_type === t).length]).filter(([, n]) => n);
     return html`<h4 class="dh">관련 WBS <em>${live.length}</em>${raw(byType.length > 1 ? html`<small class="dim" style="font-weight:500;letter-spacing:0;text-transform:none">${byType.map(([t, n]) => `${LINK_TYPE[t]} ${n}`).join(' · ')}</small>` : '')}</h4>
       ${raw(live.length ? html`<ol class="crit links">${raw(live.map((l) => html`<li data-link="${l.id}">
-        <span class="mono wcode">${l.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${l.title}<small class="dim" style="margin-left:6px">${WBS_TYPE[l.item_type]}${l.owner_name ? ' · ' + l.owner_name : ''}</small></span>
+        <span class="mono wcode">${l.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${l.title}<small class="dim" style="margin-left:6px">${WBS_TYPE[l.item_type]}${l.owner_name ? ' · ' + l.owner_name : ''}</small>${raw((() => { const j = r.jira && r.jira.wbs ? r.jira.wbs.find((x) => x.id === l.wbs_item_id) : null; return j && j.jira ? html`<small class="jx-inline" title="Jira 실행 (Done / 연결)">Jira ${j.jira.done}/${j.jira.total}${j.jira.in_progress ? ` · 진행 ${j.jira.in_progress}` : ''}</small>` : ''; })())}</span>
         ${raw(readOnly ? html`<span class="chip chip--muted">${LINK_TYPE[l.link_type]}</span>` : html`<select class="select select--xs" data-link-type="${l.id}">${raw(Object.entries(LINK_TYPE).map(([v, lb]) => html`<option value="${v}" ${l.link_type === v ? 'selected' : ''}>${lb}</option>`).join(''))}</select>
         <span class="crit__act" style="opacity:1"><button data-link-del="${l.id}" title="연결 해제">×</button></span>`)}</li>`).join(''))}</ol>`
         : html`<div class="empty-inline"><b>아직 연결된 WBS가 없습니다.</b><span>이 요구사항을 구현하거나 검증하는 작업을 연결하세요.</span></div>`)}
