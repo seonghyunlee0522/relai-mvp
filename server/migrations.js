@@ -22,6 +22,7 @@ export const migrations = [
   { version: 11, name: 'comments + wbs_history (comments tab, activity feed)', up() {} },
   { version: 12, name: 'admin console: users.status/system_role/last_login_at, workspaces.status, admin_audit_logs', up() {} },
   { version: 13, name: 'AI productivity layer: ai_runs, workspace_credit_accounts, credit_ledger (Phase 11)', up() {} },
+  { version: 14, name: 'project_definitions (프로젝트 정의)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;
