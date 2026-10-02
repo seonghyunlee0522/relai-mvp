@@ -50,8 +50,8 @@ export function summarize(type, ev) {
   return SIMPLE[a] || '변경했습니다.';
 }
 
-async function recentChanges(db, pid) {
-  const lim = RECENT_LIMIT;
+async function recentChanges(db, pid, lim = RECENT_LIMIT) {
+  lim = Math.max(1, Math.min(200, Number(lim) || RECENT_LIMIT));
   const cols = `h.changed_at AS at, h.seq, u.name AS actor_name, h.action_type, h.field_name, h.old_value, h.new_value, e.id AS entity_id, e.title`;
   const order = `ORDER BY h.changed_at DESC, h.seq DESC LIMIT ${lim}`;
   // One history table per entity (FK column) …
@@ -130,4 +130,26 @@ export async function projectDashboard(db, project) {
     timeline: timeline(tree.items),
     issues,
   };
+}
+
+/**
+ * Project activity feed (GET …/:pid/activity): every history table + comments merged newest-first.
+ * Opened on demand from the workspace header — never rendered on a default screen.
+ */
+export async function projectActivity(db, pid, { limit = 80 } = {}) {
+  const lim = Math.max(1, Math.min(200, Number(limit) || 80));
+  const [events, comments] = await Promise.all([
+    recentChanges(db, pid, lim),
+    db.all(`SELECT c.id, c.entity_type, c.entity_id, c.body, c.created_at AS at, u.name AS actor_name,
+        CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT display_id FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT wbs_code FROM wbs_items w WHERE w.id = c.entity_id) END AS display_id,
+        CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT title FROM wbs_items w WHERE w.id = c.entity_id) END AS title
+      FROM comments c LEFT JOIN users u ON u.id = c.created_by WHERE c.project_id = ? ORDER BY c.created_at DESC, c.seq DESC LIMIT ${lim}`, [pid]),
+  ]);
+  const KIND = (e) => (e.entity_type === 'PHASE' ? 'PHASE' : /상태를/.test(e.summary) ? 'STATUS' : /담당자/.test(e.summary) ? 'OWNER' : /(시작일|종료일|마일스톤 날짜|기한|위치를 이동)/.test(e.summary) ? 'SCHEDULE' : 'DATA');
+  const items = [
+    ...events.map((e) => ({ ...e, kind: KIND(e) })),
+    ...comments.map((c) => ({ at: c.at, actor_name: c.actor_name, entity_type: c.entity_type, entity_id: c.entity_id, display_id: c.display_id, title: c.title,
+      summary: c.body.length > 140 ? c.body.slice(0, 140) + '…' : c.body, href: c.entity_type === 'REQUIREMENT' ? `requirements?sel=${c.entity_id}` : `wbs?sel=${c.entity_id}`, kind: 'COMMENT' })),
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, lim);
+  return { items };
 }

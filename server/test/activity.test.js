@@ -240,3 +240,25 @@ test('dashboard: counts, overdue, workload, milestones, timeline, issues, recent
   assert.ok(!(await X.c('GET', `${X.purl}/dashboard`)).json.recent_changes.some((e) => e.title === 'LAST'));
   server.close();
 });
+
+test('project activity feed: history + comments merged newest-first with kinds; limit clamp; tenant isolation', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client, 'pa@x.com', '소유자');
+  const X = await setup(client, 'px@x.com', '외부');
+  const req = await mkReq(A, { title: '활동 요구사항' });
+  await A.c('PATCH', `${A.req}/${req.id}`, { status: 'CONFIRMED' });
+  assert.equal((await A.c('POST', `${A.req}/${req.id}/comments`, { body: '활동 댓글' })).status, 201);
+  const r = await A.c('GET', `${A.purl}/activity`);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const items = r.json.items;
+  assert.ok(items.length >= 3);
+  for (let i = 1; i < items.length; i++) assert.ok(items[i - 1].at >= items[i].at, 'newest first');
+  const c = items.find((i) => i.kind === 'COMMENT');
+  assert.equal(c.summary, '활동 댓글'); assert.equal(c.display_id, req.display_id); assert.equal(c.href, `requirements?sel=${req.id}`);
+  assert.ok(items.some((i) => i.kind === 'STATUS' && i.entity_id === req.id));
+  assert.equal((await A.c('GET', `${A.purl}/activity?limit=1`)).json.items.length, 1);
+  assert.ok((await A.c('GET', `${A.purl}/activity?limit=99999`)).json.items.length <= 200);
+  assert.ok(!(await X.c('GET', `${X.purl}/activity`)).json.items.some((i) => i.title === '활동 요구사항'));
+  assert.equal((await X.c('GET', `${A.purl}/activity`)).status, 404);
+  server.close();
+});

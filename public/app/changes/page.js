@@ -7,6 +7,7 @@ import { statusChip, prText } from '../shared/badges.js';
 import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
+import { bindDtabs, dtabs } from '../shared/detail.js';
 
 export async function changesPage(id) {
   const main = $('#main');
@@ -23,7 +24,7 @@ export async function changesPage(id) {
     { key: 'schedule', label: '일정 영향', format: () => '있음' }, { key: 'cost', label: '비용 영향', format: () => '있음' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
-  let rows = []; let summary = g.changes; let requesters = []; let sel = null; let creating = params().get('new') === '1';
+  let rows = []; let summary = g.changes; let requesters = []; let sel = null; let creating = params().get('new') === '1'; let dtab = 'info';
   let reqOptions = null; // lazily loaded requirement list for the filter + picker
   const load = async () => { const d = await api('GET', cApi(listQuery())); rows = d.changes; summary = d.summary; requesters = d.requesters; g.changes = summary; };
   const loadSel = async (cid) => { sel = cid ? (await api('GET', cApi(`/${cid}`))).change : null; setParam('sel', cid); };
@@ -36,7 +37,7 @@ export async function changesPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'changes' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : '')}
-      <div class="summary summary--4">
+      <div class="summary summary--inline" style="margin-bottom:8px">
         <div><b>${summary.total}</b><span>전체 변경 요청</span></div>
         <div class="${summary.under_review ? 'is-warn' : ''}"><b>${summary.under_review}</b><span>검토 중</span></div>
         <div class="${summary.approved_unimplemented ? 'is-warn' : ''}"><b>${summary.approved_unimplemented}</b><span>승인 후 미반영</span></div>
@@ -136,7 +137,8 @@ export async function changesPage(id) {
       }
     };
     return html`${raw(drawerHead(c.display_id, statusChip(CR_STATUS, CR_STATUS_CHIP, st), { archived: Boolean(c.archived_at) }))}
-    <div class="drawer__b">
+    ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: '영향 범위', count: liveReq.length + liveImp.length }, { key: 'hist', label: '변경 이력', count: c.history.length }], dtab))}
+    <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       <input class="dtitle" data-field="title" value="${c.title}" maxlength="200" ${fieldsRo ? 'disabled' : ''} aria-label="제목">
       ${raw(decision())}
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${fieldsRo ? 'disabled' : ''}>${c.description}</textarea>
@@ -157,6 +159,8 @@ export async function changesPage(id) {
         <div class="dfield"><span>비용 영향 (₩)</span><div><input class="input input--sm" type="number" min="0" step="1000" data-field="cost_impact" value="${c.cost_impact ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
       </div>
 
+      </section>
+      <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>
       <h4 class="dh">관련 요구사항 <em>${liveReq.length}</em></h4>
       ${raw(liveReq.length ? html`<ol class="crit links">${raw(liveReq.map((x) => html`<li>
         <span class="mono">${x.display_id}</span><span class="crit__in" style="padding:6px 4px">${x.title}<small class="dim" style="margin-left:6px">${REQ_SCOPE[x.scope]} · ${REQ_STATUS[x.status]}</small></span>
@@ -176,9 +180,8 @@ export async function changesPage(id) {
         : (c.wbs_candidates.length && !ro ? '' : html`<div class="empty-inline"><b>영향 WBS가 없습니다.</b><span>${liveReq.length ? '연결된 요구사항에 WBS가 연결되어 있지 않습니다. 영향받는 WBS를 직접 추가하세요.' : '요구사항을 먼저 연결하면 관련 WBS 후보를 보여드립니다.'}</span></div>`))}
       ${raw(archImp ? html`<p class="hint">보관된 WBS ${archImp}건 영향은 기록으로만 남아 있습니다.</p>` : '')}
       ${raw(ro ? '' : html`<div class="actions" style="margin-top:8px"><button class="btn btn--secondary btn--sm" id="imp-add">+ WBS 직접 추가</button></div>`)}
-
-      <h4 class="dh">변경 이력</h4>
-      <ol class="hist">${raw(c.history.map((h) => html`<li><time>${fmtShort(h.changed_at)}</time><span>${raw(histText(h))}</span></li>`).join(''))}</ol>
+      </section>
+      <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(c.history.length ? html`<ol class="hist">${raw(c.history.map((h) => html`<li><time>${fmtShort(h.changed_at)}</time><span>${raw(histText(h))}</span></li>`).join(''))}</ol>` : '<p class="hint">변경 이력이 없습니다.</p>')}</section>
     </div>
     ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(c.created_at)} · ${c.created_by_name || ''}`, label: '변경 요청 보관', id: 'carchive' }))}`;
   };
@@ -200,7 +203,7 @@ export async function changesPage(id) {
     const ar = $('#arch'); if (ar) ar.onchange = async () => { setParam('archived', ar.checked ? '1' : ''); await load(); draw(); };
     bindFilterClears(main, { setParam, keys: ['q', ...filterKeys, 'archived'], reload: async () => { await load(); draw(); } });
     for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; setParam('sel', ''); setParam('new', '1'); draw(); $('#c-title').focus(); }; }
-    main.querySelectorAll('[data-row]').forEach((tr) => tr.onclick = async () => { creating = false; setParam('new', ''); await loadSel(tr.dataset.row); draw(); });
+    main.querySelectorAll('[data-row]').forEach((tr) => tr.onclick = async () => { creating = false; dtab = 'info'; setParam('new', ''); await loadSel(tr.dataset.row); draw(); });
     const close = () => { creating = false; sel = null; setParam('sel', ''); setParam('new', ''); draw(); };
     for (const idc of ['dclose', 'dcancel']) { const b = $('#' + idc); if (b) b.onclick = close; }
     bindEscape(() => { if (sel || creating) close(); });
@@ -225,6 +228,7 @@ export async function changesPage(id) {
 
   const bindDetail = () => {
     const c = sel; const status = $('#dsave');
+    bindDtabs(main.querySelector('.drawer'), (k) => { dtab = k; });
     const apply = async (d) => { sel = d.change; summary = d.summary; g.changes = summary; await load(); draw(); };
     const save = async (field, value) => {
       status.textContent = '저장 중…';

@@ -161,9 +161,9 @@ export async function requirementsPage(id) {
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>
         ${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}
       </div>
-      <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
+      <div class="rrow2"><div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
+      ${raw(archived || rview() === 'trace' ? '' : html`<form class="qa" id="qa"><input class="input input--sm" id="qa-t" maxlength="200" placeholder="제목 입력 후 Enter — 요구사항 연속 추가" title="상세 항목은 목록에서 바로 수정하거나 행을 클릭해 입력하세요" autocomplete="off"></form>`)}</div>
       ${raw(appliedFilters(q, FILTER_DEFS))}
-      ${raw(archived || rview() === 'trace' ? '' : html`<form class="qa" id="qa"><input class="input input--sm" id="qa-t" maxlength="200" placeholder="제목을 입력하고 Enter — 요구사항을 연속으로 빠르게 추가" autocomplete="off"><span class="qa__h">상세 항목은 목록에서 바로 수정하거나 행을 클릭해 입력하세요</span></form>`)}
       <div id="bulkslot"></div>
       <div class="rlayout ${sel || creating ? 'has-drawer' : ''}">
         ${raw(curGrid().html())}
