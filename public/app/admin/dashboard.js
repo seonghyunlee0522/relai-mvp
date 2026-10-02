@@ -1,11 +1,11 @@
 /* Admin Dashboard: operator KPIs, 7-day activation funnel, attention queue, recent operator actions. Billing blocks appear only when Billing exists. */
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
-import { ACTIONS, adminApi, bindRows, chip, fmtD, head, kpis, n, rel, section, table } from './ui.js';
+import { ACTIONS, adminApi, aiFeatureTable, bindRows, fmtD, head, kpis, n, rel, section, table, usd } from './ui.js';
 
 export async function adminDashboardPage(main = $('#main')) {
   document.title = 'Dashboard — RELAI Admin';
-  const d = await adminApi('dashboard');
+  const [d, ai] = await Promise.all([adminApi('dashboard'), adminApi('ai/usage').catch(() => null)]);
   const k = d.kpis; const f = d.funnel_7d; const a = d.attention; const b = d.billing.implemented;
   const cards = [
     { label: '전체 Users', value: n(k.users), href: '/admin/users' },
@@ -32,6 +32,15 @@ export async function adminDashboardPage(main = $('#main')) {
         <p class="hint">가입 시 Workspace가 자동 생성되므로 2단계는 가입 수와 같습니다. 실질 활성화 지표는 Project 생성입니다.</p></div>`))}
       ${raw(section('확인 필요', attn.length ? attn.map(([t, items]) => html`<div class="aattn"><div class="aattn__t">${t}</div><ul>${raw(items.map((i) => html`<li><a href="${i.href}" data-link><i class="adot adot--${i.tone}"></i><span class="aattn__n">${i.t}</span><small>${i.s}</small>${raw(i.at ? html`<time>${rel(i.at)}</time>` : '')}</a></li>`).join(''))}</ul></div>`).join('') : '<div class="aempty">확인할 항목이 없습니다. 정지된 계정/Workspace, 한도 초과 Workspace가 생기면 여기에 표시됩니다.</div>'))}
     </div>
+    ${raw(ai ? section(`AI 사용량 (최근 30일)${ai.config.enabled ? '' : ' — AI 미설정'}`, html`${raw(kpis([
+        { label: '오늘 AI 요청', value: n(ai.kpis.runs_today) }, { label: '30일 요청', value: n(ai.kpis.runs_30d), sub: `실패 ${n(ai.kpis.failed_30d)}` },
+        { label: '성공률', value: ai.kpis.success_rate_30d === null ? '-' : `${ai.kpis.success_rate_30d}%`, tone: ai.kpis.success_rate_30d !== null && ai.kpis.success_rate_30d < 90 ? 'warn' : '' },
+        { label: '평균 응답', value: ai.kpis.avg_latency_ms === null ? '-' : `${(ai.kpis.avg_latency_ms / 1000).toFixed(1)}s` },
+        { label: 'Credit 사용', value: n(ai.kpis.credits_30d) }, { label: 'Provider Cost (추정)', value: usd(ai.kpis.provider_cost_30d) }]))}
+      ${raw(aiFeatureTable(ai.features))}
+      ${raw(ai.workspaces.length ? html`<div class="agrid2" style="margin-top:12px"><div><div class="asec__h">Workspace별 (상위 10)</div>${raw(table([{ key: 'name', label: 'Workspace', cls: 'ttl' }, { key: 'runs', label: '요청', w: 70, render: (w) => n(w.runs) }, { key: 'credits', label: 'Credit', w: 80, render: (w) => n(w.credits) }, { key: 'balance', label: '잔여', w: 80, render: (w) => n(w.balance) }], ai.workspaces, { rowHref: (w) => `/admin/workspaces/${w.id}`, id: 'aiwtbl' }))}</div>
+        <div><div class="asec__h">최근 실패</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'workspace_name', label: 'Workspace', w: 150 }, { key: 'feature', label: '기능', w: 120 }, { key: 'error_code', label: '오류', render: (r) => html`<span class="mono">${r.error_code || ''}</span> <small class="dim">${r.error_message || ''}</small>` }], ai.recent_failures, { rowHref: (r) => `/admin/workspaces/${r.workspace_id}`, empty: '실패한 요청이 없습니다.', id: 'aiftl' }))}</div></div>` : '')}
+      <p class="hint">Credit 비용은 기능별 설정값(개발 기본값)이며 가격 정책은 아직 정하지 않았습니다. Provider Cost는 내부 단가표 기준 추정치입니다.</p>`) : '')}
     ${raw(section('최근 운영자 조작', table([
       { key: 'created_at', label: '일시', w: 150, render: (r) => fmtD(r.created_at) }, { key: 'admin', label: 'Admin', w: 200, render: (r) => html`${r.admin_name || '-'} <small class="dim">${r.admin_email || ''}</small>` },
       { key: 'action', label: 'Action', w: 170, render: (r) => ACTIONS[r.action] || r.action }, { key: 'summary', label: 'Summary' },

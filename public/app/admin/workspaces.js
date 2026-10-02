@@ -3,7 +3,7 @@ import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { api } from '../core/api.js';
 import { promptDialog, toast } from '../shared/dialogs.js';
-import { ACTIONS, adminApi, bindFilters, bindPager, bindRows, chip, dl, errorBlock, fmtD, fmtDay, head, kpis, n, pager, qs, rel, sel, section, table, usageBars } from './ui.js';
+import { ACTIONS, AI_FEATURE, adminApi, aiFeatureTable, bindFilters, bindPager, bindRows, chip, dl, errorBlock, fmtD, fmtDay, head, kpis, n, pager, qs, rel, sel, section, table, usageBars, usd } from './ui.js';
 
 const STATUS = { ACTIVE: '정상', SUSPENDED: '정지', CLOSED: '종료' };
 const ACT = { PROJECT_CREATED: '프로젝트 생성', PROJECT_ARCHIVED: '프로젝트 보관', MEMBER_JOINED: '멤버 합류', WEEKLY_REPORT: '주간보고 생성' };
@@ -34,7 +34,7 @@ export async function adminWorkspacesPage(main = $('#main')) {
 
 export async function adminWorkspacePage(id, main = $('#main')) {
   const draw = async () => {
-    const d = await adminApi(`workspaces/${id}`);
+    const [d, ai] = await Promise.all([adminApi(`workspaces/${id}`), adminApi(`workspaces/${id}/ai`).catch(() => null)]);
     const w = d.workspace; const s = d.subscription;
     document.title = `${w.name} — Workspaces — RELAI Admin`;
     const actions = w.status === 'SUSPENDED' ? '<button class="btn btn--primary btn--sm" id="reactivate">정지 해제</button>' : w.status === 'ACTIVE' ? '<button class="btn btn--danger btn--sm" id="suspend">Workspace 정지</button>' : '';
@@ -52,6 +52,18 @@ export async function adminWorkspacePage(id, main = $('#main')) {
         { key: 'name', label: '이름', w: 150, cls: 'ttl' }, { key: 'email', label: '이메일', w: 240, render: (m) => html`<span class="mono">${m.email}</span>` }, { key: 'role', label: 'Role', w: 90 },
         { key: 'status', label: '계정 상태', w: 90, render: (m) => chip(m.status) }, { key: 'joined_at', label: '가입일', w: 110, render: (m) => fmtDay(m.joined_at) },
       ], d.members, { rowHref: (m) => `/admin/users/${m.id}` })))}
+      ${raw(ai ? section('AI Credit · 사용량 (최근 30일)', html`${raw(kpis([
+          { label: '현재 Credit', value: n(ai.account.balance), sub: `누적 지급 ${n(ai.account.lifetime_granted)} · 누적 사용 ${n(ai.account.lifetime_used)}` },
+          { label: '30일 AI 요청', value: n(ai.kpis.runs_30d), sub: `성공률 ${ai.kpis.success_rate_30d === null ? '-' : ai.kpis.success_rate_30d + '%'}` },
+          { label: 'Input / Output Tokens', value: `${n(ai.kpis.input_tokens_30d)} / ${n(ai.kpis.output_tokens_30d)}` },
+          { label: 'Provider Cost (추정)', value: usd(ai.kpis.provider_cost_30d), sub: `Credit 사용 ${n(ai.kpis.credits_30d)}` }]))}
+        ${raw(aiFeatureTable(ai.features))}
+        <div class="agrid2" style="margin-top:12px">
+          <div><div class="asec__h">최근 AI 요청</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'feature', label: '기능', w: 120, render: (r) => AI_FEATURE[r.feature] || r.feature }, { key: 'user_name', label: '사용자', w: 90 }, { key: 'status', label: '상태', w: 90, render: (r) => chip(r.status === 'SUCCEEDED' ? 'ACTIVE' : r.status === 'FAILED' ? 'SUSPENDED' : 'DRAFT', r.status === 'SUCCEEDED' ? '성공' : r.status === 'FAILED' ? `실패 ${r.error_code || ''}` : '진행 중') }, { key: 'credit_cost', label: 'Credit', w: 70, render: (r) => (r.credit_status === 'CHARGED' ? n(r.credit_cost) : html`<span class="dim">0</span>`) }, { key: 'tokens', label: '토큰', w: 110, render: (r) => `${n(r.input_tokens)} / ${n(r.output_tokens)}` }], ai.runs, { empty: 'AI 요청 기록이 없습니다.', id: 'airuns' }))}</div>
+          <div><div class="asec__h">Credit Ledger</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'type', label: '유형', w: 110 }, { key: 'amount', label: '증감', w: 70, render: (r) => html`<b style="color:${r.amount < 0 ? '#B42318' : '#067647'}">${r.amount > 0 ? '+' : ''}${n(r.amount)}</b>` }, { key: 'balance_after', label: '잔액', w: 80, render: (r) => n(r.balance_after) }, { key: 'reason', label: '사유', render: (r) => html`${r.feature ? AI_FEATURE[r.feature] || r.feature : r.reason}${r.created_by_name ? html` <small class="dim">· ${r.created_by_name}</small>` : ''}` }], ai.ledger, { empty: '원장 기록이 없습니다.', id: 'ailed' }))}</div>
+        </div>
+        <p class="hint">Credit은 Ledger를 통해서만 증감합니다. 가격·Plan별 지급량·Top-up은 아직 정하지 않았으며, 지급은 운영자 사유와 함께 Audit에 기록됩니다.</p>`,
+        w.status === 'CLOSED' ? '' : '<button class="btn btn--secondary btn--sm" id="ai-grant">Credit 지급 / 조정</button>') : '')}
       <div class="agrid2">
         ${raw(section('최근 Activity', d.activity.length ? html`<ul class="aact">${raw(d.activity.map((x) => html`<li><time>${fmtD(x.at)}</time><span>${ACT[x.type] || x.type}</span></li>`).join(''))}</ul>` : '<div class="aempty">활동 기록이 없습니다.</div>'))}
         ${raw(section('운영자 조작', table([{ key: 'created_at', label: '일시', w: 150, render: (r) => fmtD(r.created_at) }, { key: 'admin_name', label: 'Admin', w: 150 }, { key: 'summary', label: 'Summary', render: (r) => html`${ACTIONS[r.action] || r.action}${r.metadata?.reason ? ` — ${r.metadata.reason}` : ''}` }], d.audit, { empty: '기록 없음' })))}
@@ -64,7 +76,33 @@ export async function adminWorkspacePage(id, main = $('#main')) {
       try { await api('POST', `/api/admin/workspaces/${id}/${path}`, { reason }); toast(`${confirm} 처리했습니다.`); await draw(); } catch (e) { toast(e.message); }
     };
     const sb = $('#suspend'); if (sb) sb.onclick = () => run('suspend', `'${w.name}' Workspace를 정지할까요?`, '멤버의 로그인은 유지되지만 이 Workspace의 모든 API 호출(조회 포함)이 차단됩니다. 데이터는 삭제되지 않고 구독도 해지되지 않습니다.', '정지', true);
+    const gb = $('#ai-grant'); if (gb) gb.onclick = async () => {
+      const r = await creditDialog(w.name, ai ? ai.account.balance : 0);
+      if (!r) return;
+      try { const out = await api('POST', `/api/admin/workspaces/${id}/ai/credits`, r); toast(`Credit을 반영했습니다. 현재 잔액 ${out.balance.toLocaleString('ko-KR')}`); await draw(); } catch (e) { toast(e.message); }
+    };
     const rb = $('#reactivate'); if (rb) rb.onclick = () => run('reactivate', `'${w.name}' Workspace 정지를 해제할까요?`, '멤버가 다시 접근할 수 있게 됩니다.', '정지 해제', false);
   };
   await draw();
+}
+
+/** Grant / adjust dialog: signed integer amount + required reason (recorded in the ledger and the admin audit). */
+function creditDialog(name, balance) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div'); el.className = 'scrim';
+    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cdT"><h3 id="cdT">AI Credit 지급 / 조정</h3>
+      <div class="dialog__b">'${name}' Workspace · 현재 ${balance.toLocaleString('ko-KR')} Credits. 양수는 지급, 음수는 조정(잔액 이내)입니다. Ledger와 Audit에 기록됩니다.</div>
+      <div class="field"><label for="cd-amt">수량 <span class="req">*</span></label><input class="input" id="cd-amt" type="number" step="1" placeholder="예: 500 또는 -100"><div class="err" id="cd-err"></div></div>
+      <div class="field"><label for="cd-reason">사유 <span class="req">*</span></label><textarea class="textarea" id="cd-reason" maxlength="500" placeholder="예: 파일럿 고객 지원" style="min-height:72px"></textarea></div>
+      <div class="actions"><button class="btn btn--secondary" data-v="0">취소</button><button class="btn btn--primary" data-v="1">반영</button></div></div>`;
+    const done = (v) => { el.remove(); resolve(v); };
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; }
+      if (b.dataset.v === '0') return done(null);
+      const amount = Number($('#cd-amt', el).value); const reason = $('#cd-reason', el).value.trim();
+      if (!Number.isInteger(amount) || amount === 0) { $('#cd-err', el).textContent = '0이 아닌 정수를 입력해 주세요.'; return; }
+      if (!reason) { $('#cd-err', el).textContent = '사유를 입력해 주세요.'; return; }
+      done({ amount, reason }); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });
+    document.body.append(el); $('#cd-amt', el).focus();
+  });
 }

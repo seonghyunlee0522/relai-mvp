@@ -16,7 +16,7 @@ import { billingDashboard, workspaceSubscription } from './billing-admin.js';
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
 export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
 export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
-export const AUDIT_ACTIONS = ['SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE'];
+export const AUDIT_ACTIONS = ['SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS'];
 export const ACTIVATION = ['REGISTERED', 'WORKSPACE_CREATED', 'PROJECT_CREATED', 'ACTIVE_USER'];
 const ACTIVE_WINDOW_DAYS = 14;
 
@@ -137,6 +137,8 @@ const SUMMARY = {
   REACTIVATE_USER: (m) => `사용자 ${m.email || ''} 정지 해제${m.reason ? ` — ${m.reason}` : ''}`,
   SUSPEND_WORKSPACE: (m) => `Workspace '${m.name || ''}' 정지${m.reason ? ` — ${m.reason}` : ''}`,
   REACTIVATE_WORKSPACE: (m) => `Workspace '${m.name || ''}' 정지 해제${m.reason ? ` — ${m.reason}` : ''}`,
+  GRANT_AI_CREDITS: (m) => `Workspace '${m.name || ''}' AI Credit +${m.amount ?? ''} — ${m.reason || ''}`,
+  ADJUST_AI_CREDITS: (m) => `Workspace '${m.name || ''}' AI Credit ${m.amount ?? ''} — ${m.reason || ''}`,
 };
 export const auditSummary = (a) => (SUMMARY[a.action] ? SUMMARY[a.action](a.metadata || {}) : a.action);
 export async function writeAudit(db, { adminUserId, action, targetType, targetId, metadata = {} }) {

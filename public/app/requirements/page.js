@@ -14,10 +14,12 @@ import { activityPane, bindActivity, bindDtabs, dtabs, mergeActivity } from '../
 import { openImport } from '../shared/importer.js';
 import { ACC_STATUS, LINK_TYPE, REQ_FIELD_LABEL, REQ_PRIORITY, REQ_SCOPE, REQ_STATUS, REQ_STATUS_CHIP, REQ_TYPE, TC_STATUS, TC_STATUS_CHIP, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE, testSummaryText } from '../shared/constants.js';
 import { confirmDialog, pickerDialog, showErrors, toast } from '../shared/dialogs.js';
+import { aiStatus } from '../shared/ai.js';
+import { openExtractDialog } from '../ai/extract.js';
 
 export async function requirementsPage(id) {
   const main = $('#main');
-  const [g, members] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers()]);
+  const [g, members, ai] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers(), aiStatus(id)]);
   const p = g.project;
   const archived = p.status === 'ARCHIVED';
   document.title = `Requirements — ${p.name} — RELAI`;
@@ -159,6 +161,7 @@ export async function requirementsPage(id) {
         ${raw(rview() === 'list' ? listGrid.toolsHtml() : '')}
         <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>
+        ${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-extract" title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}
         ${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
@@ -186,6 +189,7 @@ export async function requirementsPage(id) {
     bindFilterClears(main, { setParam, keys: ['q', ...filterKeys, 'archived'], reload: async () => { await load(); draw(); } });
     const cx = $('#ctx-off'); if (cx) cx.onclick = () => { ctxCr = null; setParam('cr', ''); draw(); };
     for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; setParam('sel', ''); setParam('new', '1'); showDrawer(); drawCreate(); }; }
+    const ax = $('#ai-extract'); if (ax) ax.onclick = () => openExtractDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } });
     // Excel menu
     const xb = $('#xl-btn'); const xp = $('#xl-pop');
     xb.onclick = (e) => { e.stopPropagation(); const open = xp.hidden; document.querySelectorAll('.gpop').forEach((x) => { x.hidden = true; }); xp.hidden = !open; };

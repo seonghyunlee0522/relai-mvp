@@ -7,6 +7,7 @@ import * as A from './admin.js';
 import { USAGE_SORTS, allWorkspacesUsage } from './usage.js';
 import { PLANS } from './plans.js';
 import { billingStatus, listSubscriptions, getSubscription, listPayments, getPayment } from './billing-admin.js';
+import { aiUsageOverview, workspaceAiUsage, grantCredits } from './ai/admin.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -43,6 +44,11 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
   app.get('/api/admin/subscriptions/:id', guard, wrap(async (req, res) => { const d = await getSubscription(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', 'Subscription을 찾을 수 없습니다.'); }));
   app.get('/api/admin/payments', guard, wrap(async (req, res) => { const { page, size } = A.paging(req.query); res.json({ ...(await listPayments(db, { q: String(req.query.q || '').trim(), status: req.query.status, provider: req.query.provider, from: req.query.from, to: req.query.to, page, size })), page, size }); }));
   app.get('/api/admin/payments/:id', guard, wrap(async (req, res) => { const d = await getPayment(db, req.params.id); return d ? res.json({ payment: d }) : fail(res, 404, 'not_found', 'Payment를 찾을 수 없습니다.'); }));
+
+  /* AI usage + credits (Phase 11). Aggregates only — never project content. */
+  app.get('/api/admin/ai/usage', guard, wrap(async (req, res) => res.json(await aiUsageOverview(db))));
+  app.get('/api/admin/workspaces/:id/ai', guard, wrap(async (req, res) => { const d = await workspaceAiUsage(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', 'Workspace를 찾을 수 없습니다.'); }));
+  app.post('/api/admin/workspaces/:id/ai/credits', guard, action((req) => grantCredits(db, admin(req), req.params.id, req.body)));
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 
