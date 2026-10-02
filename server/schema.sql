@@ -570,6 +570,64 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_logs(created_a
 CREATE INDEX IF NOT EXISTS idx_admin_audit_admin ON admin_audit_logs(admin_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_audit_logs(target_type, target_id, created_at);
 
+/* ---------- AI Productivity Layer (Phase 11): run log + workspace credit metering. Pricing is NOT decided here. ---------- */
+CREATE TABLE IF NOT EXISTS ai_runs (
+  id             TEXT PRIMARY KEY,
+  seq            BIGSERIAL,
+  workspace_id   TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  project_id     TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  user_id        TEXT REFERENCES users(id),
+  feature        TEXT NOT NULL,                  -- REQUIREMENT_EXTRACTION | WBS_GENERATION | CHANGE_IMPACT | PROJECT_QA
+  provider       TEXT NOT NULL,
+  model          TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','SUCCEEDED','FAILED')),
+  input_summary  TEXT NOT NULL DEFAULT '',       -- short, non-sensitive description (sizes / ids), never the raw input
+  input_tokens   INTEGER,
+  output_tokens  INTEGER,
+  provider_cost_amount   NUMERIC(12,6),          -- estimated from the internal price table (ops analytics only)
+  provider_cost_currency TEXT NOT NULL DEFAULT 'USD',
+  credit_cost    INTEGER NOT NULL DEFAULT 0,
+  credit_status  TEXT NOT NULL DEFAULT 'NONE' CHECK (credit_status IN ('NONE','RESERVED','CHARGED','RELEASED')),
+  latency_ms     INTEGER,
+  error_code     TEXT,
+  error_message  TEXT,                           -- short message only; never the provider's raw body
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  completed_at   timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_workspace ON ai_runs(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_project ON ai_runs(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_user ON ai_runs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_feature ON ai_runs(feature, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_status ON ai_runs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_created ON ai_runs(created_at);
+
+CREATE TABLE IF NOT EXISTS workspace_credit_accounts (
+  workspace_id     TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+  balance          BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0),   -- fast read; the ledger is the audit source
+  lifetime_granted BIGINT NOT NULL DEFAULT 0,
+  lifetime_used    BIGINT NOT NULL DEFAULT 0,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS credit_ledger (
+  id             TEXT PRIMARY KEY,
+  seq            BIGSERIAL,
+  workspace_id   TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  ai_run_id      TEXT REFERENCES ai_runs(id) ON DELETE SET NULL,
+  type           TEXT NOT NULL CHECK (type IN ('PLAN_GRANT','ADMIN_GRANT','AI_USAGE','REFUND','ADJUSTMENT','PROMOTION')),
+  amount         BIGINT NOT NULL,                -- grant = positive, usage = negative
+  balance_after  BIGINT NOT NULL,
+  reason         TEXT NOT NULL DEFAULT '',
+  reference_type TEXT,                           -- AI_RUN | ADMIN_AUDIT | PLAN | …
+  reference_id   TEXT,
+  created_by     TEXT REFERENCES users(id),
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_workspace ON credit_ledger(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_created ON credit_ledger(created_at);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_run ON credit_ledger(ai_run_id);
+
 /* ================= Integrity triggers (plpgsql) =================
    Defence in depth. Every rule here is also enforced by the service layer (common.js resolveLinkTarget etc.).
    Each trigger raises SQLSTATE 'RL001' (mapped to HTTP 400 by the API error handler). */

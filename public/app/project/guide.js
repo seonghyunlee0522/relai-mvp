@@ -2,6 +2,7 @@ import { api, wsApi } from '../core/api.js';
 import { html, no2, raw } from '../core/dom.js';
 import { FEATURE_ROUTES, STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
+import { revealAskButton, wireAssistant } from '../ai/assistant.js';
 
 export function wbsStepInfo(stepKey, st, pid) {
   if (!st) return null;
@@ -152,6 +153,7 @@ const navBadge = (key, g) => {
 const pv = (v) => (v === null || v === undefined ? '-' : v + '%');
 /** Project Workspace header (sticky). `tab` = overview | phase | requirements | wbs | changes | raid | tests. crumb args are accepted for old call sites. */
 export const projectHead = (p, g, { tab = 'overview' } = {}) => {
+  wireAssistant(); queueMicrotask(() => revealAskButton(p.id));   // CTA appears only when /ai/status says AI is on
   const k = g.kpis || { guided_progress: g.progress, wbs_progress: g.wbs ? g.wbs.progress : 0, requirement_coverage: null, test_coverage: null };
   const cur = g.current_phase;
   const prog = k.guided_progress ?? g.progress ?? 0;
@@ -168,6 +170,7 @@ export const projectHead = (p, g, { tab = 'overview' } = {}) => {
       <span class="wsh__owner" data-owner-id="${p.created_by || ''}" title="프로젝트 등록자"></span>
       <span class="wsh__sp"></span>
       <a class="wsh__kpi" href="/app/projects/${p.id}" data-link title="Overview에서 자세히 보기"><span>WBS <b>${pv(k.wbs_progress)}</b></span><span>Req.Cov <b>${pv(k.requirement_coverage)}</b></span><span>Test.Cov <b>${pv(k.test_coverage)}</b></span></a>
+      <button type="button" class="btn btn--secondary btn--sm wsh__ask" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조">RELAI에게 물어보기</button>
       ${raw(p.status === 'ARCHIVED' ? '' : html`<a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/edit" data-link>정보 수정</a>`)}
     </div>
     <nav class="wsh__tabs" aria-label="프로젝트 메뉴">${raw(NAV_TABS.map((it) => {

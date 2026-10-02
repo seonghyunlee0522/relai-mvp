@@ -3,6 +3,8 @@ import { $, fmtDays, fmtKRW, fmtMD, fmtShort, html, raw, todayLocal } from '../c
 import { projectHead } from '../project/guide.js';
 import { CR_PRIORITY, CR_STATUS, CR_STATUS_CHIP, IMPACT_TYPE, RELATION_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE } from '../shared/constants.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
+import { aiStatus } from '../shared/ai.js';
+import { openImpactDialog } from '../ai/impact.js';
 import { statusChip, prText } from '../shared/badges.js';
 import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
@@ -10,7 +12,7 @@ import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
 
 export async function changesPage(id) {
   const main = $('#main');
-  const g = await api('GET', wsApi(`/${id}`));
+  const [g, ai] = await Promise.all([api('GET', wsApi(`/${id}`)), aiStatus(id)]);
   const p = g.project;
   const archived = p.status === 'ARCHIVED';
   document.title = `Changes — ${p.name} — RELAI`;
@@ -149,7 +151,7 @@ export async function changesPage(id) {
       </div>
       <div class="dsave" id="dsave"></div>
 
-      <h4 class="dh">영향 요약</h4>
+      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·Risk를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
       ${raw(impactSummary(c))}
       <div class="dgrid dgrid--3">
         <div class="dfield"><span>일정 영향 (일)</span><div><input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
@@ -226,6 +228,7 @@ export async function changesPage(id) {
   const bindDetail = () => {
     const c = sel; const status = $('#dsave');
     const apply = async (d) => { sel = d.change; summary = d.summary; g.changes = summary; await load(); draw(); };
+    const ai1 = $('#ai-impact'); if (ai1) ai1.onclick = () => openImpactDialog({ pid: id, change: c, onDone: apply });
     const save = async (field, value) => {
       status.textContent = '저장 중…';
       try { const d = await api('PATCH', cApi(`/${c.id}`), { [field]: value }); await apply(d); $('#dsave').textContent = d.changed.length ? '저장됨' : ''; }

@@ -14,10 +14,12 @@ import { bulkRun, mountBulk } from '../shared/bulk.js';
 import { activityPane, bindActivity, bindDtabs, dtabs, mergeActivity } from '../shared/detail.js';
 import { openImport } from '../shared/importer.js';
 import { confirmDialog, pickerDialog, showErrors, toast } from '../shared/dialogs.js';
+import { aiStatus } from '../shared/ai.js';
+import { openWbsDraftDialog } from '../ai/wbs-draft.js';
 
 export async function wbsPage(id) {
   const main = $('#main');
-  const [g, members] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers()]);
+  const [g, members, ai] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers(), aiStatus(id)]);
   const p = g.project;
   const archived = p.status === 'ARCHIVED';
   document.title = `WBS — ${p.name} — RELAI`;
@@ -261,6 +263,7 @@ export async function wbsPage(id) {
         ${raw(v === 'list' && items.length ? grid.toolsHtml() : '')}
         <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 WBS 내보내기</button></div></span>
+        ${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-wbs" title="선택한 요구사항으로 WBS 초안 생성">AI로 WBS 초안</button>' : '')}
         ${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ WBS 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
@@ -280,6 +283,7 @@ export async function wbsPage(id) {
   };
 
   const bind = () => {
+    const aw = $('#ai-wbs'); if (aw) aw.onclick = () => openWbsDraftDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } });
     main.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { setParam('view', b.dataset.view === 'gantt' ? 'gantt' : ''); if (b.dataset.view === 'gantt') gx.mode = 'fit'; draw(); });
     const gf = $('#gfit'); if (gf) gf.onclick = () => { gx.mode = 'fit'; placeGantt(); };
     const gt = $('#gtoday'); if (gt) gt.onclick = () => { gx.mode = 'today'; placeGantt(); };

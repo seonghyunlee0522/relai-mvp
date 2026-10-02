@@ -17,7 +17,7 @@ const TONE = { ACTIVE: 'ok', SUSPENDED: 'bad', DEACTIVATED: 'muted', CLOSED: 'mu
   REGISTERED: 'muted', WORKSPACE_CREATED: 'warn', PROJECT_CREATED: 'act', ACTIVE_USER: 'ok', ok: 'ok', warn: 'warn', attention: 'bad' };
 const LABEL = { ACTIVE: '정상', SUSPENDED: '정지', DEACTIVATED: '탈퇴', CLOSED: '종료', SYSTEM_ADMIN: 'System Admin', NONE: '-', REGISTERED: '가입', WORKSPACE_CREATED: 'Workspace 생성', PROJECT_CREATED: 'Project 생성', ACTIVE_USER: '활성 사용자', ok: '정상', warn: '주의', attention: '확인 필요' };
 export const chip = (v, label) => html`<span class="achip achip--${TONE[v] || 'muted'}">${label ?? LABEL[v] ?? v ?? '-'}</span>`;
-export const ACTIONS = { SUSPEND_USER: '사용자 정지', REACTIVATE_USER: '사용자 정지 해제', SUSPEND_WORKSPACE: 'Workspace 정지', REACTIVATE_WORKSPACE: 'Workspace 정지 해제' };
+export const ACTIONS = { SUSPEND_USER: '사용자 정지', REACTIVATE_USER: '사용자 정지 해제', SUSPEND_WORKSPACE: 'Workspace 정지', REACTIVATE_WORKSPACE: 'Workspace 정지 해제', GRANT_AI_CREDITS: 'AI Credit 지급', ADJUST_AI_CREDITS: 'AI Credit 조정' };
 export const TARGET = { USER: 'User', WORKSPACE: 'Workspace', SUBSCRIPTION: 'Subscription', PAYMENT: 'Payment' };
 
 /* ---- query string state (list pages keep filters in the URL so reloads and back navigation keep them) ---- */
@@ -76,3 +76,16 @@ export const usageBars = (usage) => (!usage ? '' : html`<div class="ause">${raw(
   <div class="ause__b"><i class="${d.pct === null ? '' : d.pct >= 90 ? 'is-bad' : d.pct >= 80 ? 'is-warn' : ''}" style="width:${d.pct === null ? 0 : Math.min(100, d.pct)}%"></i></div>
   <span class="ause__v"><b>${n(d.used)}</b> / ${d.limit === null ? 'Unlimited' : n(d.limit)}${raw(d.pct === null ? '' : html` <small>${d.pct}%</small>`)}</span></div>`).join(''))}</div>`);
 export const errorBlock = (e) => html`<div class="aempty aempty--err">${e.message}</div>`;
+
+/* ---- AI usage (Phase 11) ---- */
+export const AI_FEATURE = { REQUIREMENT_EXTRACTION: '요구사항 추출', WBS_GENERATION: 'WBS 초안', CHANGE_IMPACT: '변경 영향 분석', PROJECT_QA: '프로젝트 Q&A' };
+export const usd = (v) => (v === null || v === undefined ? '-' : `$${Number(v).toFixed(4)}`);
+/** Per-feature metering table shared by the dashboard and the workspace page. */
+export const aiFeatureTable = (features) => table([
+  { key: 'label', label: '기능', w: 150, render: (f) => AI_FEATURE[f.feature] || f.feature },
+  { key: 'runs', label: '요청', w: 70, render: (f) => n(f.runs) }, { key: 'succeeded', label: '성공', w: 70, render: (f) => n(f.succeeded) },
+  { key: 'success_rate', label: '성공률', w: 70, render: (f) => (f.success_rate === null ? '-' : `${f.success_rate}%`) },
+  { key: 'avg_input_tokens', label: '평균 입력 토큰', w: 110, render: (f) => n(f.avg_input_tokens) }, { key: 'avg_output_tokens', label: '평균 출력 토큰', w: 110, render: (f) => n(f.avg_output_tokens) },
+  { key: 'avg_provider_cost', label: '평균 Provider Cost', w: 130, render: (f) => usd(f.avg_provider_cost) }, { key: 'avg_credit', label: '평균 Credit', w: 90, render: (f) => n(f.avg_credit) },
+  { key: 'credits', label: 'Credit 합계', w: 90, render: (f) => n(f.credits) }, { key: 'avg_latency_ms', label: '평균 응답', w: 90, render: (f) => (f.avg_latency_ms === null ? '-' : `${(f.avg_latency_ms / 1000).toFixed(1)}s`) },
+], features, { empty: 'AI 요청 기록이 없습니다.', id: 'aiftbl' });

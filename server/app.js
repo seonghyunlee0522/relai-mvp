@@ -22,6 +22,9 @@ import { ImportFileError } from './xlsx.js';
 import { requireAction, requireOwner, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
 import { AdminError } from './admin.js';
+import { mountAiRoutes } from './ai/routes.js';
+import { AiError, CreditError } from './ai/service.js';
+import { ensureAccount } from './ai/credits.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
@@ -151,6 +154,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         (await db.run('INSERT INTO users (id, email, name, password_hash) VALUES (?,?,?,?)', [userId, email, name, password_hash]));
         (await db.run('INSERT INTO workspaces (id, name, owner_id) VALUES (?,?,?)', [wsId, `${name}님의 Workspace`, userId]));
         (await db.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,?)', [wsId, userId, 'OWNER']));
+        await ensureAccount(db, wsId);   // AI credit account (dev/test starter credits only when DEV_INITIAL_AI_CREDITS is set)
       }));
     } catch (e) {
       if (String(e.message).includes('UNIQUE')) return fail(res, 409, 'email_taken', '이미 가입된 이메일입니다.', { fields: { email: '이미 가입된 이메일입니다.' } });
@@ -847,6 +851,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(`${base}/:pid/health`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; res.json({ health: (await H.projectHealth(db, project)) }); }));
   app.get(`${base}/:pid/attention`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const items = (await M.attentionAll(db, project.id)); res.json({ items, total: items.length }); }));
   mountDashboardRoute({ app, db, guard, wrap, loadProject, base });
+  mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base });   // Phase 11 AI (draft/candidate endpoints + approval commits)
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };
@@ -906,6 +911,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);
     if (err instanceof AdminError) return fail(res, err.status, err.code, err.message);
+    if (err instanceof AiError || err instanceof CreditError) return fail(res, err.status, err.code, err.message, err.extra || {});
     const dbe = dbErrorInfo(err);
     if (dbe) { if (dbe.status >= 500) console.error('[db]', err.message); return fail(res, dbe.status, dbe.code, dbe.message); }
     console.error(err);
