@@ -1,4 +1,4 @@
-import { api } from './core/api.js';
+import { api, resetMembers } from './core/api.js';
 import { $, fmtShort, html, raw } from './core/dom.js';
 import { state } from './core/state.js';
 import { confirmDialog, toast } from './shared/dialogs.js';
@@ -12,6 +12,7 @@ export async function settingsPage(main = $('#main')) {
   const [{ workspace }, { members }] = await Promise.all([api('GET', `/api/workspaces/${wid}`), api('GET', `/api/workspaces/${wid}/members`)]);
   const perm = workspace.permissions; const me = state.user.id;
   const draw = (members) => {
+    resetMembers();
     main.innerHTML = html`<div class="page page--narrow"><div class="page__head"><h1>Settings</h1></div>
     <div class="panel"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd>${state.user.name}</dd><dt>이메일</dt><dd>${state.user.email}</dd></dl></div></div>

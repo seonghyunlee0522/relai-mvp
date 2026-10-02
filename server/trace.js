@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
+import { addWbsHistory } from './wbs-history.js';
 
 export const LINK_TYPES = ['IMPLEMENTS', 'SUPPORTS', 'VALIDATES'];
 
@@ -78,6 +79,7 @@ export async function addLink(db, project, { requirement, wbs }, linkType, userI
   const id = randomUUID();
   (await db.run('INSERT INTO requirement_wbs_links (id, project_id, requirement_id, wbs_item_id, link_type, created_by) VALUES (?,?,?,?,?,?)', [id, project.id, requirement.id, wbs.id, linkType, userId]));
   (await addReqHistory(db, requirement.id, 'LINKED_WBS', { newValue: `${wbs.wbs_code} ${wbs.title} (${linkType})` }, userId));
+  (await addWbsHistory(db, wbs.id, 'LINKED_REQ', { field: 'requirement_link', newValue: requirement.display_id }, userId));
   return id;
 }
 
@@ -90,10 +92,12 @@ export async function updateLinkType(db, link, linkType, userId) {
   if (link.link_type === linkType) return false;
   (await db.run('UPDATE requirement_wbs_links SET link_type = ? WHERE id = ?', [linkType, link.id]));
   (await addReqHistory(db, link.requirement_id, 'LINK_TYPE_CHANGED', { oldValue: `${link.wbs_code} ${link.link_type}`, newValue: `${link.wbs_code} ${linkType}` }, userId));
+  (await addWbsHistory(db, link.wbs_item_id, 'LINK_TYPE_CHANGED', { field: 'requirement_link', oldValue: `${link.display_id} ${link.link_type}`, newValue: `${link.display_id} ${linkType}` }, userId));
   return true;
 }
 
 export async function removeLink(db, link, userId) {
   (await db.run('DELETE FROM requirement_wbs_links WHERE id = ?', [link.id]));
   (await addReqHistory(db, link.requirement_id, 'UNLINKED_WBS', { oldValue: `${link.wbs_code} ${link.wbs_title}` }, userId));
+  (await addWbsHistory(db, link.wbs_item_id, 'UNLINKED_REQ', { field: 'requirement_link', oldValue: link.display_id }, userId));
 }

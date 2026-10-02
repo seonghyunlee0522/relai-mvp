@@ -204,6 +204,20 @@ CREATE TABLE IF NOT EXISTS wbs_dependencies (
 CREATE INDEX IF NOT EXISTS idx_wbsdep_project ON wbs_dependencies(project_id);
 CREATE INDEX IF NOT EXISTS idx_wbsdep_succ ON wbs_dependencies(successor_id);
 
+-- WBS change log (mirrors requirement_history). Rows go away with the item (items are archived, never deleted).
+CREATE TABLE IF NOT EXISTS wbs_history (
+  id          TEXT PRIMARY KEY,
+  seq         BIGSERIAL,
+  wbs_item_id TEXT NOT NULL REFERENCES wbs_items(id) ON DELETE CASCADE,
+  action_type TEXT NOT NULL,   -- CREATED | UPDATED | MOVED | ARCHIVED | DEP_ADDED | DEP_REMOVED | LINKED_REQ | UNLINKED_REQ | LINK_TYPE_CHANGED
+  field_name  TEXT,
+  old_value   TEXT,
+  new_value   TEXT,
+  changed_by  TEXT REFERENCES users(id),
+  changed_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_wbs_history ON wbs_history(wbs_item_id, changed_at);
+
 /* ---------- Requirement ↔ WBS traceability (Phase 5) ---------- */
 -- N:M junction. Rows are kept when either side is archived (history); reads/coverage filter on archived_at.
 CREATE TABLE IF NOT EXISTS requirement_wbs_links (
@@ -497,6 +511,20 @@ CREATE TABLE IF NOT EXISTS weekly_reports (
   CHECK (period_end >= period_start)
 );
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_project ON weekly_reports(project_id, period_start DESC);
+
+/* ---------- Comments (requirements / WBS items) ---------- */
+-- Polymorphic by (entity_type, entity_id); the API verifies the entity belongs to project_id before every read/write.
+CREATE TABLE IF NOT EXISTS comments (
+  id          TEXT PRIMARY KEY,
+  seq         BIGSERIAL,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('REQUIREMENT','WBS')),
+  entity_id   TEXT NOT NULL,
+  body        TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 2000),
+  created_by  TEXT NOT NULL REFERENCES users(id),
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity_type, entity_id, created_at);
 
 /* ================= Integrity triggers (plpgsql) =================
    Defence in depth. Every rule here is also enforced by the service layer (common.js resolveLinkTarget etc.).

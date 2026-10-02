@@ -4,7 +4,7 @@ import { html, raw } from '../core/dom.js';
 /** <select> with a blank "Label: 전체" option. `cur` may be a comma list (first value is shown as selected). */
 export const filterSelect = (key, label, map, cur, extra = '') => {
   const first = String(cur || '').split(',').filter(Boolean)[0] || '';
-  return html`<select class="select select--sm" data-f="${key}" aria-label="${label}"><option value="">${label}: 전체</option>${raw(Object.entries(map).map(([v, l]) => html`<option value="${v}" ${first === v ? 'selected' : ''}>${l}</option>`).join(''))}${raw(extra)}</select>`;
+  return html`<select class="select select--sm" data-f="${key}" aria-label="${label}"><option value="">${label}</option>${raw(Object.entries(map).map(([v, l]) => html`<option value="${v}" ${first === v ? 'selected' : ''}>${l}</option>`).join(''))}${raw(extra)}</select>`;
 };
 
 /**

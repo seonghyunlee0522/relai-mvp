@@ -19,8 +19,8 @@ export async function phasePage(id, phaseKey) {
     document.title = `${ph.name} — ${p.name} — RELAI`;
     const open = ph.steps.filter((s) => s.status !== 'COMPLETED');
     const nextStep = open[0];
-    main.innerHTML = html`<div class="page">
-      ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name }))}
+    main.innerHTML = html`<div class="page page--wide page--flow">
+      ${raw(projectHead(p, g, { tab: 'phase' }))}
       ${raw(phaseStrip(g, p.id))}
 
       <section class="panel phase">

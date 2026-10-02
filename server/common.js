@@ -24,6 +24,12 @@ export async function getNextProjectSequence(db, projectId, entityType) {
   (await db.run('INSERT INTO project_counters (project_id, key, value) VALUES (?,?,0) ON CONFLICT DO NOTHING', [projectId, key]));
   return (await db.get('UPDATE project_counters SET value = value + 1 WHERE project_id = ? AND key = ? RETURNING value', [projectId, key])).value;
 }
+/** Makes sure the counter is at least `seq` (explicit ids supplied by an import must never be handed out again). */
+export async function reserveProjectSequence(db, projectId, entityType, seq) {
+  const key = SEQUENCE_KEYS[entityType] || entityType;
+  (await db.run('INSERT INTO project_counters (project_id, key, value) VALUES (?,?,0) ON CONFLICT DO NOTHING', [projectId, key]));
+  (await db.run('UPDATE project_counters SET value = GREATEST(value, ?) WHERE project_id = ? AND key = ?', [seq, projectId, key]));
+}
 export const formatDisplayId = (entityType, seq) => `${SEQUENCE_KEYS[entityType] || entityType}-${String(seq).padStart(3, '0')}`;
 /** Convenience: returns { sequence, display_id }. */
 export async function nextDisplayId(db, projectId, entityType) {

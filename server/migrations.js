@@ -19,6 +19,7 @@ export const migrations = [
   { version: 8, name: 'tests & acceptance + issues.source_test_execution_id', up() {} },
   { version: 9, name: 'weekly reports (Phase 9)', up() {} },
   { version: 10, name: 'PostgreSQL baseline (timestamptz/date types, plpgsql triggers, history seq, usage indexes)', up() {} },
+  { version: 11, name: 'comments + wbs_history (comments tab, activity feed)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

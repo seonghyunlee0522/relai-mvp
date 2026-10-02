@@ -8,6 +8,8 @@ import { linkCountsByWbs, linksForWbs, traceStats } from './trace.js';
 import { linkedRaid } from './raid.js';
 import { testsFor } from './testing.js';
 import { changesFor } from './changes.js';
+import { addWbsHistory, listWbsHistory, WBS_TRACKED } from './wbs-history.js';
+import { listComments } from './comments.js';
 
 export const WBS_TYPES = ['SUMMARY', 'TASK', 'MILESTONE'];
 export const WBS_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD'];
@@ -147,11 +149,12 @@ export async function getWbs(db, project, id) {
     FROM wbs_dependencies d JOIN wbs_items p ON p.id = d.predecessor_id WHERE d.successor_id = ? ORDER BY p.sequence`, [id]));
   const succs = (await db.all(`SELECT d.id, d.successor_id, s.wbs_code, s.title FROM wbs_dependencies d JOIN wbs_items s ON s.id = d.successor_id
     WHERE d.predecessor_id = ? AND s.archived_at IS NULL ORDER BY s.sequence`, [id]));
-  return { ...it, predecessors: preds.filter((p) => !p.archived_at), successors: succs, requirement_links: (await linksForWbs(db, id)), raid: (await linkedRaid(db, 'WBS', id)), testing: (await testsFor(db, 'WBS', id)), changes: (await changesFor(db, 'WBS', id)) };
+  return { ...it, predecessors: preds.filter((p) => !p.archived_at), successors: succs, requirement_links: (await linksForWbs(db, id)), raid: (await linkedRaid(db, 'WBS', id)), testing: (await testsFor(db, 'WBS', id)), changes: (await changesFor(db, 'WBS', id)),
+    history: (await listWbsHistory(db, id)), comments: (await listComments(db, 'WBS', id)) };
 }
 
 /* ---------- writes (caller wraps in tx) ---------- */
-export async function createWbs(db, project, input, userId) {
+export async function createWbs(db, project, input, userId, { skipRenumber = false } = {}) {
   if (input.parent_id) {
     const parent = (await getItem(db, project.id, input.parent_id));
     if (!parent || parent.archived_at) throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
@@ -162,11 +165,12 @@ export async function createWbs(db, project, input, userId) {
   (await db.run(`INSERT INTO wbs_items (id, project_id, parent_id, sequence, item_type, title, description, owner_user_id, status, progress,
       planned_start_date, planned_end_date, actual_start_date, actual_end_date, milestone_date, created_by, created_at, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, input.parent_id || null, seq, input.item_type, input.title, input.description ?? '', input.owner_user_id ?? null, input.status ?? 'NOT_STARTED', input.item_type === 'TASK' ? (input.progress ?? (input.status === 'COMPLETED' ? 100 : 0)) : 0, input.item_type === 'MILESTONE' ? null : input.planned_start_date ?? null, input.item_type === 'MILESTONE' ? null : input.planned_end_date ?? null, input.actual_start_date ?? null, input.actual_end_date ?? null, input.item_type === 'MILESTONE' ? input.milestone_date ?? null : null, userId, ts, ts]));
-  (await renumber(db, project.id));
+  (await addWbsHistory(db, id, 'CREATED', {}, userId, ts));
+  if (!skipRenumber) (await renumber(db, project.id));
   return id;
 }
 
-export async function updateWbs(db, project, existing, input) {
+export async function updateWbs(db, project, existing, input, userId = null) {
   const sets = []; const vals = [];
   const next = { ...input };
   if (next.item_type && next.item_type !== existing.item_type) {
@@ -176,15 +180,20 @@ export async function updateWbs(db, project, existing, input) {
     if (next.item_type !== 'MILESTONE') next.milestone_date = null;
     if (next.item_type === 'SUMMARY') next.progress = 0;
   }
-  for (const [k, v] of Object.entries(next)) { if (v === undefined || v === existing[k]) continue; sets.push(`${k} = ?`); vals.push(v); }
+  const ts = now();
+  for (const [k, v] of Object.entries(next)) {
+    if (v === undefined || v === existing[k]) continue;
+    sets.push(`${k} = ?`); vals.push(v);
+    if (WBS_TRACKED.includes(k)) (await addWbsHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: v }, userId, ts));
+  }
   if (!sets.length) return false;
-  sets.push('updated_at = ?'); vals.push(now(), existing.id);
+  sets.push('updated_at = ?'); vals.push(ts, existing.id);
   (await db.run(`UPDATE wbs_items SET ${sets.join(', ')} WHERE id = ?`, [...vals]));
   return true;
 }
 
 /** Move within/between parents. sequence is the 1-based target position among live siblings of the new parent. */
-export async function moveWbs(db, project, existing, { parent_id, sequence }) {
+export async function moveWbs(db, project, existing, { parent_id, sequence }, userId = null) {
   const newParent = parent_id === undefined ? existing.parent_id : (parent_id || null);
   if (newParent) {
     const parent = (await getItem(db, project.id, newParent));
@@ -192,22 +201,30 @@ export async function moveWbs(db, project, existing, { parent_id, sequence }) {
     if (parent.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래로는 이동할 수 없습니다.' });
     if (newParent === existing.id || (await descendants(db, project.id, existing.id)).includes(newParent)) throw new ValidationError({ parent_id: '자기 자신이나 하위 항목 아래로는 이동할 수 없습니다.' });
   }
+  const codeOf = async (pid) => (pid ? ((await getItem(db, project.id, pid))?.wbs_code || '') : '(최상위)');
+  const oldParentCode = await codeOf(existing.parent_id); const newParentCode = await codeOf(newParent);
   const siblings = (await db.all('SELECT id FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND parent_id IS NOT DISTINCT FROM ? AND id <> ? ORDER BY sequence, created_at', [project.id, newParent, existing.id])).map((x) => x.id);
   const curIdx = existing.parent_id === newParent ? existing.sequence - 1 : siblings.length;
   const target = sequence === undefined || sequence === null ? curIdx : Math.max(0, Math.min(siblings.length, Number(sequence) - 1));
   siblings.splice(target, 0, existing.id);
   const ts = now();
   for (const [i, id] of siblings.entries()) await db.run('UPDATE wbs_items SET parent_id = ?, sequence = ?, updated_at = ? WHERE id = ?', [newParent, i + 1, ts, id]);
+  // History: parent change → old/new parent code; pure reorder → field 'sequence' with old/new position.
+  if (existing.parent_id !== newParent) (await addWbsHistory(db, existing.id, 'MOVED', { field: 'parent', oldValue: oldParentCode, newValue: newParentCode }, userId, ts));
+  else if (existing.sequence !== target + 1) (await addWbsHistory(db, existing.id, 'MOVED', { field: 'sequence', oldValue: existing.sequence, newValue: target + 1 }, userId, ts));
   (await renumber(db, project.id));
 }
 
 /** Archive an item with all live descendants. Dependency rows are kept (history); reads filter them out. */
-export async function archiveWbs(db, project, existing) {
+export async function archiveWbs(db, project, existing, userId = null, { skipRenumber = false } = {}) {
   if (existing.archived_at) return [];
   const ids = [existing.id, ...(await descendants(db, project.id, existing.id))];
   const ts = now();
-  for (const id of ids) await db.run('UPDATE wbs_items SET archived_at = ?, updated_at = ? WHERE id = ?', [ts, ts, id]);
-  (await renumber(db, project.id));
+  for (const id of ids) {
+    await db.run('UPDATE wbs_items SET archived_at = ?, updated_at = ? WHERE id = ?', [ts, ts, id]);
+    (await addWbsHistory(db, id, 'ARCHIVED', {}, userId, ts));
+  }
+  if (!skipRenumber) (await renumber(db, project.id));
   return ids;
 }
 
@@ -231,9 +248,14 @@ export async function addDependency(db, project, successor, predecessorId, userI
   if ((await reaches(db, project.id, successor.id, predecessorId))) throw new ValidationError({ predecessor_id: '순환 관계가 생겨 지정할 수 없습니다.' });
   const id = randomUUID();
   (await db.run('INSERT INTO wbs_dependencies (id, project_id, predecessor_id, successor_id, dependency_type, created_by) VALUES (?,?,?,?,?,?)', [id, project.id, predecessorId, successor.id, 'FINISH_TO_START', userId]));
+  (await addWbsHistory(db, successor.id, 'DEP_ADDED', { field: 'predecessor', newValue: `${pred.wbs_code} ${pred.title}` }, userId));
   return id;
 }
 
-export async function removeDependency(db, project, successor, depId) {
-  return (await db.run('DELETE FROM wbs_dependencies WHERE id = ? AND project_id = ? AND successor_id = ?', [depId, project.id, successor.id])).changes > 0;
+export async function removeDependency(db, project, successor, depId, userId = null) {
+  const dep = (await db.get(`SELECT p.wbs_code, p.title FROM wbs_dependencies d JOIN wbs_items p ON p.id = d.predecessor_id
+    WHERE d.id = ? AND d.project_id = ? AND d.successor_id = ?`, [depId, project.id, successor.id]));
+  const ok = (await db.run('DELETE FROM wbs_dependencies WHERE id = ? AND project_id = ? AND successor_id = ?', [depId, project.id, successor.id])).changes > 0;
+  if (ok && dep) (await addWbsHistory(db, successor.id, 'DEP_REMOVED', { field: 'predecessor', oldValue: `${dep.wbs_code} ${dep.title}` }, userId));
+  return ok;
 }

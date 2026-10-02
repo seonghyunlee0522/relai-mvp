@@ -4,7 +4,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
-import { nextDisplayId, resolveLinkTarget } from './common.js';
+import { nextDisplayId, resolveLinkTarget, formatDisplayId, reserveProjectSequence } from './common.js';
+import { listComments } from './comments.js';
 import { linkCountsByRequirement, linksForRequirement, traceStats } from './trace.js';
 import { linkedRaid } from './raid.js';
 import { testsFor, acceptancesFor } from './testing.js';
@@ -125,12 +126,22 @@ export async function getRequirement(db, project, id) {
       c.display_id AS source_change_display_id, c.title AS source_change_title, c.status AS source_change_status, c.archived_at AS source_change_archived_at
     FROM requirement_history h LEFT JOIN users u ON u.id = h.changed_by LEFT JOIN change_requests c ON c.id = h.source_change_request_id
     WHERE h.requirement_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [id]));
+  r.comments = (await listComments(db, 'REQUIREMENT', id));
   return r;
 }
 
 /* ---------- writes (caller wraps in tx) ---------- */
-export async function createRequirement(db, project, input, userId) {
-  const { sequence: seq, display_id } = (await nextDisplayId(db, project.id, 'REQUIREMENT'));
+/** input.display_id (optional, `REQ-nnn`, used by the Excel import): claims that number and advances the counter past it.
+ *  `reservedSequences`: numbers that explicit ids elsewhere in the same batch will claim — auto-numbering skips them. */
+export async function createRequirement(db, project, input, userId, { reservedSequences = null } = {}) {
+  let seq; let display_id;
+  const explicit = input.display_id && /^REQ-(\d{1,6})$/.exec(input.display_id);
+  if (explicit) {
+    seq = Number(explicit[1]); display_id = formatDisplayId('REQUIREMENT', seq);
+    (await reserveProjectSequence(db, project.id, 'REQUIREMENT', seq));
+  } else {
+    do { ({ sequence: seq, display_id } = (await nextDisplayId(db, project.id, 'REQUIREMENT'))); } while (reservedSequences && reservedSequences.has(seq));
+  }
   const id = randomUUID(); const ts = now();
   (await db.run(`INSERT INTO requirements (id, project_id, sequence_number, display_id, title, description, type, priority, scope, status,
       requester_name, requester_organization, owner_user_id, created_by, created_at, updated_at)

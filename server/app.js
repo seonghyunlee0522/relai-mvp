@@ -17,6 +17,8 @@ import * as Q from './testing.js';
 import * as M from './metrics.js';
 import * as H from './health.js';
 import * as WR from './reports.js';
+import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, BIG_JSON_PATH } from './routes-extra.js';
+import { ImportFileError } from './xlsx.js';
 import { requireAction, requireOwner, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +34,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const tokenHash = (token) => sha256(sessionSecret ? `${sessionSecret}:${token}` : token);
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '64kb' }));
+  // 64 KB for every JSON body except the Excel import endpoints (base64 xlsx), which parse their own larger body after auth.
+  const smallJson = express.json({ limit: '64kb' });
+  app.use((req, res, next) => (req.method === 'POST' && BIG_JSON_PATH.test(req.path) ? next() : smallJson(req, res, next)));
   app.use((req, res, next) => {
     res.set({
       'X-Content-Type-Options': 'nosniff',
@@ -337,6 +341,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     return r;
   };
 
+  mountRequirementRoutes({ app, db, guard, wrap, fail, loadProject, mutable, rbase });   // Excel / bulk / comments (before the /:rid routes)
+
   app.get(rbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
@@ -430,6 +436,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     return { project, w };
   };
 
+  mountWbsRoutes({ app, db, guard, wrap, fail, loadProject, mutable, wbase, wbsResponse });   // Excel / bulk / comments (before the /:iid routes)
+
   app.get(wbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
@@ -456,19 +464,19 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
     const input = W.parseWbs(req.body, { partial: true, existing: ctx.w });
     if (!(await ownerOk(req, res, input.owner_user_id))) return;
-    (await tx(db, async (db) => (await W.updateWbs(db, ctx.project, ctx.w, input))));
+    (await tx(db, async (db) => (await W.updateWbs(db, ctx.project, ctx.w, input, req.user.id))));
     res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), ...(await wbsResponse(ctx.project)) });
   }));
 
   app.post(`${wbase}/:iid/move`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
-    (await tx(db, async (db) => (await W.moveWbs(db, ctx.project, ctx.w, { parent_id: req.body?.parent_id, sequence: req.body?.sequence }))));
+    (await tx(db, async (db) => (await W.moveWbs(db, ctx.project, ctx.w, { parent_id: req.body?.parent_id, sequence: req.body?.sequence }, req.user.id))));
     res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), ...(await wbsResponse(ctx.project)) });
   }));
 
   app.post(`${wbase}/:iid/archive`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
-    const archived = (await tx(db, async (db) => (await W.archiveWbs(db, ctx.project, ctx.w))));
+    const archived = (await tx(db, async (db) => (await W.archiveWbs(db, ctx.project, ctx.w, req.user.id))));
     res.json({ archived_ids: archived, ...(await wbsResponse(ctx.project)) });
   }));
 
@@ -480,7 +488,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   app.delete(`${wbase}/:iid/dependencies/:did`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
-    const ok = (await tx(db, async (db) => (await W.removeDependency(db, ctx.project, ctx.w, req.params.did))));
+    const ok = (await tx(db, async (db) => (await W.removeDependency(db, ctx.project, ctx.w, req.params.did, req.user.id))));
     if (!ok) return fail(res, 404, 'not_found', '선행 작업 관계를 찾을 수 없습니다.');
     res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), ...(await wbsResponse(ctx.project)) });
   }));
@@ -817,6 +825,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /* ---------- Phase 9: health / attention / weekly reports ---------- */
   app.get(`${base}/:pid/health`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; res.json({ health: (await H.projectHealth(db, project)) }); }));
   app.get(`${base}/:pid/attention`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const items = (await M.attentionAll(db, project.id)); res.json({ items, total: items.length }); }));
+  mountDashboardRoute({ app, db, guard, wrap, loadProject, base });
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };
@@ -866,6 +875,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.use((err, req, res, next) => {
     if (err instanceof ValidationError) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: err.fields });
     if (err.type === 'entity.parse.failed') return fail(res, 400, 'bad_json', '잘못된 요청입니다.');
+    if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
+    if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);
     const dbe = dbErrorInfo(err);
     if (dbe) { if (dbe.status >= 500) console.error('[db]', err.message); return fail(res, dbe.status, dbe.code, dbe.message); }
     console.error(err);

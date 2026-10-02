@@ -2,6 +2,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, fmtDT, html, raw } from '../core/dom.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
+import { projectHead } from './guide.js';
 
 /** Minimal markdown → HTML for the read view: headings, bold, bullet lists (nested by 2-space indent), paragraphs. Escaped first via html``. */
 export function mdToHtml(md) {
@@ -22,12 +23,12 @@ const RS = { DRAFT: ['초안', 'chip--muted'], FINAL: ['확정', 'chip--done'] }
 
 export async function reportPage(pid, rid, main = $('#main')) {
   let { report } = await api('GET', wsApi(`/${pid}/weekly-reports/${rid}`));
-  const proj = (await api('GET', wsApi(`/${pid}`))).project;
+  const g = await api('GET', wsApi(`/${pid}`)); const proj = g.project;
   const archived = proj.status === 'ARCHIVED';
   document.title = `${report.title} — RELAI`;
   const draw = () => {
     const ro = report.status === 'FINAL' || archived; const sc = report.structured_content;
-    main.innerHTML = html`<div class="page page--doc">
+    main.innerHTML = html`${raw(projectHead(proj, g, { tab: 'overview' }))}<div class="page page--doc">
       <a class="crumb" href="/app/projects/${pid}" data-link>← ${proj.name}</a>
       <div class="doc__bar">
         <div class="doc__meta"><span class="chip ${RS[report.status][1]}">${RS[report.status][0]}</span>
