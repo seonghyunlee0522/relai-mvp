@@ -38,7 +38,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
   const drawFile = () => {
     el.innerHTML = shell(html`
       <div class="drop" id="drop" tabindex="0" role="button"><b>Excel 파일(.xlsx)을 여기에 끌어다 놓거나 클릭해 선택하세요</b>
-        <span>최대 5MB · 한 번에 최대 5,000행 · 첫 번째 시트를 읽습니다</span>
+        <span>최대 5MB · 한 번에 최대 2,000행 · 첫 번째 시트를 읽습니다</span>
         <input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></div>
       <div class="imp__tpl"><button class="btn btn--secondary" data-tpl>${TEMPLATE_NAME[kind]} 내려받기</button>
         <span class="hint">템플릿에 입력 → 업로드 → 오류 확인·수정 → 가져오기 순서로 진행합니다. ${kind === 'wbs' ? 'WBS Code(1, 1.1, 1.2.1)로 계층이 만들어집니다.' : '요구사항 ID를 비우면 자동 채번됩니다.'}</span></div>
