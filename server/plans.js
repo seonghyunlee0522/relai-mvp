@@ -8,7 +8,7 @@
  * `null` limit = unlimited. Nothing here is enforced on the product API yet — enforcement is a Billing-phase task.
  */
 export const PLANS = {
-  FREE: { key: 'FREE', label: 'Free', price_monthly: null, limits: { projects: 3, members: 5, requirements: 300, wbs: 1000, weekly_reports: 8 } },
+  FREE: { key: 'FREE', label: 'Free', price_monthly: null, limits: { projects: 1, members: 3, requirements: 10, wbs: 30, weekly_reports: 8 } },
   TEAM: { key: 'TEAM', label: 'Team', price_monthly: null, limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
 };
 export const DEFAULT_PLAN = 'FREE';

@@ -37,7 +37,7 @@
 
 ## 5. Plan / Usage
 
-`server/plans.js`가 Plan 한도의 단일 기준(FREE: Projects 3 · Members 5 · Requirements 300 · WBS 1,000 · 주간보고 8/월, TEAM: 무제한). Billing 전까지 모든 Workspace는 FREE이며 한도는 제품 API에서 강제되지 않는다(Billing Phase 과제). `server/usage.js`는 집계 쿼리 한 번으로 계산한다(행별 쿼리 없음).
+`server/plans.js`가 Plan 한도의 단일 기준(FREE: Projects 1 · Members 3 · Requirements 10 · WBS 30 · 주간보고 8/월, TEAM: 무제한). Billing 전까지 모든 Workspace는 FREE이며 한도는 제품 API에서 강제되지 않는다(Billing Phase 과제). `server/usage.js`는 집계 쿼리 한 번으로 계산한다(행별 쿼리 없음).
 
 ## 6. API
 
