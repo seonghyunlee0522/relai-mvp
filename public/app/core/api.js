@@ -11,6 +11,7 @@ export async function api(method, url, body) {
   try { data = await res.json(); } catch { /* empty */ }
   if (!res.ok) {
     if (res.status === 401 && !location.pathname.match(/^\/(login|signup)/)) { location.href = '/login'; }
+    if (res.status === 403 && data?.error?.code === 'account_suspended') { location.href = '/login?suspended=1'; }
     const e = new Error(data?.error?.message || '요청을 처리하지 못했습니다.');
     e.status = res.status; e.code = data?.error?.code; e.fields = data?.error?.fields || {};
     throw e;

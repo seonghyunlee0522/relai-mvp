@@ -8,6 +8,7 @@ export const icon = {
   projects: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M3 8h14"/></svg>',
   settings: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="2.5"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke-linecap="round"/></svg>',
   logout: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3H4v14h4M12 6l4 4-4 4M16 10H8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  admin: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2.5 16 5v4.5c0 3.7-2.6 6.6-6 8-3.4-1.4-6-4.3-6-8V5z" stroke-linejoin="round"/><path d="M7.5 10l1.8 1.8L12.8 8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   collapse: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11 5 6 10l5 5M15 4v12" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
@@ -47,6 +48,7 @@ export async function shell(path, view) {
         </nav>
         <div class="side__bottom">
           <a class="navlink" data-nav="settings" href="/app/settings" data-link title="Settings">${raw(icon.settings)}<span class="nl">Settings</span></a>
+          ${raw(state.user.system_role === 'SYSTEM_ADMIN' ? html`<a class="navlink navlink--admin" href="/admin" data-link title="Admin Console">${raw(icon.admin)}<span class="nl">Admin Console</span></a>` : '')}
           <div class="me"><span class="avatar">${[...state.user.name][0]}</span>
             <div class="me__t" style="min-width:0"><b>${state.user.name}</b><small>${state.user.email}</small></div></div>
           <button class="navlink linkbtn" id="logout" title="Logout">${raw(icon.logout)}<span class="nl">Logout</span></button>
@@ -72,6 +74,10 @@ export async function shell(path, view) {
   const main = $('#main');
   main.innerHTML = '<div class="loading">불러오는 중…</div>';
   window.scrollTo(0, 0);
+  if (state.workspace && state.workspace.status === 'SUSPENDED') {
+    main.innerHTML = html`<div class="page"><div class="empty"><h2>정지된 Workspace입니다</h2><p>'${state.workspace.name}'은(는) 운영자에 의해 정지되어 조회와 수정이 차단됩니다. 데이터는 그대로 보관되어 있습니다. 문의는 운영자에게 해 주세요.</p><a class="btn btn--secondary" href="/app" data-link>Home</a></div></div>`;
+    return;
+  }
   try { await view(main); } catch (e) { main.innerHTML = html`<div class="page"><div class="empty"><h2>${e.status === 404 ? '찾을 수 없습니다' : '문제가 발생했습니다'}</h2><p>${e.message}</p><a class="btn btn--primary" href="/app/projects" data-link>프로젝트로 돌아가기</a></div></div>`; }
   hydrateHeader();
 }

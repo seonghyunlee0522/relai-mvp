@@ -13,6 +13,13 @@ import { changesPage } from './changes/page.js';
 import { raidPage } from './raid/page.js';
 import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
+import { adminShell } from './admin/shell.js';
+import { adminDashboardPage } from './admin/dashboard.js';
+import { adminUsersPage, adminUserPage } from './admin/users.js';
+import { adminWorkspacesPage, adminWorkspacePage } from './admin/workspaces.js';
+import { adminSubscriptionsPage, adminSubscriptionPage, adminPaymentsPage, adminPaymentPage } from './admin/billing.js';
+import { adminUsagePage } from './admin/usage.js';
+import { adminAuditPage } from './admin/audit.js';
 
 registerRoutes([
   [/^\/app\/?$/, homePage],
@@ -28,5 +35,17 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/issues\/?$/, raidPage],
   [/^\/app\/projects\/([\w-]+)\/tests\/?$/, testsPage],
   [/^\/app\/settings\/?$/, settingsPage],
-], { shell, auth: authPage });
+  // Admin Console — separate shell, operator-only (the server refuses /admin and /api/admin/* to everyone else)
+  [/^\/admin\/?$/, adminDashboardPage],
+  [/^\/admin\/users\/?$/, adminUsersPage],
+  [/^\/admin\/users\/([\w-]+)\/?$/, adminUserPage],
+  [/^\/admin\/workspaces\/?$/, adminWorkspacesPage],
+  [/^\/admin\/workspaces\/([\w-]+)\/?$/, adminWorkspacePage],
+  [/^\/admin\/subscriptions\/?$/, adminSubscriptionsPage],
+  [/^\/admin\/subscriptions\/([\w-]+)\/?$/, adminSubscriptionPage],
+  [/^\/admin\/payments\/?$/, adminPaymentsPage],
+  [/^\/admin\/payments\/([\w-]+)\/?$/, adminPaymentPage],
+  [/^\/admin\/usage\/?$/, adminUsagePage],
+  [/^\/admin\/audit\/?$/, adminAuditPage],
+], { shell: (path, view) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view)), auth: authPage });
 render();

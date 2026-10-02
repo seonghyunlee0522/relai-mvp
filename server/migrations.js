@@ -20,6 +20,7 @@ export const migrations = [
   { version: 9, name: 'weekly reports (Phase 9)', up() {} },
   { version: 10, name: 'PostgreSQL baseline (timestamptz/date types, plpgsql triggers, history seq, usage indexes)', up() {} },
   { version: 11, name: 'comments + wbs_history (comments tab, activity feed)', up() {} },
+  { version: 12, name: 'admin console: users.status/system_role/last_login_at, workspaces.status, admin_audit_logs', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

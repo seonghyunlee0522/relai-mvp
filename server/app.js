@@ -20,6 +20,8 @@ import * as WR from './reports.js';
 import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, BIG_JSON_PATH } from './routes-extra.js';
 import { ImportFileError } from './xlsx.js';
 import { requireAction, requireOwner, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
+import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
+import { AdminError } from './admin.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
@@ -52,13 +54,14 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /* ---------- helpers ---------- */
   const q = {
     userByEmail: { get: (email) => db.get('SELECT * FROM users WHERE email = ?', [email]) },
-    userById: { get: (id) => db.get('SELECT id, email, name FROM users WHERE id = ?', [id]) },
+    userById: { get: (id) => db.get('SELECT id, email, name, status, system_role FROM users WHERE id = ?', [id]) },
     session: { get: (h, now) => db.get('SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?', [h, now]) },
     insSession: { run: (h, uid, exp) => db.run('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?,?,?)', [h, uid, exp]) },
     delSession: { run: (h) => db.run('DELETE FROM sessions WHERE token_hash = ?', [h]) },
-    memberships: { all: (uid) => db.all(`SELECT w.id, w.name, m.role FROM workspace_members m
+    memberships: { all: (uid) => db.all(`SELECT w.id, w.name, w.status, m.role FROM workspace_members m
       JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? ORDER BY w.created_at`, [uid]) },
-    role: { get: (wid, uid) => db.get('SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [wid, uid]) },
+    role: { get: (wid, uid) => db.get('SELECT m.role, w.status AS workspace_status FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = ? AND m.user_id = ?', [wid, uid]) },
+    delUserSessions: { run: (uid) => db.run('DELETE FROM sessions WHERE user_id = ?', [uid]) },
   };
 
   const parseCookies = (h = '') => Object.fromEntries(h.split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
@@ -89,19 +92,27 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     next();
   });
 
-  /* Authentication: attaches req.user or leaves it undefined. */
+  /* Authentication: attaches req.user or leaves it undefined.
+   * Suspension enforcement (Phase 10B): a session whose user is no longer ACTIVE is revoked on the spot — the user
+   * is treated as logged out, API calls get 403 account_suspended, page loads go back to /login. */
   app.use(wrap(async (req, res, next) => {
     const token = parseCookies(req.headers.cookie)[COOKIE];
     if (token) {
       const row = await q.session.get(tokenHash(token), new Date().toISOString());
-      if (row) req.user = await q.userById.get(row.user_id);
+      if (row) {
+        const user = await q.userById.get(row.user_id);
+        if (user && user.status !== 'ACTIVE') { await q.delUserSessions.run(user.id); clearSessionCookie(res); req.suspendedUser = user; }
+        else req.user = user;
+      }
       req.sessionToken = token;
     }
     next();
   }));
+  app.use('/api', (req, res, next) => (req.suspendedUser ? fail(res, 403, 'account_suspended', '정지된 계정입니다. 운영자에게 문의해 주세요.') : next()));
 
   const requireAuth = (req, res, next) =>
     req.user ? next() : fail(res, 401, 'unauthenticated', '로그인이 필요합니다.');
+  const toPublicUser = (u) => ({ id: u.id, email: u.email, name: u.name, system_role: u.system_role || 'NONE' });
 
   /**
    * Single choke point for tenant isolation. Every /api/workspaces/:wid/* route passes through here.
@@ -110,9 +121,13 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const requireMember = wrap(async (req, res, next) => {
     const m = await q.role.get(req.params.wid, req.user.id);
     if (!m) return fail(res, 404, 'not_found', '찾을 수 없습니다.');
-    req.role = m.role;
+    req.role = m.role; req.workspaceStatus = m.workspace_status;
     next();
   });
+  /** Workspace suspension policy (Phase 10B): a SUSPENDED workspace refuses every workspace-scoped call, reads included.
+   * Members keep their login and other workspaces; nothing is deleted. Runs after requireMember so non-members still get 404. */
+  const requireWorkspaceActive = (req, res, next) =>
+    (req.workspaceStatus === 'SUSPENDED' ? fail(res, 403, 'workspace_suspended', '정지된 Workspace입니다. 운영자에게 문의해 주세요.') : next());
 
   /* ---------- operations ---------- */
   /** Liveness + database reachability. No secrets, no versions. */
@@ -141,8 +156,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       if (String(e.message).includes('UNIQUE')) return fail(res, 409, 'email_taken', '이미 가입된 이메일입니다.', { fields: { email: '이미 가입된 이메일입니다.' } });
       throw e;
     }
+    await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [userId]);
     await startSession(res, userId);
-    res.status(201).json({ user: { id: userId, email, name }, workspaces: await q.memberships.all(userId) });
+    res.status(201).json({ user: { id: userId, email, name, system_role: 'NONE' }, workspaces: await q.memberships.all(userId) });
   }));
 
   app.post('/api/auth/login', wrap(async (req, res) => {
@@ -158,9 +174,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       return fail(res, 401, 'invalid_credentials', '이메일 또는 비밀번호가 올바르지 않습니다.');
     }
     loginLimit.reset(key);
+    if (user.status !== 'ACTIVE') return fail(res, 403, 'account_suspended', '정지된 계정입니다. 운영자에게 문의해 주세요.');
     if (req.sessionToken) await q.delSession.run(tokenHash(req.sessionToken));
+    await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [user.id]);
     await startSession(res, user.id);
-    res.json({ user: { id: user.id, email: user.email, name: user.name }, workspaces: await q.memberships.all(user.id) });
+    res.json({ user: toPublicUser(user), workspaces: await q.memberships.all(user.id) });
   }));
 
   app.post('/api/auth/logout', wrap(async (req, res) => {
@@ -170,12 +188,15 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
 
   app.get('/api/me', requireAuth, wrap(async (req, res) => {
-    res.json({ user: req.user, workspaces: await q.memberships.all(req.user.id) });
+    res.json({ user: toPublicUser(req.user), workspaces: await q.memberships.all(req.user.id) });
   }));
+
+  /* ---------- admin console API (operator role only; see admin-routes.js) ---------- */
+  mountAdminRoutes(app, db, { requireAuth, wrap, fail });
 
   /* ---------- projects (always workspace-scoped) ---------- */
   const base = '/api/workspaces/:wid/projects';
-  const guard = [requireAuth, requireMember];
+  const guard = [requireAuth, requireMember, requireWorkspaceActive];
 
   app.get(base, guard, wrap(async (req, res) => {
     const includeArchived = req.query.include_archived === '1';
@@ -864,8 +885,15 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (req.user) return res.redirect('/app');
     res.sendFile(resolve(pub, 'app/index.html'));
   });
-  app.get(/^\/app(\/.*)?$/, (req, res) => {
+  /* Admin Console page: same SPA bundle, but the server refuses it to non-operators (403) — the frontend hiding is not the control. */
+  app.get(/^\/admin(\/.*)?$/, (req, res) => {
     if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
+    if (!isSystemAdmin(req.user)) return res.status(403).type('html').send('<!DOCTYPE html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;padding:40px"><h1>403</h1><p>운영자 권한이 필요합니다.</p><a href="/app">앱으로 돌아가기</a></body>');
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(resolve(pub, 'app/index.html'));
+  });
+  app.get(/^\/app(\/.*)?$/, (req, res) => {
+    if (!req.user) return res.redirect(req.suspendedUser ? '/login?suspended=1' : `/login?next=${encodeURIComponent(req.originalUrl)}`);
     res.set('Cache-Control', 'no-store');
     res.sendFile(resolve(pub, 'app/index.html'));
   });
@@ -877,6 +905,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (err.type === 'entity.parse.failed') return fail(res, 400, 'bad_json', '잘못된 요청입니다.');
     if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);
+    if (err instanceof AdminError) return fail(res, err.status, err.code, err.message);
     const dbe = dbErrorInfo(err);
     if (dbe) { if (dbe.status >= 500) console.error('[db]', err.message); return fail(res, dbe.status, dbe.code, dbe.message); }
     console.error(err);

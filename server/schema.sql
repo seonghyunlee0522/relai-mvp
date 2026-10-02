@@ -6,8 +6,27 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT NOT NULL UNIQUE,            -- lower-cased
   name          TEXT NOT NULL,
   password_hash TEXT NOT NULL,                   -- scrypt$N$salt$hash
-  created_at    timestamptz NOT NULL DEFAULT now()
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  -- Phase 10B: account status + service-operator role. system_role is deliberately NOT the workspace role
+  -- (that lives on workspace_members.role) — the two are unrelated permission systems.
+  status        TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','DEACTIVATED')),
+  system_role   TEXT NOT NULL DEFAULT 'NONE' CHECK (system_role IN ('NONE','SYSTEM_ADMIN')),
+  last_login_at timestamptz,
+  suspended_at  timestamptz
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS system_role TEXT NOT NULL DEFAULT 'NONE';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at timestamptz;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_status_check') THEN
+    ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('ACTIVE','SUSPENDED','DEACTIVATED')); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_system_role_check') THEN
+    ALTER TABLE users ADD CONSTRAINT users_system_role_check CHECK (system_role IN ('NONE','SYSTEM_ADMIN')); END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at);                    -- admin: signups by date, list ordering
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);                          -- admin: status filter, suspended attention
+CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login_at);               -- admin: activation / recency
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,                   -- sha256(token); raw token lives only in the cookie
@@ -18,11 +37,21 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
 CREATE TABLE IF NOT EXISTS workspaces (
-  id         TEXT PRIMARY KEY,
-  name       TEXT NOT NULL,
-  owner_id   TEXT NOT NULL REFERENCES users(id),
-  created_at timestamptz NOT NULL DEFAULT now()
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  owner_id     TEXT NOT NULL REFERENCES users(id),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  status       TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','CLOSED')),  -- Phase 10B
+  suspended_at timestamptz
 );
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS suspended_at timestamptz;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_status_check') THEN
+    ALTER TABLE workspaces ADD CONSTRAINT workspaces_status_check CHECK (status IN ('ACTIVE','SUSPENDED','CLOSED')); END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_workspaces_created ON workspaces(created_at);
+CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status);
 
 CREATE TABLE IF NOT EXISTS workspace_members (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -525,6 +554,21 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity_type, entity_id, created_at);
+
+/* ---------- Admin Console (Phase 10B): operator actions only. Never mixed with project-level history tables. ---------- */
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+  id            TEXT PRIMARY KEY,
+  seq           BIGSERIAL,
+  admin_user_id TEXT NOT NULL REFERENCES users(id),
+  action        TEXT NOT NULL,                   -- SUSPEND_USER | REACTIVATE_USER | SUSPEND_WORKSPACE | REACTIVATE_WORKSPACE | …
+  target_type   TEXT NOT NULL,                   -- USER | WORKSPACE | SUBSCRIPTION | PAYMENT
+  target_id     TEXT NOT NULL,
+  metadata      JSONB NOT NULL DEFAULT '{}'::jsonb,   -- target label at the time (email / workspace name), reason …; never secrets
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_admin ON admin_audit_logs(admin_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_audit_logs(target_type, target_id, created_at);
 
 /* ================= Integrity triggers (plpgsql) =================
    Defence in depth. Every rule here is also enforced by the service layer (common.js resolveLinkTarget etc.).

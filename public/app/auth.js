@@ -15,6 +15,7 @@ export function authPage(mode) {
       <p class="sub">${isSignup ? '가입하면 나만의 Workspace가 바로 만들어집니다.' : '이메일과 비밀번호로 로그인해 주세요.'}</p>
       <form id="f" novalidate>
         <div class="form-err" id="ferr" role="alert" hidden></div>
+        ${raw(!isSignup && new URLSearchParams(location.search).get('suspended') ? '<div class="notice" style="margin-bottom:14px">정지된 계정입니다. 운영자에게 문의해 주세요.</div>' : '')}
         ${raw(isSignup ? html`<div class="field"><label for="name">이름 <span class="req">*</span></label>
           <input class="input" id="name" name="name" autocomplete="name" maxlength="50"><div class="err" data-for="name"></div></div>` : '')}
         <div class="field"><label for="email">이메일 <span class="req">*</span></label>

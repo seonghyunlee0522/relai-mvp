@@ -19,7 +19,7 @@ export async function render() {
   const path = location.pathname;
   if (/^\/(login|signup)\/?$/.test(path)) return authFn(path.startsWith('/signup') ? 'signup' : 'login');
   if (!state.user) {
-    try { Object.assign(state, await api('GET', '/api/me')); state.workspace = state.workspaces[0]; }
+    try { Object.assign(state, await api('GET', '/api/me')); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0]; }
     catch { return; }
   }
   for (const [re, fn] of routes) {
