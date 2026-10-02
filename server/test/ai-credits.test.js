@@ -135,3 +135,104 @@ test('workspace isolation: usage in one workspace never touches another; members
   assert.equal((await db.get('SELECT COUNT(*) AS n FROM ai_runs WHERE workspace_id = ?', [X.w])).n, 0);
   server.close();
 });
+
+/* ---------- Phase 11 final stabilization ---------- */
+import { ensureAccount, reserveRun, settleRun, SETTLEMENT_CONFLICT } from '../ai/credits.js';
+import { runAiFeature, AiError } from '../ai/service.js';
+const ledgerSum = async (db, wid) => (await db.get('SELECT COALESCE(SUM(amount), 0) AS s, (SELECT balance_after FROM credit_ledger WHERE workspace_id = ? ORDER BY created_at DESC, seq DESC LIMIT 1) AS last FROM credit_ledger WHERE workspace_id = ?', [wid, wid]));
+const consistent = async (db, wid) => { const acc = await account(db, wid); const l = await ledgerSum(db, wid); assert.equal(acc.balance, l.s, 'balance == sum(ledger)'); assert.equal(acc.balance, l.last ?? 0, 'balance == last balance_after'); assert.ok(acc.balance >= 0); };
+
+test('initial grant policy: production trial (PROMOTION 100, once) vs DEV_INITIAL (PLAN_GRANT, replaces trial); re-touching an account never grants again; trial can be 0', async () => {
+  const { db, server, client } = await boot();
+  delete process.env.DEV_INITIAL_AI_CREDITS; delete process.env.AI_INITIAL_TRIAL_CREDITS;
+  const P = await setup(client, 'prod@x.com');
+  let led = await ledgerOf(db, P.w);
+  assert.equal(led.length, 1); assert.equal(led[0].type, 'PROMOTION'); assert.equal(led[0].amount, 100); assert.equal(led[0].reason, '신규 Workspace AI 시작 Credit'); assert.equal(led[0].reference_id, 'AI_INITIAL_TRIAL_CREDITS');
+  assert.equal((await status(P)).credits.balance, 100);
+  // re-reads / explicit ensureAccount with any policy → no second grant
+  await ensureAccount(db, P.w); await ensureAccount(db, P.w, { devInitial: 500, trial: 999 }); await status(P);
+  process.env.DEV_INITIAL_AI_CREDITS = '500'; await status(P);
+  led = await ledgerOf(db, P.w); assert.equal(led.length, 1); assert.equal((await account(db, P.w)).balance, 100); assert.equal((await account(db, P.w)).lifetime_granted, 100);
+  // DEV_INITIAL set → PLAN_GRANT only, trial NOT added on top
+  const D = await setup(client, 'dev@x.com');
+  led = await ledgerOf(db, D.w); assert.equal(led.length, 1); assert.equal(led[0].type, 'PLAN_GRANT'); assert.equal(led[0].amount, 500); assert.equal((await account(db, D.w)).balance, 500);
+  // trial disabled, no dev grant → 0
+  delete process.env.DEV_INITIAL_AI_CREDITS; process.env.AI_INITIAL_TRIAL_CREDITS = '0';
+  const Z = await setup(client, 'zero@x.com');
+  assert.equal((await ledgerOf(db, Z.w)).length, 0); assert.equal((await account(db, Z.w)).balance, 0);
+  const r = await Z.c('POST', `${Z.purl}/ai/ask`, { question: '잔액 0에서 질문' }); assert.equal(r.status, 402);
+  // concurrent first touch of a brand-new account (no signup path) → exactly one grant
+  process.env.AI_INITIAL_TRIAL_CREDITS = '100';
+  const wid = (await db.get(`INSERT INTO workspaces (id, name, owner_id) VALUES (gen_random_uuid()::text, 'raw', ?) RETURNING id`, [P.uid])).id;
+  await Promise.all([1, 2, 3, 4].map(() => ensureAccount(db, wid)));
+  assert.equal((await ledgerOf(db, wid)).length, 1); assert.equal((await account(db, wid)).balance, 100);
+  for (const w of [P.w, D.w, Z.w, wid]) await consistent(db, w);
+  process.env.DEV_INITIAL_AI_CREDITS = '100'; delete process.env.AI_INITIAL_TRIAL_CREDITS;
+  server.close();
+});
+
+test('settlement race: a reservation that expired (TTL) and was overtaken by other runs settles as AI_CREDIT_SETTLEMENT_CONFLICT — no charge, no negative balance, ledger == balance', async () => {
+  const { db, server, client } = await boot();
+  process.env.DEV_INITIAL_AI_CREDITS = '25';
+  const A = await setup(client, 'race@x.com');
+  process.env.DEV_INITIAL_AI_CREDITS = '100';
+  // run A: reserved (cost 10) but "forgotten" → pretend it is older than the reservation TTL
+  const runA = await reserveRun(db, { wid: A.w, projectId: A.p.id, userId: A.uid, feature: 'REQUIREMENT_EXTRACTION', provider: 'fake', model: 'fake-model', inputSummary: 'stale', cost: 10 });
+  await db.run(`UPDATE ai_runs SET created_at = now() - interval '11 minutes' WHERE id = ?`, [runA.id]);
+  // two other runs now see 25 available (A's reservation expired) and spend 20
+  setFakeProvider(() => ({ data: { candidates: [] } }));
+  assert.equal((await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '첫 번째 회의록 본문입니다.' })).status, 200);
+  assert.equal((await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '두 번째 회의록 본문입니다.' })).status, 200);
+  assert.equal((await account(db, A.w)).balance, 5);
+  // the stale run finally settles "successfully": balance 5 < cost 10 → conflict, nothing charged
+  const s = await settleRun(db, runA.id, { success: true, usage: { input_tokens: 1, output_tokens: 1 }, latencyMs: 700000 });
+  assert.deepEqual(s, { balance: 5, credit_status: 'RELEASED', conflict: true });
+  const run = await db.get('SELECT * FROM ai_runs WHERE id = ?', [runA.id]);
+  assert.equal(run.status, 'SUCCEEDED'); assert.equal(run.credit_status, 'RELEASED'); assert.equal(run.error_code, SETTLEMENT_CONFLICT); assert.ok(run.error_message.includes('5'));
+  assert.equal((await account(db, A.w)).balance, 5);
+  assert.deepEqual((await ledgerOf(db, A.w)).map((l) => l.amount), [25, -10, -10]);
+  await consistent(db, A.w);
+  // settling again is a no-op (already settled)
+  assert.equal(await settleRun(db, runA.id, { success: true }), null);
+  assert.equal(await settleRun(db, runA.id, { success: false }), null);
+  // partial case: balance 5 and a late run costing exactly 5 still charges normally (>= rule)
+  const runB = await reserveRun(db, { wid: A.w, projectId: A.p.id, userId: A.uid, feature: 'PROJECT_QA', provider: 'fake', model: 'fake-model', inputSummary: 'x', cost: 5 });
+  const s2 = await settleRun(db, runB.id, { success: true }); assert.equal(s2.credit_status, 'CHARGED'); assert.equal(s2.balance, 0);
+  await consistent(db, A.w);
+  // admin surfaces the conflict
+  const OPS = await setup(client, 'ops2@x.com', '운영자'); await grantAdmin(db, OPS.uid);
+  const ov = (await OPS.c('GET', '/api/admin/ai/usage')).json;
+  assert.equal(ov.kpis.settlement_conflicts_30d, 1); assert.ok(ov.recent_failures.some((f) => f.id === runA.id && f.error_code === SETTLEMENT_CONFLICT));
+  const wu = (await OPS.c('GET', `/api/admin/workspaces/${A.w}/ai`)).json;
+  assert.ok(wu.runs.some((r) => r.id === runA.id && r.status === 'SUCCEEDED' && r.credit_status === 'RELEASED' && r.error_code === SETTLEMENT_CONFLICT));
+  server.close();
+});
+
+test('unexpected exceptions after reservation (post-validation bug, provider throwing a plain Error) always end FAILED/RELEASED; no run stays PENDING; settle is not duplicated', async () => {
+  const { db, server, client } = await boot();
+  const A = await setup(client, 'boom@x.com');
+  const before = (await account(db, A.w)).balance;
+  const base = { wid: A.w, projectId: A.p.id, userId: A.uid, feature: 'PROJECT_QA', build: async () => ({ system: 's', user: 'u', inputSummary: 'x', inputChars: 1 }) };
+  // 1. postValidate throws a non-AI error
+  setFakeProvider(() => ({ data: { answer: 'ok', references: [], warnings: [] } }));
+  await assert.rejects(() => runAiFeature(db, { ...base, postValidate: async () => { throw new TypeError('boom in post-validation'); } }), (e) => e instanceof AiError && e.code === 'AI_INTERNAL_ERROR' && e.status === 500);
+  // 2. provider throws a plain Error (not AiProviderError)
+  setFakeProvider(() => { throw new Error('socket hang up'); });
+  const r = await A.c('POST', `${A.purl}/ai/ask`, { question: '예상 못한 오류' });
+  assert.equal(r.status, 502); assert.equal(r.json.error.code, 'AI_PROVIDER_ERROR');
+  // 3. schema failure path and 4. AI post-validation rejection still release
+  setFakeProvider(() => ({ data: { nope: true } }));
+  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '스키마 오류' })).status, 502);
+  setFakeProvider(() => ({ data: { items: [], notes: [] } }));
+  const q = (await A.c('POST', A.req, { title: 'r' })).json.requirement;
+  assert.equal((await A.c('POST', `${A.purl}/ai/wbs/generate`, { requirement_ids: [q.id] })).status, 502);   // "AI가 WBS 항목을 제안하지 않았습니다"
+  const runs = await db.all('SELECT status, credit_status, error_code FROM ai_runs WHERE workspace_id = ? ORDER BY created_at, seq', [A.w]);
+  assert.equal(runs.length, 4);
+  assert.deepEqual(runs.map((x) => [x.status, x.credit_status]), Array(4).fill(['FAILED', 'RELEASED']));
+  assert.deepEqual(runs.map((x) => x.error_code), ['AI_INTERNAL_ERROR', 'AI_PROVIDER_ERROR', 'AI_INVALID_OUTPUT', 'AI_INVALID_OUTPUT']);
+  assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ai_runs WHERE status = 'PENDING' OR credit_status = 'RESERVED'`)).n, 0);
+  assert.equal((await account(db, A.w)).balance, before); assert.equal((await ledgerOf(db, A.w)).length, 1);
+  await consistent(db, A.w);
+  assert.equal((await status(A)).credits.reserved, 0);
+  server.close();
+});

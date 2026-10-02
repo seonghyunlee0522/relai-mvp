@@ -8,7 +8,7 @@ import { aiConfig, estimateProviderCost, featureCreditCost, publicConfig } from 
 import { createProvider, AiProviderError } from './provider.js';
 import { SCHEMAS, validateSchema, trimDeep } from './schemas.js';
 import { retryHint } from './prompts.js';
-import { CreditError, getBalance, reserveRun, settleRun } from './credits.js';
+import { CreditError, getBalance, releaseIfPending, reserveRun, settleRun } from './credits.js';
 
 export class AiError extends Error {
   constructor(code, message, { status = 400, ...extra } = {}) { super(message); this.code = code; this.status = status; this.extra = extra; }
@@ -58,36 +58,51 @@ export async function runAiFeature(db, { wid, projectId = null, userId, feature,
     throw new AiError(code, message, { status: STATUS_OF[code] || 502, run_id: run.id });
   };
 
-  let user = prompt.user; let data = null; let errors = [];
-  for (let attempt = 1; attempt <= 2 && !data; attempt++) {
-    let out;
-    try {
-      out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, attempt });
-    } catch (e) {
-      if (e instanceof AiProviderError && e.transient && attempt === 1) {   // one retry for transient provider failures
-        await sleep(300);
-        try { out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, attempt: 2 }); }
-        catch (e2) { return fail(e2 instanceof AiProviderError ? e2.code : 'AI_PROVIDER_ERROR', e2.message); }
-        attempt = 2;
-      } else if (e instanceof AiProviderError && e.code === 'AI_INVALID_OUTPUT' && attempt === 1) {
-        addUsage(e.usage); user = prompt.user + retryHint(['응답은 반드시 요구된 JSON 객체여야 합니다.']); continue;
-      } else return fail(e instanceof AiProviderError ? e.code : 'AI_PROVIDER_ERROR', e.message);
+  /* From here on a reservation exists: every exit path must settle the run (charge or release). The outer catch/finally
+   * covers anything unexpected (bugs, DB errors, thrown non-AI errors) so a run can never stay PENDING/RESERVED. */
+  try {
+    let user = prompt.user; let data = null; let errors = [];
+    for (let attempt = 1; attempt <= 2 && !data; attempt++) {
+      let out;
+      try {
+        out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, attempt });
+      } catch (e) {
+        if (e instanceof AiProviderError && e.transient && attempt === 1) {   // one retry for transient provider failures
+          await sleep(300);
+          try { out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, attempt: 2 }); }
+          catch (e2) { return await fail(e2 instanceof AiProviderError ? e2.code : 'AI_PROVIDER_ERROR', e2.message); }
+          attempt = 2;
+        } else if (e instanceof AiProviderError && e.code === 'AI_INVALID_OUTPUT' && attempt === 1) {
+          user = prompt.user + retryHint(['응답은 반드시 요구된 JSON 객체여야 합니다.']); continue;
+        } else return await fail(e instanceof AiProviderError ? e.code : 'AI_PROVIDER_ERROR', e.message);
+      }
+      addUsage(out.usage);
+      const candidate = trimDeep(out.data);
+      errors = validateSchema(schema, candidate);
+      if (!errors.length) data = candidate;
+      else if (attempt === 1) user = prompt.user + retryHint(errors);   // re-prompt once with the concrete validation problems
     }
-    addUsage(out.usage);
-    const candidate = trimDeep(out.data);
-    errors = validateSchema(schema, candidate);
-    if (!errors.length) data = candidate;
-    else if (attempt === 1) user = prompt.user + retryHint(errors);   // re-prompt once with the concrete validation problems
+    if (!data) return await fail('AI_INVALID_OUTPUT', `AI 응답이 요구된 형식을 만족하지 않았습니다. (${errors[0] || 'schema'})`);
+
+    let final;
+    try { final = await postValidate(data); }
+    catch (e) { if (e instanceof AiError) return await fail(e.code, e.message); throw e; }
+
+    const u = usage();
+    const settled = await settleRun(db, run.id, { success: true, usage: u, providerCost: estimateProviderCost(provider.model, u.input_tokens, u.output_tokens), latencyMs: Date.now() - started });
+    if (settled?.conflict) console.warn(`[ai] settlement conflict run=${run.id} workspace=${wid} feature=${feature}`);
+    return { ...final.data, warnings: final.warnings || [], run: { id: run.id, feature, model: provider.model, credit_cost: settled?.credit_status === 'CHARGED' ? cost : 0, credit_status: settled?.credit_status || 'NONE', balance: settled?.balance ?? run.balance_before, latency_ms: Date.now() - started } };
+  } catch (e) {
+    if (!(e instanceof AiError)) {   // unexpected: release the reservation, record the cause, then surface a generic AI error
+      await releaseIfPending(db, run.id, { errorCode: 'AI_INTERNAL_ERROR', errorMessage: e.message, latencyMs: Date.now() - started }).catch((e2) => console.error('[ai] release failed', e2.message));
+      console.error('[ai] unexpected error', e);
+      throw new AiError('AI_INTERNAL_ERROR', 'AI 처리 중 오류가 발생했습니다. 다시 시도해 주세요.', { status: 500, run_id: run.id });
+    }
+    throw e;
+  } finally {
+    // belt and braces: if settlement itself failed (e.g. DB hiccup) the run must still not stay PENDING
+    await releaseIfPending(db, run.id, { errorCode: 'AI_INTERNAL_ERROR', errorMessage: 'settlement did not complete' }).catch(() => {});
   }
-  if (!data) return fail('AI_INVALID_OUTPUT', `AI 응답이 요구된 형식을 만족하지 않았습니다. (${errors[0] || 'schema'})`);
-
-  let final;
-  try { final = await postValidate(data); }
-  catch (e) { if (e instanceof AiError) return fail(e.code, e.message); throw e; }
-
-  const u = usage();
-  const settled = await settleRun(db, run.id, { success: true, usage: u, providerCost: estimateProviderCost(provider.model, u.input_tokens, u.output_tokens), latencyMs: Date.now() - started });
-  return { ...final.data, warnings: final.warnings || [], run: { id: run.id, feature, model: provider.model, credit_cost: cost, balance: settled?.balance ?? run.balance_before, latency_ms: Date.now() - started } };
 }
 
 export { AiProviderError, CreditError };

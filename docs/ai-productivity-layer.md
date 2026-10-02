@@ -26,7 +26,8 @@ AI_PROVIDER=anthropic      # anthropic | openai | fake
 ANTHROPIC_API_KEY= / OPENAI_API_KEY=
 AI_MODEL=                  # 기본 claude-sonnet-4-5 / gpt-4o-mini
 AI_REQUEST_TIMEOUT_MS=25000  AI_DAILY_LIMIT=300  AI_USER_MINUTE_LIMIT=10  AI_MAX_INPUT_CHARS=20000
-DEV_INITIAL_AI_CREDITS=10000 # 개발/테스트용 초기 지급. 운영에서는 비워 둔다(Pricing Phase에서 결정)
+AI_INITIAL_TRIAL_CREDITS=100 # 운영: Account 최초 생성 시 1회 PROMOTION 지급("신규 Workspace AI 시작 Credit"). 0이면 미지급
+DEV_INITIAL_AI_CREDITS=      # 개발/테스트 전용. >0이면 PLAN_GRANT로 지급되고 Trial은 지급되지 않는다(중복 금지)
 AI_CREDIT_COST_<FEATURE>=    # 기능별 비용 override (기본 10 / 15 / 8 / 3)
 AI_FAKE_AUTOREPLY=1          # fake provider가 프롬프트 안의 ID만으로 데모 응답 생성 (키 없이 UI 확인용)
 ```
@@ -63,7 +64,8 @@ ai_runs                    feature, provider, model, status PENDING|SUCCEEDED|FA
 
 * reserve: account row lock → `available = balance − (RESERVED 상태인 ai_runs 합, 10분 TTL)` → 부족하면 402, 충분하면 `ai_runs` PENDING/RESERVED insert.
 * settle(성공): 같은 트랜잭션에서 balance 차감 + ledger `AI_USAGE` + run `SUCCEEDED/CHARGED`.
-* settle(실패: timeout, 5xx, invalid output, grounding 실패): run `FAILED/RELEASED`, ledger 기록 없음, 잔액 변동 없음.
+* settle(실패: timeout, 5xx, invalid output, grounding 실패, 예상치 못한 예외): run `FAILED/RELEASED`, ledger 기록 없음, 잔액 변동 없음. orchestration의 catch/finally가 예약 이후 모든 경로에서 settle을 보장하므로 PENDING/RESERVED로 남는 run은 없다(이미 settle된 run은 no-op).
+* settlement conflict: 예약 TTL(10분) 만료 후 다른 요청이 Credit을 소진한 뒤 늦게 성공 settle되면 `balance < credit_cost` → 차감하지 않고 run `SUCCEEDED/RELEASED` + `error_code = AI_CREDIT_SETTLEMENT_CONFLICT`. Admin Dashboard KPI(정산 충돌)와 최근 실패 목록, Workspace 상세 요청 목록에서 추적. 불변식: `balance == SUM(ledger.amount) == 마지막 balance_after`, 절대 음수 없음.
 * 예약은 ai_runs에서 파생되므로 프로세스가 중간에 죽어도 카운터가 새지 않는다(10분 후 자동 만료).
 * Pricing(판매가, Plan별 지급량, Top-up, rollover, 유효기간)은 이번 Phase에서 정하지 않는다. `featureCreditCost`와 `applyCredits(type: PLAN_GRANT)`가 향후 Plan 연결 지점이다.
 

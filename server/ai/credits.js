@@ -31,18 +31,27 @@ async function writeLedger(t, { wid, runId = null, type, amount, balanceAfter, r
 }
 
 /**
- * Creates the account on first touch. In development/test (DEV_INITIAL_AI_CREDITS > 0) the first creation also grants
- * the configured starter credits through the ledger (type PLAN_GRANT, reason names the env var) so existing
- * workspaces work the moment the feature is turned on. Production (env unset) starts at 0 — pricing decides later.
+ * Creates the account on first touch and applies the ONE-TIME initial grant policy, exactly once per workspace:
+ *   - DEV_INITIAL_AI_CREDITS > 0  (development / test)  → PLAN_GRANT of that amount, and the trial grant is skipped
+ *   - otherwise AI_INITIAL_TRIAL_CREDITS (production, default 100) → PROMOTION "신규 Workspace AI 시작 Credit"
+ * The grant is tied to the INSERT (ON CONFLICT DO NOTHING + changes = 1) under the row lock, so an existing account —
+ * or two concurrent first calls — can never be granted twice.
  */
-export async function ensureAccount(db, wid, { devInitial = aiConfig().devInitialCredits } = {}) {
+export async function ensureAccount(db, wid, opts = {}) {
+  const cfg = aiConfig();
+  const devInitial = opts.devInitial ?? cfg.devInitialCredits;
+  const trial = opts.trial ?? cfg.trialCredits;
   return tx(db, async (t) => {
     const existing = await lockAccount(t, wid);
     if (existing) return existing;
     const ins = await t.run('INSERT INTO workspace_credit_accounts (workspace_id) VALUES (?) ON CONFLICT (workspace_id) DO NOTHING', [wid]);
-    if (ins.changes && devInitial > 0) {
-      await t.run('UPDATE workspace_credit_accounts SET balance = ?, lifetime_granted = ?, updated_at = now() WHERE workspace_id = ?', [devInitial, devInitial, wid]);
-      await writeLedger(t, { wid, type: 'PLAN_GRANT', amount: devInitial, balanceAfter: devInitial, reason: '개발 초기 지급 (DEV_INITIAL_AI_CREDITS)', referenceType: 'ENV', referenceId: 'DEV_INITIAL_AI_CREDITS' });
+    if (ins.changes) {
+      const grant = devInitial > 0 ? { amount: devInitial, type: 'PLAN_GRANT', reason: '개발 초기 지급 (DEV_INITIAL_AI_CREDITS)', referenceType: 'ENV', referenceId: 'DEV_INITIAL_AI_CREDITS' }
+        : trial > 0 ? { amount: trial, type: 'PROMOTION', reason: '신규 Workspace AI 시작 Credit', referenceType: 'ENV', referenceId: 'AI_INITIAL_TRIAL_CREDITS' } : null;
+      if (grant) {
+        await t.run('UPDATE workspace_credit_accounts SET balance = ?, lifetime_granted = ?, updated_at = now() WHERE workspace_id = ?', [grant.amount, grant.amount, wid]);
+        await writeLedger(t, { wid, type: grant.type, amount: grant.amount, balanceAfter: grant.amount, reason: grant.reason, referenceType: grant.referenceType, referenceId: grant.referenceId });
+      }
     }
     return lockAccount(t, wid);
   });
@@ -89,23 +98,42 @@ export async function reserveRun(db, { wid, projectId, userId, feature, provider
   });
 }
 
-/** Finish a run. success → charge through the ledger; failure → release the reservation. One transaction either way. */
+export const SETTLEMENT_CONFLICT = 'AI_CREDIT_SETTLEMENT_CONFLICT';
+/**
+ * Finish a run — one transaction, account row locked, idempotent (a run that is no longer PENDING is left untouched).
+ *   success + enough balance → charge: balance −cost, ledger AI_USAGE, run SUCCEEDED/CHARGED
+ *   success + balance < cost → settlement conflict: the result was already delivered but the reservation had expired
+ *                              and other runs spent the credits. Nothing is charged (no ledger row, balance untouched),
+ *                              run SUCCEEDED/RELEASED with error_code AI_CREDIT_SETTLEMENT_CONFLICT so Admin can see it.
+ *   failure                 → release: run FAILED/RELEASED, nothing written to the ledger.
+ * Invariant: workspace_credit_accounts.balance always equals the last ledger balance_after, and never goes negative.
+ */
 export async function settleRun(db, runId, { success, usage = {}, providerCost = null, latencyMs = null, errorCode = null, errorMessage = null }) {
   return tx(db, async (t) => {
     const run = await t.get('SELECT * FROM ai_runs WHERE id = ? FOR UPDATE', [runId]);
     if (!run || run.status !== 'PENDING') return null;
-    let balance = null;
+    let balance = null; let creditStatus = run.credit_cost > 0 ? 'RELEASED' : 'NONE'; let conflict = false;
     if (success && run.credit_cost > 0) {
       const acc = await lockAccount(t, run.workspace_id);
-      balance = Math.max(0, acc.balance - run.credit_cost);
-      await t.run('UPDATE workspace_credit_accounts SET balance = ?, lifetime_used = lifetime_used + ?, updated_at = now() WHERE workspace_id = ?', [balance, run.credit_cost, run.workspace_id]);
-      await writeLedger(t, { wid: run.workspace_id, runId, type: 'AI_USAGE', amount: -run.credit_cost, balanceAfter: balance, reason: run.feature, referenceType: 'AI_RUN', referenceId: runId, createdBy: run.user_id });
+      if (acc.balance >= run.credit_cost) {
+        balance = acc.balance - run.credit_cost;
+        await t.run('UPDATE workspace_credit_accounts SET balance = ?, lifetime_used = lifetime_used + ?, updated_at = now() WHERE workspace_id = ?', [balance, run.credit_cost, run.workspace_id]);
+        await writeLedger(t, { wid: run.workspace_id, runId, type: 'AI_USAGE', amount: -run.credit_cost, balanceAfter: balance, reason: run.feature, referenceType: 'AI_RUN', referenceId: runId, createdBy: run.user_id });
+        creditStatus = 'CHARGED';
+      } else {
+        conflict = true; balance = acc.balance;
+        errorCode = SETTLEMENT_CONFLICT; errorMessage = `정산 시점 잔액(${acc.balance})이 비용(${run.credit_cost})보다 적어 차감하지 않았습니다. (예약 만료 후 다른 요청이 Credit을 사용)`;
+      }
     }
-    const creditStatus = run.credit_cost > 0 ? (success ? 'CHARGED' : 'RELEASED') : 'NONE';
     await t.run(`UPDATE ai_runs SET status = ?, credit_status = ?, input_tokens = ?, output_tokens = ?, provider_cost_amount = ?, latency_ms = ?, error_code = ?, error_message = ?, completed_at = now() WHERE id = ?`,
       [success ? 'SUCCEEDED' : 'FAILED', creditStatus, usage.input_tokens ?? null, usage.output_tokens ?? null, providerCost, latencyMs, errorCode, errorMessage ? String(errorMessage).slice(0, 300) : null, runId]);
-    return { balance };
+    return { balance, credit_status: creditStatus, conflict };
   });
+}
+
+/** Safety net for the orchestrator: whatever happened, a PENDING run is never left behind. Idempotent. */
+export async function releaseIfPending(db, runId, { errorCode = 'AI_INTERNAL_ERROR', errorMessage = null, latencyMs = null } = {}) {
+  return settleRun(db, runId, { success: false, errorCode, errorMessage, latencyMs });
 }
 
 export async function listLedger(db, wid, { limit = 50 } = {}) {

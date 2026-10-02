@@ -24,14 +24,15 @@ export async function aiUsageOverview(db) {
       COUNT(*) FILTER (WHERE created_at >= now() - interval '30 days' AND status = 'FAILED') AS failed_30d,
       ROUND(AVG(latency_ms) FILTER (WHERE created_at >= now() - interval '30 days' AND status = 'SUCCEEDED')) AS avg_latency_ms,
       COALESCE(SUM(credit_cost) FILTER (WHERE created_at >= now() - interval '30 days' AND credit_status = 'CHARGED'), 0) AS credits_30d,
-      ROUND(COALESCE(SUM(provider_cost_amount) FILTER (WHERE created_at >= now() - interval '30 days'), 0)::numeric, 4) AS provider_cost_30d
+      ROUND(COALESCE(SUM(provider_cost_amount) FILTER (WHERE created_at >= now() - interval '30 days'), 0)::numeric, 4) AS provider_cost_30d,
+      COUNT(*) FILTER (WHERE created_at >= now() - interval '30 days' AND error_code = 'AI_CREDIT_SETTLEMENT_CONFLICT') AS settlement_conflicts_30d
     FROM ai_runs`);
   const features = withAllFeatures((await db.all(`SELECT ${FEATURE_SQL} FROM ai_runs WHERE created_at >= now() - interval '30 days' GROUP BY feature`)).map(shapeFeature));
   const workspaces = await db.all(`SELECT w.id, w.name, COUNT(r.id) AS runs, COALESCE(SUM(CASE WHEN r.credit_status = 'CHARGED' THEN r.credit_cost ELSE 0 END), 0) AS credits, a.balance
     FROM ai_runs r JOIN workspaces w ON w.id = r.workspace_id LEFT JOIN workspace_credit_accounts a ON a.workspace_id = w.id
     WHERE r.created_at >= now() - interval '30 days' GROUP BY w.id, w.name, a.balance ORDER BY runs DESC LIMIT 10`);
   const recentFailures = await db.all(`SELECT r.id, r.feature, r.error_code, r.error_message, r.created_at, w.name AS workspace_name, w.id AS workspace_id FROM ai_runs r JOIN workspaces w ON w.id = r.workspace_id
-    WHERE r.status = 'FAILED' ORDER BY r.created_at DESC LIMIT 10`);
+    WHERE r.status = 'FAILED' OR r.error_code = 'AI_CREDIT_SETTLEMENT_CONFLICT' ORDER BY r.created_at DESC LIMIT 10`);
   return { config: publicConfig(), kpis: { ...k, success_rate_30d: k.runs_30d ? Math.round((k.succeeded_30d / k.runs_30d) * 100) : null }, features, workspaces, recent_failures: recentFailures, costs: featureCreditCosts() };
 }
 
