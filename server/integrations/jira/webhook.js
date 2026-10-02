@@ -20,7 +20,7 @@ export async function handleJiraWebhook(db, { connectionId, secret, authorizatio
   const conn = await getConnectionById(db, connectionId);
   if (!conn || conn.provider !== 'JIRA' || !safeEq(conn.webhook_secret, secret)) return { status: 404, body: { error: 'not_found' } };
   const token = String(authorization || '').replace(/^Bearer\s+/i, '');
-  const claims = cfg.jira.clientSecret ? verifyJwt(token, cfg.jira.clientSecret) : null;
+  const claims = cfg.jira.clientSecret ? await verifyJwt(token, cfg.jira.clientSecret) : null;   // HS256 + exp/nbf only; token never logged
   if (!claims) return { status: 401, body: { error: 'unauthorized' } };
   if (conn.status === 'DISABLED') return { status: 202, body: { result: 'ignored', reason: 'disabled' } };
   const ev = body && typeof body === 'object' ? body : {};

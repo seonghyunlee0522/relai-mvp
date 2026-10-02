@@ -29,11 +29,11 @@ async function connect(A, fake, { map = true, leafType = '1', groupType = '3', a
 }
 const conn = (A) => A.c('GET', INT(A)).then((r) => r.json.providers[0].connection);
 
-test('crypto: AES-GCM round trip, tamper detection, JWT HS256 sign/verify', () => {
+test('crypto: AES-GCM round trip, tamper detection, JWT HS256 sign/verify (jose)', async () => {
   const ct = encrypt('secret-token'); assert.notEqual(ct, 'secret-token'); assert.match(ct, /^v1\./); assert.equal(decrypt(ct), 'secret-token');
   assert.throws(() => decrypt(ct.slice(0, -2) + 'xx'));
-  const jwt = signJwt({ iss: 'x', exp: Math.floor(Date.now() / 1000) + 60 }, 'k'); assert.ok(verifyJwt(jwt, 'k')); assert.equal(verifyJwt(jwt, 'wrong'), null);
-  assert.equal(verifyJwt(signJwt({ exp: Math.floor(Date.now() / 1000) - 600 }, 'k'), 'k'), null);
+  const jwt = await signJwt({ iss: 'x', exp: Math.floor(Date.now() / 1000) + 60 }, 'k'); assert.ok(await verifyJwt(jwt, 'k')); assert.equal(await verifyJwt(jwt, 'wrong'), null);
+  assert.equal(await verifyJwt(await signJwt({ exp: Math.floor(Date.now() / 1000) - 600 }, 'k'), 'k'), null);
 });
 
 test('OAuth: OWNER/ADMIN connect, MEMBER forbidden, state validation (unknown/expired/other user), tokens encrypted and never exposed', async () => {
@@ -247,7 +247,7 @@ test('sync: manual, webhook update/delete, duplicate webhook, invalid auth, miss
   const w = await mkWbs(A, { title: 'W' }); fake.addIssue('ABC-10', { summary: 's', status: 'todo' }); fake.addIssue('ABC-11', { summary: 't', status: 'todo' });
   await A.c('POST', `${WJ(A, w.id)}/links`, { issue_keys: ['ABC-10', 'ABC-11'] });
   const c = await conn(A); const row = await db.get('SELECT webhook_secret FROM integration_connections WHERE id = ?', [c.id]);
-  const hook = (body, { secret = 'test-client-secret', path = row.webhook_secret, id = null } = {}) => fetch(`${base}/api/integrations/jira/webhook/${c.id}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${signJwt({ iss: 'atlassian', exp: Math.floor(Date.now() / 1000) + 300 }, secret)}`, ...(id ? { 'x-atlassian-webhook-identifier': id } : {}) }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, json: await r.json() }));
+  const hook = async (body, { secret = 'test-client-secret', path = row.webhook_secret, id = null } = {}) => fetch(`${base}/api/integrations/jira/webhook/${c.id}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await signJwt({ iss: 'atlassian', exp: Math.floor(Date.now() / 1000) + 300 }, secret)}`, ...(id ? { 'x-atlassian-webhook-identifier': id } : {}) }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, json: await r.json() }));
   // 39. webhook update → snapshot refreshed from Jira (payload not trusted)
   fake.setStatus('ABC-10', 'done');
   let r = await hook({ webhookEvent: 'jira:issue_updated', timestamp: 1, issue: { id: '999999', key: 'ABC-10', fields: { status: { name: 'HACKED' } } } }); assert.equal(r.status, 200); assert.equal(r.json.result, 'updated');

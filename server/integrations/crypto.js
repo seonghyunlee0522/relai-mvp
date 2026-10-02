@@ -5,31 +5,44 @@
  *   works without extra setup; production refuses to start the integration layer without an explicit key.
  * - Tokens are never logged: callers pass ciphertext around and decrypt only at the HTTP boundary.
  */
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { SignJWT, jwtVerify } from 'jose';
 
 export class IntegrationConfigError extends Error { constructor(msg) { super(msg); this.code = 'integration_config'; this.status = 503; } }
 
 const b64u = (b) => Buffer.from(b).toString('base64url');
 const fromB64u = (s) => Buffer.from(s, 'base64url');
 
-function parseKey(raw) {
+/**
+ * Key material rules:
+ *   INTEGRATION_ENCRYPTION_KEY set → must be 64 hex chars, or base64/base64url that decodes to exactly 32 bytes; anything else is a
+ *   configuration error in every environment (no silent SHA-256 derivation).
+ *   Not set → production: IntegrationConfigError; development/test: key derived from SESSION_SECRET (so local setups work).
+ */
+export function parseStrictKey(raw) {
   const s = String(raw || '').trim();
   if (!s) return null;
-  if (/^[0-9a-f]{64}$/i.test(s)) return Buffer.from(s, 'hex');
-  const b = Buffer.from(s, s.includes('-') || s.includes('_') ? 'base64url' : 'base64');
-  if (b.length === 32) return b;
-  return createHash('sha256').update(s).digest();   // any other secret string → derived 32-byte key
+  if (/^[0-9a-fA-F]{64}$/.test(s)) return Buffer.from(s, 'hex');
+  const isUrl = /[-_]/.test(s); const isStd = /[+/=]/.test(s);
+  if (!(isUrl && isStd) && /^[A-Za-z0-9+/_-]+={0,2}$/.test(s)) {
+    const b = Buffer.from(s, isUrl ? 'base64url' : 'base64');
+    if (b.length === 32 && (isUrl ? b.toString('base64url') === s.replace(/=+$/, '') : b.toString('base64').replace(/=+$/, '') === s.replace(/=+$/, ''))) return b;
+  }
+  throw new IntegrationConfigError('INTEGRATION_ENCRYPTION_KEY는 64자리 hex 또는 32바이트로 디코딩되는 base64/base64url 값이어야 합니다.');
 }
-
 let cachedKey = null; let cachedFrom = null;
 export function encryptionKey(env = process.env) {
-  const raw = env.INTEGRATION_ENCRYPTION_KEY || '';
-  const src = raw || (env.NODE_ENV === 'production' ? '' : `dev:${env.SESSION_SECRET || 'relai-dev'}`);
-  if (!src) throw new IntegrationConfigError('INTEGRATION_ENCRYPTION_KEY가 설정되지 않았습니다.');
+  const raw = String(env.INTEGRATION_ENCRYPTION_KEY || '').trim();
+  const prod = env.NODE_ENV === 'production';
+  const src = raw ? `key:${raw}` : prod ? '' : `dev:${env.SESSION_SECRET || 'relai-dev'}`;
+  if (!src) throw new IntegrationConfigError('INTEGRATION_ENCRYPTION_KEY가 설정되지 않았습니다. (production 필수: 64 hex 또는 32바이트 base64)');
   if (cachedKey && cachedFrom === src) return cachedKey;
-  cachedKey = parseKey(src); cachedFrom = src;
+  cachedKey = raw ? parseStrictKey(raw) : createHash('sha256').update(src).digest();   // dev fallback only
+  cachedFrom = src;
   return cachedKey;
 }
+/** Startup check (server/index.js): throws IntegrationConfigError when the key is missing (production) or malformed (any env). */
+export function assertEncryptionConfig(env = process.env) { encryptionKey(env); return true; }
 
 export function encrypt(plain, env = process.env) {
   if (plain === null || plain === undefined) return null;
@@ -47,27 +60,20 @@ export function decrypt(blob, env = process.env) {
   return Buffer.concat([d.update(fromB64u(ct)), d.final()]).toString('utf8');
 }
 
-/* ---------- JWT HS256 (Atlassian OAuth webhooks are bearer JWTs signed with the app's client secret) ---------- */
-export function signJwt(claims, secret, { alg = 'HS256' } = {}) {
-  const h = b64u(JSON.stringify({ alg, typ: 'JWT' })); const p = b64u(JSON.stringify(claims));
-  const sig = createHmac('sha256', secret).update(`${h}.${p}`).digest('base64url');
-  return `${h}.${p}.${sig}`;
+/* ---------- JWT HS256 via `jose` (Atlassian OAuth 2.0 dynamic webhooks send a bearer JWT signed with the app's client secret) ---------- */
+const secretKey = (secret) => new TextEncoder().encode(String(secret));
+/** Test helper / symmetric signer. */
+export async function signJwt(claims, secret, { alg = 'HS256' } = {}) {
+  return new SignJWT(claims).setProtectedHeader({ alg, typ: 'JWT' }).sign(secretKey(secret));
 }
-/** Returns the claims or null. Checks: structure, HS256 signature (constant time), exp/nbf when present. */
-export function verifyJwt(token, secret, { now = Date.now() } = {}) {
+/**
+ * Verifies signature (HS256 only), `exp` and `nbf` (60 s tolerance). No other claim is required: Atlassian does not document
+ * iss/aud/qsh for OAuth-app webhooks. Returns the claims or null — never throws, never logs the token.
+ */
+export async function verifyJwt(token, secret, { clockTolerance = 60 } = {}) {
   if (!token || !secret) return null;
-  const parts = String(token).split('.'); if (parts.length !== 3) return null;
-  const [h, p, sig] = parts;
-  let header; let claims;
-  try { header = JSON.parse(fromB64u(h).toString('utf8')); claims = JSON.parse(fromB64u(p).toString('utf8')); } catch { return null; }
-  if (!header || header.alg !== 'HS256') return null;
-  const expect = createHmac('sha256', secret).update(`${h}.${p}`).digest();
-  let got; try { got = fromB64u(sig); } catch { return null; }
-  if (got.length !== expect.length || !timingSafeEqual(got, expect)) return null;
-  const t = Math.floor(now / 1000);
-  if (typeof claims.exp === 'number' && claims.exp < t - 60) return null;
-  if (typeof claims.nbf === 'number' && claims.nbf > t + 60) return null;
-  return claims;
+  try { const { payload } = await jwtVerify(String(token), secretKey(secret), { algorithms: ['HS256'], clockTolerance }); return payload; }
+  catch { return null; }
 }
 export const sha256hex = (s) => createHash('sha256').update(s).digest('hex');
 export const randomToken = (n = 24) => randomBytes(n).toString('base64url');

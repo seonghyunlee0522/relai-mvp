@@ -7,7 +7,7 @@ Requirement와 Jira는 직접 연결하지 않고 RequirementWBSLink → WBS →
 ```
 server/integrations/
   config.js      env (ATLASSIAN_*, INTEGRATION_*), scopes, timeouts
-  crypto.js      AES-256-GCM 토큰 암호화 (v1.<iv>.<tag>.<ct>), HS256 JWT verify (webhook)
+  crypto.js      AES-256-GCM 토큰 암호화 (v1.<iv>.<tag>.<ct>), webhook JWT verify (jose: HS256 + exp/nbf), 키 검증
   registry.js    provider 조회 (live | fake)  — tests: setProvider(fake)
   service.js     connection CRUD, OAuth 3LO start/finish, disconnect, ensureAccessToken (FOR UPDATE + rotating refresh), withClient (401→refresh 1회→reconnect_required), withRetry
   events.js      integration_activity (feed), integration_events (idempotency), sync runs
@@ -44,8 +44,9 @@ integration_events(연결+payload_hash unique) · integration_sync_runs(trigger 
 * state: 서버 생성, workspace+user 바인딩, 10분 만료, 1회 사용. callback은 state의 workspace만 신뢰.
 * Refresh: rotating(1회용) — connection row `SELECT … FOR UPDATE` 아래에서 1회만 교환, 새 access/refresh/expiry를 같은 트랜잭션에서 교체. invalid_grant/401 → `reconnect_required`(ERROR), 재시도 루프 없음.
 * Retry: 429/5xx/timeout만 최대 2회(Retry-After ≤20s), createIssue는 재시도 안 함.
-* Webhook: `POST /api/integrations/jira/webhook/:connectionId/:secret` — Authorization Bearer JWT(HS256, client secret) 검증 + URL secret. payload의 issue id/key만 사용하고 실제 데이터는 Jira에서 재조회. 중복은 integration_events로 차단. 등록은 매핑 시 `POST /rest/api/3/webhook`(jqlFilter project=KEY, issue_updated/deleted), 30일 만료 → `PUT /webhook/refresh`, 만료분은 재등록(scheduler).
+* Webhook: `POST /api/integrations/jira/webhook/:connectionId/:secret` — URL secret(connection별, 불일치 404) → Authorization Bearer JWT를 `jose.jwtVerify`로 검증(HS256만, exp/nbf 60s 허용오차; Atlassian이 문서화하지 않은 claim은 요구하지 않음, 실패 401, 토큰·헤더 미로그). payload의 issue id/key만 사용하고 실제 데이터는 Jira에서 재조회. 중복은 integration_events로 차단. 등록은 매핑 시 `POST /rest/api/3/webhook`(jqlFilter project=KEY, issue_updated/deleted), 30일 만료 → `PUT /webhook/refresh`, 만료분은 재등록(scheduler).
 * 로그/응답/Admin에 토큰·secret·authorization code 없음.
+* `INTEGRATION_ENCRYPTION_KEY`: 64 hex 또는 정확히 32바이트로 디코딩되는 base64/base64url만 허용(모든 환경). 다른 값은 `IntegrationConfigError`로 서버 기동 실패. 미설정 시 production은 기동 실패, dev/test는 SESSION_SECRET 파생 키.
 
 ## API
 * `GET /api/workspaces/:wid/integrations`, `POST …/integrations/jira/connect`(OWNER/ADMIN → {url}), `POST …/jira/disconnect`, `GET /api/integrations/jira/callback`

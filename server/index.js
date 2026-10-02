@@ -1,9 +1,13 @@
 import { openDb } from './db.js';
 import { createApp } from './app.js';
 import { startInProcessScheduler } from './integrations/scheduler.js';
+import { assertEncryptionConfig, IntegrationConfigError } from './integrations/crypto.js';
 
 const port = Number(process.env.PORT || 3000);
 if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) { console.error('SESSION_SECRET is required in production'); process.exit(1); }
+
+// Integration credential key: malformed → always fatal; missing → fatal in production, derived from SESSION_SECRET elsewhere.
+try { assertEncryptionConfig(); } catch (e) { if (e instanceof IntegrationConfigError) { console.error(e.message); process.exit(1); } throw e; }
 
 const db = await openDb();
 const app = createApp(db);
