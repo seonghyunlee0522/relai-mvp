@@ -61,7 +61,7 @@ export async function traceStats(db, projectId) {
   const t = (await db.get(`SELECT COUNT(*) AS tasks,
       COALESCE(SUM((NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN requirements rq ON rq.id = l.requirement_id
         WHERE l.wbs_item_id = w.id AND rq.archived_at IS NULL))::int), 0) AS tasks_unlinked
-    FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK'`, [projectId]));
+    FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND NOT EXISTS (SELECT 1 FROM wbs_items wc WHERE wc.parent_id = w.id AND wc.archived_at IS NULL)`, [projectId]));
   return {
     in_scope: r.in_scope, in_scope_linked: r.in_scope_linked, in_scope_unlinked: r.in_scope - r.in_scope_linked,
     coverage: r.in_scope ? Math.round((r.in_scope_linked / r.in_scope) * 100) : null, // null = no target

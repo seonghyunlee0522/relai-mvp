@@ -22,6 +22,10 @@ export const migrations = [
   { version: 11, name: 'comments + wbs_history (comments tab, activity feed)', up() {} },
   { version: 12, name: 'admin console: users.status/system_role/last_login_at, workspaces.status, admin_audit_logs', up() {} },
   { version: 13, name: 'AI productivity layer: ai_runs, workspace_credit_accounts, credit_ledger (Phase 11)', up() {} },
+  { version: 14, name: 'tree WBS: depth/weight columns, depth backfill (SUMMARY kept as legacy group)', async up(db) {
+    await db.run(`WITH RECURSIVE t AS (SELECT id, 0 AS d FROM wbs_items WHERE parent_id IS NULL UNION ALL SELECT w.id, t.d + 1 FROM wbs_items w JOIN t ON w.parent_id = t.id)
+      UPDATE wbs_items w SET depth = t.d FROM t WHERE t.id = w.id AND w.depth <> t.d`);
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

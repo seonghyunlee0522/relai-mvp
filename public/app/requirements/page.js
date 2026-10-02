@@ -413,7 +413,7 @@ export async function requirementsPage(id) {
       const linked = new Set(r.links.filter((l) => !l.archived_at).map((l) => l.wbs_item_id));
       const pick = await pickerDialog({ title: `${r.display_id}에 WBS 연결`, placeholder: 'WBS 번호 또는 업무명 검색', withType: true,
         rows: items.map((w) => ({ ...w, disabled: linked.has(w.id) })), searchKeys: ['wbs_code', 'title'],
-        render: (w) => html`<span class="mono wcode">${w.wbs_code}</span><span class="pick__t" style="padding-left:${w.depth * 14}px">${raw(w.item_type === 'MILESTONE' ? '<i class="wms">◆</i> ' : '')}<span class="${w.item_type === 'SUMMARY' ? 'wsum' : ''}">${w.title}</span></span>
+        render: (w) => html`<span class="mono wcode">${w.wbs_code}</span><span class="pick__t" style="padding-left:${w.depth * 14}px">${raw(w.item_type === 'MILESTONE' ? '<i class="wms">◆</i> ' : '')}<span class="${w.is_group || w.item_type === 'SUMMARY' ? 'wsum' : ''}">${w.title}</span></span>
           <small class="dim">${WBS_TYPE[w.item_type]}</small><small class="dim">${w.owner_name || '-'}</small><span class="chip ${WBS_STATUS_CHIP[w.status] || ''}">${WBS_STATUS[w.status]}</span>${raw(w.disabled ? '<small class="dim">연결됨</small>' : '')}` });
       if (!pick) return;
       try { await refreshAll(await api('POST', rApi(`/${r.id}/links`), { wbs_item_id: pick.id, link_type: pick.link_type })); toast('WBS를 연결했습니다.'); }

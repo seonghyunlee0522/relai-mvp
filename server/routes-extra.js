@@ -11,7 +11,8 @@ import * as R from './requirements.js';
 import * as W from './wbs.js';
 import { KINDS } from './importspec.js';
 import { XLSX_MIME, MAX_IMPORT_ROWS, ImportFileError, buildTemplate, buildExport, buildErrorReport } from './xlsx.js';
-import { previewImport, runImport } from './importer.js';
+import { previewImport, runImport, inspectWbsWorkbook } from './importer.js';
+import { decodeBase64Xlsx } from './xlsx.js';
 import { bulkRequirements, bulkWbs } from './bulk.js';
 import { parseComment, listComments, addComment, getComment, deleteComment } from './comments.js';
 import { can } from './authz.js';
@@ -19,7 +20,7 @@ import { projectDashboard } from './dashboard.js';
 
 /** JSON bodies of the import endpoints may carry a base64 xlsx (≤5 MB file → ≈6.7 MB); everything else keeps the 64 KB limit. */
 export const BIG_BODY_LIMIT = '8mb';
-export const BIG_JSON_PATH = /^\/api\/workspaces\/[^/]+\/projects\/[^/]+\/(requirements|wbs)\/import(\/preview|\/errors\.xlsx)?\/?$/;
+export const BIG_JSON_PATH = /^\/api\/workspaces\/[^/]+\/projects\/[^/]+\/(requirements|wbs)\/import(\/preview|\/inspect|\/errors\.xlsx)?\/?$/;
 const bigJson = express.json({ limit: BIG_BODY_LIMIT });
 
 /* ---------- download helpers ---------- */
@@ -61,7 +62,7 @@ async function wbsRows(db, project, wid) {
   const L = KINDS.wbs.columns; const lab = (key, v) => L.find((c) => c.key === key).options.find((o) => o.value === v)?.label ?? v;
   return items.map((i) => ({ code: i.wbs_code, parent_code: i.parent_id ? byId.get(i.parent_id)?.wbs_code || '' : '', item_type: lab('item_type', i.item_type), title: i.title, description: i.description,
     owner: i.owner_user_id ? label(i.owner_user_id) : '', start: i.item_type === 'MILESTONE' ? '' : i.planned_start_date || '', end: i.item_type === 'MILESTONE' ? i.milestone_date || '' : i.planned_end_date || '',
-    status: lab('status', i.status), progress: i.item_type === 'TASK' ? i.progress : '', predecessors: i.predecessors.map((p) => byId.get(p.predecessor_id)?.wbs_code).filter(Boolean).join(', ') }));
+    status: lab('status', i.status), progress: i.item_type === 'TASK' && !i.is_group ? i.progress : '', predecessors: i.predecessors.map((p) => byId.get(p.predecessor_id)?.wbs_code).filter(Boolean).join(', ') }));
 }
 
 /* ---------- shared route set for both kinds ---------- */
@@ -77,6 +78,10 @@ function mountExcelRoutes({ app, db, guard, wrap, fail, loadProject, mutable }, 
     const project = await loadOnly(req, res); if (!project) return;
     const rows = kind === 'requirements' ? await requirementRows(db, project, req.params.wid) : await wbsRows(db, project, req.params.wid);
     sendXlsx(res, await buildExport(kind, rows), `${spec.names.ascii}-export.xlsx`, `${spec.names.export}_${safeName(project.name, 'project')}_${ymd()}.xlsx`);
+  }));
+  if (kind === 'wbs') app.post(`${segBase}/import/inspect`, guard, bigJson, wrap(async (req, res) => {   // headers + sample + suggested column mapping
+    const project = await loadOnly(req, res); if (!project) return;
+    res.json(await inspectWbsWorkbook(decodeBase64Xlsx(req.body?.data)));
   }));
   app.post(`${segBase}/import/preview`, guard, bigJson, wrap(async (req, res) => {
     const project = await loadOnly(req, res); if (!project) return;

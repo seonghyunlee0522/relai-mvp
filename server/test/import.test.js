@@ -289,7 +289,7 @@ test('wbs preview: validation rules (codes, parent, types, dates, progress, pred
   const { server, client } = await boot();
   const A = await setup(client);
   const list = [
-    W('1', '분석', {}),                                                       // 2 SUMMARY (has children)
+    W('1', '분석', {}),                                                       // 2 group (has children)
     W('1.1', '요구사항', { start: '2026-11-02', end: '2026-11-06', progress: '30' }),   // 3 TASK
     W('1.2', '설계', { start: '2026-11-09', end: '2026-11-05' }),            // 4 end < start
     W('1.2', '중복 코드'),                                                    // 5 duplicate
@@ -369,8 +369,8 @@ test('wbs import: hierarchy + file order, auto types, dates/milestone, owner, pr
   const codes = tree.items.map((i) => `${i.wbs_code}:${i.title}`);
   assert.deepEqual(codes, ['1:기존 상위', '2:기존 작업', '3:분석', '3.1:요구사항 분석', '3.2:인터뷰', '4:설계', '4.1:화면 설계', '4.1.1:목록', '5:오픈', '6:마지막 작업']);
   const byTitle = Object.fromEntries(tree.items.map((i) => [i.title, i]));
-  assert.equal(byTitle['분석'].item_type, 'SUMMARY'); assert.equal(byTitle['요구사항 분석'].item_type, 'TASK');
-  assert.equal(byTitle['화면 설계'].item_type, 'SUMMARY');                 // has a child → SUMMARY by default (status COMPLETED kept)
+  assert.equal(byTitle['분석'].item_type, 'TASK'); assert.equal(byTitle['분석'].is_group, true); assert.equal(byTitle['요구사항 분석'].item_type, 'TASK');
+  assert.equal(byTitle['화면 설계'].item_type, 'TASK'); assert.equal(byTitle['화면 설계'].is_group, true);   // has a child → group (status COMPLETED kept)
   assert.equal(byTitle['목록'].item_type, 'TASK');
   assert.equal(byTitle['오픈'].item_type, 'MILESTONE'); assert.equal(byTitle['오픈'].milestone_date, '2026-12-01'); assert.equal(byTitle['오픈'].planned_end_date, null);
   const t1 = byTitle['요구사항 분석'];

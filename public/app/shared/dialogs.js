@@ -8,6 +8,34 @@ export function toast(msg) {
   setTimeout(() => t.remove(), 2600);
 }
 
+/** Toast with one action (e.g. 실행 취소). The action is available for `ms` (default 6s); returns a handle with close(). */
+export function toastAction(msg, { label = '실행 취소', onAction, ms = 6000 } = {}) {
+  document.querySelectorAll('.toast--act').forEach((x) => x.remove());
+  const t = document.createElement('div');
+  t.className = 'toast toast--act'; t.setAttribute('role', 'status');
+  t.innerHTML = html`<span>${msg}</span><button type="button" class="toast__a">${label}</button><button type="button" class="toast__x" aria-label="닫기">×</button>`;
+  document.body.append(t);
+  const close = () => t.remove();
+  const timer = setTimeout(close, ms);
+  $('.toast__x', t).onclick = () => { clearTimeout(timer); close(); };
+  $('.toast__a', t).onclick = async () => { clearTimeout(timer); $('.toast__a', t).disabled = true; try { await onAction(); } finally { close(); } };
+  return { close };
+}
+
+/** Choice dialog: title/body + a list of options; resolves the chosen option id or null. */
+export function choiceDialog({ title, body, options, cancel = '취소' }) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div'); el.className = 'scrim';
+    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="chT"><h3 id="chT">${title}</h3>${raw(body ? html`<div class="dialog__b">${raw(body)}</div>` : '')}
+      <div class="choicelist">${raw(options.map((o) => html`<button type="button" class="choicelist__i ${o.danger ? 'is-danger' : ''}" data-v="${o.id}"><b>${o.label}</b>${raw(o.hint ? html`<small>${o.hint}</small>` : '')}</button>`).join(''))}</div>
+      <div class="actions"><button class="btn btn--secondary" data-v="">${cancel}</button></div></div>`;
+    const done = (v) => { el.remove(); resolve(v || null); };
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) done(b.dataset.v); else if (e.target === el) done(null); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });
+    document.body.append(el); $('.choicelist__i', el).focus();
+  });
+}
+
 export function confirmDialog({ title, body, confirm, danger }) {
   return new Promise((resolve) => {
     const el = document.createElement('div');

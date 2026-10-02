@@ -5,6 +5,7 @@
  */
 import * as R from './requirements.js';
 import * as W from './wbs.js';
+import { LEAF_SQL } from './wbs.js';
 
 const RECENT_LIMIT = 15; const OVERDUE_LIMIT = 20; const TIMELINE_LIMIT = 40; const MILESTONE_LIMIT = 100;
 const TODAY = 'CURRENT_DATE';
@@ -91,12 +92,12 @@ function timeline(items) {
       span.set(it.parent_id, { s: [p.s, s].filter(Boolean).sort()[0] || null, e: [p.e, e].filter(Boolean).sort().pop() || null });
     }
   }
-  return items.filter((it) => it.item_type === 'SUMMARY' || it.depth === 0).slice(0, TIMELINE_LIMIT).map((it) => {
+  return items.filter((it) => it.is_group || it.item_type === 'SUMMARY' || it.depth === 0).slice(0, TIMELINE_LIMIT).map((it) => {
     let start; let end;
-    if (it.item_type === 'SUMMARY') { const d = span.get(it.id) || {}; start = d.s || it.planned_start_date || null; end = d.e || it.planned_end_date || null; }
+    if (it.is_group || it.item_type === 'SUMMARY') { const d = span.get(it.id) || {}; start = d.s || it.planned_start_date || null; end = d.e || it.planned_end_date || null; }
     else if (it.item_type === 'MILESTONE') { start = it.milestone_date; end = it.milestone_date; }
     else { start = it.planned_start_date; end = it.planned_end_date; }
-    return { id: it.id, wbs_code: it.wbs_code, title: it.title, item_type: it.item_type, depth: it.depth, start: start || null, end: end || null, progress: it.computed_progress, status: it.status };
+    return { id: it.id, wbs_code: it.wbs_code, title: it.title, item_type: it.item_type, is_group: Boolean(it.is_group), depth: it.depth, start: start || null, end: end || null, progress: it.computed_progress, status: it.status };
   });
 }
 
@@ -104,14 +105,14 @@ export async function projectDashboard(db, project) {
   const pid = project.id;
   const [taskRow, reqStats, overdue, workload, milestones, issues, tree, recent] = await Promise.all([
     db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((w.status = 'IN_PROGRESS')::int), 0) AS in_progress, COALESCE(SUM((w.status = 'COMPLETED')::int), 0) AS completed,
-        COALESCE(SUM(${OVERDUE}::int), 0) AS delayed FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK'`, [pid]),
+        COALESCE(SUM(${OVERDUE}::int), 0) AS delayed FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')}`, [pid]),
     R.requirementStats(db, pid),
     db.all(`SELECT w.id, w.wbs_code, w.title, w.owner_user_id AS owner_id, u.name AS owner_name, w.planned_end_date, (${TODAY} - w.planned_end_date) AS days_overdue, w.status, w.progress
       FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id
-      WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${OVERDUE} ORDER BY w.planned_end_date, w.sequence LIMIT ${OVERDUE_LIMIT}`, [pid]),
+      WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND ${OVERDUE} ORDER BY w.planned_end_date, w.sequence LIMIT ${OVERDUE_LIMIT}`, [pid]),
     db.all(`SELECT w.owner_user_id AS owner_id, u.name AS owner_name, COUNT(*) AS tasks, COALESCE(SUM((w.status = 'IN_PROGRESS')::int), 0) AS in_progress,
         COALESCE(SUM((w.status = 'COMPLETED')::int), 0) AS completed, COALESCE(SUM(${OVERDUE}::int), 0) AS overdue, COALESCE(ROUND(AVG(w.progress)), 0) AS avg_progress
-      FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK'
+      FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')}
       GROUP BY w.owner_user_id, u.name`, [pid]),
     db.all(`SELECT w.id, w.wbs_code, w.title, w.milestone_date, w.status, (w.milestone_date - ${TODAY}) AS days_left FROM wbs_items w
       WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'MILESTONE' ORDER BY w.milestone_date NULLS LAST, w.sequence LIMIT ${MILESTONE_LIMIT}`, [pid]),

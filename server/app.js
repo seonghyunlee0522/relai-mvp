@@ -501,8 +501,32 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   app.post(`${wbase}/:iid/archive`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
-    const archived = (await tx(db, async (db) => (await W.archiveWbs(db, ctx.project, ctx.w, req.user.id))));
+    const children = req.body?.children === 'promote' ? 'promote' : 'cascade';
+    const archived = (await tx(db, async (db) => (await W.archiveWbs(db, ctx.project, ctx.w, req.user.id, { children }))));
     res.json({ archived_ids: archived, ...(await wbsResponse(ctx.project)) });
+  }));
+  /* Tree WBS structural actions (Phase 12): indent / outdent / duplicate / restore. Each returns the item + whole tree like /move. */
+  app.post(`${wbase}/:iid/indent`, guard, wrap(async (req, res) => {
+    const ctx = (await wbsMutable(req, res)); if (!ctx) return;
+    const undo = (await tx(db, async (db) => (await W.indentWbs(db, ctx.project, ctx.w, req.user.id))));
+    res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), undo, ...(await wbsResponse(ctx.project)) });
+  }));
+  app.post(`${wbase}/:iid/outdent`, guard, wrap(async (req, res) => {
+    const ctx = (await wbsMutable(req, res)); if (!ctx) return;
+    const undo = (await tx(db, async (db) => (await W.outdentWbs(db, ctx.project, ctx.w, req.user.id))));
+    res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), undo, ...(await wbsResponse(ctx.project)) });
+  }));
+  app.post(`${wbase}/:iid/duplicate`, guard, wrap(async (req, res) => {
+    const ctx = (await wbsMutable(req, res)); if (!ctx) return;
+    const out = (await tx(db, async (db) => (await W.duplicateWbs(db, ctx.project, ctx.w, req.user.id, { withChildren: req.body?.with_children !== false }))));
+    res.status(201).json({ item: (await W.getWbs(db, ctx.project, out.id)), created_ids: out.created, ...(await wbsResponse(ctx.project)) });
+  }));
+  app.post(`${wbase}/:iid/restore`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const w = (await loadWbs(req, res, project)); if (!w) return;
+    if (!w.archived_at) return fail(res, 409, 'not_archived', '보관된 항목이 아닙니다.');
+    const ids = (await tx(db, async (db) => (await W.restoreWbs(db, project, w, req.user.id))));
+    res.json({ restored_ids: ids, item: (await W.getWbs(db, project, w.id)), ...(await wbsResponse(project)) });
   }));
 
   app.post(`${wbase}/:iid/dependencies`, guard, wrap(async (req, res) => {

@@ -97,8 +97,9 @@ export async function bulkWbs(db, project, wid, body, userId) {
         skipped.push({ id, reason: '마일스톤은 시작일/종료일 대신 마일스톤 날짜를 사용합니다.' }); continue;
       }
       const draft = { ...patch };
+      const isGroup = w.item_type === 'SUMMARY' || (await W.childCount(t, id)) > 0;
+      if (isGroup && (shift || ['progress', 'planned_start_date', 'planned_end_date'].some((k) => draft[k] !== undefined))) { skipped.push({ id, reason: '상위 항목의 일정·진행률은 하위 항목에서 계산됩니다.' }); continue; }
       if (shift) {
-        if (w.item_type === 'SUMMARY') { skipped.push({ id, reason: '상위 항목의 일정은 하위 항목에서 계산되어 이동할 수 없습니다.' }); continue; }
         if (w.item_type === 'MILESTONE') {
           if (!w.milestone_date) { skipped.push({ id, reason: '날짜가 없어 이동할 수 없습니다.' }); continue; }
           draft.milestone_date = shiftDate(w.milestone_date, shift);

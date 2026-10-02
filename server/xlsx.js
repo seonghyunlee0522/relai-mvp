@@ -189,6 +189,30 @@ export async function parseWorkbook(kind, buffer) {
   return { rows, warnings };
 }
 
+/**
+ * Column-agnostic read of the first sheet (enterprise WBS files that do not follow the template).
+ * Returns { headers: [{ n, text }], rows: [{ row, cells: { [n]: text } }] }. Date cells become YYYY-MM-DD; numbers become strings.
+ */
+export async function parseWorkbookRaw(buffer, { maxRows = MAX_IMPORT_ROWS } = {}) {
+  const wb = new ExcelJS.Workbook();
+  try { await wb.xlsx.load(buffer); } catch { throw new ImportFileError(400, '엑셀(.xlsx) 파일을 읽을 수 없습니다.'); }
+  const ws = wb.worksheets[0];
+  if (!ws) throw new ImportFileError(400, '엑셀(.xlsx) 파일을 읽을 수 없습니다.');
+  const headers = [];
+  ws.getRow(1).eachCell({ includeEmpty: false }, (cell, n) => { const text = clean(cellText(cell.value)); if (text) headers.push({ n, text }); });
+  if (!headers.length) throw new ImportFileError(400, '1행에 열 제목이 없습니다. 첫 행을 헤더로 사용해 주세요.', 'missing_columns');
+  const rows = [];
+  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const cells = {}; let any = false;
+    for (const h of headers) { const t = clean(cellText(row.getCell(h.n).value)); if (t) { cells[h.n] = t; any = true; } }
+    if (!any) return;
+    if (rows.length >= maxRows) throw new ImportFileError(400, `한 번에 최대 ${maxRows.toLocaleString('en-US')}행까지 가져올 수 있습니다.`, 'too_many_rows');
+    rows.push({ row: rowNumber, cells });
+  });
+  return { headers, rows };
+}
+
 /** base64 (optionally a data: URL) → Buffer. Size and shape are checked before any decoding work. */
 export function decodeBase64Xlsx(data) {
   if (typeof data !== 'string' || !data) throw new ImportFileError(400, '엑셀(.xlsx) 파일을 읽을 수 없습니다.');
