@@ -21,6 +21,7 @@ import { adminWorkspacesPage, adminWorkspacePage } from './admin/workspaces.js';
 import { adminSubscriptionsPage, adminSubscriptionPage, adminPaymentsPage, adminPaymentPage } from './admin/billing.js';
 import { adminUsagePage } from './admin/usage.js';
 import { adminAuditPage } from './admin/audit.js';
+import { adminIntegrationsPage } from './admin/integrations.js';
 
 registerRoutes([
   [/^\/app\/?$/, homePage],
@@ -48,6 +49,7 @@ registerRoutes([
   [/^\/admin\/payments\/?$/, adminPaymentsPage],
   [/^\/admin\/payments\/([\w-]+)\/?$/, adminPaymentPage],
   [/^\/admin\/usage\/?$/, adminUsagePage],
+  [/^\/admin\/integrations\/?$/, adminIntegrationsPage],
   [/^\/admin\/audit\/?$/, adminAuditPage],
 ], { shell: (path, view) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view)), auth: authPage });
 render();

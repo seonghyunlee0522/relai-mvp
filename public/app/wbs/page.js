@@ -21,6 +21,7 @@ import { openImport } from '../shared/importer.js';
 import { choiceDialog, confirmDialog, pickerDialog, toast, toastAction } from '../shared/dialogs.js';
 import { aiStatus } from '../shared/ai.js';
 import { openWbsDraftDialog } from '../ai/wbs-draft.js';
+import { bindJiraPane, execChip, jiraPaneHtml } from '../shared/jira.js';
 
 const GHOST = '__new';
 const STATUS_EDIT = { NOT_STARTED: '예정', IN_PROGRESS: '진행중', COMPLETED: '완료', ON_HOLD: '보류' };
@@ -37,6 +38,8 @@ export async function wbsPage(id) {
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
 
   let items = []; let summary = g.wbs; let sel = null;
+  let jira = null;          // { enabled, by: { wbsId: summary } } when the project is mapped to Jira (Phase 12), else null
+  let jiraDetail = null;    // Jira pane data of the open detail (fetched when the tab is first opened)
   let dtab = 'info';
   let ghost = null;   // { parent_id, item_type, after } — the inline "new item" row
   // Context from other screens: ?requirement=<id> narrows to that requirement's WBS; ?cr=<id> shows the Change Request banner.
@@ -50,9 +53,9 @@ export async function wbsPage(id) {
   const isLeafTask = (it) => it.item_type !== 'MILESTONE' && !it.is_group;
   const isOverdue = (it) => it.computed_status === 'DELAYED';
   const byId = () => new Map(items.map((i) => [i.id, i]));
-  const apply = (r) => { items = r.items || items; summary = r.summary || summary; if (r.item && sel && r.item.id === sel.id) sel = r.item; syncRows(); paintKpi(); };
-  const load = async () => { const d = await api('GET', wApi()); items = d.items; summary = d.summary; syncRows(); };
-  const loadSel = async (iid) => { sel = iid ? (await api('GET', wApi(`/${iid}`))).item : null; setParam('sel', iid); };
+  const apply = (r) => { items = r.items || items; summary = r.summary || summary; if (r.jira !== undefined) jira = r.jira; if (r.item && sel && r.item.id === sel.id) sel = r.item; syncRows(); paintKpi(); };
+  const load = async () => { const d = await api('GET', wApi()); items = d.items; summary = d.summary; jira = d.jira || null; syncRows(); };
+  const loadSel = async (iid) => { sel = iid ? (await api('GET', wApi(`/${iid}`))).item : null; jiraDetail = null; setParam('sel', iid); };
 
   /** Visible rows after search / filters / collapse (a match shows together with its ancestors), plus the inline ghost row. */
   const visible = () => {
@@ -153,6 +156,7 @@ export async function wbsPage(id) {
       { key: 'status', label: '상태', width: 118, edit: { type: 'select', field: 'status', options: STATUS_EDIT, prefix: (r) => (r.computed_status === 'DELAYED' ? '<i class="wlate" title="계획 종료일이 지났습니다">지연</i>' : '') }, render: (r) => (r._ghost ? '' : statusBadge(r)) },
       { key: 'weight', label: '가중치', width: 76, hidden: true, align: 'right', edit: { type: 'number', field: 'weight', value: (r) => r.weight, min: 0, max: 1000 }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`${r.weight}`) },
       { key: 'type', label: '유형', width: 80, hidden: true, render: (r) => (r._ghost ? '' : r.is_group ? '작업 그룹' : WBS_TYPE[r.item_type]) },
+      { key: 'jira', label: 'Jira 실행', width: 110, hidden: true, render: (r) => (r._ghost || !jira || r.item_type === 'MILESTONE' ? '' : execChip(jira.by[r.id]) || dim()) },
     ],
     empty: () => (items.length ? emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '검색어나 필터를 바꾸거나 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }) : ''),
   });
@@ -471,6 +475,9 @@ export async function wbsPage(id) {
       case 'AI_GENERATED': return html`AI WBS 초안에서 생성`;
       case 'ARCHIVED': return html`삭제(보관)`;
       case 'RESTORED': return html`삭제 취소(복구)`;
+      case 'JIRA_LINKED': return html`Jira Issue 연결 <q>${h.new_value}</q>`;
+      case 'JIRA_UNLINKED': return html`Jira Issue 연결 해제 <q>${h.old_value}</q>`;
+      case 'JIRA_AUTO_COMPLETED': return html`연결된 Jira 작업이 모두 Done — 동기화로 완료 처리`;
       case 'MOVED': return html`<b>${h.field_name === 'sequence' ? '순서' : '상위 항목'}</b> 변경 <q>${h.old_value || '-'}</q> → <q>${h.new_value || '-'}</q>`;
       case 'DEP_ADDED': return html`선행 작업 추가 <q>${h.new_value}</q>`;
       case 'DEP_REMOVED': return html`선행 작업 삭제 <q>${h.old_value}</q>`;
@@ -497,7 +504,7 @@ export async function wbsPage(id) {
     d.innerHTML = html`<div class="drawer__h"><b class="mono">${it.wbs_code}</b>${raw(statusBadge(live))}<span class="lbl-sub">${group ? '작업 그룹' : WBS_TYPE[t]}</span>${raw(it.archived_at ? '<span class="chip">보관됨</span>' : '')}
         <span class="dnav"><button type="button" data-nav="-1" aria-label="이전 항목" title="이전 (목록 순서)" ${at <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-nav="1" aria-label="다음 항목" title="다음 (목록 순서)" ${at < 0 || at >= ids.length - 1 ? 'disabled' : ''}>↓</button></span>
         <button class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
-      ${raw(dtabs([{ key: 'info', label: '기본 정보' }, { key: 'req', label: '관련 요구사항', count: liveReq.length }, { key: 'dep', label: '선행 작업', count: it.predecessors.length }, { key: 'hist', label: '변경 이력', count: hist.length }, { key: 'cmt', label: '댓글', count: comments.length }], dtab))}
+      ${raw(dtabs([{ key: 'info', label: '기본 정보' }, { key: 'req', label: '관련 요구사항', count: liveReq.length }, { key: 'dep', label: '선행 작업', count: it.predecessors.length }, { key: 'jira', label: 'Jira 실행', count: it.jira && it.jira.total ? it.jira.total : undefined }, { key: 'hist', label: '변경 이력', count: hist.length }, { key: 'cmt', label: '댓글', count: comments.length }], dtab))}
       <div class="drawer__b">
         <section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
           <div class="dlayout"><div>
@@ -551,6 +558,7 @@ export async function wbsPage(id) {
           ${raw(it.successors.length ? html`<h4 class="dh">후행 작업 <em>${it.successors.length}</em></h4><ol class="crit">${raw(it.successors.map((x) => html`<li><span class="mono wcode">${x.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${x.title}</span></li>`).join(''))}</ol>` : '')}
         </section>
         <section data-pane="hist" class="dpane-hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(activityPane({ events: hist, filter: 'CHANGES', ro: true }))}</section>
+        <section data-pane="jira" class="dpane-jira" ${dtab === 'jira' ? '' : 'hidden'}>${raw(jiraPaneHtml(jiraDetail, live, { ro: readOnly }))}</section>
         <section data-pane="cmt" class="dpane-cmt" ${dtab === 'cmt' ? '' : 'hidden'}>${raw(activityPane({ events: comments, filter: 'COMMENT', ro: archived }))}</section>
       </div>
       ${raw(drawerFoot({ ro: readOnly, meta: `등록 ${fmtShort(it.created_at)}`, label: 'WBS 삭제', id: 'warchive' }))}`;
@@ -560,7 +568,10 @@ export async function wbsPage(id) {
   const bindDetail = () => {
     const it = sel; const d = $('#drawer'); const status = $('#dsave');
     $('#dclose').onclick = closeDrawer;
-    bindDtabs(d, (k) => { dtab = k; });
+    bindDtabs(d, (k) => { dtab = k; if (k === 'jira' && !jiraDetail) loadJira(); });
+    const loadJira = async () => { try { jiraDetail = await api('GET', wApi(`/${it.id}/jira`)); } catch (e) { jiraDetail = { mapped: false, error: e.message }; } if (sel && sel.id === it.id) { drawDetail(); } };
+    const jiraChanged = async (r) => { jiraDetail = { ...(jiraDetail || {}), ...(r.links ? { links: r.links } : {}), ...(r.summary ? { summary: r.summary } : {}) }; try { const t = await api('GET', wApi()); apply(t); sel = (await api('GET', wApi(`/${it.id}`))).item; } catch { /* keep pane */ } grid.refresh(); drawDetail(); };
+    bindJiraPane(d.querySelector('[data-pane="jira"]'), { pid: id, wbsId: it.id, it: byId().get(it.id) || it, onChange: jiraChanged });
     d.querySelectorAll('[data-nav]').forEach((b) => b.onclick = () => { const ids = (view() === 'gantt' ? visible().map((x) => x.id) : grid.orderedIds()).filter((x) => x !== GHOST); const n = ids[ids.indexOf(it.id) + Number(b.dataset.nav)]; if (n) openDetail(n); });
     const after = async (r) => { apply(r); sel = (await api('GET', wApi(`/${it.id}`))).item; grid.refresh(); drawDetail(); };
     const save = async (field, value) => {

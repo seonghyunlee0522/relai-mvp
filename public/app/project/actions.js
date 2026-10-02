@@ -6,9 +6,10 @@ import { $, html, no2, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { periodDialog } from './dashboard.js';
+import { openJiraProjectSettings } from '../shared/jira.js';
 
-const ENT = { REQUIREMENT: 'REQ', WBS: 'WBS', CHANGE: 'CR', ISSUE: 'Issue', RISK: 'Risk', TEST: 'Test', ACCEPTANCE: 'Acc.', PHASE: '단계' };
-const KINDS = [['ALL', '전체'], ['COMMENT', '댓글'], ['STATUS', '상태'], ['OWNER', '담당자'], ['SCHEDULE', '일정'], ['PHASE', '단계'], ['DATA', '기타']];
+const ENT = { REQUIREMENT: 'REQ', WBS: 'WBS', CHANGE: 'CR', ISSUE: 'Issue', RISK: 'Risk', TEST: 'Test', ACCEPTANCE: 'Acc.', PHASE: '단계', JIRA: 'Jira' };
+const KINDS = [['ALL', '전체'], ['COMMENT', '댓글'], ['STATUS', '상태'], ['OWNER', '담당자'], ['SCHEDULE', '일정'], ['PHASE', '단계'], ['JIRA', 'Jira'], ['DATA', '기타']];
 const RS = { DRAFT: ['Draft', 'chip--muted'], FINAL: ['Final', 'chip--done'] };
 const fmtAt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${no2(d.getDate())} ${no2(d.getHours())}:${no2(d.getMinutes())}`; };
 
@@ -49,11 +50,15 @@ async function reportsMenu(btn, c) {
 
 function moreMenu(btn, c) {
   const m = openMenu(btn, html`<button type="button" role="menuitem" class="amenu__act" data-more="activity">Activity</button>
+    ${raw(c.ro ? '' : '<button type="button" role="menuitem" class="amenu__act amenu__act--sm" data-more="report-new">주간보고 생성</button>')}
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
+    <button type="button" role="menuitem" data-more="jira">Jira 연동 설정</button>
     <a role="menuitem" href="/app/projects/${c.pid}/phases" data-link data-phases>단계 기록</a>
     ${raw(c.ro ? '' : '<hr><button type="button" role="menuitem" class="is-danger" data-more="archive">프로젝트 보관</button>')}`);
   const ph = $('[data-phases]', m); if (ph) ph.href = document.querySelector('.wsh__phase')?.getAttribute('href') || ph.href;
   $('[data-more="activity"]', m).onclick = () => openActivity(c.pid);
+  $('[data-more="jira"]', m).onclick = () => { closeMenus(); openJiraProjectSettings(c.pid); };
+  const rn = $('[data-more="report-new"]', m); if (rn) rn.onclick = () => { closeMenus(); periodDialog(undefined, async (period) => { try { const r = await api('POST', wsApi(`/${c.pid}/weekly-reports/generate`), period); navigate(`/app/projects/${c.pid}/reports/${r.report.id}`); return true; } catch (e) { return e.fields || { period_end: e.message }; } }); };
   const ab = $('[data-more="archive"]', m);
   if (ab) ab.onclick = async () => {
     closeMenus();

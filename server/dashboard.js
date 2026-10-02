@@ -37,6 +37,7 @@ const SIMPLE = {
   LINKED_WBS: 'WBS 항목을 연결했습니다.', UNLINKED_WBS: 'WBS 연결을 해제했습니다.', LINKED_REQ: '요구사항을 연결했습니다.', UNLINKED_REQ: '요구사항 연결을 해제했습니다.',
   LINK_TYPE_CHANGED: '연결 유형을 변경했습니다.', MOVED: '위치를 이동했습니다.', DEP_ADDED: '선행 작업을 추가했습니다.', DEP_REMOVED: '선행 작업을 삭제했습니다.',
   REQUIREMENT_LINKED: '요구사항을 연결했습니다.', REQUIREMENT_UNLINKED: '요구사항 연결을 해제했습니다.', WBS_IMPACT_ADDED: '영향 WBS를 추가했습니다.', WBS_IMPACT_UPDATED: '영향 WBS를 수정했습니다.',
+  JIRA_LINKED: 'Jira Issue를 연결했습니다.', JIRA_UNLINKED: 'Jira Issue 연결을 해제했습니다.', JIRA_AUTO_COMPLETED: 'Jira 동기화로 완료 처리했습니다.',
   WBS_IMPACT_REMOVED: '영향 WBS를 삭제했습니다.', LINKED: '연결 항목을 추가했습니다.', UNLINKED: '연결 항목을 삭제했습니다.',
 };
 
@@ -69,12 +70,15 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT) {
       FROM phase_transitions t JOIN project_phases p ON p.id = t.to_phase_id LEFT JOIN users u ON u.id = t.changed_by
       WHERE t.project_id = ? ORDER BY t.changed_at DESC, t.seq DESC LIMIT ${lim}`, [pid]),
   ]);
+  const integ = await db.all(`SELECT a.created_at AS at, a.seq, u.name AS actor_name, a.action, a.summary, a.wbs_item_id AS entity_id, w.wbs_code AS display_id, w.title
+      FROM integration_activity a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN wbs_items w ON w.id = a.wbs_item_id WHERE a.project_id = ? ORDER BY a.created_at DESC, a.seq DESC LIMIT ${lim}`, [pid]);
   const tag = (rows, type, href) => rows.map((r) => ({ ...r, entity_type: type, href: href(r.entity_id), summary: summarize(type, r) }));
   const events = [
     ...tag(reqs, 'REQUIREMENT', (id) => `requirements?sel=${id}`), ...tag(wbs, 'WBS', (id) => `wbs?sel=${id}`), ...tag(chg, 'CHANGE', (id) => `changes?sel=${id}`),
     ...tag(issues, 'ISSUE', (id) => `issues?sel=${id}`), ...tag(risks, 'RISK', (id) => `issues?tab=risks&sel=${id}`),
     ...tag(tests, 'TEST', (id) => `tests?sel=${id}`), ...tag(accs, 'ACCEPTANCE', (id) => `tests?tab=acceptance&sel=${id}`),
     ...phases.map((r) => ({ ...r, entity_type: 'PHASE', display_id: null, href: `phases/${r.phase_key}`, summary: `'${r.title}' 단계로 전환했습니다.` })),
+    ...integ.map((r) => ({ ...r, entity_type: 'JIRA', title: r.title || 'Jira', href: r.entity_id ? `wbs?sel=${r.entity_id}` : 'wbs', summary: r.summary })),
   ];
   events.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.seq - a.seq));
   return events.slice(0, lim).map((e) => ({ at: e.at, actor_name: e.actor_name, entity_type: e.entity_type, entity_id: e.entity_id, display_id: e.display_id, title: e.title, summary: e.summary, href: e.href }));
@@ -146,7 +150,7 @@ export async function projectActivity(db, pid, { limit = 80 } = {}) {
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT title FROM wbs_items w WHERE w.id = c.entity_id) END AS title
       FROM comments c LEFT JOIN users u ON u.id = c.created_by WHERE c.project_id = ? ORDER BY c.created_at DESC, c.seq DESC LIMIT ${lim}`, [pid]),
   ]);
-  const KIND = (e) => (e.entity_type === 'PHASE' ? 'PHASE' : /상태를/.test(e.summary) ? 'STATUS' : /담당자/.test(e.summary) ? 'OWNER' : /(시작일|종료일|마일스톤 날짜|기한|위치를 이동)/.test(e.summary) ? 'SCHEDULE' : 'DATA');
+  const KIND = (e) => (e.entity_type === 'PHASE' ? 'PHASE' : e.entity_type === 'JIRA' ? 'JIRA' : /상태를/.test(e.summary) ? 'STATUS' : /담당자/.test(e.summary) ? 'OWNER' : /(시작일|종료일|마일스톤 날짜|기한|위치를 이동)/.test(e.summary) ? 'SCHEDULE' : 'DATA');
   const items = [
     ...events.map((e) => ({ ...e, kind: KIND(e) })),
     ...comments.map((c) => ({ at: c.at, actor_name: c.actor_name, entity_type: c.entity_type, entity_id: c.entity_id, display_id: c.display_id, title: c.title,
