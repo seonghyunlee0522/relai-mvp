@@ -7,11 +7,11 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "dev": "node --env-file-if-exists=.env --watch server/index.js",
     "test": "node --test --test-force-exit \"server/test/*.test.js\"",
-    "migrate:sqlite": "node scripts/migrate-sqlite-to-postgres.js",
-    "db:validate": "node scripts/migrate-sqlite-to-postgres.js --validate"
+    "migrate:sqlite": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-postgres.js",
+    "db:validate": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-postgres.js --validate"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
