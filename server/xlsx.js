@@ -8,7 +8,7 @@ import { KINDS, normHeader } from './importspec.js';
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 2000;
-const VALIDATION_LAST_ROW = 1001;
+const VALIDATION_LAST_ROW = MAX_IMPORT_ROWS + 1;   // header row + every importable data row
 
 export class ImportFileError extends Error {
   constructor(status, message, code = 'invalid_file') { super(message); this.status = status; this.code = code; }
@@ -33,7 +33,7 @@ const DATE_FMT = 'yyyy-mm-dd';
 const utcDate = (s) => new Date(`${s}T00:00:00Z`);
 const isIsoDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-/** Data sheet: header row 1 (required headers blue), frozen, dropdowns on enum columns for rows 2..1001. */
+/** Data sheet: header row 1 (required headers blue), frozen, dropdowns on enum columns for every importable row (2..MAX_IMPORT_ROWS + 1). */
 function buildDataSheet(wb, spec, rows, lastRow = VALIDATION_LAST_ROW) {
   const ws = wb.addWorksheet(spec.sheet, { views: [{ state: 'frozen', ySplit: 1 }] });
   ws.columns = spec.columns.map((c) => ({ key: c.key, width: c.width }));

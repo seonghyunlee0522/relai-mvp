@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { APP_TIMEZONE } from '../db.js';
 import { boot, setup, addMember, xlsxBase64, readXlsx, REQ_HEADERS, WBS_HEADERS } from './api-helpers.js';
+import { MAX_IMPORT_ROWS } from '../xlsx.js';
 
 const row = (rows, n) => rows.find((r) => r.row === n);
 
@@ -28,9 +29,17 @@ test('template: requirements + wbs download as xlsx with styled header, dropdown
     const req = ws.getCell(1, headers.indexOf(kind === 'requirements' ? '요구사항명' : 'WBS Code') + 1);
     assert.equal(req.font.bold, true); assert.equal(req.fill.fgColor.argb, 'FF2563EB');
     const letter = String.fromCharCode(64 + enumCol);
-    assert.equal(ws.getCell(`${letter}2`).dataValidation?.type, 'list');           // dropdown on rows 2..1001
+    const lastDataRow = MAX_IMPORT_ROWS + 1;                                        // 2,000th data row
+    assert.equal(ws.getCell(`${letter}2`).dataValidation?.type, 'list');           // dropdown on every importable row
     assert.equal(ws.getCell(`${letter}1001`).dataValidation?.type, 'list');
-    assert.equal(ws.getCell(`${letter}1002`).dataValidation, undefined);
+    assert.equal(ws.getCell(`${letter}${lastDataRow}`).dataValidation?.type, 'list');
+    assert.equal(ws.getCell(`${letter}${lastDataRow + 1}`).dataValidation, undefined);
+    if (kind === 'wbs') {                                                           // number validation (진행률) covers the same range
+      const prog = String.fromCharCode(64 + WBS_HEADERS.indexOf('진행률') + 1);
+      assert.equal(ws.getCell(`${prog}2`).dataValidation?.type, 'whole');
+      assert.equal(ws.getCell(`${prog}${lastDataRow}`).dataValidation?.type, 'whole');
+      assert.equal(ws.getCell(`${prog}${lastDataRow + 1}`).dataValidation, undefined);
+    }
     // guide sheet lists every column
     const guide = wb.worksheets[1]; const names = []; guide.eachRow((r) => names.push(r.getCell(1).value));
     for (const h of headers) assert.ok(names.includes(h), `guide misses ${h}`);
