@@ -206,7 +206,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         COALESCE((SELECT ROUND(AVG(r)) FROM (
           SELECT SUM((st.status = 'COMPLETED')::int) * 100.0 / COUNT(st.id) AS r
           FROM project_phases ph JOIN project_steps st ON st.project_phase_id = ph.id
-          WHERE ph.project_id = projects.id GROUP BY ph.id)), 0) AS progress
+          WHERE ph.project_id = projects.id GROUP BY ph.id) pr), 0) AS progress
       FROM projects
       WHERE workspace_id = ? ${includeArchived ? '' : "AND status != 'ARCHIVED'"}
       ORDER BY created_at DESC`, [req.params.wid]));

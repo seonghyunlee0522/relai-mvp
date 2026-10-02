@@ -102,7 +102,7 @@ export async function upcomingDates(db, projectId, { days = 7, limit = 20, from 
   ];
   for (const _ of parts) { args.push(projectId); bind(); }
   const HREF = { WBS: (r) => `wbs?sel=${r.id}`, ISSUE: (r) => `issues?sel=${r.id}`, RISK: (r) => `issues?tab=risks&sel=${r.id}`, ACCEPTANCE: (r) => `tests?tab=acceptance&sel=${r.id}` };
-  return (await db.all(`SELECT * FROM (${parts.map((p) => p[0]).join(' UNION ALL ')}) ORDER BY date, type, display_id LIMIT ?`, [...args, limit])).map((r) => ({ ...r, href: HREF[r.type](r) }));
+  return (await db.all(`SELECT * FROM (${parts.map((p) => p[0]).join(' UNION ALL ')}) up ORDER BY date, type, display_id LIMIT ?`, [...args, limit])).map((r) => ({ ...r, href: HREF[r.type](r) }));
 }
 
 /** Everything Phase 9 needs in one call. */
