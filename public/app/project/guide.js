@@ -49,8 +49,18 @@ export function raidStepInfo(stepKey, is, rs, pid) {
   if (stepKey === 'DELAYS' && is.overdue) return { text: `기한이 지난 Issue ${is.overdue}건이 있습니다.`, ok: false, cta: go('?overdue=1', 'Overdue Issue 보기') };
   return null;
 }
+/** INITIATION steps are the five sections of 프로젝트 정의; `def` (GET /definition) is optional — without it the CTA still points at the section. */
+export function initStepInfo(stepKey, def, pid) {
+  const go = (label = '프로젝트 정의에서 작성') => ({ label, href: `/app/projects/${pid}/definition#sec-${stepKey}` });
+  const sec = def && def.sections ? def.sections.find((x) => x.key === stepKey) : null;
+  if (!sec) return { text: '프로젝트 정의 화면에서 작성합니다.', ok: false, cta: go() };
+  if (sec.status === 'COMPLETED' && sec.changed_after_completion) return { text: '완료 후 내용이 수정되었습니다. 다시 확인해 주세요.', ok: false, cta: go('다시 확인') };
+  if (sec.status === 'COMPLETED') return { text: '작성이 완료되었습니다.', ok: true, cta: go('내용 보기') };
+  if (sec.ready) return { text: '작성한 내용을 확인하고 완료 처리하세요.', ok: false, cta: go('확인 후 완료') };
+  return { text: sec.missing[0], ok: false, cta: go() };
+}
 export const stepInfo = (phaseKey, stepKey, g, pid) =>
-  phaseKey === 'REQUIREMENTS' ? reqStepInfo(stepKey, g.requirements, pid) : phaseKey === 'SCHEDULE' ? wbsStepInfo(stepKey, g.wbs, pid)
+  phaseKey === 'INITIATION' ? initStepInfo(stepKey, g.definition, pid) : phaseKey === 'REQUIREMENTS' ? reqStepInfo(stepKey, g.requirements, pid) : phaseKey === 'SCHEDULE' ? wbsStepInfo(stepKey, g.wbs, pid)
   : phaseKey === 'EXECUTION' ? (changeStepInfo(stepKey, g.changes, pid) || raidStepInfo(stepKey, g.issues, g.risks, pid))
   : phaseKey === 'TESTING' ? testStepInfo(stepKey, g.tests, pid) : phaseKey === 'ACCEPTANCE' ? acceptanceStepInfo(stepKey, g.acceptances, g.tests, pid) : null;
 export function reqStepInfo(stepKey, st, pid) {
@@ -127,14 +137,14 @@ export function acceptanceStepInfo(stepKey, ac, ts, pid) {
 
 export const phaseStrip = (g, pid) => html`<nav class="flow" aria-label="프로젝트 진행 단계">${raw(g.phases.map((ph) => {
   const cls = ph.is_current ? 'is-current' : ph.status === 'COMPLETED' ? 'is-done' : ph.status === 'IN_PROGRESS' ? 'is-open' : '';
-  return html`<a class="flow__item ${cls}" href="/app/projects/${pid}/phases/${ph.phase_key}" data-link title="${ph.name} · ${ph.progress.done}/${ph.progress.total}">
+  return html`<a class="flow__item ${cls}" href="/app/projects/${pid}/${ph.phase_key === 'INITIATION' ? 'definition' : `phases/${ph.phase_key}`}" data-link title="${ph.name} · ${ph.progress.done}/${ph.progress.total}">
     <i>${ph.status === 'COMPLETED' ? '✓' : ph.sequence}</i><span>${ph.name}</span></a>`;
 }).join(''))}</nav>`;
 
 /** Project Workspace header: one 44px row (menu · name · status · phase stepper · progress · creator · KPIs · actions) + one tab row. */
 const NAV_TABS = [
-  { key: 'overview', label: 'Overview', path: '' },
-  { key: 'phase', label: '프로세스', path: null },
+  { key: 'overview', label: '프로젝트 홈', path: '' },
+  { key: 'definition', label: '프로젝트 정의', path: '/definition' },
   { key: 'requirements', label: 'Requirements', path: '/requirements' },
   { key: 'wbs', label: 'WBS', path: '/wbs' },
   { key: 'changes', label: 'Changes', path: '/changes' },
@@ -143,6 +153,7 @@ const NAV_TABS = [
 ];
 const navBadge = (key, g) => {
   switch (key) {
+    case 'definition': return g.definition && g.definition.needs_review && g.definition.needs_review.length ? { n: g.definition.needs_review.length, warn: true } : null;
     case 'requirements': return g.requirements && g.requirements.total ? { n: g.requirements.total } : null;
     case 'wbs': return g.wbs && g.wbs.total ? { n: g.wbs.total } : null;
     case 'changes': return g.changes && (g.changes.under_review || g.changes.approved_unimplemented) ? { n: g.changes.under_review + g.changes.approved_unimplemented, warn: true } : null;
@@ -152,32 +163,32 @@ const navBadge = (key, g) => {
   }
 };
 const pv = (v) => (v === null || v === undefined ? '-' : v + '%');
-/** Project Workspace header (sticky). `tab` = overview | phase | requirements | wbs | changes | raid | tests. crumb args are accepted for old call sites. */
+/** Project Workspace header (sticky). `tab` = overview | definition | phase | requirements | wbs | changes | raid | tests. crumb args are accepted for old call sites. */
 export const projectHead = (p, g, { tab = 'overview' } = {}) => {
   wireProjectActions();
   wireAssistant(); queueMicrotask(() => revealAskButton(p.id));   // CTA appears only when /ai/status says AI is on
   const k = g.kpis || { guided_progress: g.progress, wbs_progress: g.wbs ? g.wbs.progress : 0, requirement_coverage: null, test_coverage: null };
   const cur = g.current_phase;
   const prog = k.guided_progress ?? g.progress ?? 0;
-  const phaseHref = cur ? `/app/projects/${p.id}/phases/${cur.phase_key}` : `/app/projects/${p.id}`;
+  const phaseHref = cur ? `/app/projects/${p.id}/${cur.phase_key === 'INITIATION' ? 'definition' : `phases/${cur.phase_key}`}` : `/app/projects/${p.id}`;
   return html`<header class="wsh">
     <div class="wsh__row">
       <button type="button" class="wsh__menu" data-ws-menu aria-label="전체 메뉴 열기" title="전체 메뉴 (Projects · Settings)">☰</button>
       <a class="wsh__back" href="/app/projects" data-link>프로젝트</a><span class="wsh__sep">/</span>
       <a class="wsh__name" href="/app/projects/${p.id}" data-link title="${p.name}">${p.name}</a>
       <span class="chip ${STATUS_CHIP[p.status] || ''}">${STATUS[p.status]}</span>
-      ${raw(cur ? html`<a class="wsh__phase" href="${phaseHref}" data-link title="현재 단계">${no2(cur.sequence)} ${cur.name}</a>` : '')}
-      <span class="wsh__steps" aria-label="단계 진행">${raw((g.phases || []).map((ph) => html`<a class="ps ${ph.is_current ? 'is-cur' : ph.status === 'COMPLETED' ? 'is-done' : ph.status === 'IN_PROGRESS' ? 'is-open' : ''}" href="/app/projects/${p.id}/phases/${ph.phase_key}" data-link title="${no2(ph.sequence)} ${ph.name} · ${ph.progress.done}/${ph.progress.total}"></a>`).join(''))}</span>
+      ${raw(cur ? html`<a class="wsh__phase" href="${phaseHref}" data-link title="현재 단계 · 단계 기록 보기">${no2(cur.sequence)} ${cur.name}</a>` : '')}
+      <span class="wsh__steps" aria-label="단계 진행">${raw((g.phases || []).map((ph) => html`<a class="ps ${ph.is_current ? 'is-cur' : ph.status === 'COMPLETED' ? 'is-done' : ph.status === 'IN_PROGRESS' ? 'is-open' : ''}" href="/app/projects/${p.id}/${ph.phase_key === 'INITIATION' ? 'definition' : `phases/${ph.phase_key}`}" data-link title="${no2(ph.sequence)} ${ph.name} · ${ph.progress.done}/${ph.progress.total}"></a>`).join(''))}</span>
       <span class="wsh__prog" title="Guided 진행률"><span class="pbar"><i style="width:${prog}%"></i></span><b>${prog}%</b></span>
       <span class="wsh__owner" data-owner-id="${p.created_by || ''}" title="프로젝트 등록자"></span>
       <span class="wsh__sp"></span>
-      <a class="wsh__kpi" href="/app/projects/${p.id}" data-link title="Overview에서 자세히 보기"><span>WBS <b>${pv(k.wbs_progress)}</b></span><span>Req.Cov <b>${pv(k.requirement_coverage)}</b></span><span>Test.Cov <b>${pv(k.test_coverage)}</b></span></a>
+      <a class="wsh__kpi" href="/app/projects/${p.id}" data-link title="프로젝트 홈에서 자세히 보기"><span>WBS <b>${pv(k.wbs_progress)}</b></span><span>Req.Cov <b>${pv(k.requirement_coverage)}</b></span><span>Test.Cov <b>${pv(k.test_coverage)}</b></span></a>
       <button type="button" class="btn btn--secondary btn--sm wsh__ask" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조">RELAI에게 물어보기</button>
       ${raw(headerActions(p))}
     </div>
     <nav class="wsh__tabs" aria-label="프로젝트 메뉴">${raw(NAV_TABS.map((it) => {
       const b = navBadge(it.key, g);
-      const href = it.key === 'phase' ? phaseHref : `/app/projects/${p.id}${it.path}`;
+      const href = `/app/projects/${p.id}${it.path}`;
       return html`<a class="${tab === it.key ? 'is-active' : ''}" href="${href}" data-link data-tab="${it.key}">${it.label}${raw(b ? html`<em class="${b.crit ? 'is-crit' : b.warn ? 'is-warn' : ''}">${b.n}</em>` : '')}</a>`;
     }).join(''))}</nav></header>`;
 };

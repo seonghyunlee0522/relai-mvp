@@ -8,6 +8,7 @@ import {
 } from './security.js';
 import { parseSignup, parseProject, ValidationError } from './validate.js';
 import { ensurePhases, loadGuide, updateStep, transitionTo, projectProgress } from './guide.js';
+import * as D from './definition.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import * as T from './trace.js';
@@ -243,7 +244,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const guideResponse = async (project) => {
     const guide = (await loadGuide(db, project));
     const stats = (await M.projectStats(db, project));
-    return { project: { ...project, progress: guide.progress }, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)) };
+    const def = (await D.loadDefinition(db, project));
+    return { project: { ...project, progress: guide.progress }, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
+      definition: { progress: def.progress, needs_review: def.needs_review, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) } };
   };
 
   app.get(`${base}/:pid`, guard, wrap(async (req, res) => {
@@ -292,6 +295,22 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '단계를 찾을 수 없습니다.');
     if (r.error === 'already_current') return fail(res, 409, 'already_current', '이미 현재 단계입니다.');
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
+  }));
+
+  /* ---------- 프로젝트 정의 (structured INITIATION input; completion = INITIATION step status) ---------- */
+  app.get(`${base}/:pid/definition`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json((await D.loadDefinition(db, project)));
+  }));
+  app.put(`${base}/:pid/definition`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    res.json((await tx(db, async (db) => D.saveDefinition(db, project, req.body, req.user.id))));
+  }));
+  app.post(`${base}/:pid/definition/sections/:key/:action(complete|confirm|reopen)`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const r = (await tx(db, async (db) => D.setSectionStatus(db, project, req.params.key, req.params.action, req.user.id)));
+    if (r.error === 'not_found') return fail(res, 404, 'not_found', '섹션을 찾을 수 없습니다.');
+    res.json({ ...(await D.loadDefinition(db, project)), guide: (await guideResponse(project)) });
   }));
 
   app.patch(`${base}/:pid`, manage, wrap(async (req, res) => {

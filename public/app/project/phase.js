@@ -11,6 +11,7 @@ export async function phasePage(id, phaseKey) {
   const p = g.project;
   let ph = g.phases.find((x) => x.phase_key === phaseKey);
   if (!ph) { navigate(`/app/projects/${id}`, { replace: true }); return; }
+  if (phaseKey === 'INITIATION') { navigate(`/app/projects/${id}/definition`, { replace: true }); return; }   // 착수 = 프로젝트 정의 화면
   const archived = p.status === 'ARCHIVED';
   let openId = (location.hash || '').replace('#step-', '') || null;
 
@@ -21,15 +22,16 @@ export async function phasePage(id, phaseKey) {
     const nextStep = open[0];
     main.innerHTML = html`<div class="page page--wide page--flow">
       ${raw(projectHead(p, g, { tab: 'phase' }))}
+      <p class="phase__crumb"><a class="link" href="/app/projects/${p.id}" data-link>← 프로젝트 홈</a><span class="dim">단계별 할 일의 완료 처리와 메모는 여기에서 관리합니다. 실제 작업은 각 업무 탭에서 합니다.</span></p>
       ${raw(phaseStrip(g, p.id))}
 
       <section class="panel phase">
         <div class="phase__h">
-          <div><div class="phase__k"><span>${no2(ph.sequence)}</span>${raw(ph.is_current ? '<em class="chip chip--active">현재 단계</em>' : html`<em class="chip">${PHASE_STATUS[ph.status]}</em>`)}</div>
+          <div><div class="phase__k"><span class="phase__rec">단계 기록</span><span>${no2(ph.sequence)}</span>${raw(ph.is_current ? '<em class="chip chip--active">현재 단계</em>' : html`<em class="chip">${PHASE_STATUS[ph.status]}</em>`)}</div>
             <h2>${ph.name}</h2><p>${ph.description}</p></div>
           <div class="phase__p"><b>${ph.progress.done} / ${ph.progress.total}</b><span>완료</span><div class="pbar"><i style="width:${ph.progress.percent}%"></i></div></div>
         </div>
-        ${raw(!ph.is_current && !archived ? html`<div class="phase__bar"><span>이 단계를 조회하고 있습니다. 현재 단계는 <b>${g.current_phase.name}</b>입니다.</span><button class="btn btn--secondary btn--sm" id="setcur">이 단계를 현재 단계로 변경</button></div>` : '')}
+        ${raw(!ph.is_current ? html`<div class="phase__bar"><span>이 단계의 기록을 조회하고 있습니다. 현재 단계는 <b>${g.current_phase.name}</b>입니다.</span>${raw(archived ? '' : '<button class="btn btn--secondary btn--sm" id="setcur">이 단계를 현재 단계로 변경…</button>')}</div>` : '')}
         ${raw(ph.is_current && !archived ? (open.length
           ? html`<div class="phase__bar phase__bar--now"><span>다음에 할 일: <b>${nextStep.title}</b></span></div>`
           : html`<div class="phase__bar phase__bar--done"><span>현재 단계의 할 일을 모두 완료했습니다.</span>${raw(g.next_phase ? '<button class="btn btn--primary btn--sm" id="next">다음 단계로 이동</button>' : '')}</div>`) : '')}

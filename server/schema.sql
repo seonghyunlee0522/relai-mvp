@@ -82,6 +82,27 @@ CREATE TABLE IF NOT EXISTS projects (
   CHECK (planned_end_date >= planned_start_date)
 );
 
+/* ---------- Project definition (Phase 12b: 착수 입력 → 프로젝트 정의) ----------
+ * One row per project. List-type sections are JSON arrays in TEXT (same convention as other JSON columns here).
+ * Section completion is NOT stored here: it is the INITIATION step status in project_steps (GOALS/SCOPE/STAKEHOLDERS/
+ * MILESTONES/OPERATIONS), so the home progress keeps reading one source. `section_updated` records when each section
+ * was last edited so "completed, then changed" can be shown and re-confirmed. */
+CREATE TABLE IF NOT EXISTS project_definitions (
+  project_id        TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  goal              TEXT NOT NULL DEFAULT '',
+  success_criteria  TEXT NOT NULL DEFAULT '[]',   -- [{id, text}]
+  scope_in          TEXT NOT NULL DEFAULT '[]',   -- [{id, text}]
+  scope_out         TEXT NOT NULL DEFAULT '[]',   -- [{id, text}]
+  stakeholders      TEXT NOT NULL DEFAULT '[]',   -- [{id, name, org, role, area, authority}]
+  key_dates         TEXT NOT NULL DEFAULT '[]',   -- [{id, title, date, note}]
+  operations        TEXT NOT NULL DEFAULT '{}',   -- {meetings, reporting, communication, decisions}
+  memo              TEXT NOT NULL DEFAULT '',
+  section_updated   TEXT NOT NULL DEFAULT '{}',   -- {GOALS: ts, SCOPE: ts, ...}
+  updated_by        TEXT REFERENCES users(id),
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
 /* ---------- Guided execution (Phase 2) ---------- */
 CREATE TABLE IF NOT EXISTS project_phases (
   id           TEXT PRIMARY KEY,

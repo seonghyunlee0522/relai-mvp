@@ -6,6 +6,7 @@ import { homePage, projectsPage } from './project/list.js';
 import { projectFormPage } from './project/form.js';
 import { overviewPage } from './project/overview.js';
 import { phasePage } from './project/phase.js';
+import { definitionPage } from './project/definition.js';
 import { reportPage } from './project/report.js';
 import { requirementsPage } from './requirements/page.js';
 import { wbsPage } from './wbs/page.js';
@@ -27,6 +28,7 @@ registerRoutes([
   [/^\/app\/projects\/new\/?$/, projectFormPage],
   [/^\/app\/projects\/([\w-]+)\/?$/, overviewPage],
   [/^\/app\/projects\/([\w-]+)\/edit\/?$/, projectFormPage],
+  [/^\/app\/projects\/([\w-]+)\/definition\/?$/, definitionPage],
   [/^\/app\/projects\/([\w-]+)\/phases\/([A-Z_]+)\/?$/, phasePage],
   [/^\/app\/projects\/([\w-]+)\/reports\/([\w-]+)\/?$/, reportPage],
   [/^\/app\/projects\/([\w-]+)\/requirements\/?$/, requirementsPage],

@@ -50,9 +50,9 @@ async function reportsMenu(btn, c) {
 function moreMenu(btn, c) {
   const m = openMenu(btn, html`<button type="button" role="menuitem" class="amenu__act" data-more="activity">Activity</button>
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
-    <a role="menuitem" href="/app/projects/${c.pid}/phases" data-link data-phases>단계 이력·프로세스</a>
+    <a role="menuitem" href="/app/projects/${c.pid}/phases" data-link data-phases>단계 기록</a>
     ${raw(c.ro ? '' : '<hr><button type="button" role="menuitem" class="is-danger" data-more="archive">프로젝트 보관</button>')}`);
-  const ph = $('[data-phases]', m); if (ph) ph.href = document.querySelector('.wsh__tabs a[data-tab="phase"]')?.getAttribute('href') || ph.href;
+  const ph = $('[data-phases]', m); if (ph) ph.href = document.querySelector('.wsh__phase')?.getAttribute('href') || ph.href;
   $('[data-more="activity"]', m).onclick = () => openActivity(c.pid);
   const ab = $('[data-more="archive"]', m);
   if (ab) ab.onclick = async () => {
