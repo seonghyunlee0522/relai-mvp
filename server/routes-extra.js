@@ -15,7 +15,7 @@ import { previewImport, runImport } from './importer.js';
 import { bulkRequirements, bulkWbs } from './bulk.js';
 import { parseComment, listComments, addComment, getComment, deleteComment } from './comments.js';
 import { can } from './authz.js';
-import { projectDashboard } from './dashboard.js';
+import { projectDashboard, projectActivity } from './dashboard.js';
 
 /** JSON bodies of the import endpoints may carry a base64 xlsx (≤5 MB file → ≈6.7 MB); everything else keeps the 64 KB limit. */
 export const BIG_BODY_LIMIT = '8mb';
@@ -148,5 +148,10 @@ export function mountDashboardRoute({ app, db, guard, wrap, loadProject, base })
   app.get(`${base}/:pid/dashboard`, guard, wrap(async (req, res) => {
     const project = await loadProject(req, res); if (!project) return;
     res.json(await projectDashboard(db, project));
+  }));
+  /** Project activity (history + comments), opened on demand from the workspace header. */
+  app.get(`${base}/:pid/activity`, guard, wrap(async (req, res) => {
+    const project = await loadProject(req, res); if (!project) return;
+    res.json(await projectActivity(db, project.id, { limit: req.query.limit }));
   }));
 }
