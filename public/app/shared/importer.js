@@ -7,6 +7,8 @@ import { download, fileToBase64 } from '../core/ui.js';
 import { toast } from './dialogs.js';
 
 const STEPS = ['파일 선택', '검증·수정', '가져오기 결과'];
+const STEPS_WBS = ['파일 선택', '열 매핑', '검증·미리보기', '가져오기 결과'];
+const MAP_LABEL = { title: 'WBS명', code: 'WBS Code', lv1: 'Lv1', lv2: 'Lv2', lv3: 'Lv3', lv4: 'Lv4', lv5: 'Lv5', owner: '담당자', start: '시작일', end: '종료일', progress: '진행률', status: '상태', description: '설명', item_type: '유형(마일스톤)' };
 const KIND_LABEL = { requirements: '요구사항', wbs: 'WBS' };
 const TEMPLATE_NAME = { requirements: '요구사항 등록 템플릿.xlsx', wbs: 'WBS 등록 템플릿.xlsx' };
 
@@ -23,15 +25,18 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
 
   let step = 1; let columns = []; let rows = []; let warnings = []; let errOnly = false; let busy = false; let result = null; let fileName = '';
   let dirty = false;
+  const isWbs = kind === 'wbs'; const steps = isWbs ? STEPS_WBS : STEPS;
+  let fileData = null; let inspect = null; let mapping = {};   // WBS: raw file + column mapping (step 2)
+  const PREVIEW_STEP = isWbs ? 3 : 2; const RESULT_STEP = isWbs ? 4 : 3;
 
   const close = () => { document.onkeydown = prevKey; el.remove(); if (result) onDone(); };
-  const tryClose = () => { if (dirty && step === 2 && !confirm('검증 중인 내용이 사라집니다. 닫을까요?')) return; close(); };
+  const tryClose = () => { if (dirty && step === PREVIEW_STEP && !confirm('검증 중인 내용이 사라집니다. 닫을까요?')) return; close(); };
 
   const summary = () => ({ total: rows.length, ok: rows.filter((r) => r.ok).length, error: rows.filter((r) => !r.ok).length });
 
   const shell = (body, footer) => html`<div class="imp" role="dialog" aria-modal="true" aria-label="${label} Excel 가져오기">
     <div class="imp__h"><h3>${label} Excel 가져오기</h3>${raw(fileName ? html`<span class="hint">${fileName}</span>` : '')}<button class="imp__x" data-x aria-label="닫기">×</button></div>
-    <div class="imp__steps">${raw(STEPS.map((s, i) => html`<span class="imp__step ${step === i + 1 ? 'is-on' : step > i + 1 ? 'is-done' : ''}"><i>${step > i + 1 ? '✓' : i + 1}</i>${s}</span>`).join(''))}</div>
+    <div class="imp__steps">${raw(steps.map((s, i) => html`<span class="imp__step ${step === i + 1 ? 'is-on' : step > i + 1 ? 'is-done' : ''}"><i>${step > i + 1 ? '✓' : i + 1}</i>${s}</span>`).join(''))}</div>
     <div class="imp__body">${raw(body)}</div><div class="imp__f">${raw(footer)}</div></div>`;
 
   /* ---------- step 1: file ---------- */
@@ -58,9 +63,48 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
     busy = true; fileName = file.name; drawFile();
     try {
       const data = await fileToBase64(file);
+      if (isWbs) { fileData = data; inspect = await api('POST', `${base}/import/inspect`, { data }); mapping = { ...inspect.suggested }; busy = false; step = 2; drawMapping(); return; }
       const d = await api('POST', `${base}/import/preview`, { data, ...(parentId ? { parent_id: parentId } : {}) });
-      columns = d.columns; rows = d.rows; warnings = d.warnings || []; errOnly = rows.some((r) => !r.ok) && rows.length > 30; dirty = false; busy = false; step = 2; drawPreview();
+      columns = d.columns; rows = d.rows; warnings = d.warnings || []; errOnly = rows.some((r) => !r.ok) && rows.length > 30; dirty = false; busy = false; step = PREVIEW_STEP; drawPreview();
     } catch (e) { busy = false; fileName = ''; drawFile(); toast(e.message); }
+  };
+
+  /* ---------- WBS step 2: column mapping (Lv1..Lv5 layout, WBS Code layout, or flat) ---------- */
+  const layoutOf = () => (mapping.code ? 'code' : mapping.lv1 ? 'levels' : 'flat');
+  const drawMapping = () => {
+    const hdr = inspect.headers; const sel = (f) => html`<select class="select select--sm" data-map="${f}"><option value="">(사용 안 함)</option>${raw(hdr.map((h) => html`<option value="${h.n}" ${String(mapping[f] || '') === String(h.n) ? 'selected' : ''}>${h.text}</option>`).join(''))}</select>`;
+    const layout = layoutOf();
+    const used = new Set(Object.values(mapping).map(String));
+    el.innerHTML = shell(html`
+      <div class="imp__maphead"><p>파일의 열을 WBS 항목에 연결합니다. <b>WBS Code</b>(1, 1.1, 1.1.1)가 있으면 그 번호로, 없으면 <b>Lv1~Lv5</b> 열의 위치로 계층을 만듭니다. 둘 다 없으면 모든 행이 최상위 항목이 됩니다.</p>
+        <span class="chip ${layout === 'flat' ? 'chip--hold' : 'chip--done'}">${layout === 'code' ? 'WBS Code 기반 계층' : layout === 'levels' ? 'Lv 열 기반 계층' : '계층 없음 (모두 최상위)'}</span></div>
+      <div class="imp__map">
+        <div class="imp__mapcol"><h4>계층 · 이름</h4>
+          <label><span>WBS명</span>${raw(sel('title'))}</label>
+          <label><span>WBS Code</span>${raw(sel('code'))}</label>
+          ${raw(['lv1', 'lv2', 'lv3', 'lv4', 'lv5'].map((f) => html`<label><span>${MAP_LABEL[f]}</span>${raw(sel(f))}</label>`).join(''))}
+        </div>
+        <div class="imp__mapcol"><h4>속성 (선택)</h4>
+          ${raw(['owner', 'start', 'end', 'progress', 'status', 'item_type', 'description'].map((f) => html`<label><span>${MAP_LABEL[f]}</span>${raw(sel(f))}</label>`).join(''))}
+          <p class="hint">담당자는 Workspace 멤버 이름/이메일, 날짜는 YYYY-MM-DD, 진행률은 0~100, 유형은 '마일스톤'일 때만 마일스톤으로 만듭니다.</p>
+        </div>
+      </div>
+      <h4 class="imp__h4">파일 미리보기 <small class="dim">(첫 ${inspect.sample.length}행)</small></h4>
+      <div class="imp__tbl imp__tbl--raw"><table><thead><tr><th>행</th>${raw(hdr.map((h) => html`<th class="${used.has(String(h.n)) ? 'is-mapped' : ''}">${h.text}</th>`).join(''))}</tr></thead>
+        <tbody>${raw(inspect.sample.map((r) => html`<tr><td class="rn">${r.row}</td>${raw(hdr.map((h) => html`<td>${r.cells[h.n] || ''}</td>`).join(''))}</tr>`).join(''))}</tbody></table></div>`,
+      html`<button class="btn btn--secondary" data-back>다른 파일 선택</button><span class="sp"></span><button class="btn btn--primary" data-mapnext ${mapping.title || mapping.lv1 ? '' : 'disabled'}>다음: 검증·미리보기</button>`);
+  };
+  const applyMapping = async () => {
+    const d = await api('POST', `${base}/import/preview`, { data: fileData, mapping, ...(parentId ? { parent_id: parentId } : {}) });
+    columns = d.columns; rows = d.rows; warnings = d.warnings || []; errOnly = rows.some((r) => !r.ok) && rows.length > 30; dirty = false; step = PREVIEW_STEP; drawPreview();
+  };
+  /** Tree rendered from the WBS Code column of the (validated) rows — what will actually be created. */
+  const treeHtml = () => {
+    const nodes = rows.map((r) => ({ code: String(r.values.code || ''), title: r.values.title || '', ok: r.ok, ms: /마일스톤|MILESTONE/i.test(r.values.item_type || '') })).filter((n) => n.code);
+    if (!nodes.length) return '';
+    const depth = (c) => c.split('.').length - 1;
+    return html`<details class="imp__tree" open><summary>생성될 WBS 구조 <small class="dim">(${nodes.length}건 · 번호는 가져올 때 다시 매겨집니다)</small></summary>
+      <div class="imp__treebody">${raw(nodes.slice(0, 400).map((n) => html`<div class="imp__node ${n.ok ? '' : 'is-bad'} ${depth(n.code) === 0 ? 'is-top' : ''}" style="--d:${Math.min(depth(n.code), 6)}">${raw(n.ms ? '<i class="wms">◆</i>' : '')}<span class="mono">${n.code}</span>${n.title}${raw(n.ok ? '' : ' <span class="chip chip--fail">오류</span>')}</div>`).join(''))}${raw(nodes.length > 400 ? `<div class="hint">… 외 ${nodes.length - 400}건</div>` : '')}</div></details>`;
   };
 
   /* ---------- step 2: preview / fix ---------- */
@@ -87,11 +131,12 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
       <div class="imp__cards"><div class="imp__card"><b>${s.total.toLocaleString('ko-KR')}</b><span>읽은 행</span></div>
         <div class="imp__card is-ok"><b>${s.ok.toLocaleString('ko-KR')}</b><span>가져올 수 있음</span></div>
         <div class="imp__card is-err"><b>${s.error.toLocaleString('ko-KR')}</b><span>오류 (수정하거나 제외됩니다)</span></div></div>
+      ${raw(isWbs ? treeHtml() : '')}
       <div class="imp__opts"><label class="toggle"><input type="checkbox" id="errOnly" ${errOnly ? 'checked' : ''}> 오류 행만 보기</label>
         <span class="hint">셀을 직접 수정한 뒤 [다시 검증]을 누르세요. 오류가 남은 행은 가져오지 않습니다.</span></div>
       <div class="imp__tbl"><table><thead><tr><th>행</th><th>상태</th>${raw(columns.map((c) => html`<th>${c.label}${raw(c.required ? ' <span class="req">*</span>' : '')}</th>`).join(''))}</tr></thead>
         <tbody id="ptb">${raw(shown.map(([r, i]) => rowHtml(r, i)).join('') || `<tr><td colspan="${columns.length + 2}" class="hint" style="padding:18px">표시할 행이 없습니다.</td></tr>`)}</tbody></table></div>`,
-    html`<button class="btn btn--secondary" data-back>다른 파일 선택</button>
+    html`<button class="btn btn--secondary" data-back>${isWbs ? '← 열 매핑' : '다른 파일 선택'}</button>
       ${raw(s.error ? '<button class="btn btn--secondary" data-errxlsx>오류 행 Excel 내려받기</button>' : '')}<span class="sp"></span>
       <button class="btn btn--secondary" data-revalidate>다시 검증</button>
       <button class="btn btn--primary" data-run ${s.ok ? '' : 'disabled'}>${s.ok.toLocaleString('ko-KR')}건 가져오기${s.error ? ` (오류 ${s.error.toLocaleString('ko-KR')}건 제외)` : ''}</button>`);
@@ -111,7 +156,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
       const d = await api('POST', `${base}/import`, { rows: payloadRows(), ...(parentId ? { parent_id: parentId } : {}) });
       const byRow = new Map(rows.map((r) => [r.row, r]));
       result = { ...d, failedRows: d.results.filter((x) => !x.ok).map((x) => ({ row: x.row, values: (byRow.get(x.row) || { values: {} }).values, errors: x.errors || {}, row_errors: x.row_errors || [] })) };
-      step = 3; dirty = false; drawResult();
+      step = RESULT_STEP; dirty = false; drawResult();
     } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = '다시 시도'; }
   };
 
@@ -135,13 +180,15 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
     if (t === el && step !== 2) return close();
     if (t.closest('[data-x]')) return tryClose();
     if (t.closest('[data-tpl]')) { try { await download(`${base}/template.xlsx`, { filename: TEMPLATE_NAME[kind] }); } catch (err) { toast(err.message); } return; }
-    if (t.closest('[data-back]')) { step = 1; fileName = ''; drawFile(); return; }
+    if (t.closest('[data-back]')) { if (isWbs && step === PREVIEW_STEP && inspect) { step = 2; drawMapping(); return; } step = 1; fileName = ''; fileData = null; inspect = null; drawFile(); return; }
+    if (t.closest('[data-mapnext]')) { const b = t.closest('button'); b.disabled = true; b.textContent = '검증 중…'; try { await applyMapping(); } catch (err) { toast(err.fields ? Object.values(err.fields)[0] : err.message); drawMapping(); } return; }
     if (t.closest('[data-revalidate]')) { const b = t.closest('button'); b.disabled = true; b.textContent = '검증 중…'; try { await revalidate(); } catch (err) { toast(err.message); drawPreview(); } return; }
     if (t.closest('[data-run]')) return run();
     if (t.closest('[data-errxlsx]')) return downloadErrors(rows.filter((r) => !r.ok).map(({ row, values, errors, row_errors }) => ({ row, values, errors, row_errors })));
     if (t.closest('[data-errxlsx2]')) return downloadErrors(result.failedRows);
   });
   el.addEventListener('change', (e) => {
+    if (e.target.dataset && e.target.dataset.map) { const f = e.target.dataset.map; if (e.target.value) mapping[f] = Number(e.target.value); else delete mapping[f]; drawMapping(); return; }
     if (e.target.id === 'errOnly') { errOnly = e.target.checked; drawPreview(); return; }
     const k = e.target.dataset && e.target.dataset.k; if (!k) return;
     const tr = e.target.closest('tr[data-i]'); const r = rows[Number(tr.dataset.i)];

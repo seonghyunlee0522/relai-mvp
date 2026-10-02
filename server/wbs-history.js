@@ -5,7 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-export const WBS_TRACKED = ['title', 'description', 'item_type', 'status', 'owner_user_id', 'progress',
+export const WBS_TRACKED = ['title', 'description', 'item_type', 'status', 'owner_user_id', 'progress', 'weight',
   'planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date', 'milestone_date'];
 
 const txt = (v) => (v === null || v === undefined ? null : String(v));

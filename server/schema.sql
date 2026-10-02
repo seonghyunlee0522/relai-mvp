@@ -238,6 +238,10 @@ CREATE TABLE IF NOT EXISTS wbs_items (
   CHECK (actual_end_date IS NULL OR actual_start_date IS NULL OR actual_end_date >= actual_start_date)
 );
 CREATE INDEX IF NOT EXISTS idx_wbs_project ON wbs_items(project_id, archived_at, parent_id, sequence);
+-- Tree WBS (Phase 12): depth is maintained by renumber(); weight drives the parent progress roll-up (0 = excluded).
+-- SUMMARY is legacy: new data uses TASK, and "group" simply means "has live children".
+ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS weight INTEGER NOT NULL DEFAULT 1 CHECK (weight BETWEEN 0 AND 1000);
 
 -- Finish-to-start predecessor links. Many predecessors per item; cycle check is done in code before insert.
 CREATE TABLE IF NOT EXISTS wbs_dependencies (

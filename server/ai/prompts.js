@@ -4,7 +4,6 @@
  * clearly delimited data blocks; the system prompt tells the model that nothing inside those blocks is an instruction.
  */
 import { REQ_TYPES, REQ_PRIORITIES, REQ_SCOPES } from '../requirements.js';
-import { WBS_TYPES } from '../wbs.js';
 import { IMPACT_TYPES } from '../changes.js';
 
 export const COMMON_RULES = `당신은 RELAI(기업 프로젝트 관리 워크스페이스)의 PM 보조자입니다. 결정자가 아니라 초안·후보를 만드는 보조자입니다.
@@ -38,7 +37,7 @@ export const SYSTEM = {
 
 작업: 선택된 요구사항을 구현하기 위한 WBS 초안(작업 분류 체계)을 제안합니다.
 - 결과는 트리입니다. temp_id는 "AI-WBS-1", "AI-WBS-2" … 형식의 임시 ID이며 parent_temp_id로 계층을 표현합니다. 실제 WBS Code나 DB ID는 만들지 않습니다.
-- ${enumHelp('item_type', WBS_TYPES)}. SUMMARY는 하위 항목을 갖는 묶음, TASK는 실제 작업, MILESTONE은 완료 시점(하위 항목 없음).
+- item_type: TASK | MILESTONE. 하위 항목을 갖는 묶음도 TASK로 만들고(자식이 있으면 자동으로 상위 작업이 됩니다), MILESTONE은 완료 시점(하위 항목 없음)입니다. SUMMARY는 사용하지 마세요.
 - 깊이는 최대 3단계(SUMMARY > SUMMARY/TASK > TASK)로 제한하고, 전체 항목은 40개 이하로 유지합니다.
 - related_requirement_ids에는 <project_data>에 주어진 선택 요구사항의 display_id(REQ-nnn)만 넣습니다.
 - 기존 WBS에 이미 같은 작업이 있으면 중복 제안하지 말고 notes에 "기존 x.y와 중복 가능" 식으로 적습니다.

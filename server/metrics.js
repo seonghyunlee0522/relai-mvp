@@ -11,6 +11,7 @@ import * as C from './changes.js';
 import * as X from './raid.js';
 import * as Q from './testing.js';
 import { projectHealth } from './health.js';
+import { LEAF_SQL } from './wbs.js';
 
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
@@ -74,8 +75,8 @@ export async function attentionAll(db, projectId) {
   const chg = (await db.all(`SELECT id, display_id, title, status FROM change_requests WHERE project_id = ? AND archived_at IS NULL AND status IN ('APPROVED','UNDER_REVIEW') ORDER BY approved_at, updated_at`, [projectId]));
   push('APPROVED_UNIMPLEMENTED_CHANGE', 'CHANGE', (r) => `changes?sel=${r.id}`, chg.filter((c) => c.status === 'APPROVED'), '승인 후 미반영 변경');
   push('UNDER_REVIEW_CHANGE', 'CHANGE', (r) => `changes?sel=${r.id}`, chg.filter((c) => c.status === 'UNDER_REVIEW'), '검토 중 변경 (결정 필요)');
-  const wbs = (await db.all(`SELECT id, wbs_code AS display_id, title, item_type, planned_end_date, milestone_date FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND status != 'COMPLETED'
-      AND ((item_type = 'TASK' AND planned_end_date IS NOT NULL AND planned_end_date < ${TODAY}) OR (item_type = 'MILESTONE' AND milestone_date IS NOT NULL AND milestone_date < ${TODAY})) ORDER BY COALESCE(planned_end_date, milestone_date)`, [projectId]));
+  const wbs = (await db.all(`SELECT w.id, w.wbs_code AS display_id, w.title, w.item_type, w.planned_end_date, w.milestone_date FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.status != 'COMPLETED'
+      AND ((w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.planned_end_date IS NOT NULL AND w.planned_end_date < ${TODAY}) OR (w.item_type = 'MILESTONE' AND w.milestone_date IS NOT NULL AND w.milestone_date < ${TODAY})) ORDER BY COALESCE(w.planned_end_date, w.milestone_date)`, [projectId]));
   push('OVERDUE_MILESTONE', 'WBS', (r) => `wbs?sel=${r.id}`, wbs.filter((w) => w.item_type === 'MILESTONE'), (w) => `지난 마일스톤 · ${w.milestone_date}`);
   push('OVERDUE_WBS', 'WBS', (r) => `wbs?sel=${r.id}`, wbs.filter((w) => w.item_type === 'TASK'), (w) => `Overdue WBS · 종료 예정 ${w.planned_end_date}`);
   push('CONFIRMED_UNLINKED_REQUIREMENT', 'REQUIREMENT', (r) => `requirements?sel=${r.id}`, (await db.all(`SELECT r.id, r.display_id, r.title FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE' AND r.status = 'CONFIRMED'
@@ -93,8 +94,8 @@ export async function upcomingDates(db, projectId, { days = 7, limit = 20, from 
   const range = (col) => `${col} IS NOT NULL AND ${col} BETWEEN ${lo} AND ${hi}`;
   const args = []; const bind = () => { if (from) args.push(from); if (to) args.push(to); };
   const parts = [
-    [`SELECT 'WBS' AS type, 'WBS_START' AS kind, id, wbs_code AS display_id, title, planned_start_date AS date, '시작 예정' AS label FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'TASK' AND status = 'NOT_STARTED' AND ${range('planned_start_date')}`],
-    [`SELECT 'WBS', 'WBS_END', id, wbs_code, title, planned_end_date, '종료 예정' FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'TASK' AND status != 'COMPLETED' AND ${range('planned_end_date')}`],
+    [`SELECT 'WBS' AS type, 'WBS_START' AS kind, w.id, w.wbs_code AS display_id, w.title, w.planned_start_date AS date, '시작 예정' AS label FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status = 'NOT_STARTED' AND ${range('w.planned_start_date')}`],
+    [`SELECT 'WBS', 'WBS_END', w.id, w.wbs_code, w.title, w.planned_end_date, '종료 예정' FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status != 'COMPLETED' AND ${range('w.planned_end_date')}`],
     [`SELECT 'WBS', 'MILESTONE', id, wbs_code, title, milestone_date, '마일스톤' FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'MILESTONE' AND status != 'COMPLETED' AND ${range('milestone_date')}`],
     [`SELECT 'ISSUE', 'ISSUE_DUE', id, display_id, title, due_date, '이슈 기한' FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED') AND ${range('due_date')}`],
     [`SELECT 'RISK', 'RISK_REVIEW', id, display_id, title, review_date, 'Risk Review' FROM risks WHERE project_id = ? AND archived_at IS NULL AND status IN ('OPEN','MONITORING') AND ${range('review_date')}`],

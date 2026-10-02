@@ -9,6 +9,7 @@
  *
  * Thresholds live in HEALTH_RULES so they can be tuned (or made per-workspace later) without touching the rules.
  */
+import { LEAF_SQL } from './wbs.js';
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
 
@@ -29,13 +30,13 @@ export const HEALTH_RULES = {
 export async function healthFacts(db, project) {
   const pid = project.id;
   const wbs = (await db.get(`SELECT
-      COALESCE(SUM((item_type = 'TASK')::int), 0) AS tasks,
-      COALESCE(SUM((item_type = 'TASK' AND planned_start_date IS NOT NULL AND planned_end_date IS NOT NULL)::int), 0) AS tasks_dated,
+      COALESCE(SUM((item_type = 'TASK' AND ${LEAF_SQL('w')})::int), 0) AS tasks,
+      COALESCE(SUM((item_type = 'TASK' AND ${LEAF_SQL('w')} AND planned_start_date IS NOT NULL AND planned_end_date IS NOT NULL)::int), 0) AS tasks_dated,
       COALESCE(SUM((item_type = 'MILESTONE')::int), 0) AS milestones,
       COALESCE(SUM((item_type = 'MILESTONE' AND milestone_date IS NOT NULL)::int), 0) AS milestones_dated,
-      COALESCE(SUM((item_type = 'TASK' AND status != 'COMPLETED' AND planned_end_date IS NOT NULL AND planned_end_date < ${TODAY})::int), 0) AS overdue_tasks,
+      COALESCE(SUM((item_type = 'TASK' AND ${LEAF_SQL('w')} AND status != 'COMPLETED' AND planned_end_date IS NOT NULL AND planned_end_date < ${TODAY})::int), 0) AS overdue_tasks,
       COALESCE(SUM((item_type = 'MILESTONE' AND status != 'COMPLETED' AND milestone_date IS NOT NULL AND milestone_date < ${TODAY})::int), 0) AS overdue_milestones
-    FROM wbs_items WHERE project_id = ? AND archived_at IS NULL`, [pid]));
+    FROM wbs_items w WHERE project_id = ? AND archived_at IS NULL`, [pid]));
   const req = (await db.get(`SELECT COUNT(*) AS in_scope,
       COALESCE(SUM((status = 'CONFIRMED')::int), 0) AS confirmed,
       COALESCE(SUM((status != 'CONFIRMED')::int), 0) AS unconfirmed,

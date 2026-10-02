@@ -12,6 +12,7 @@ import { ValidationError } from './validate.js';
 import { loadGuide } from './guide.js';
 import * as M from './metrics.js';
 import { projectHealth, STATUS_LABEL } from './health.js';
+import { LEAF_SQL } from './wbs.js';
 
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
@@ -56,8 +57,8 @@ export async function buildReportData(db, project, { period_start: s, period_end
   const kpis = (await M.headlineKpis(db, project, stats));
 
   const completed = [
-    ...(await db.all(`SELECT 'WBS' AS type, wbs_code AS display_id, title, 'COMPLETED' AS event, COALESCE(actual_end_date, (updated_at)::date) AS at FROM wbs_items
-      WHERE project_id = ? AND archived_at IS NULL AND item_type != 'SUMMARY' AND status = 'COMPLETED' AND COALESCE(actual_end_date, (updated_at)::date) BETWEEN ? AND ?`, [pid, s, e])),
+    ...(await db.all(`SELECT 'WBS' AS type, w.wbs_code AS display_id, w.title, 'COMPLETED' AS event, COALESCE(w.actual_end_date, (w.updated_at)::date) AS at FROM wbs_items w
+      WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type != 'SUMMARY' AND (w.item_type = 'MILESTONE' OR ${LEAF_SQL('w')}) AND w.status = 'COMPLETED' AND COALESCE(w.actual_end_date, (w.updated_at)::date) BETWEEN ? AND ?`, [pid, s, e])),
     ...(await db.all(`SELECT 'REQUIREMENT' AS type, r.display_id, r.title, 'CONFIRMED' AS event, MAX((h.changed_at)::date) AS at FROM requirement_history h JOIN requirements r ON r.id = h.requirement_id
       WHERE r.project_id = ? AND r.archived_at IS NULL AND ((h.action_type = 'UPDATED' AND h.field_name = 'status' AND h.new_value = 'CONFIRMED')
         OR (h.action_type = 'CREATED' AND r.status = 'CONFIRMED' AND NOT EXISTS (SELECT 1 FROM requirement_history x WHERE x.requirement_id = r.id AND x.field_name = 'status')))
@@ -77,7 +78,7 @@ export async function buildReportData(db, project, { period_start: s, period_end
       (SELECT COUNT(*) FROM raid_links l WHERE l.target_type = 'WBS' AND l.target_id = w.id) AS raid_links,
       (SELECT COUNT(*) FROM change_request_wbs_impacts x JOIN change_requests c ON c.id = x.change_request_id WHERE x.wbs_item_id = w.id AND c.archived_at IS NULL AND c.status IN ('UNDER_REVIEW','APPROVED')) AS change_impacts
     FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id
-    WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND w.status = 'IN_PROGRESS') s
+    WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status = 'IN_PROGRESS') s
     ORDER BY overdue DESC, (planned_end_date IS NULL), planned_end_date, (raid_links + change_impacts) DESC, sequence LIMIT 10`, [pid]));
 
   const issues = (await db.all(`SELECT i.id, i.display_id, i.title, i.status, i.severity, i.due_date, u.name AS owner, (i.due_date IS NOT NULL AND i.due_date < ${TODAY})::int AS overdue

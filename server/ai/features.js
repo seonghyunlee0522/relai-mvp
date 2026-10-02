@@ -113,7 +113,7 @@ export async function generateWbs(db, { project, wid, userId, requirementIds }) 
         let temp = str(it.temp_id) || `AI-WBS-${items.length + 1}`;
         if (seen.has(temp)) { const t2 = `${temp}-${items.length + 1}`; warnings.push(`중복 임시 ID ${temp} → ${t2}`); temp = t2; }
         seen.add(temp);
-        items.push({ ...it, temp_id: temp, parent_temp_id: it.parent_temp_id ? str(it.parent_temp_id) : null, related_requirement_ids: uniq(it.related_requirement_ids) });
+        items.push({ ...it, item_type: it.item_type === 'SUMMARY' ? 'TASK' : it.item_type, temp_id: temp, parent_temp_id: it.parent_temp_id ? str(it.parent_temp_id) : null, related_requirement_ids: uniq(it.related_requirement_ids) });   // SUMMARY is legacy: a TASK with children is the group
       }
       const byTemp = new Map(items.map((i) => [i.temp_id, i]));
       for (const it of items) {

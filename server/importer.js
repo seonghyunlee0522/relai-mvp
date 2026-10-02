@@ -9,8 +9,8 @@ import { tx } from './db.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import { formatDisplayId } from './common.js';
-import { KINDS, publicColumns } from './importspec.js';
-import { MAX_IMPORT_ROWS, ImportFileError, parseWorkbook, decodeBase64Xlsx } from './xlsx.js';
+import { KINDS, normHeader, publicColumns } from './importspec.js';
+import { MAX_IMPORT_ROWS, ImportFileError, parseWorkbook, decodeBase64Xlsx, parseWorkbookRaw } from './xlsx.js';
 
 const REQUIRED = '필수 항목입니다.';
 const CODE_RE = /^\d+(\.\d+)*$/;
@@ -141,7 +141,7 @@ function validateWbs(rows, ctx) {
     if (!v.title) e.title = REQUIRED;
 
     const t = resolveEnum(col('item_type'), v.item_type); if (t.error) e.item_type = t.error;
-    const type = t.value || (CODE_RE.test(v.code) && hasChildren.has(v.code) ? 'SUMMARY' : 'TASK');
+    const type = t.value || 'TASK';   // a row with children is a TASK group (SUMMARY only when the file says so — legacy)
     typeOf[i] = type;
     const st = resolveEnum(col('status'), v.status); if (st.error) e.status = st.error;
     const ow = resolveOwner(ctx.members, v.owner); if (ow.error) e.owner = ow.error;
@@ -152,7 +152,7 @@ function validateWbs(rows, ctx) {
     if (type !== 'MILESTONE' && sd.value && ed.value && ed.value < sd.value) e.end = '종료일은 시작일보다 빠를 수 없습니다.';
     const pg = parseProgress(v.progress);
     if (pg.error) e.progress = pg.error;
-    else if (pg.value !== null && type !== 'TASK') e.progress = type === 'SUMMARY' ? '상위 항목의 진행률은 하위 작업에서 계산됩니다.' : '마일스톤은 진행률을 관리하지 않습니다.';
+    else if (pg.value !== null && (type !== 'TASK' || (hasChildren.has(v.code) && pg.value !== 0))) e.progress = type === 'MILESTONE' ? '마일스톤은 진행률을 관리하지 않습니다.' : '상위 항목의 진행률은 하위 작업에서 계산됩니다.';
 
     const list = [];
     for (const tok of v.predecessors.split(/[,，;\n]+/).map((x) => x.trim()).filter(Boolean)) {
@@ -245,11 +245,83 @@ const validate = (kind, rows, ctx) => (kind === 'requirements' ? validateRequire
 const view = (o) => ({ row: o.row, values: o.values, errors: o.errors, row_errors: o.row_errors, ok: !Object.keys(o.errors).length && !o.row_errors.length });
 const summaryOf = (rows) => ({ total: rows.length, ok: rows.filter((r) => r.ok).length, error: rows.filter((r) => !r.ok).length });
 
+/* ---------- WBS column mapping (enterprise files that are not the template) ---------- */
+export const MAP_FIELDS = ['title', 'code', 'lv1', 'lv2', 'lv3', 'lv4', 'lv5', 'owner', 'start', 'end', 'progress', 'status', 'description', 'item_type'];
+const MAP_HINTS = {
+  title: /^(wbs명|wbs\s*명|업무명|작업명|task(명|\s*name)?|activity|항목명|작업|업무|name|title|내용)$/i,
+  code: /^(wbs\s*(code|코드|번호|no\.?)|code|코드|번호|no\.?|id)$/i,
+  lv1: /^(lv\.?\s*1|level\s*1|레벨\s*1|1\s*단계|대분류|phase|단계)$/i, lv2: /^(lv\.?\s*2|level\s*2|레벨\s*2|2\s*단계|중분류)$/i, lv3: /^(lv\.?\s*3|level\s*3|레벨\s*3|3\s*단계|소분류)$/i,
+  lv4: /^(lv\.?\s*4|level\s*4|레벨\s*4|4\s*단계)$/i, lv5: /^(lv\.?\s*5|level\s*5|레벨\s*5|5\s*단계)$/i,
+  owner: /^(담당자|담당|owner|assignee|책임자|pic)$/i, start: /^(시작일?|계획\s*시작일?|start(\s*date)?|착수일?)$/i, end: /^(종료일?|계획\s*종료일?|end(\s*date)?|완료\s*예정일?|마감일?|finish)$/i,
+  progress: /^(진행률|진척률|progress|%|달성률)$/i, status: /^(상태|status)$/i, description: /^(설명|비고|description|note|내용\s*설명)$/i, item_type: /^(유형|type|구분)$/i,
+};
+/** Reads headers + first rows and proposes a mapping. The template's own headers map 1:1 through the standard spec. */
+export async function inspectWbsWorkbook(buffer) {
+  const raw = await parseWorkbookRaw(buffer, { maxRows: 50 });
+  const spec = KINDS.wbs; const byLabel = new Map(spec.columns.map((c) => [normHeader(c.label), c.key]));
+  const suggested = {}; const used = new Set();
+  for (const h of raw.headers) {
+    const std = byLabel.get(normHeader(h.text));
+    const key = std === 'parent_code' ? null : std === 'predecessors' ? null : std || MAP_FIELDS.find((f) => MAP_HINTS[f].test(h.text.trim()));
+    if (key && !suggested[key] && !used.has(h.n)) { suggested[key] = h.n; used.add(h.n); }
+  }
+  const layout = suggested.lv1 && !suggested.code ? 'levels' : suggested.code ? 'code' : 'flat';
+  return { headers: raw.headers, sample: raw.rows.slice(0, 8), suggested, layout, fields: MAP_FIELDS };
+}
+
+const CODE_NORM = (v) => String(v || '').trim().replace(/[\s]/g, '').replace(/\.$/, '').replace(/[-_/]/g, '.');
+/**
+ * Mapping → template rows. Hierarchy comes from (a) WBS Code dot notation, (b) Lv1..Lv5 columns (deepest non-empty = this row;
+ * missing intermediate levels are created on the fly), or (c) nothing (every row is top level, file order).
+ */
+export function rowsFromMapping(raw, mapping = {}) {
+  const m = {}; for (const f of MAP_FIELDS) { const n = Number(mapping[f]); if (Number.isInteger(n) && n > 0) m[f] = n; }
+  if (!m.title && !m.lv1) throw new ValidationError({ mapping: 'WBS명 열(또는 Lv1 열)을 지정해 주세요.' });
+  const cell = (r, f) => (m[f] ? String(r.cells[m[f]] ?? '').trim() : '');
+  const out = []; const counters = []; const levelsOf = (r) => ['lv1', 'lv2', 'lv3', 'lv4', 'lv5'].map((k) => cell(r, k));
+  const common = (r) => ({ owner: cell(r, 'owner'), start: cell(r, 'start'), end: cell(r, 'end'), progress: cell(r, 'progress'), status: cell(r, 'status'), description: cell(r, 'description'), item_type: cell(r, 'item_type'), predecessors: '', parent_code: '' });
+  const useLevels = Boolean(m.lv1) && !m.code;
+  const current = []; const lastLabel = [];   // open node per depth while walking Lv columns in file order
+  const blank = () => ({ owner: '', start: '', end: '', progress: '', status: '', description: '', item_type: '', predecessors: '', parent_code: '' });
+  for (const r of raw.rows) {
+    if (m.code && !useLevels) {
+      const code = CODE_NORM(cell(r, 'code')); const title = cell(r, 'title') || levelsOf(r).filter(Boolean).pop() || '';
+      if (!code && !title) continue;
+      out.push({ row: r.row, values: { code, title, ...common(r) } });
+      continue;
+    }
+    if (useLevels) {
+      const lv = levelsOf(r); let depth = -1; for (let i = lv.length - 1; i >= 0; i--) if (lv[i]) { depth = i; break; }
+      if (depth < 0) { const t = cell(r, 'title'); if (!t) continue; lv[0] = t; depth = 0; }
+      for (let d = 0; d <= depth; d++) {
+        const label = lv[d];
+        if (!label) {   // intermediate level left blank → stay under the current node at that depth
+          if (!current[d]) { current[d] = null; out.push({ row: r.row, values: { code: '', title: '', ...common(r) } }); break; }   // no parent → validation error (code required)
+          continue;
+        }
+        const leaf = d === depth;
+        if (!leaf && current[d] && lastLabel[d] === label) continue;   // same group label repeated on this row → reuse
+        counters.length = d + 1; counters[d] = (counters[d] || 0) + 1;
+        const code = counters.slice(0, d + 1).join('.');
+        current.length = d + 1; current[d] = code; lastLabel.length = d + 1; lastLabel[d] = label;
+        out.push({ row: r.row, values: { code, title: leaf && cell(r, 'title') ? cell(r, 'title') : label, ...(leaf ? common(r) : blank()) } });
+      }
+      continue;
+    }
+    const title = cell(r, 'title'); if (!title) continue;
+    counters[0] = (counters[0] || 0) + 1;
+    out.push({ row: r.row, values: { code: String(counters[0]), title, ...common(r) } });
+  }
+  return out;
+}
+
 /** Never writes. Body: { data: base64 } to parse a file, or { rows } to re-validate edited rows. */
 export async function previewImport(db, project, wid, kind, body = {}) {
   let rows; let warnings = [];
   const ctx = await loadContext(db, project, wid, kind, body.parent_id);
-  if (body.data !== undefined) {
+  if (body.data !== undefined && kind === 'wbs' && body.mapping && typeof body.mapping === 'object') {
+    rows = sanitizeRows(rowsFromMapping(await parseWorkbookRaw(decodeBase64Xlsx(body.data)), body.mapping), kind);
+  } else if (body.data !== undefined) {
     const parsed = await parseWorkbook(kind, decodeBase64Xlsx(body.data));
     rows = parsed.rows; warnings = parsed.warnings;
   } else rows = sanitizeRows(body.rows, kind);

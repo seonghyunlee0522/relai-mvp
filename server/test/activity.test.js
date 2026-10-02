@@ -207,7 +207,7 @@ test('dashboard: counts, overdue, workload, milestones, timeline, issues, recent
   assert.deepEqual([d.timeline[1].start, d.timeline[1].end], [day(-30), day(9)]);
   assert.equal(typeof tl.progress, 'number');
   assert.deepEqual([d.timeline[3].start, d.timeline[3].end], [day(4), day(4)]);
-  assert.deepEqual(Object.keys(tl).sort(), ['depth', 'end', 'id', 'item_type', 'progress', 'start', 'status', 'title', 'wbs_code']);
+  assert.deepEqual(Object.keys(tl).sort(), ['depth', 'end', 'id', 'is_group', 'item_type', 'progress', 'start', 'status', 'title', 'wbs_code']);
   void t4; void t5; void m1; void m2; void m0; void sub;
 
   // recent changes: ≤ 15, newest first, all sources, hrefs relative to /app/projects/<pid>/
