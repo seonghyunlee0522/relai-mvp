@@ -2,6 +2,9 @@ import { api, getMembers } from './core/api.js';
 import { $, html, raw, root } from './core/dom.js';
 import { state } from './core/state.js';
 import { store } from './core/ui.js';
+import { helpButton, wireHelp, maybeWelcome } from './onboarding/ui.js';
+import { tour } from './onboarding/tour.js';
+import { ob } from './onboarding/state.js';
 
 export const icon = {
   home: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9.5 10 3l7 6.5V17H12v-5H8v5H3z" stroke-linejoin="round"/></svg>',
@@ -39,15 +42,16 @@ export async function shell(path, view) {
   wireOnce();
   if (!$('.shell')) {
     root.innerHTML = html`<div class="shell">
-      <header class="topbar"><a class="logo" href="/app" data-link>RELAI</a><button id="menu" aria-label="메뉴">☰</button></header>
+      <header class="topbar"><a class="logo" href="/app" data-link>RELAI</a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
       <aside class="side" id="side">
         <a class="logo" href="/app" data-link><span class="logo__full">RELAI</span><span class="logo__mark">R</span></a>
         <nav aria-label="주요 메뉴">
-          <a class="navlink" data-nav="home" href="/app" data-link title="Home">${raw(icon.home)}<span class="nl">Home</span></a>
-          <a class="navlink" data-nav="projects" href="/app/projects" data-link title="Projects">${raw(icon.projects)}<span class="nl">Projects</span></a>
+          <a class="navlink" data-nav="home" href="/app" data-link title="Home" data-tour-id="nav-home">${raw(icon.home)}<span class="nl">Home</span></a>
+          <a class="navlink" data-nav="projects" href="/app/projects" data-link title="Projects" data-tour-id="nav-projects">${raw(icon.projects)}<span class="nl">Projects</span></a>
         </nav>
         <div class="side__bottom">
-          <a class="navlink" data-nav="settings" href="/app/settings" data-link title="Settings">${raw(icon.settings)}<span class="nl">Settings</span></a>
+          <a class="navlink" data-nav="settings" href="/app/settings" data-link title="Settings" data-tour-id="nav-settings">${raw(icon.settings)}<span class="nl">Settings</span></a>
+          <div class="navlink navlink--help">${raw(helpButton())}<span class="nl">도움말</span></div>
           ${raw(state.user.system_role === 'SYSTEM_ADMIN' ? html`<a class="navlink navlink--admin" href="/admin" data-link title="Admin Console">${raw(icon.admin)}<span class="nl">Admin Console</span></a>` : '')}
           <div class="me"><span class="avatar">${[...state.user.name][0]}</span>
             <div class="me__t" style="min-width:0"><b>${state.user.name}</b><small>${state.user.email}</small></div></div>
@@ -58,6 +62,7 @@ export async function shell(path, view) {
       <div class="sidescrim" id="sidescrim" hidden></div>
       <main class="main" id="main"></main></div>`;
     $('#menu').onclick = toggleNav;
+    wireHelp(root);
     $('#sidescrim').onclick = closeNav;
     $('#fold').onclick = () => { const c = !store.get('nav.collapsed', false); store.set('nav.collapsed', c); $('.shell').classList.toggle('is-collapsed', c && !$('.shell').classList.contains('shell--ws')); };
     $('#logout').onclick = async () => {
@@ -78,6 +83,12 @@ export async function shell(path, view) {
     main.innerHTML = html`<div class="page"><div class="empty"><h2>정지된 Workspace입니다</h2><p>'${state.workspace.name}'은(는) 운영자에 의해 정지되어 조회와 수정이 차단됩니다. 데이터는 그대로 보관되어 있습니다. 문의는 운영자에게 해 주세요.</p><a class="btn btn--secondary" href="/app" data-link>Home</a></div></div>`;
     return;
   }
+  if (!ob.peek()) await ob.get();   // Phase 14: one onboarding request per workspace, before the page decides what to guide
   try { await view(main); } catch (e) { main.innerHTML = html`<div class="page"><div class="empty"><h2>${e.status === 404 ? '찾을 수 없습니다' : '문제가 발생했습니다'}</h2><p>${e.message}</p><a class="btn btn--primary" href="/app/projects" data-link>프로젝트로 돌아가기</a></div></div>`; }
   hydrateHeader();
+  // Phase 14: pages are rendered → first-login welcome (once), resume an in-progress tour, help button inside the workspace header
+  wireHelp(main);
+  document.dispatchEvent(new CustomEvent('relai:rendered', { detail: { path } }));
+  if (!welcomed) { welcomed = true; maybeWelcome().then(() => tour.onRender()); } else tour.onRender();
 }
+let welcomed = false;

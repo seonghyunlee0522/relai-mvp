@@ -21,9 +21,10 @@ export async function adminWorkspacesPage(main = $('#main')) {
       ${raw(table([
         { key: 'name', label: 'Workspace', w: 240, cls: 'ttl' },
         { key: 'owner', label: 'Owner', w: 220, render: (w) => (w.owner_email ? html`${w.owner_name} <small class="dim mono">${w.owner_email}</small>` : '<span class="dim">없음</span>') },
+        { key: 'activation', label: 'Activation', w: 130, render: (w) => (w.activation ? chip(w.activation.tone, w.activation.label) : '-') },
         { key: 'plan_label', label: 'Plan', w: 70 }, { key: 'status', label: 'Status', w: 80, render: (w) => chip(w.status) },
         { key: 'member_count', label: 'Members', w: 90, cls: 'num', render: (w) => n(w.member_count) }, { key: 'pending_invitations', label: 'Pending Invites', w: 110, cls: 'num', render: (w) => (Number(w.pending_invitations) ? html`<b>${n(w.pending_invitations)}</b>` : '<span class="dim">0</span>') }, { key: 'project_count', label: 'Projects', w: 90, cls: 'num', render: (w) => n(w.project_count) },
-        { key: 'created_at', label: 'Created', w: 110, render: (w) => fmtDay(w.created_at) }, { key: 'last_activity_at', label: 'Last Activity', w: 130, render: (w) => html`<span title="${fmtD(w.last_activity_at)}">${rel(w.last_activity_at)}</span>` },
+        { key: 'created_at', label: 'Created', w: 110, render: (w) => fmtDay(w.created_at) }, { key: 'last_activity_at', label: 'Last Active', w: 130, render: (w) => html`<span title="${fmtD(w.last_activity_at)}">${rel(w.last_activity_at)}</span>` },
       ], data.items, { rowHref: (w) => `/admin/workspaces/${w.id}`, empty: '조건에 맞는 Workspace가 없습니다.' }))}
       ${raw(pager(data))}
     </div>`;
@@ -42,7 +43,7 @@ export async function adminWorkspacePage(id, main = $('#main')) {
       ${raw(head(w.name, actions, { href: '/admin/workspaces', label: 'Workspaces' }))}
       ${raw(w.status === 'SUSPENDED' ? html`<div class="anotice anotice--bad">정지된 Workspace입니다 (${fmtD(w.suspended_at)}). 멤버는 로그인할 수 있지만 이 Workspace의 모든 조회·수정이 차단됩니다. 데이터와 구독은 그대로 유지됩니다.</div>` : '')}
       ${raw(d.warnings.map((x) => html`<div class="anotice anotice--warn">${x}</div>`).join(''))}
-      ${raw(kpis([{ label: 'Members', value: n(d.members.length) }, { label: 'Active Projects', value: n(d.projects.active), sub: `보관 ${n(d.projects.archived)}` }, { label: 'Plan', value: w.plan_label, sub: s ? `구독 ${s.status}` : 'Billing 미연동' }, { label: '한도 사용', value: d.usage ? (d.usage.max_pct === null ? '-' : `${d.usage.max_pct}%`) : '-', tone: d.usage?.tier === 'attention' ? 'bad' : d.usage?.tier === 'warn' ? 'warn' : '' }]))}
+      ${raw(kpis([{ label: 'Activation', value: w.activation ? chip(w.activation.tone, w.activation.label) : '-', sub: w.activation ? `정의 완료 ${n(w.defined_projects)} · 업무 시작 ${n(w.activated_projects)} 프로젝트 · 최근 활동 ${rel(w.last_activity_at)}` : '' }, { label: 'Members', value: n(d.members.length) }, { label: 'Active Projects', value: n(d.projects.active), sub: `보관 ${n(d.projects.archived)}` }, { label: 'Plan', value: w.plan_label, sub: s ? `구독 ${s.status}` : 'Billing 미연동' }, { label: '한도 사용', value: d.usage ? (d.usage.max_pct === null ? '-' : `${d.usage.max_pct}%`) : '-', tone: d.usage?.tier === 'attention' ? 'bad' : d.usage?.tier === 'warn' ? 'warn' : '' }]))}
       <div class="agrid2">
         ${raw(section('기본 정보', dl([['Workspace', html`${w.name}`], ['생성일', fmtD(w.created_at)], ['상태', chip(w.status)], ['Owner', w.owner_email ? html`<a class="link" href="/admin/users/${w.owner_id}" data-link>${w.owner_name}</a> <small class="dim mono">${w.owner_email}</small>` : '<span class="dim">없음</span>'],
           ['OWNER 수', n(d.owners.length)], ['현재 Plan', html`${w.plan_label}`], ['Subscription', s ? html`<a class="link" href="/admin/subscriptions/${s.id}" data-link>${s.status}</a> · ${s.current_period_end ? `기간 종료 ${fmtDay(s.current_period_end)}` : ''}` : '<span class="dim">Billing 미연동 — 구독 정보 없음</span>'], ['Workspace ID', html`<span class="mono dim">${w.id}</span>`]])))}

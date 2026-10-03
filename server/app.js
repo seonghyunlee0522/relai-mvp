@@ -29,6 +29,9 @@ import { mountAuthRoutes } from './auth/routes.js';
 import { createDirectSignupUser, createUser, touchIdentity, normEmail } from './accounts.js';
 import * as I from './invitations.js';
 import { writeAudit } from './admin.js';
+import { mountOnboardingRoutes } from './onboarding-routes.js';
+import { recordFirst } from './onboarding.js';
+import { projectGuidance } from './guidance.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
@@ -250,6 +253,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
           status, planned_start_date, planned_end_date, current_phase, created_by)
         VALUES (?,?,?,?,?,?, 'ACTIVE', ?,?, 'INITIATION', ?)`, [id, req.params.wid, p.name, p.description, p.project_type, p.current_situation, p.planned_start_date, p.planned_end_date, req.user.id]));
       await ensurePhases(db, await getProject(req.params.wid, id, db), { createdBy: req.user.id });
+      if (Number((await db.get(`SELECT COUNT(*) n FROM projects WHERE workspace_id = ?`, [req.params.wid])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: id, kind: 'project' });
     }));
     res.status(201).json({ project: (await getProject(req.params.wid, id)) });
   }));
@@ -268,8 +272,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const guide = (await loadGuide(db, project));
     const stats = (await M.projectStats(db, project));
     const def = (await D.loadDefinition(db, project));
+    const overdue = (await db.get(`SELECT COUNT(*) n FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${W.LEAF_SQL('w')} AND w.status <> 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE`, [project.id])).n;
+    const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review }, stats, overdue_tasks: Number(overdue) || 0 });
     return { project: { ...project, progress: guide.progress }, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
       definition: { progress: def.progress, needs_review: def.needs_review, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
+      guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
   };
 
@@ -279,6 +286,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.json((await guideResponse(project)));
   }));
   /** Phase 9 entry point: all metrics + attention + upcoming dates in one call (computed, never stored). */
+  app.get(`${base}/:pid/guidance`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res));
+    if (!project) return;
+    res.json({ guidance: (await guideResponse(project)).guidance });
+  }));
   app.get(`${base}/:pid/snapshot`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
@@ -423,7 +435,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const input = R.parseRequirement(req.body);
     if (!(await ownerOk(req, res, input.owner_user_id))) return;
     const crit = Array.isArray(req.body?.criteria) ? req.body.criteria.map((c) => R.parseCriterion(typeof c === 'string' ? { content: c } : c)) : [];
-    const id = (await tx(db, async (db) => (await R.createRequirement(db, project, { ...input, criteria: crit }, req.user.id))));
+    const id = (await tx(db, async (db) => { const rid = (await R.createRequirement(db, project, { ...input, criteria: crit }, req.user.id));
+      if (Number((await db.get('SELECT COUNT(*) n FROM requirements WHERE project_id = ?', [project.id])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id, kind: 'requirement' });
+      return rid; }));
     res.status(201).json({ requirement: (await R.getRequirement(db, project, id)), summary: (await R.requirementStats(db, project.id)) });
   }));
 
@@ -517,7 +531,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (!project || !mutable(res, project)) return;
     const input = W.parseWbs(req.body);
     if (!(await ownerOk(req, res, input.owner_user_id))) return;
-    const id = (await tx(db, async (db) => (await W.createWbs(db, project, { ...input, parent_id: req.body?.parent_id || null }, req.user.id))));
+    const id = (await tx(db, async (db) => { const iid = (await W.createWbs(db, project, { ...input, parent_id: req.body?.parent_id || null }, req.user.id));
+      if (Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?', [project.id])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id, kind: 'wbs' });
+      return iid; }));
     res.status(201).json({ item: (await W.getWbs(db, project, id)), ...(await wbsResponse(project)) });
   }));
 
@@ -921,6 +937,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base });   // Phase 11 AI (draft/candidate endpoints + approval commits)
   mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base });   // Phase 12 integrations (Jira)
   mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin });   // Phase 13 Google sign-in + invitations
+  mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };

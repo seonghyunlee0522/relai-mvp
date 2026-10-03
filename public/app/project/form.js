@@ -1,7 +1,8 @@
 import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
-import { SITUATION, TYPE } from '../shared/constants.js';
+import { SITUATION, TYPE, TYPE_DESC } from '../shared/constants.js';
+import { ob } from '../onboarding/state.js';
 import { showErrors, toast } from '../shared/dialogs.js';
 
 export async function projectFormPage(id) {
@@ -13,8 +14,8 @@ export async function projectFormPage(id) {
     if (p.status === 'ARCHIVED') { navigate(`/app/projects/${id}`, { replace: true }); return; }
   }
   document.title = `${editing ? '프로젝트 정보 수정' : '새 프로젝트'} — RELAI`;
-  const radios = (name, map, cur) => Object.entries(map).map(([v, l]) =>
-    html`<label class="choice"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''}><span>${l}</span></label>`).join('');
+  const radios = (name, map, cur, desc = null) => Object.entries(map).map(([v, l]) =>
+    html`<label class="choice ${desc ? 'choice--desc' : ''}"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''}><span>${l}${raw(desc && desc[v] ? html`<small>${desc[v]}</small>` : '')}</span></label>`).join('');
   main.innerHTML = html`<div class="page page--form">
     <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : 'Projects'}</a>
     <div class="page__head"><div><h1>${editing ? '프로젝트 정보 수정' : '새 프로젝트 시작하기'}</h1>
@@ -24,7 +25,7 @@ export async function projectFormPage(id) {
       <div class="field full"><label for="name">프로젝트 이름 <span class="req">*</span></label>
         <input class="input" id="name" name="name" maxlength="100" placeholder="예: A사 AI 상담 시스템 구축" value="${p.name}"><div class="err" data-for="name"></div></div>
       <div class="field"><span class="lbl">프로젝트 유형 <span class="req">*</span></span>
-        <div class="choices" role="radiogroup">${raw(radios('project_type', TYPE, p.project_type))}</div><div class="err" data-for="project_type"></div></div>
+        <div class="choices choices--col" role="radiogroup">${raw(radios('project_type', TYPE, p.project_type, TYPE_DESC))}</div><div class="err" data-for="project_type"></div></div>
       <div class="field"><span class="lbl">현재 상황 <span class="req">*</span></span>
         <div class="choices" role="radiogroup">${raw(radios('current_situation', SITUATION, p.current_situation))}</div>
         <div class="err" data-for="current_situation"></div></div>
@@ -60,7 +61,8 @@ export async function projectFormPage(id) {
     try {
       const { project } = editing ? await api('PATCH', wsApi(`/${id}`), d) : await api('POST', wsApi(), d);
       if (editing) toast('저장했습니다.');
-      navigate(`/app/projects/${project.id}`);
+      else ob.invalidate();   // first project changes onboarding state (checklist, tour routes)
+      navigate(editing ? `/app/projects/${project.id}` : `/app/projects/${project.id}?created=1`);
     } catch (err) { btn.disabled = false; showErrors(form, err.fields, err.message); }
   });
 }

@@ -14,6 +14,7 @@ import { traceStrip } from '../shared/trace-strip.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
 import { appliedFilters, bindFilterClears } from '../shared/filters.js';
 import { emptyState } from '../shared/empty-state.js';
+import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { createGrid } from '../shared/grid.js';
 import { bulkRun, mountBulk } from '../shared/bulk.js';
 import { activityPane, bindActivity, bindDtabs, dtabs, mergeActivity } from '../shared/detail.js';
@@ -265,13 +266,15 @@ export async function wbsPage(id) {
   const draw = () => {
     const rows = visible(); const v = view(); const f = quick(); const q = params();
     g.wbs = summary;
-    const body = !items.length && !ghost ? html`<div class="wempty"><h2>아직 등록된 WBS가 없습니다.</h2><p>프로젝트를 수행할 작업 구조를 만들어보세요. 항목을 추가하면 번호(1, 1.1, 1.1.1)는 자동으로 매겨지고, 하위 작업을 넣으면 일정과 진행률이 자동으로 합산됩니다.</p>
-        ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="add2">첫 항목 추가</button><button class="btn btn--secondary" id="xl-import2">Excel에서 가져오기</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--ai" id="ai-wbs2">AI로 WBS 초안</button>' : '')}</div>`)}</div>`
+    const body = !items.length && !ghost ? html`<div class="wempty" data-tour-id="wbs-empty"><h2>아직 실행 작업이 없습니다.</h2><p>요구사항을 실제 작업 단위로 나누어 계획하세요. 항목을 추가하면 번호(1, 1.1, 1.1.1)는 자동으로 매겨지고, 하위 작업을 넣으면 일정과 진행률이 자동으로 합산됩니다.${g.requirements && g.requirements.total ? '' : ' 요구사항이 아직 없다면 먼저 요구사항을 등록하는 것이 좋습니다.'}</p>
+        ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="add2">WBS 추가</button><button class="btn btn--secondary" id="xl-import2">Excel Import</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--ai" id="ai-wbs2">AI WBS 생성</button>' : '')}</div>`)}</div>`
       : v === 'gantt' ? html`<div class="rtable-wrap wbs-wrap">${raw(rows.length ? gantt(rows) : emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '보기 조건을 바꾸거나 필터를 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }))}</div>`
       : grid.html();
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'wbs' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(items.length && !jira && !archived ? coachMark('JIRA_OPTIONAL_INTRO', { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira Issue를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 WBS 진행률만으로 프로젝트를 계속 진행할 수 있습니다.', cta: { label: '연결하기 (Settings › Integrations)', href: '/app/settings' } }) : '')}
+      ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. ${ctxCr.impacts && ctxCr.impacts.length ? `영향 WBS ${ctxCr.impacts.length}건만 표시합니다.` : '영향 WBS가 등록되지 않아 전체를 표시합니다.'} 반영이 끝나면 변경 요청을 '반영 완료'로 바꾸세요.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
       <div class="rtool">
         <div class="seg" role="tablist"><button class="${v === 'list' ? 'is-on' : ''}" data-view="list" role="tab">WBS</button><button class="${v === 'gantt' ? 'is-on' : ''}" data-view="gantt" role="tab">Gantt</button></div>
@@ -453,6 +456,9 @@ export async function wbsPage(id) {
       } catch (err) { toast(err.message); }
     };
     const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = doImport;
+    bindCoach(main);
+    if (params().get('import') === '1' && !archived) { setParam('import', ''); doImport(); }
+    if (params().get('ai') === '1' && !archived && ai.enabled) { setParam('ai', ''); openWbsDraftDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
     grid.bind(main);
     bindDnd();
     bindEscape(() => { if (sel) closeDrawer(); });

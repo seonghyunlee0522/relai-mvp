@@ -7,6 +7,7 @@
  * app.js; `workspace_members.role` is never consulted here and admin status never grants workspace membership.
  */
 import { randomUUID } from 'node:crypto';
+import { activationState } from './activation.js';
 import { tx } from './db.js';
 import { ValidationError } from './validate.js';
 import { DEFAULT_PLAN, PLANS } from './plans.js';
@@ -18,7 +19,8 @@ export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
 export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
 export const AUDIT_ACTIONS = ['SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS',
   'PLATFORM_INVITE_CREATED', 'PLATFORM_INVITE_RESENT', 'PLATFORM_INVITE_REVOKED', 'PLATFORM_INVITE_ACCEPTED', 'WORKSPACE_INVITE_CREATED', 'WORKSPACE_INVITE_RESENT', 'WORKSPACE_INVITE_REVOKED', 'WORKSPACE_INVITE_ACCEPTED',
-  'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'WORKSPACE_CREATED_FROM_INVITE'];
+  'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'WORKSPACE_CREATED_FROM_INVITE',
+  'ONBOARDING_STARTED', 'ONBOARDING_SKIPPED', 'ONBOARDING_COMPLETED', 'FIRST_PROJECT_CREATED', 'FIRST_REQUIREMENT_CREATED', 'FIRST_WBS_CREATED'];
 export const ACTIVATION = ['REGISTERED', 'WORKSPACE_CREATED', 'PROJECT_CREATED', 'ACTIVE_USER'];
 const ACTIVE_WINDOW_DAYS = 14;
 
@@ -95,14 +97,24 @@ const WS_COLS = `w.id, w.name, w.status, w.created_at, w.suspended_at,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id = w.id) AS member_count,
   (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status != 'ARCHIVED') AS project_count,
   (SELECT COUNT(*) FROM invitations i WHERE i.workspace_id = w.id AND i.status = 'PENDING' AND i.expires_at >= now()) AS pending_invitations,
+  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND NOT EXISTS (SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.status <> 'COMPLETED')) AS defined_projects,
+  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)
+      AND EXISTS (SELECT 1 FROM wbs_items x WHERE x.project_id = p.id AND x.archived_at IS NULL AND x.item_type = 'TASK' AND NOT EXISTS (SELECT 1 FROM wbs_items c WHERE c.parent_id = x.id AND c.archived_at IS NULL))) AS activated_projects,
+  (SELECT MAX(u.last_login_at) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = w.id) AS last_login_at,
   GREATEST(w.created_at,
+    COALESCE((SELECT MAX(u.last_login_at) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = w.id), w.created_at),
+    COALESCE((SELECT MAX(r.updated_at) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id), w.created_at),
+    COALESCE((SELECT MAX(x.updated_at) FROM wbs_items x JOIN projects p ON p.id = x.project_id WHERE p.workspace_id = w.id), w.created_at),
     COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id), w.created_at),
     COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at`;
 // "Owner" column = the earliest OWNER member (the creator unless ownership was transferred); the LATERAL join keeps it one query.
 const WS_FROM = `FROM workspaces w LEFT JOIN LATERAL (SELECT u.id, u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id
   WHERE m.workspace_id = w.id AND m.role = 'OWNER' ORDER BY m.created_at, u.email LIMIT 1) o ON true`;
 const WS_SORTS = { created: 'w.created_at DESC', activity: 'last_activity_at DESC', name: 'w.name', members: 'member_count DESC', projects: 'project_count DESC' };
-const shapeWorkspace = (r) => ({ ...r, plan: DEFAULT_PLAN, plan_label: PLANS[DEFAULT_PLAN].label });
+const shapeWorkspace = (r) => {
+  const act = activationState({ has_owner: Boolean(r.owner_id), projects: Number(r.project_count) || 0, defined_projects: Number(r.defined_projects) || 0, activated_projects: Number(r.activated_projects) || 0, last_login: r.last_login_at, last_active_at: r.last_activity_at });
+  return { ...r, plan: DEFAULT_PLAN, plan_label: PLANS[DEFAULT_PLAN].label, activation: { state: act.state, label: act.label, tone: act.tone } };
+};
 
 export async function listWorkspaces(db, q = {}) {
   const { page, size, offset } = paging(q);
@@ -159,6 +171,8 @@ const SUMMARY = {
   WORKSPACE_INVITE_ACCEPTED: (m) => `멤버 초대 수락 ${m.email || ''} → '${m.workspace_name || ''}' (${m.role || ''})`,
   GOOGLE_IDENTITY_LINKED: (m) => `Google 계정 연결 ${m.email || ''}`,
   USER_CREATED: (m) => `사용자 가입 ${m.email || ''} (${m.method || ''}${m.invitation_id ? ', 초대' : ''})`,
+  ONBOARDING_STARTED: (m) => `온보딩 시작 (${m.key || ''}${m.replay ? ', 다시 보기' : ''})`, ONBOARDING_SKIPPED: (m) => `온보딩 건너뜀 (${m.key || ''})`, ONBOARDING_COMPLETED: (m) => `온보딩 완료 (${m.key || ''})`,
+  FIRST_PROJECT_CREATED: () => '첫 프로젝트 생성', FIRST_REQUIREMENT_CREATED: () => '첫 요구사항 등록', FIRST_WBS_CREATED: () => '첫 WBS 작업 등록',
   WORKSPACE_CREATED_FROM_INVITE: (m) => `초대로 Workspace '${m.name || ''}' 생성`,
 };
 export const auditSummary = (a) => (SUMMARY[a.action] ? SUMMARY[a.action](a.metadata || {}) : a.action);
@@ -172,7 +186,7 @@ export async function listAudit(db, q = {}) {
   const where = []; const params = [];
   const action = oneOf(q.action, AUDIT_ACTIONS); if (action) { where.push('a.action = ?'); params.push(action); }
   if (q.admin) { where.push('(a.admin_user_id = ? OR adm.email ILIKE ?)'); params.push(String(q.admin), like(q.admin)); }
-  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
+  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
   // Operator actions by default; account/invitation events raised by regular users (Phase 13) are a separate view (actor_kind=USER) or `all`.
   const ak = q.actor_kind === 'all' ? '' : oneOf(q.actor_kind, ['ADMIN', 'USER']) || 'ADMIN';
   if (ak && !q.target_id) { where.push('a.actor_kind = ?'); params.push(ak); }

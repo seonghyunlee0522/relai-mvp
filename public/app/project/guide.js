@@ -4,6 +4,7 @@ import { FEATURE_ROUTES, STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { revealAskButton, wireAssistant } from '../ai/assistant.js';
 import { headerActions, wireProjectActions } from './actions.js';
+import { helpButton } from '../onboarding/ui.js';
 
 export function wbsStepInfo(stepKey, st, pid) {
   if (!st) return null;
@@ -184,12 +185,12 @@ export const projectHead = (p, g, { tab = 'overview' } = {}) => {
       <span class="wsh__sp"></span>
       <a class="wsh__kpi" href="/app/projects/${p.id}" data-link title="프로젝트 홈에서 자세히 보기"><span>WBS <b>${pv(k.wbs_progress)}</b></span><span>Req.Cov <b>${pv(k.requirement_coverage)}</b></span><span>Test.Cov <b>${pv(k.test_coverage)}</b></span></a>
       <button type="button" class="btn btn--secondary btn--sm wsh__ask" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조">RELAI에게 물어보기</button>
-      ${raw(headerActions(p))}
+      ${raw(headerActions(p))}${raw(helpButton())}
     </div>
     <nav class="wsh__tabs" aria-label="프로젝트 메뉴">${raw(NAV_TABS.map((it) => {
       const b = navBadge(it.key, g);
       const href = `/app/projects/${p.id}${it.path}`;
-      return html`<a class="${tab === it.key ? 'is-active' : ''}" href="${href}" data-link data-tab="${it.key}">${it.label}${raw(b ? html`<em class="${b.crit ? 'is-crit' : b.warn ? 'is-warn' : ''}">${b.n}</em>` : '')}</a>`;
+      return html`<a class="${tab === it.key ? 'is-active' : ''}" href="${href}" data-link data-tab="${it.key}" data-tour-id="tab-${it.key}">${it.label}${raw(b ? html`<em class="${b.crit ? 'is-crit' : b.warn ? 'is-warn' : ''}">${b.n}</em>` : '')}</a>`;
     }).join(''))}</nav></header>`;
 };
 
@@ -201,8 +202,9 @@ export async function moveToPhase(pid, g, target, { next = false } = {}) {
   if (next && !open.length) {
     ok = await confirmDialog({ title: `${cur.name} 단계를 완료했습니다.`, body: `다음 단계인 ${target.name}(으)로 이동하시겠습니까?`, confirm: '다음 단계로 이동' });
   } else if (next) {
+    const warns = (g.guidance && g.guidance.warnings) || [];
     ok = await confirmDialog({ title: '아직 완료되지 않은 항목이 있습니다.',
-      body: raw(html`<ul class="dlist">${raw(open.map((s) => html`<li>${s.title}</li>`).join(''))}</ul>완료하지 않고 다음 단계로 이동할 수 있지만, 프로젝트 진행 중 다시 확인하는 것을 권장합니다.`),
+      body: raw(html`<ul class="dlist">${raw(open.map((s) => html`<li>${s.title}</li>`).join(''))}${raw(warns.map((w) => html`<li class="is-warn">${w}</li>`).join(''))}</ul>그래도 <b>${target.name}</b> 단계로 이동하시겠습니까? 이동해도 각 단계의 할 일은 유지되며, 프로젝트 진행 중 다시 확인할 수 있습니다.`),
       confirm: '계속 진행' });
   } else {
     ok = await confirmDialog({ title: `${target.name} 단계를 현재 단계로 변경할까요?`,

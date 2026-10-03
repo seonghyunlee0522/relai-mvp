@@ -1021,3 +1021,27 @@ CREATE TABLE IF NOT EXISTS email_deliveries (
 );
 CREATE INDEX IF NOT EXISTS idx_email_deliveries_created ON email_deliveries(created_at);
 CREATE INDEX IF NOT EXISTS idx_email_deliveries_inv ON email_deliveries(invitation_id);
+
+-- Phase 14: onboarding state (server-side, per user × workspace) and one-time feature guides (coach marks)
+CREATE TABLE IF NOT EXISTS user_onboarding (
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id     TEXT REFERENCES workspaces(id) ON DELETE CASCADE,       -- NULL = account-wide (unused today; every key is per workspace)
+  onboarding_key   TEXT NOT NULL,                                         -- WELCOME | PRODUCT_TOUR | CHECKLIST
+  status           TEXT NOT NULL DEFAULT 'NOT_STARTED' CHECK (status IN ('NOT_STARTED','IN_PROGRESS','COMPLETED','SKIPPED')),
+  current_step     TEXT,
+  completed_steps  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  meta             JSONB NOT NULL DEFAULT '{}'::jsonb,                    -- { backfilled: true, replays: n } — never sensitive data
+  started_at       timestamptz,
+  completed_at     timestamptz,
+  skipped_at       timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_onboarding ON user_onboarding(user_id, COALESCE(workspace_id, ''), onboarding_key);
+CREATE TABLE IF NOT EXISTS user_feature_guides (
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  guide_key  TEXT NOT NULL,                                               -- REQ_TRACE_INTRO, TESTING_INTRO, PHASE_INTRO_TESTING, …
+  seen_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, guide_key)
+);

@@ -5,7 +5,8 @@ import { download, keepUi } from '../core/ui.js';
 import { projectHead } from '../project/guide.js';
 import { resBadge, statusChip, subtle, prText, verifyChip } from '../shared/badges.js';
 import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
-import { emptyFiltered, emptyState } from '../shared/empty-state.js';
+import { emptyFiltered } from '../shared/empty-state.js';
+import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
 import { traceStrip } from '../shared/trace-strip.js';
 import { createGrid } from '../shared/grid.js';
@@ -98,7 +99,8 @@ export async function requirementsPage(id) {
     const q = params();
     const hasFilter = ['q', ...filterKeys, 'archived'].some((k) => q.get(k));
     return hasFilter ? emptyFiltered('요구사항')
-      : emptyState({ title: '아직 등록된 요구사항이 없습니다.', body: '한 건씩 추가하거나 Excel로 한 번에 등록하세요. 이후 WBS, 테스트, 변경관리와 연결할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 요구사항 추가' } });
+      : html`<div class="empty empty--ob" data-tour-id="req-empty"><h2>아직 등록된 요구사항이 없습니다.</h2><p>프로젝트 범위와 검수 기준이 되는 요구사항을 등록하세요. 이후 WBS, 테스트, 변경관리와 연결됩니다.</p>
+        ${raw(archived ? '' : html`<div class="empty__a"><button class="btn btn--primary btn--lg" id="add2">요구사항 추가</button><button class="btn btn--secondary btn--lg" id="xl-import2">Excel 가져오기</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--lg btn--ai" id="ai-extract2">AI로 요구사항 추출</button>' : '')}</div>`)}</div>`;
   };
 
   /* ---------- bulk ---------- */
@@ -146,6 +148,8 @@ export async function requirementsPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'requirements' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link>직접 WBS 작성</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 생성</a>` : '')}</div></div>` : '')}
+      ${raw(summary.total ? coachMark('REQ_TRACE_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 History에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
       <div class="rtool">
         <div class="seg" role="tablist"><button class="${rview() === 'list' ? 'is-on' : ''}" data-rview="list" role="tab">요구사항 목록</button><button class="${rview() === 'trace' ? 'is-on' : ''}" data-rview="trace" role="tab">Traceability</button></div>
@@ -189,7 +193,10 @@ export async function requirementsPage(id) {
     bindFilterClears(main, { setParam, keys: ['q', ...filterKeys, 'archived'], reload: async () => { await load(); draw(); } });
     const cx = $('#ctx-off'); if (cx) cx.onclick = () => { ctxCr = null; setParam('cr', ''); draw(); };
     for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; setParam('sel', ''); setParam('new', '1'); showDrawer(); drawCreate(); }; }
-    const ax = $('#ai-extract'); if (ax) ax.onclick = () => openExtractDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } });
+    for (const ida of ['ai-extract', 'ai-extract2']) { const ax = $('#' + ida); if (ax) ax.onclick = () => openExtractDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
+    const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = () => openImport({ kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } });
+    bindCoach(main);
+    if (params().get('import') === '1' && !archived) { setParam('import', ''); openImport({ kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } }); }
     // Excel menu
     const xb = $('#xl-btn'); const xp = $('#xl-pop');
     xb.onclick = (e) => { e.stopPropagation(); const open = xp.hidden; document.querySelectorAll('.gpop').forEach((x) => { x.hidden = true; }); xp.hidden = !open; };

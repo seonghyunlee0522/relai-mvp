@@ -2,6 +2,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, fmtDT, html, raw } from '../core/dom.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
+import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { projectHead } from './guide.js';
 
 /** Minimal markdown → HTML for the read view: headings, bold, bullet lists (nested by 2-space indent), paragraphs. Escaped first via html``. */
@@ -30,6 +31,7 @@ export async function reportPage(pid, rid, main = $('#main')) {
     const ro = report.status === 'FINAL' || archived; const sc = report.structured_content;
     main.innerHTML = html`${raw(projectHead(proj, g, { tab: 'overview' }))}<div class="page page--doc">
       <a class="crumb" href="/app/projects/${pid}" data-link>← ${proj.name}</a>
+      ${raw(coachMark('WEEKLY_REPORT_INTRO'))}
       <div class="doc__bar">
         <div class="doc__meta"><span class="chip ${RS[report.status][1]}">${RS[report.status][0]}</span>
           <span>보고 기간 <b>${sc.period.start} ~ ${sc.period.end}</b></span><span>생성 ${fmtDT(report.generated_at)}</span>${raw(report.finalized_at ? html`<span>확정 ${fmtDT(report.finalized_at)}</span>` : '')}<span id="dsave" class="doc__save"></span></div>
@@ -61,6 +63,7 @@ export async function reportPage(pid, rid, main = $('#main')) {
     catch { const ta = document.createElement('textarea'); ta.value = text; document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast(`${label} 형식으로 복사했습니다.`); }
   };
   const bind = () => {
+    bindCoach(main);
     $('#copy-md').onclick = () => copy(report.rendered_content, 'Markdown');
     $('#copy-txt').onclick = () => copy(report.plain_text, '텍스트');
     const t = $('#title'); if (t) t.onchange = () => { if (t.value.trim()) save({ title: t.value.trim() }); };

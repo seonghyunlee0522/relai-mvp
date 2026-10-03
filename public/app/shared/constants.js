@@ -1,5 +1,6 @@
 
 export const TYPE = { SI: 'IT 시스템 구축', AI_POC: 'AI / PoC', SAAS_IMPLEMENTATION: 'SaaS 도입', MIGRATION: '시스템 마이그레이션', INTERNAL: '내부 프로젝트', OTHER: '기타' };
+export const TYPE_DESC = { SI: '고객 요구사항을 기반으로 시스템을 구축하는 프로젝트', AI_POC: 'AI 기술의 적용 가능성을 검증하는 프로젝트', SAAS_IMPLEMENTATION: '기존 SaaS 제품을 고객 환경에 맞게 도입·설정하는 프로젝트', MIGRATION: '기존 시스템·데이터를 새 환경으로 이전하는 프로젝트', INTERNAL: '외부 고객 없이 조직 내부에서 진행하는 프로젝트', OTHER: '위 유형에 해당하지 않는 프로젝트' };
 export const SITUATION = { NOT_STARTED: '아직 시작 전', JUST_STARTED: '막 시작함', IN_PROGRESS: '이미 진행 중', TROUBLED: '문제가 발생한 프로젝트' };
 export const STATUS = { DRAFT: '초안', ACTIVE: '진행 중', ON_HOLD: '보류', COMPLETED: '완료', ARCHIVED: '보관됨' };
 export const STATUS_CHIP = { ACTIVE: 'chip--active', ON_HOLD: 'chip--hold', COMPLETED: 'chip--done' };

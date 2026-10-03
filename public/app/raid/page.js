@@ -6,6 +6,7 @@ import { sevBadge } from '../shared/badges.js';
 import { CR_STATUS, CR_STATUS_CHIP, ISSUE_STATUS, ISSUE_STATUS_CHIP, ISSUE_TRANSITIONS, LEVEL3, RAID_TARGET, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RISK_LEVEL, RISK_STATUS, RISK_STATUS_CHIP, RISK_TRANSITIONS, SEVERITY, STRATEGY, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE } from '../shared/constants.js';
 import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
+import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
 import { statusChip } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
@@ -47,6 +48,7 @@ export async function raidPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'raid' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. Issue와 Risk는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(coachMark('ISSUE_RISK_INTRO'))}
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? 'Issue는 이미 발생해 대응이 필요한 문제입니다.' : 'Risk는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">Issues${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">Risks${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>
       ${raw(I ? html`<div class="summary summary--inline">
         <div><b>${is.active}</b><span>Open <small>(진행 중 포함)</small></span></div><div class="${is.blocked ? 'is-warn' : ''}"><b>${is.blocked}</b><span>Blocked</span></div>
@@ -73,7 +75,7 @@ export async function raidPage(id) {
           : emptyState({ title: '현재 등록된 Risk가 없습니다.', body: '프로젝트에 영향을 줄 수 있는 잠재 위험을 미리 기록하고 대응 계획과 Review 일정을 관리하세요.', cta: archived ? null : { id: 'add2', label: '첫 Risk 등록' } }))}</div>
         <aside class="drawer drawer--cr" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? (I ? createIssue() : createRisk()) : sel ? (I ? detailIssue() : detailRisk()) : '')}</aside>
       </div></div>`;
-    bind();
+    bind(); bindCoach(main);
   };
 
   const issueTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>Severity</th><th>Status</th><th>Owner</th><th>Due</th><th class="num">관련 WBS</th><th>Updated</th></tr></thead>
