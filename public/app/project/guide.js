@@ -8,23 +8,23 @@ import { helpButton } from '../onboarding/ui.js';
 
 export function wbsStepInfo(stepKey, st, pid) {
   if (!st) return null;
-  const go = (qs, label = 'WBS에서 확인') => ({ label, href: FEATURE_ROUTES.wbs(pid, qs) });
-  const none = { text: '아직 등록된 WBS가 없습니다.', ok: false, cta: go('?new=1', 'WBS 만들기') };
+  const go = (qs, label = 'WBS 보기') => ({ label, href: FEATURE_ROUTES.wbs(pid, qs) });
+  const none = { text: '아직 등록된 WBS가 없습니다.', ok: false, empty: true, cta: go('?new=1', 'WBS 추가') };
   switch (stepKey) {
     case 'TASKS': return st.total === 0 ? none : { text: `현재 ${st.total}개의 WBS가 등록되어 있습니다.`, ok: true, cta: go(''),
       trace: st.tasks && st.tasks_unlinked ? { text: `현재 ${st.tasks}개의 실행 Task 중 ${st.tasks_unlinked}개가 요구사항과 연결되지 않았습니다.`, cta: go('?f=unlinked', '미연결 Task 보기') } : null };
     case 'ORDER': return st.total === 0 ? none : st.dependencies === 0
-      ? { text: '아직 작업 간 선후관계가 설정되지 않았습니다.', ok: false, cta: go('') }
+      ? { text: '아직 작업 간 선후관계가 설정되지 않았습니다.', ok: false, cta: go('', '선후관계 설정') }
       : { text: `${st.dependencies}개의 작업 선후관계가 설정되어 있습니다.`, ok: true, cta: go('') };
     case 'ASSIGN': return st.tasks === 0 ? none : st.tasks_without_owner
-      ? { text: `${st.tasks}개 작업 중 ${st.tasks_without_owner}개에 담당자가 지정되지 않았습니다.`, ok: false, cta: go('?f=no_owner') }
+      ? { text: `${st.tasks}개 작업 중 ${st.tasks_without_owner}개에 담당자가 지정되지 않았습니다.`, ok: false, cta: go('?f=no_owner', '담당자 지정') }
       : { text: '모든 작업에 담당자가 지정되었습니다.', ok: true, cta: go('') };
     case 'PLAN': return st.tasks === 0 ? none : st.tasks_without_dates
-      ? { text: `${st.tasks_without_dates}개의 작업 일정이 아직 설정되지 않았습니다.`, ok: false, cta: go('?f=no_dates') }
-      : { text: '모든 작업에 일정이 설정되었습니다.', ok: true, cta: go('?view=gantt') };
+      ? { text: `${st.tasks_without_dates}개 작업의 일정이 아직 입력되지 않았습니다.`, ok: false, cta: go('?f=no_dates', '일정 입력') }
+      : { text: '모든 작업에 일정이 설정되었습니다.', ok: true, cta: go('?view=gantt', 'Gantt 보기') };
     case 'MILESTONES': return st.milestones === 0
-      ? { text: '아직 등록된 주요 마일스톤이 없습니다.', ok: false, cta: go('?new=1&type=MILESTONE', '마일스톤 추가') }
-      : { text: `${st.milestones}개의 마일스톤이 등록되어 있습니다.`, ok: true, cta: go('?view=gantt') };
+      ? { text: '아직 등록된 주요 마일스톤이 없습니다.', ok: false, empty: true, cta: go('?new=1&type=MILESTONE', '마일스톤 등록') }
+      : { text: `${st.milestones}개의 마일스톤이 등록되어 있습니다.`, ok: true, cta: go('?view=gantt', 'Gantt 보기') };
     default: return null;
   }
 }
@@ -45,20 +45,20 @@ export function raidStepInfo(stepKey, is, rs, pid) {
     const riskNote = rs.high_or_critical ? { text: `High 이상 Risk ${rs.high_or_critical}건이 모니터링 중입니다.`, cta: { label: 'Risk 보기', href: `/app/projects/${pid}/issues?tab=risks&risk_level=HIGH,CRITICAL` } } : null;
     if (is.active === 0) return { text: rs.total ? '현재 Open Issue가 없습니다.' : '현재 Open Issue가 없습니다. 문제가 생기면 Issue로 기록하세요.', ok: true, cta: go(is.total ? '' : '?new=1', is.total ? 'Issues & Risks 확인' : 'Issue 등록'), trace: riskNote };
     const parts = [`현재 Open Issue ${is.active}건`]; if (is.critical) parts.push(`Critical ${is.critical}건`); if (is.overdue) parts.push(`Overdue ${is.overdue}건`);
-    return { text: parts.join(' · '), ok: false, cta: go(is.critical ? '?severity=CRITICAL' : is.overdue ? '?overdue=1' : ''), trace: riskNote };
+    return { text: parts.join(' · '), ok: false, crit: Boolean(is.critical || is.blocked), cta: go(is.critical ? '?severity=CRITICAL' : is.overdue ? '?overdue=1' : '', 'Issue 처리'), trace: riskNote };
   }
   if (stepKey === 'DELAYS' && is.overdue) return { text: `기한이 지난 Issue ${is.overdue}건이 있습니다.`, ok: false, cta: go('?overdue=1', 'Overdue Issue 보기') };
   return null;
 }
 /** INITIATION steps are the five sections of 프로젝트 정의; `def` (GET /definition) is optional — without it the CTA still points at the section. */
 export function initStepInfo(stepKey, def, pid) {
-  const go = (label = '프로젝트 정의로 이동') => ({ label, href: `/app/projects/${pid}/definition#sec-${stepKey}` });
+  const go = (label = '작성하기') => ({ label, href: `/app/projects/${pid}/definition#sec-${stepKey}` });
   const sec = def && def.sections ? def.sections.find((x) => x.key === stepKey) : null;
-  if (!sec) return { text: '프로젝트 정의 화면에서 작성합니다.', ok: false, cta: go() };
+  if (!sec) return { text: '프로젝트 정의 화면에서 작성합니다.', ok: false, empty: true, cta: go() };
   if (sec.status === 'COMPLETED' && sec.changed_after_completion) return { text: '완료 후 내용이 수정되었습니다. 다시 확인해 주세요.', ok: false, cta: go('다시 확인') };
   if (sec.status === 'COMPLETED') return { text: '작성이 완료되었습니다.', ok: true, cta: go('내용 보기') };
   if (sec.ready) return { text: '작성한 내용을 확인하고 완료 처리하세요.', ok: false, cta: go('확인 후 완료') };
-  return { text: sec.missing[0], ok: false, cta: go() };
+  return { text: sec.missing[0], ok: false, empty: true, cta: go() };
 }
 export const stepInfo = (phaseKey, stepKey, g, pid) =>
   phaseKey === 'INITIATION' ? initStepInfo(stepKey, g.definition, pid) : phaseKey === 'REQUIREMENTS' ? reqStepInfo(stepKey, g.requirements, pid) : phaseKey === 'SCHEDULE' ? wbsStepInfo(stepKey, g.wbs, pid)
@@ -69,15 +69,15 @@ export function reqStepInfo(stepKey, st, pid) {
   const go = (qs, label = '요구사항 관리') => ({ label, href: FEATURE_ROUTES.requirements(pid, qs) });
   switch (stepKey) {
     case 'COLLECT': return st.total === 0
-      ? { text: '아직 등록된 요구사항이 없습니다.', ok: false, cta: go('?new=1', '요구사항 추가') }
+      ? { text: '아직 등록된 요구사항이 없습니다.', ok: false, empty: true, cta: go('?new=1', '요구사항 추가') }
       : { text: `현재 ${st.total}건의 요구사항이 등록되어 있습니다.`, ok: true, cta: go('') };
-    case 'CLASSIFY': return st.total === 0 ? { text: '먼저 요구사항을 등록하세요.', ok: false, cta: go('?new=1', '요구사항 추가') }
+    case 'CLASSIFY': return st.total === 0 ? { text: '먼저 요구사항을 등록하세요.', ok: false, empty: true, cta: go('?new=1', '요구사항 추가') }
       : st.type_unspecified ? { text: `${st.total}건 중 ${st.type_unspecified}건의 요구사항 유형이 아직 지정되지 않았습니다.`, ok: false, cta: go('?type=UNSPECIFIED') }
       : { text: '모든 요구사항이 분류되었습니다.', ok: true, cta: go('') };
-    case 'PRIORITIZE': return st.total === 0 ? { text: '먼저 요구사항을 등록하세요.', ok: false, cta: go('?new=1', '요구사항 추가') }
+    case 'PRIORITIZE': return st.total === 0 ? { text: '먼저 요구사항을 등록하세요.', ok: false, empty: true, cta: go('?new=1', '요구사항 추가') }
       : st.priority_unspecified ? { text: `${st.priority_unspecified}건의 요구사항 우선순위가 아직 지정되지 않았습니다.`, ok: false, cta: go('?priority=UNSPECIFIED') }
       : { text: '모든 요구사항의 우선순위가 지정되었습니다.', ok: true, cta: go('') };
-    case 'SCOPE_CHECK': return st.total === 0 ? { text: '먼저 요구사항을 등록하세요.', ok: false, cta: go('?new=1', '요구사항 추가') }
+    case 'SCOPE_CHECK': return st.total === 0 ? { text: '먼저 요구사항을 등록하세요.', ok: false, empty: true, cta: go('?new=1', '요구사항 추가') }
       : st.scope_undecided ? { text: `${st.scope_undecided}건의 요구사항 범위가 아직 결정되지 않았습니다.`, ok: false, cta: go('?scope=UNDECIDED') }
       : { text: '모든 요구사항의 범위가 결정되었습니다.', ok: true, cta: go('') };
     case 'CONFIRM': {
@@ -92,7 +92,7 @@ export function reqStepInfo(stepKey, st, pid) {
 export function testStepInfo(stepKey, ts, pid) {
   if (!ts) return null;
   const go = (qs, label = 'Tests에서 확인') => ({ label, href: FEATURE_ROUTES.tests(pid, qs) });
-  const none = { text: '아직 등록된 테스트가 없습니다.', ok: false, cta: go('?new=1', '첫 테스트 추가') };
+  const none = { text: '아직 등록된 테스트가 없습니다.', ok: false, empty: true, cta: go('?new=1', '테스트 추가') };
   switch (stepKey) {
     case 'SCOPE': return ts.in_scope === 0 ? { text: '범위 내 요구사항이 아직 없습니다. 요구사항의 범위를 먼저 정리하세요.', ok: false, cta: { label: '요구사항 관리', href: FEATURE_ROUTES.requirements(pid, '?scope=UNDECIDED') } }
       : ts.total === 0 ? { text: `범위 내 요구사항 ${ts.in_scope}건이 테스트 대상입니다. 아직 등록된 테스트가 없습니다.`, ok: false, cta: go('?tab=coverage', 'Coverage 보기') }
@@ -104,7 +104,7 @@ export function testStepInfo(stepKey, ts, pid) {
       ? { text: `테스트 ${ts.total}건 중 ${ts.executed}건이 실행되었습니다. ${ts.total - ts.executed}건은 아직 실행 전입니다.`, ok: false, cta: go('?last_result=NOT_RUN', '미실행 테스트 보기') }
       : { text: `테스트 ${ts.total}건이 모두 실행되었습니다. (Pass ${ts.last_pass} · Fail ${ts.last_fail} · Blocked ${ts.last_blocked})`, ok: true, cta: go('') };
     case 'DEFECTS': return ts.executed === 0 ? { text: '먼저 테스트를 실행하세요.', ok: false, cta: go('') } : ts.last_fail
-      ? { text: `최근 결과가 Fail인 테스트 ${ts.last_fail}건이 있습니다. ${ts.fail_issues_open ? `이 중 Issue로 등록되어 처리 중인 건: ${ts.fail_issues_open}건.` : 'Issue로 등록해 조치 담당자를 정하세요.'}`, ok: false, cta: go('?last_result=FAIL', 'Fail 테스트 보기') }
+      ? { text: `최근 결과가 Fail인 테스트 ${ts.last_fail}건이 있습니다. ${ts.fail_issues_open ? `이 중 Issue로 등록되어 처리 중인 건: ${ts.fail_issues_open}건.` : 'Issue로 등록해 조치 담당자를 정하세요.'}`, ok: false, crit: true, cta: go('?last_result=FAIL', 'Fail 테스트 보기') }
       : { text: '최근 결과가 Fail인 테스트가 없습니다.', ok: true, cta: go('') };
     case 'FIXES': return ts.last_fail || ts.fail_issues_open
       ? { text: `${ts.last_fail ? `Fail 테스트 ${ts.last_fail}건` : ''}${ts.last_fail && ts.fail_issues_open ? ' · ' : ''}${ts.fail_issues_open ? `처리 중인 테스트 Issue ${ts.fail_issues_open}건` : ''}이 남아 있습니다. 조치 후 다시 실행해 Pass로 바꾸세요.`, ok: false, cta: ts.fail_issues_open ? { label: 'Issue 보기', href: FEATURE_ROUTES.raid(pid, '?status=OPEN,IN_PROGRESS,BLOCKED') } : go('?last_result=FAIL') }
@@ -115,7 +115,7 @@ export function testStepInfo(stepKey, ts, pid) {
 export function acceptanceStepInfo(stepKey, ac, ts, pid) {
   if (!ac) return null;
   const go = (qs, label = 'Acceptance 확인') => ({ label, href: FEATURE_ROUTES.tests(pid, `?tab=acceptance${qs ? '&' + qs.replace(/^\?/, '') : ''}`) });
-  const none = { text: '아직 등록된 검수가 없습니다.', ok: false, cta: go('?new=1', '첫 검수 만들기') };
+  const none = { text: '아직 등록된 검수가 없습니다.', ok: false, empty: true, cta: go('?new=1', '검수 만들기') };
   switch (stepKey) {
     case 'SCOPE': return ac.total === 0 ? none : ac.target_requirements || ac.accepted
       ? { text: `검수 ${ac.total}건이 등록되어 있습니다.${ac.target_requirements ? ` 진행 중인 검수의 대상 요구사항은 ${ac.target_requirements}건입니다.` : ''}`, ok: true, cta: go('') }
