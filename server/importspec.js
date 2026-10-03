@@ -5,7 +5,7 @@
 import { REQ_TYPES, REQ_PRIORITIES, REQ_SCOPES, REQ_STATUSES } from './requirements.js';
 import { WBS_STATUSES } from './wbs.js';
 
-const opts = (codes, labels) => codes.map((value) => ({ value, label: labels[value] }));
+const opts = (codes, labels, aliases = null) => codes.map((value) => ({ value, label: labels[value], ...(aliases && aliases[value] ? { aliases: aliases[value] } : {}) }));
 
 export const LABELS = {
   type: { UNSPECIFIED: '미지정', FUNCTIONAL: '기능', NON_FUNCTIONAL: '비기능', INTERFACE: '인터페이스', DATA: '데이터', SECURITY: '보안', OPERATION: '운영', OTHER: '기타' },
@@ -15,6 +15,8 @@ export const LABELS = {
   item_type: { SUMMARY: '상위 항목', TASK: '작업', MILESTONE: '마일스톤' },
   wbs_status: { NOT_STARTED: '시작 전', IN_PROGRESS: '진행 중', COMPLETED: '완료', ON_HOLD: '보류' },
 };
+/* UX-006: the WBS screen labels statuses 예정/진행중/지연; accept those spellings in imports as well. */
+export const ALIASES = { wbs_status: { NOT_STARTED: ['예정', '시작전', '미착수'], IN_PROGRESS: ['진행중', '진행'], COMPLETED: ['완료됨', '종료'], ON_HOLD: ['중단', '대기'] } };
 
 export const KINDS = {
   requirements: {
@@ -51,7 +53,7 @@ export const KINDS = {
       { key: 'owner', label: '담당자', required: false, type: 'owner', width: 20, hint: 'Workspace 멤버의 이메일 또는 이름(정확히 일치)', examples: ['hong@company.com', '홍길동'] },
       { key: 'start', label: '시작일', required: false, type: 'date', width: 13, hint: 'YYYY-MM-DD (YYYY.MM.DD, YYYY/MM/DD, 엑셀 날짜도 허용). 마일스톤은 비워 둡니다.', examples: ['2026-11-02'] },
       { key: 'end', label: '종료일', required: false, type: 'date', width: 13, hint: '시작일 이후여야 합니다. 마일스톤은 이 칸에 마일스톤 날짜를 입력합니다.', examples: ['2026-11-13'] },
-      { key: 'status', label: '상태', required: false, type: 'enum', width: 12, options: opts(WBS_STATUSES, LABELS.wbs_status), hint: '시작 전 / 진행 중 / 완료 / 보류. 비우면 시작 전', examples: ['시작 전', '진행 중'] },
+      { key: 'status', label: '상태', required: false, type: 'enum', width: 12, options: opts(WBS_STATUSES, LABELS.wbs_status, ALIASES.wbs_status), hint: '시작 전 / 진행 중 / 완료 / 보류. 비우면 시작 전', examples: ['시작 전', '진행 중'] },
       { key: 'progress', label: '진행률', required: false, type: 'number', width: 10, hint: '0~100 정수, 작업에만 입력', examples: ['0', '50', '100'] },
       { key: 'predecessors', label: '선행 작업', required: false, type: 'text', width: 18, hint: '같은 파일의 WBS Code를 쉼표로 구분 (종료 후 시작 관계)', examples: ['1.1', '1.1, 1.2'] },
     ],

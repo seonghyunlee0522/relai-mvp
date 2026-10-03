@@ -34,12 +34,12 @@ export const SECTIONS = [
 const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const dayOfWeek = (d) => new Date(d + 'T00:00:00Z').getUTCDay();
 const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-/** Korean business week: Mon–Fri; while the week is still running, Mon–today. Weekends report on the week that just ended. */
+/** Week = Mon–Sun; while the week is still running the default period is Mon–today, so weekend activity is never dropped (UX-010). */
 export function defaultPeriod(today = localToday()) {
   const dow = dayOfWeek(today); // 0 Sun … 6 Sat
   const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const monday = addDays(today, mondayOffset); const friday = addDays(monday, 4);
-  return { period_start: monday, period_end: today < friday ? today : friday };
+  const monday = addDays(today, mondayOffset); const sunday = addDays(monday, 6);
+  return { period_start: monday, period_end: today < sunday ? today : sunday };
 }
 export function parsePeriod(body = {}) {
   const f = {}; const s = str(body.period_start); const e = str(body.period_end);

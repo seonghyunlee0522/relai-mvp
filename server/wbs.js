@@ -55,8 +55,22 @@ export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
   if (merged.planned_start_date && merged.planned_end_date && merged.planned_end_date < merged.planned_start_date && !f.planned_end_date) f.planned_end_date = '종료일은 시작일보다 이전일 수 없습니다.';
   if (merged.actual_start_date && merged.actual_end_date && merged.actual_end_date < merged.actual_start_date && !f.actual_end_date) f.actual_end_date = '실제 종료일은 실제 시작일보다 이전일 수 없습니다.';
   if (Object.keys(f).length) throw new ValidationError(f);
-  // Completing a task sets progress to 100 unless an explicit progress came with it.
-  if (out.status === 'COMPLETED' && type === 'TASK' && out.progress === undefined) out.progress = 100;
+  if (type === 'TASK') {
+    // Completing a task sets progress to 100 unless an explicit progress came with it.
+    if (out.status === 'COMPLETED' && out.progress === undefined) out.progress = 100;
+    // UX-007: 100% means done — promote the stored status so counters that read `status` agree with the roll-up.
+    if (out.progress === 100 && out.status === undefined && (existing?.status ?? 'NOT_STARTED') !== 'COMPLETED') out.status = 'COMPLETED';
+    // BUG-004: leaving COMPLETED must not keep the stale 100 (예정 → 0, 진행중/보류 → capped at 99).
+    const prevStatus = existing?.status ?? null;
+    if (out.status !== undefined && out.status !== 'COMPLETED' && prevStatus === 'COMPLETED' && out.progress === undefined) {
+      out.progress = out.status === 'NOT_STARTED' ? 0 : Math.min(existing?.progress ?? 0, 99);
+    }
+    // Progress below 100 on a completed task reopens it.
+    if (out.progress !== undefined && out.progress < 100 && out.status === undefined && prevStatus === 'COMPLETED') out.status = out.progress === 0 ? 'NOT_STARTED' : 'IN_PROGRESS';
+    // Explicit conflicting pair (예정 + 100, 완료 + 50) is rejected rather than silently reconciled.
+    if (out.status === 'NOT_STARTED' && out.progress !== undefined && out.progress > 0 && b.progress !== undefined) throw new ValidationError({ progress: '예정 상태의 작업은 진행률이 0이어야 합니다.' });
+    if (out.status === 'COMPLETED' && out.progress !== undefined && out.progress < 100 && b.progress !== undefined) throw new ValidationError({ progress: '완료 상태의 작업은 진행률이 100이어야 합니다.' });
+  }
   return out;
 }
 

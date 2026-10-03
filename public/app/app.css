@@ -974,7 +974,7 @@ body.is-resizing{cursor:col-resize;user-select:none}
 
 /* ---- detail view: large modal (replaces the right-hand drawer) ---- */
 .rlayout.has-drawer::before{content:"";position:fixed;inset:0;background:rgba(16,24,40,.38);z-index:80}
-.rlayout .drawer{position:fixed;z-index:81;left:50%;top:4vh;transform:translateX(-50%);width:min(1120px,95vw);max-height:92vh;height:auto;border-radius:10px;box-shadow:var(--sh-lift);display:flex;flex-direction:column;background:#fff;border:1px solid var(--border);overflow:hidden}
+.rlayout .drawer{position:fixed;z-index:81;left:50%;top:4vh;transform:translateX(-50%);width:min(900px,92vw);max-height:92vh;height:auto;border-radius:10px;box-shadow:var(--sh-lift);display:flex;flex-direction:column;background:#fff;border:1px solid var(--border);overflow:hidden}
 .rlayout .drawer.drawer--lg{height:88vh;top:6vh}
 .rlayout .drawer.drawer--form{width:min(980px,95vw)}
 .drawer__h{padding:10px 16px;gap:8px;flex:none;background:#fff}

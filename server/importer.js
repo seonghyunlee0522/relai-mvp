@@ -24,6 +24,7 @@ function resolveEnum(column, raw) {
   const n = norm(t); const nc = n.replace(/[_-]/g, '');
   for (const o of column.options) {
     if (norm(o.label) === n || o.value.toLowerCase() === n || o.value.toLowerCase().replace(/_/g, '') === nc) return { value: o.value };
+    if ((o.aliases || []).some((a) => norm(a) === n)) return { value: o.value };
   }
   return { error: `${column.label} 값이 올바르지 않습니다. (${column.options.map((o) => o.label).join(', ')})` };
 }

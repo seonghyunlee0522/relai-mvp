@@ -163,9 +163,10 @@ test('weekly report: default period, generate (structured + sections + markdown)
   const { server, client } = await boot();
   const A = await setup(client, 'a@x.com'); const B = await setup(client, 'b@x.com');
   // default period rule
-  assert.deepEqual(defaultPeriod('2026-10-02'), { period_start: '2026-09-28', period_end: '2026-10-02' }); // Fri → Mon–Fri
+  assert.deepEqual(defaultPeriod('2026-10-02'), { period_start: '2026-09-28', period_end: '2026-10-02' }); // Fri → Mon–Fri (today)
   assert.deepEqual(defaultPeriod('2026-09-30'), { period_start: '2026-09-28', period_end: '2026-09-30' }); // Wed → Mon–today
-  assert.deepEqual(defaultPeriod('2026-10-04'), { period_start: '2026-09-28', period_end: '2026-10-02' }); // Sun → last Mon–Fri
+  assert.deepEqual(defaultPeriod('2026-10-03'), { period_start: '2026-09-28', period_end: '2026-10-03' }); // Sat → Mon–Sat (UX-010)
+  assert.deepEqual(defaultPeriod('2026-10-04'), { period_start: '2026-09-28', period_end: '2026-10-04' }); // Sun → Mon–Sun
   assert.throws(() => parsePeriod({ period_start: '2026-10-05', period_end: '2026-10-01' }));
   assert.throws(() => parsePeriod({ period_start: 'x', period_end: '2026-10-01' }));
   // data with status changes "this week" (now) and some state

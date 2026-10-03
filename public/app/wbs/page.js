@@ -140,7 +140,7 @@ export async function wbsPage(id) {
     onEdit: async (iid, field, value) => {
       const it = byId().get(iid);
       const f = it.item_type === 'MILESTONE' && field === 'planned_end_date' ? 'milestone_date' : field;
-      try { apply(await api('PATCH', wApi(`/${iid}`), { [f]: value })); if (sel && sel.id === iid) { sel = (await api('GET', wApi(`/${iid}`))).item; drawDetail(); } }
+      try { const r = await api('PATCH', wApi(`/${iid}`), { [f]: value }); apply(r); if (sel && sel.id === iid) { sel = (await api('GET', wApi(`/${iid}`))).item; drawDetail(); } toast(r.warnings && r.warnings.length ? r.warnings[0] : '저장됨'); }
       catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); throw e; }
     },
     columns: [
@@ -352,8 +352,12 @@ export async function wbsPage(id) {
     m.innerHTML = html`${raw(ms ? '' : html`<button type="button" role="menuitem" data-m="child">하위 작업 추가</button>`)}<button type="button" role="menuitem" data-m="sibling">같은 레벨 작업 추가</button><button type="button" role="menuitem" data-m="ms">◆ 마일스톤 추가 (같은 레벨)</button><hr>
       <button type="button" role="menuitem" data-m="indent">들여쓰기 →</button><button type="button" role="menuitem" data-m="outdent" ${it.parent_id ? '' : 'disabled'}>← 내어쓰기</button><button type="button" role="menuitem" data-m="dup">복제</button><hr>
       <button type="button" role="menuitem" class="is-danger" data-m="del">삭제</button>`;
-    const r = btn.getBoundingClientRect(); m.style.position = 'fixed'; m.style.top = `${r.bottom + 4}px`; m.style.left = `${Math.min(r.left, window.innerWidth - 230)}px`;
+    const r = btn.getBoundingClientRect(); m.style.position = 'fixed'; m.style.visibility = 'hidden';
     document.body.append(m);
+    // UI-005: flip upward when the menu would run past the bottom of the viewport; clamp horizontally by real width.
+    const mh = m.offsetHeight, mw = m.offsetWidth;
+    const top = r.bottom + 4 + mh > window.innerHeight ? Math.max(8, r.top - mh - 4) : r.bottom + 4;
+    m.style.top = `${top}px`; m.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - mw - 8))}px`; m.style.visibility = '';
     const close = () => { m.remove(); document.removeEventListener('click', onDoc, true); };
     const onDoc = (e) => { if (!m.contains(e.target)) close(); };
     setTimeout(() => document.addEventListener('click', onDoc, true), 0);
@@ -384,7 +388,7 @@ export async function wbsPage(id) {
       let c = target; while (c) { if (c.id === dragId) return; c = c.parent_id ? byId().get(c.parent_id) : null; }
       e.preventDefault(); e.dataTransfer.dropEffect = 'move';
       const rect = tr.getBoundingClientRect(); const y = (e.clientY - rect.top) / rect.height;
-      const zone = target.item_type === 'MILESTONE' ? (y < 0.5 ? 'before' : 'after') : y < 0.3 ? 'before' : y > 0.7 ? 'after' : 'inside';
+      const zone = target.item_type === 'MILESTONE' ? (y < 0.5 ? 'before' : 'after') : y < 0.4 ? 'before' : y > 0.6 ? 'after' : 'inside';   // UX-005: wider before/after bands so sibling reorder is reachable
       if (over && (over.tr !== tr || over.zone !== zone)) clear();
       if (!over) { tr.classList.add(`drop-${zone}`); over = { tr, zone }; }
     });
@@ -491,7 +495,7 @@ export async function wbsPage(id) {
       case 'UNLINKED_REQ': return html`요구사항 연결 해제 <q>${h.old_value}</q>`;
       case 'LINK_TYPE_CHANGED': return html`연결 유형 변경 <q>${h.old_value}</q> → <q>${h.new_value}</q>`;
       default: { const f = h.field_name; const long = f === 'title' || f === 'description';
-        return html`<b>${wbsLabel[f] || f}</b> 변경 ${long ? (f === 'description' ? '' : html`<q>${h.old_value}</q> → <q>${h.new_value}</q>`) : html`${val(f, h.old_value)} → ${val(f, h.new_value)}`}`; }
+        return html`<b>${wbsLabel[f] || f}</b> 변경 ${raw(long ? (f === 'description' ? '' : html`<q>${h.old_value}</q> → <q>${h.new_value}</q>`) : html`${val(f, h.old_value)} → ${val(f, h.new_value)}`)}`; }
     }
   };
 

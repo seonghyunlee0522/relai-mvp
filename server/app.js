@@ -990,6 +990,12 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.sendFile(resolve(pub, 'app/index.html'));
   });
   app.use(express.static(pub, { index: 'index.html', extensions: ['html'], setHeaders: (r, p) => { if (p.includes('/app/')) r.set('Cache-Control', 'no-store'); } }));
+  /* UX-001: unknown non-API paths get a friendly page instead of Express's "Cannot GET". Signed-in users are sent into the app. */
+  app.use((req, res) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(404).type('text').send('Not found');
+    if (req.user) return res.redirect('/app');
+    res.status(404).type('html').send('<!DOCTYPE html><meta charset="utf-8"><title>404</title><body style="font-family:sans-serif;padding:40px"><h1>404</h1><p>페이지를 찾을 수 없습니다.</p><a href="/login">로그인</a></body>');
+  });
 
   /* ---------- errors ---------- */
   app.use((err, req, res, next) => {
