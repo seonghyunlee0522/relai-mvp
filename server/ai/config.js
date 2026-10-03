@@ -5,14 +5,14 @@
  * Credits vs. tokens: tokens and provider cost are internal metering; the user-facing unit is the Credit.
  * FEATURE_CREDIT_COST is the single place feature prices live (development defaults — the Pricing phase changes them here).
  */
-export const FEATURES = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA'];
-export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI 요구사항 추출', WBS_GENERATION: 'AI WBS 초안', CHANGE_IMPACT: 'AI 영향 분석', PROJECT_QA: 'RELAI에게 물어보기' };
+export const FEATURES = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA', 'WBS_PLAN_QUESTIONS', 'WBS_PLAN_FIX'];
+export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI 요구사항 추출', WBS_GENERATION: 'AI WBS 초안', CHANGE_IMPACT: 'AI 영향 분석', PROJECT_QA: 'RELAI에게 물어보기', WBS_PLAN_QUESTIONS: 'AI WBS Planner 질문', WBS_PLAN_FIX: 'AI WBS Planner 보완' };
 
 const envInt = (k, def) => { const n = Number(process.env[k]); return Number.isFinite(n) && process.env[k] !== undefined && process.env[k] !== '' ? n : def; };
 
 /** Per-feature credit cost (development defaults). Overridable per feature with AI_CREDIT_COST_<FEATURE>. */
 export function featureCreditCost(feature) {
-  const def = { REQUIREMENT_EXTRACTION: 10, WBS_GENERATION: 15, CHANGE_IMPACT: 8, PROJECT_QA: 3 }[feature];
+  const def = { REQUIREMENT_EXTRACTION: 10, WBS_GENERATION: 15, CHANGE_IMPACT: 8, PROJECT_QA: 3, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0 }[feature];   // Planner: one WBS_GENERATION charge per plan; question / fix calls are free (token cost still recorded)
   if (def === undefined) throw new Error(`unknown AI feature ${feature}`);
   return Math.max(0, envInt(`AI_CREDIT_COST_${feature}`, def));
 }

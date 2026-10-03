@@ -30,7 +30,7 @@ test('feature flag: AI_ENABLED=false or missing provider → status.enabled=fals
   assert.equal((await A.c('GET', `${A.purl}/ai/status`)).json.enabled, false);           // provider named but no credential
   process.env.AI_PROVIDER = 'fake';
   s = (await A.c('GET', `${A.purl}/ai/status`)).json;
-  assert.equal(s.enabled, true); assert.equal(s.provider, 'fake'); assert.deepEqual(Object.keys(s.costs).sort(), ['CHANGE_IMPACT', 'PROJECT_QA', 'REQUIREMENT_EXTRACTION', 'WBS_GENERATION']);
+  assert.equal(s.enabled, true); assert.equal(s.provider, 'fake'); assert.deepEqual(Object.keys(s.costs).sort(), ['CHANGE_IMPACT', 'PROJECT_QA', 'REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'WBS_PLAN_FIX', 'WBS_PLAN_QUESTIONS']);
   assert.equal(s.credits.balance, 1000); assert.ok(s.notice.includes('초안'));
   assert.ok(!JSON.stringify(s).includes('API_KEY'));
   server.close();

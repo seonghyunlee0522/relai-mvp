@@ -10,7 +10,7 @@ export const aiStatus = (pid, { fresh = false } = {}) => {
   return cache.get(pid);
 };
 export const aiStatusReset = (pid) => cache.delete(pid);
-export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI로 요구사항 추출', WBS_GENERATION: 'AI로 WBS 초안', CHANGE_IMPACT: 'AI 영향 분석', PROJECT_QA: 'RELAI에게 물어보기' };
+export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI로 요구사항 추출', WBS_GENERATION: 'AI로 WBS 만들기', CHANGE_IMPACT: 'AI 영향 분석', PROJECT_QA: 'RELAI에게 물어보기' };
 export const CONF = { HIGH: ['높음', 'is-good'], MEDIUM: ['보통', 'is-warn'], LOW: ['낮음', 'is-crit'] };
 export const confChip = (c) => html`<span class="hchip hchip--sm ${(CONF[c] || CONF.LOW)[1]}" title="AI 확신도">${(CONF[c] || CONF.LOW)[0]}</span>`;
 
