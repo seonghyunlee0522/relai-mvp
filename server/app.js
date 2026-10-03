@@ -245,13 +245,19 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
 
   const manage = [...guard, requireAction('project_manage')];
+  /* BUG-002: same-named live project in the workspace. Not a hard rule (clients may pass allow_duplicate) but never silent. */
+  const duplicateName = async (wid, name, exceptId = null) =>
+    db.get(`SELECT id, name FROM projects WHERE workspace_id = ? AND lower(trim(name)) = lower(trim(?)) AND status <> 'ARCHIVED' ${exceptId ? 'AND id <> ?' : ''} LIMIT 1`, exceptId ? [wid, name, exceptId] : [wid, name]);
   app.post(base, manage, wrap(async (req, res) => {
     const p = parseProject(req.body);
+    if (!req.body.allow_duplicate && await duplicateName(req.params.wid, p.name)) return fail(res, 409, 'duplicate_name', '같은 이름의 프로젝트가 이미 있습니다.', { fields: { name: '같은 이름의 프로젝트가 이미 있습니다.' } });
     const id = randomUUID();
+    // UI-001: "아직 시작 전" starts as 초안(DRAFT); it becomes 진행 중 when the project leaves the 착수 phase (guide.transitionTo).
+    const status = p.current_situation === 'NOT_STARTED' ? 'DRAFT' : 'ACTIVE';
     (await tx(db, async (db) => {
       (await db.run(`INSERT INTO projects (id, workspace_id, name, description, project_type, current_situation,
           status, planned_start_date, planned_end_date, current_phase, created_by)
-        VALUES (?,?,?,?,?,?, 'ACTIVE', ?,?, 'INITIATION', ?)`, [id, req.params.wid, p.name, p.description, p.project_type, p.current_situation, p.planned_start_date, p.planned_end_date, req.user.id]));
+        VALUES (?,?,?,?,?,?, ?, ?,?, 'INITIATION', ?)`, [id, req.params.wid, p.name, p.description, p.project_type, p.current_situation, status, p.planned_start_date, p.planned_end_date, req.user.id]));
       await ensurePhases(db, await getProject(req.params.wid, id, db), { createdBy: req.user.id });
       if (Number((await db.get(`SELECT COUNT(*) n FROM projects WHERE workspace_id = ?`, [req.params.wid])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: id, kind: 'project' });
     }));
@@ -354,6 +360,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (!existing) return fail(res, 404, 'not_found', '프로젝트를 찾을 수 없습니다.');
     if (existing.status === 'ARCHIVED') return fail(res, 409, 'archived', '보관된 프로젝트는 수정할 수 없습니다.');
     const p = parseProject({ ...existing, ...req.body });
+    if (!req.body.allow_duplicate && p.name !== existing.name && await duplicateName(req.params.wid, p.name, existing.id)) return fail(res, 409, 'duplicate_name', '같은 이름의 프로젝트가 이미 있습니다.', { fields: { name: '같은 이름의 프로젝트가 이미 있습니다.' } });
     (await db.run(`UPDATE projects SET name=?, description=?, project_type=?, current_situation=?,
         planned_start_date=?, planned_end_date=?, updated_at=now()
       WHERE workspace_id=? AND id=?`, [p.name, p.description, p.project_type, p.current_situation, p.planned_start_date, p.planned_end_date, req.params.wid, req.params.pid]));
@@ -363,8 +370,18 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.post(`${base}/:pid/archive`, manage, wrap(async (req, res) => {
     const existing = (await getProject(req.params.wid, req.params.pid));
     if (!existing) return fail(res, 404, 'not_found', '프로젝트를 찾을 수 없습니다.');
-    (await db.run(`UPDATE projects SET status='ARCHIVED', updated_at=now()
+    if (existing.status === 'ARCHIVED') return fail(res, 409, 'archived', '이미 보관된 프로젝트입니다.');
+    (await db.run(`UPDATE projects SET status='ARCHIVED', status_before_archive=status, updated_at=now()
       WHERE workspace_id=? AND id=?`, [req.params.wid, req.params.pid]));
+    res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
+  }));
+  /* GAP-006: 보관 해제 — restores the status the project had when it was archived (ACTIVE for legacy rows). */
+  app.post(`${base}/:pid/unarchive`, manage, wrap(async (req, res) => {
+    const existing = (await db.get(`SELECT ${PROJECT_COLS}, status_before_archive FROM projects WHERE workspace_id = ? AND id = ?`, [req.params.wid, req.params.pid]));
+    if (!existing) return fail(res, 404, 'not_found', '프로젝트를 찾을 수 없습니다.');
+    if (existing.status !== 'ARCHIVED') return fail(res, 409, 'not_archived', '보관된 프로젝트가 아닙니다.');
+    const back = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'COMPLETED'].includes(existing.status_before_archive) ? existing.status_before_archive : 'ACTIVE';
+    (await db.run(`UPDATE projects SET status=?, status_before_archive=NULL, updated_at=now() WHERE workspace_id=? AND id=?`, [back, req.params.wid, req.params.pid]));
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
   }));
   // No DELETE route by design (Phase 1: archive only).
@@ -503,7 +520,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- WBS ---------- */
   const wbase = `${base}/:pid/wbs`;
-  const wbsResponse = async (project) => ({ ...(await W.loadTree(db, project)), summary: (await W.wbsStats(db, project.id)), jira: (await wbsExecutionMap(db, project.id)) });   // jira: null unless the project is mapped (Phase 12)
+  const wbsResponse = async (project, opts = {}) => ({ ...(await W.loadTree(db, project, opts)), summary: (await W.wbsStats(db, project.id)), jira: (await wbsExecutionMap(db, project.id)) });   // jira: null unless the project is mapped (Phase 12)
   const loadWbs = async (req, res, project) => {
     const w = (await W.getWbs(db, project, req.params.wid2 || req.params.iid));
     if (!w) fail(res, 404, 'not_found', 'WBS 항목을 찾을 수 없습니다.');
@@ -523,7 +540,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(wbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
-    res.json((await wbsResponse(project)));
+    res.json((await wbsResponse(project, { includeArchived: req.query.include_archived === '1' })));   // GAP-002
   }));
 
   app.post(wbase, guard, wrap(async (req, res) => {
@@ -531,10 +548,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (!project || !mutable(res, project)) return;
     const input = W.parseWbs(req.body);
     if (!(await ownerOk(req, res, input.owner_user_id))) return;
-    const id = (await tx(db, async (db) => { const iid = (await W.createWbs(db, project, { ...input, parent_id: req.body?.parent_id || null }, req.user.id));
+    const id = (await tx(db, async (db) => { const iid = (await W.createWbs(db, project, { ...input, parent_id: req.body?.parent_id || null, convert_parent: req.body?.convert_parent }, req.user.id));
       if (Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?', [project.id])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id, kind: 'wbs' });
       return iid; }));
-    res.status(201).json({ item: (await W.getWbs(db, project, id)), ...(await wbsResponse(project)) });
+    const item = (await W.getWbs(db, project, id));
+    res.status(201).json({ item, warnings: W.rangeWarnings(project, item), ...(await wbsResponse(project)) });   // UX-008
   }));
 
   app.get(`${wbase}/:iid`, guard, wrap(async (req, res) => {
@@ -549,12 +567,13 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const input = W.parseWbs(req.body, { partial: true, existing: ctx.w });
     if (!(await ownerOk(req, res, input.owner_user_id))) return;
     (await tx(db, async (db) => (await W.updateWbs(db, ctx.project, ctx.w, input, req.user.id))));
-    res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), ...(await wbsResponse(ctx.project)) });
+    const item = (await W.getWbs(db, ctx.project, ctx.w.id));
+    res.json({ item, warnings: W.rangeWarnings(ctx.project, item), ...(await wbsResponse(ctx.project)) });
   }));
 
   app.post(`${wbase}/:iid/move`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
-    (await tx(db, async (db) => (await W.moveWbs(db, ctx.project, ctx.w, { parent_id: req.body?.parent_id, sequence: req.body?.sequence }, req.user.id))));
+    (await tx(db, async (db) => (await W.moveWbs(db, ctx.project, ctx.w, { parent_id: req.body?.parent_id, sequence: req.body?.sequence, convert_parent: req.body?.convert_parent }, req.user.id))));
     res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), ...(await wbsResponse(ctx.project)) });
   }));
 
@@ -567,7 +586,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /* Tree WBS structural actions (Phase 12): indent / outdent / duplicate / restore. Each returns the item + whole tree like /move. */
   app.post(`${wbase}/:iid/indent`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
-    const undo = (await tx(db, async (db) => (await W.indentWbs(db, ctx.project, ctx.w, req.user.id))));
+    const undo = (await tx(db, async (db) => (await W.indentWbs(db, ctx.project, ctx.w, req.user.id, { convert_parent: req.body?.convert_parent }))));
     res.json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), undo, ...(await wbsResponse(ctx.project)) });
   }));
   app.post(`${wbase}/:iid/outdent`, guard, wrap(async (req, res) => {
@@ -999,7 +1018,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- errors ---------- */
   app.use((err, req, res, next) => {
-    if (err instanceof ValidationError) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: err.fields });
+    if (err instanceof ValidationError) return fail(res, err.code === 'parent_has_values' ? 409 : 400, err.code || 'validation_error', err.code === 'parent_has_values' ? '상위 작업의 일정·진행률 처리 방식을 선택해 주세요.' : '입력값을 확인해 주세요.', { fields: err.fields, ...(err.parent ? { parent: err.parent } : {}) });
     if (err.type === 'entity.parse.failed') return fail(res, 400, 'bad_json', '잘못된 요청입니다.');
     if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);

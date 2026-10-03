@@ -55,5 +55,5 @@ registerRoutes([
   [/^\/admin\/email-deliveries\/?$/, adminEmailDeliveriesPage],
   [/^\/admin\/integrations\/?$/, adminIntegrationsPage],
   [/^\/admin\/audit\/?$/, adminAuditPage],
-], { shell: (path, view) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view)), auth: authPage, invite: invitePage });
+], { shell: (path, view, token) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view, token)), auth: authPage, invite: invitePage });
 render();

@@ -1670,6 +1670,7 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .wghost{gap:6px}
 .wghost__in{flex:1;min-width:160px;height:26px;font-size:13px}
 .pcell.is-roll{opacity:.8}
+.cell--late{color:#B42318;border-color:#F4C7C3;background:#FEF3F2;font-weight:600}
 .wlate{font-style:normal;font-size:11px;font-weight:700;color:#B42318;border:1px solid #F4C7C3;background:#FEF3F2;border-radius:4px;padding:0 5px;flex:none}
 .wcode{font-variant-numeric:tabular-nums}
 .wempty{margin:18px 0;padding:56px 24px;border:1px dashed var(--border);border-radius:12px;text-align:center;background:#fff}

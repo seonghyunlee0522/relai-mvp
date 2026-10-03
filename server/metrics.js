@@ -100,9 +100,14 @@ export async function upcomingDates(db, projectId, { days = 7, limit = 20, from 
     [`SELECT 'ISSUE', 'ISSUE_DUE', id, display_id, title, due_date, '이슈 기한' FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED') AND ${range('due_date')}`],
     [`SELECT 'RISK', 'RISK_REVIEW', id, display_id, title, review_date, 'Risk Review' FROM risks WHERE project_id = ? AND archived_at IS NULL AND status IN ('OPEN','MONITORING') AND ${range('review_date')}`],
     [`SELECT 'ACCEPTANCE', 'ACCEPTANCE_DUE', id, display_id, title, due_date, '검수 기한' FROM acceptances WHERE project_id = ? AND archived_at IS NULL AND status IN ('DRAFT','REQUESTED','REWORK_REQUIRED') AND ${range('due_date')}`],
+    // BUG-003: 프로젝트 정의 > 주요 일정 (JSON array on project_definitions.key_dates) and the project's own planned end.
+    [`SELECT 'DEFINITION', 'KEY_DATE', kd.id, NULL, kd.title, kd.d, '주요 일정' FROM (
+        SELECT kd->>'id' AS id, kd->>'title' AS title, (kd->>'date')::date AS d FROM project_definitions d, jsonb_array_elements(COALESCE(NULLIF(d.key_dates, '')::jsonb, '[]'::jsonb)) kd
+        WHERE d.project_id = ? AND jsonb_typeof(kd) = 'object' AND (kd->>'date') ~ '^\\d{4}-\\d{2}-\\d{2}$' OFFSET 0) kd WHERE ${range('kd.d')}`],
+    [`SELECT 'PROJECT', 'PROJECT_END', p.id, NULL, p.name, p.planned_end_date, '프로젝트 종료 예정' FROM projects p WHERE p.id = ? AND ${range('p.planned_end_date')}`],
   ];
   for (const _ of parts) { args.push(projectId); bind(); }
-  const HREF = { WBS: (r) => `wbs?sel=${r.id}`, ISSUE: (r) => `issues?sel=${r.id}`, RISK: (r) => `issues?tab=risks&sel=${r.id}`, ACCEPTANCE: (r) => `tests?tab=acceptance&sel=${r.id}` };
+  const HREF = { WBS: (r) => `wbs?sel=${r.id}`, ISSUE: (r) => `issues?sel=${r.id}`, RISK: (r) => `issues?tab=risks&sel=${r.id}`, ACCEPTANCE: (r) => `tests?tab=acceptance&sel=${r.id}`, DEFINITION: () => 'definition#sec-MILESTONES', PROJECT: () => 'edit' };
   return (await db.all(`SELECT * FROM (${parts.map((p) => p[0]).join(' UNION ALL ')}) up ORDER BY date, type, display_id LIMIT ?`, [...args, limit])).map((r) => ({ ...r, href: HREF[r.type](r) }));
 }
 

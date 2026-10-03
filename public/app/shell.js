@@ -1,4 +1,5 @@
 import { api, getMembers } from './core/api.js';
+import { isCurrent } from './core/router.js';
 import { $, html, raw, root } from './core/dom.js';
 import { state } from './core/state.js';
 import { store } from './core/ui.js';
@@ -31,14 +32,15 @@ function wireOnce() {
 /** Fill the "등록자" slot of the workspace header once the member list is cached. */
 async function hydrateHeader() {
   const el = $('[data-owner-id]');
-  if (!el) return;
+  if (!el || el.childElementCount) return;
   try {
     const m = (await getMembers()).find((x) => x.id === el.dataset.ownerId);
     if (m) el.innerHTML = html`<i class="av">${[...m.name][0]}</i>${m.name}`;
   } catch { /* header still works without the creator name */ }
 }
 
-export async function shell(path, view) {
+export async function shell(path, view, token = null) {
+  const stale = () => token !== null && !isCurrent(token);
   wireOnce();
   if (!$('.shell')) {
     root.innerHTML = html`<div class="shell">
@@ -84,8 +86,12 @@ export async function shell(path, view) {
     return;
   }
   if (!ob.peek()) await ob.get();   // Phase 14: one onboarding request per workspace, before the page decides what to guide
+  if (stale()) return;              // BUG-001: a newer navigation already owns #main
   try { await view(main); } catch (e) { main.innerHTML = html`<div class="page"><div class="empty"><h2>${e.status === 404 ? '찾을 수 없습니다' : '문제가 발생했습니다'}</h2><p>${e.message}</p><a class="btn btn--primary" href="/app/projects" data-link>프로젝트로 돌아가기</a></div></div>`; }
+  if (stale()) return;
   hydrateHeader();
+  // UI-002: screens that re-render projectHead() themselves (phase/definition partial redraws) get the owner name refilled.
+  if (!main.__ownerObs) { main.__ownerObs = new MutationObserver(() => { if ($('[data-owner-id]:empty')) hydrateHeader(); }); main.__ownerObs.observe(main, { childList: true, subtree: true }); }
   // Phase 14: pages are rendered → first-login welcome (once), resume an in-progress tour, help button inside the workspace header
   wireHelp(main);
   document.dispatchEvent(new CustomEvent('relai:rendered', { detail: { path } }));

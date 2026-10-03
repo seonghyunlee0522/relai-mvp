@@ -55,7 +55,7 @@ export async function wbsPage(id) {
   const isOverdue = (it) => it.computed_status === 'DELAYED';
   const byId = () => new Map(items.map((i) => [i.id, i]));
   const apply = (r) => { items = r.items || items; summary = r.summary || summary; if (r.jira !== undefined) jira = r.jira; if (r.item && sel && r.item.id === sel.id) sel = r.item; syncRows(); paintKpi(); };
-  const load = async () => { const d = await api('GET', wApi()); items = d.items; summary = d.summary; jira = d.jira || null; syncRows(); };
+  const load = async () => { const d = await api('GET', wApi(params().get('archived') ? '?include_archived=1' : '')); items = d.items; summary = d.summary; jira = d.jira || null; syncRows(); };
   const loadSel = async (iid) => { sel = iid ? (await api('GET', wApi(`/${iid}`))).item : null; jiraDetail = null; setParam('sel', iid); };
 
   /** Visible rows after search / filters / collapse (a match shows together with its ancestors), plus the inline ghost row. */
@@ -134,7 +134,7 @@ export async function wbsPage(id) {
   };
   const grid = createGrid({
     key: 'wbs.tree', rowId: (r) => r.id, paginate: false, sortable: false,
-    rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''}`,
+    rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
     canEdit: editable, activeId: () => (sel ? sel.id : null), onOpen: (iid) => { if (iid !== GHOST) openDetail(iid); },
     onSelect: (s) => bulk.update(s.size),
     onEdit: async (iid, field, value) => {
@@ -147,14 +147,14 @@ export async function wbsPage(id) {
       { key: 'code', label: 'WBS', width: 70, sticky: true, fixed: true, cls: 'mono wcode', render: (r) => html`${r.wbs_code}` },
       { key: 'title', label: '업무명', width: 400, min: 200, sticky: true, fixed: true, cls: 'ttl', render: (r) => titleCell(r) },
       { key: 'start', label: '계획 시작', width: 118, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
-      { key: 'end', label: '계획 종료', width: 118, edit: { type: 'date', field: 'planned_end_date', value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date) }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dateCell(r.milestone_date) : dateCell(r.planned_end, r.rollup)) },
+      { key: 'end', label: '계획 종료', width: 118, edit: { type: 'date', field: 'planned_end_date', cls: (r) => (r.computed_status === 'DELAYED' ? 'cell--late' : ''), value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date) }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dateCell(r.milestone_date) : dateCell(r.planned_end, r.rollup)) },
       { key: 'astart', label: '실적 시작', width: 118, hidden: true, edit: { type: 'date', field: 'actual_start_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_start, r.rollup)) },
       { key: 'aend', label: '실적 종료', width: 118, hidden: true, edit: { type: 'date', field: 'actual_end_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_end, r.rollup)) },
       { key: 'progress', label: '진행률', width: 126, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress },
         render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`<div class="pcell ${r.rollup ? 'is-roll' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : ''}"><div class="pbar"><i style="width:${r.computed_progress}%"></i></div><span>${r.computed_progress}%</span></div>`) },
       { key: 'owner', label: '담당자', width: 128, edit: { type: 'select', field: 'owner_user_id', options: ownerPairs, value: (r) => r.owner_user_id || '', prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : '') },
         render: (r) => (r._ghost ? '' : r.owner_name ? html`<span class="cellwrap"><i class="av">${[...r.owner_name][0]}</i>${r.owner_name}</span>` : dim()) },
-      { key: 'status', label: '상태', width: 118, edit: { type: 'select', field: 'status', options: STATUS_EDIT, prefix: (r) => (r.computed_status === 'DELAYED' ? '<i class="wlate" title="계획 종료일이 지났습니다">지연</i>' : '') }, render: (r) => (r._ghost ? '' : statusBadge(r)) },
+      { key: 'status', label: '상태', width: 118, edit: { type: 'select', field: 'status', options: STATUS_EDIT, cls: (r) => (r.computed_status === 'DELAYED' ? 'cell--late' : ''), prefix: (r) => (r.computed_status === 'DELAYED' ? '<i class="wlate" title="계획 종료일이 지났습니다">지연</i>' : '') }, render: (r) => (r._ghost ? '' : statusBadge(r)) },   // UI-006: leaf rows show 지연 on the select too
       { key: 'weight', label: '가중치', width: 76, hidden: true, align: 'right', edit: { type: 'number', field: 'weight', value: (r) => r.weight, min: 0, max: 1000 }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`${r.weight}`) },
       { key: 'type', label: '유형', width: 80, hidden: true, render: (r) => (r._ghost ? '' : r.is_group ? '작업 그룹' : WBS_TYPE[r.item_type]) },
       { key: 'jira', label: 'Jira 실행', width: 110, hidden: true, render: (r) => (r._ghost || !jira || r.item_type === 'MILESTONE' ? '' : execChip(jira.by[r.id]) || dim()) },
@@ -284,6 +284,7 @@ export async function wbsPage(id) {
         <select class="select select--sm" id="f-cst" aria-label="상태"><option value="">상태</option>${raw(Object.entries(WBS_CSTATUS).map(([k, l]) => html`<option value="${k}" ${q.get('cst') === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
         <select class="select select--sm" id="quick"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
         <button class="link linkbtn" id="expall" style="width:auto">모두 펼치기</button><button class="link linkbtn" id="colall" style="width:auto">모두 접기</button>
+        <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         <span class="rtool__sp"></span>
         ${raw(v === 'list' && items.length ? grid.toolsHtml() : '')}
         <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
@@ -313,12 +314,27 @@ export async function wbsPage(id) {
     syncRows(); if (!items.length || view() === 'gantt') draw(); else { grid.refresh(); focusGhost(); }
   };
   const closeGhost = () => { ghost = null; syncRows(); if (!items.length) draw(); else grid.refresh(); };
+  /* BUG-005: the server refuses to turn a leaf that has its own schedule/progress into a group without being told what to
+   * do with those values. Ask, then retry with convert_parent. `allowMove` = the values can be carried into the new child. */
+  const withConvert = async (call, { allowMove = true } = {}) => {
+    try { return await call({}); }
+    catch (e) {
+      if (e.code !== 'parent_has_values') throw e;
+      const p = e.error?.parent || {};
+      const opts = [];
+      if (allowMove) opts.push({ id: 'move', label: '기존 값을 하위 작업으로 옮기기', hint: `새 하위 작업이 ${p.progress ?? 0}% · ${p.planned_start_date || '-'}~${p.planned_end_date || '-'} 을(를) 이어받습니다.` });
+      opts.push({ id: 'drop', label: '하위 작업 기준으로 다시 계산', hint: '상위 작업에 입력된 진행률·일정은 더 이상 쓰이지 않습니다 (이력에 남습니다).', danger: true });
+      const v = await choiceDialog({ title: `${p.wbs_code || ''} ${p.title || '상위 작업'}에 이미 일정·진행률이 있습니다`, body: '하위 작업이 생기면 상위 작업의 일정과 진행률은 하위 작업을 합산해 계산됩니다. 기존 값을 어떻게 할까요?', options: opts });
+      if (!v) return null;
+      return call({ convert_parent: v });
+    }
+  };
   const createFromGhost = async (title) => {
     const t = title.trim(); if (!t || !ghost) return;
     const body = { title: t, item_type: ghost.item_type, parent_id: ghost.parent_id || '' };
     try {
-      const r = await api('POST', wApi(), body); apply(r);
-      const kept = ghost; toast(`${r.item.wbs_code} ${r.item.title} 추가됨`);
+      const r = await withConvert((extra) => api('POST', wApi(), { ...body, ...extra })); if (!r) return; apply(r);
+      const kept = ghost; toast(r.warnings && r.warnings.length ? `${r.item.wbs_code} 추가됨 — ${r.warnings[0]}` : `${r.item.wbs_code} ${r.item.title} 추가됨`);
       ghost = { ...kept }; syncRows(); if (items.length === 1) draw(); else { grid.refresh(); focusGhost(); }   // keep typing: next sibling
     } catch (err) { toast(err.fields ? Object.values(err.fields)[0] : err.message); }
   };
@@ -327,7 +343,7 @@ export async function wbsPage(id) {
   const undoMove = (it, label) => { const from = { parent_id: it.parent_id || null, sequence: it.sequence }; return (r) => toastAction(label, { onAction: async () => { try { apply(await api('POST', wApi(`/${it.id}/move`), from)); if (sel && sel.id === it.id) { sel = (await api('GET', wApi(`/${it.id}`))).item; drawDetail(); } grid.refresh(); toast('이동을 되돌렸습니다.'); } catch (e) { toast(e.message); } } }); };
   const structural = async (it, path, label, body = {}) => {
     const undo = undoMove(it, label);
-    try { const r = await api('POST', wApi(`/${it.id}/${path}`), body); apply(r); if (sel && sel.id === it.id) { sel = r.item; drawDetail(); } grid.refresh(); undo(); }
+    try { const r = await withConvert((extra) => api('POST', wApi(`/${it.id}/${path}`), { ...body, ...extra }), { allowMove: false }); if (!r) return; apply(r); if (sel && sel.id === it.id) { sel = r.item; drawDetail(); } grid.refresh(); undo(); }
     catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); }
   };
   const removeItem = async (it) => {
@@ -405,7 +421,7 @@ export async function wbsPage(id) {
         const idx = sibs.findIndex((x) => x.id === target.id);
         body = { parent_id: target.parent_id || null, sequence: (zone === 'before' ? idx : idx + 1) + 1 };
       }
-      try { const r = await api('POST', wApi(`/${it.id}/move`), body); apply(r); if (sel && sel.id === it.id) { sel = r.item; drawDetail(); } grid.refresh(); undo(); }
+      try { const r = await withConvert((extra) => api('POST', wApi(`/${it.id}/move`), { ...body, ...extra }), { allowMove: false }); if (!r) return; apply(r); if (sel && sel.id === it.id) { sel = r.item; drawDetail(); } grid.refresh(); undo(); }
       catch (err) { toast(err.fields ? Object.values(err.fields)[0] : err.message); }
     });
   };
@@ -424,6 +440,7 @@ export async function wbsPage(id) {
     const cl2 = $('#clear2'); if (cl2) cl2.onclick = () => { for (const k of ['q', 'owner', 'cst', 'f']) setParam(k, ''); syncRows(); draw(); };
     const cx = $('#ctx-off'); if (cx) cx.onclick = () => { ctxCr = null; setParam('cr', ''); syncRows(); draw(); };
     $('#expall').onclick = () => { collapsed.clear(); syncRows(); draw(); };
+    const ar = $('#arch'); if (ar) ar.onchange = async () => { setParam('archived', ar.checked ? '1' : ''); await load(); draw(); };   // GAP-002
     $('#colall').onclick = () => { items.filter((i) => i.children_count).forEach((i) => collapsed.add(i.id)); syncRows(); draw(); };
     // tree toggles, inline add, row menu (delegated: works for both the grid and the Gantt's left pane)
     main.querySelector('.rlayout').addEventListener('click', (e) => {
@@ -484,6 +501,7 @@ export async function wbsPage(id) {
       case 'CREATED': return h.new_value ? html`생성 <q>${h.new_value}</q>` : html`<b>${it.wbs_code}</b> 생성`;
       case 'AI_GENERATED': return html`AI WBS 초안에서 생성`;
       case 'ARCHIVED': return html`삭제(보관)`;
+      case 'CONVERTED': return html`<b>작업 그룹으로 전환</b> — 기존 값 <q>${h.old_value || '-'}</q> → ${h.new_value || ''}`;
       case 'RESTORED': return html`삭제 취소(복구)`;
       case 'JIRA_LINKED': return html`Jira Issue 연결 <q>${h.new_value}</q>`;
       case 'JIRA_UNLINKED': return html`Jira Issue 연결 해제 <q>${h.old_value}</q>`;
@@ -511,7 +529,7 @@ export async function wbsPage(id) {
     const hist = events.filter((e) => e.kind !== 'COMMENT'); const comments = events.filter((e) => e.kind === 'COMMENT');
     const liveReq = it.requirement_links.filter((l) => !l.archived_at);
     const dateInput = (field, value, ro) => html`<input class="input input--sm" type="date" data-field="${field}" value="${value || ''}" ${ro ? 'disabled' : ''}>`;
-    d.innerHTML = html`<div class="drawer__h"><b class="mono">${it.wbs_code}</b>${raw(statusBadge(live))}<span class="lbl-sub">${group ? '작업 그룹' : WBS_TYPE[t]}</span>${raw(it.archived_at ? '<span class="chip">보관됨</span>' : '')}
+    d.innerHTML = html`<div class="drawer__h"><b class="mono">${it.wbs_code}</b>${raw(statusBadge(live))}<span class="lbl-sub">${group ? '작업 그룹' : WBS_TYPE[t]}</span>${raw(it.archived_at ? `<span class="chip">보관됨</span>${archived ? '' : '<button type="button" class="btn btn--secondary btn--xs" id="restore">복구</button>'}` : '')}
         <span class="dnav"><button type="button" data-nav="-1" aria-label="이전 항목" title="이전 (목록 순서)" ${at <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-nav="1" aria-label="다음 항목" title="다음 (목록 순서)" ${at < 0 || at >= ids.length - 1 ? 'disabled' : ''}>↓</button></span>
         <button class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
       ${raw(dtabs([{ key: 'info', label: '기본 정보' }, { key: 'req', label: '관련 요구사항', count: liveReq.length }, { key: 'dep', label: '선행 작업', count: it.predecessors.length }, { key: 'jira', label: 'Jira 실행', count: it.jira && it.jira.total ? it.jira.total : undefined }, { key: 'hist', label: '변경 이력', count: hist.length }, { key: 'cmt', label: '댓글', count: comments.length }], dtab))}
@@ -597,8 +615,9 @@ export async function wbsPage(id) {
         el.onkeydown = (e) => { if (e.key === 'Enter' && el.tagName !== 'TEXTAREA') el.blur(); };
       }
     });
-    const move = async (body, label) => { const undo = undoMove(it, label); try { await after(await api('POST', wApi(`/${it.id}/move`), body)); undo(); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); drawDetail(); } };
+    const move = async (body, label) => { const undo = undoMove(it, label); try { const r = await withConvert((extra) => api('POST', wApi(`/${it.id}/move`), { ...body, ...extra }), { allowMove: false }); if (!r) { drawDetail(); return; } await after(r); undo(); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); drawDetail(); } };
     const mp = $('#mv-parent'); if (mp) mp.onchange = () => move({ parent_id: mp.value || null }, `${it.wbs_code} ${it.title}의 상위 항목을 바꿨습니다.`);
+    const rs = $('#restore'); if (rs) rs.onclick = async () => { try { const r = await api('POST', wApi(`/${it.id}/restore`), {}); toast(`${r.restored_ids.length}개 항목을 복구했습니다.`); await load(); sel = r.item; draw(); drawDetail(); } catch (e) { toast(e.message); } };   // GAP-002
     const up = $('#mv-up'); if (up) up.onclick = () => move({ sequence: it.sequence - 1 }, '순서를 위로 옮겼습니다.');
     const dn = $('#mv-down'); if (dn) dn.onclick = () => move({ sequence: it.sequence + 1 }, '순서를 아래로 옮겼습니다.');
     const mi = $('#mv-in'); if (mi) mi.onclick = () => structural(it, 'indent', `${it.wbs_code} ${it.title}을(를) 들여썼습니다.`);

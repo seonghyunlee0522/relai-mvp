@@ -172,6 +172,15 @@ function rollupDates(node, kids) {
 }
 
 /** 보류 (explicit) > 완료 (100% / COMPLETED) > 지연 (end passed) > 진행중 (progress > 0 or IN_PROGRESS) > 예정. */
+/** UX-008: non-blocking warnings when a task/milestone is scheduled outside the project's planned window. */
+export function rangeWarnings(project, item) {
+  const out = []; if (!project) return out;
+  const ps = project.planned_start_date, pe = project.planned_end_date;
+  const chk = (label, d) => { if (!d) return; if (ps && d < ps) out.push(`${label}(${d})이 프로젝트 시작일(${ps})보다 앞섭니다.`); if (pe && d > pe) out.push(`${label}(${d})이 프로젝트 종료일(${pe})을 넘습니다.`); };
+  chk('계획 시작일', item.planned_start_date); chk('계획 종료일', item.planned_end_date); chk('마일스톤 일자', item.milestone_date);
+  return out;
+}
+
 export function computeStatus(node, today = todayStr()) {
   if (node.status === 'ON_HOLD') return 'ON_HOLD';
   if (node.item_type === 'MILESTONE') return node.status === 'COMPLETED' ? 'COMPLETED' : node.milestone_date && node.milestone_date < today ? 'DELAYED' : 'PLANNED';
@@ -223,12 +232,36 @@ export async function getWbs(db, project, id) {
 }
 
 /* ---------- writes (caller wraps in tx) ---------- */
-export async function createWbs(db, project, input, userId, { skipRenumber = false } = {}) {
+/* BUG-005: a leaf TASK that already carries its own progress or dates becomes a group the moment it gets a child, and
+ * from then on its stored values are hidden behind the roll-up. Refuse silently converting such a parent: the caller
+ * must pass convert_parent = 'move' (copy the parent's execution values into the new child, when the child has none) or
+ * 'drop' (the parent's values are discarded; recorded in history). */
+export const leafHasValues = (p) => p.item_type === 'TASK' && (Number(p.progress) > 0 || Boolean(p.planned_start_date || p.planned_end_date || p.actual_start_date || p.actual_end_date));
+export async function guardLeafToGroup(db, project, parent, convert, userId, { child = null, ts = now() } = {}) {
+  if (!parent || !leafHasValues(parent) || (await childCount(db, parent.id))) return child;
+  if (convert !== 'move' && convert !== 'drop') {
+    const e = new ValidationError({ parent_id: `'${parent.wbs_code || parent.title}'에 입력된 일정·진행률(${parent.progress}%)은 하위 작업이 생기면 하위 기준으로 바뀝니다. 기존 값을 첫 하위 작업으로 옮기거나(convert_parent=move) 버리는(convert_parent=drop) 방식을 지정하세요.` });
+    e.code = 'parent_has_values'; e.parent = { id: parent.id, wbs_code: parent.wbs_code, title: parent.title, progress: parent.progress, planned_start_date: parent.planned_start_date, planned_end_date: parent.planned_end_date }; throw e;
+  }
+  const summary = `${parent.progress}% · ${parent.planned_start_date || '-'}~${parent.planned_end_date || '-'}`;
+  if (convert === 'move' && child) {
+    const c = { ...child };
+    for (const k of ['planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date']) if (c[k] == null && parent[k]) c[k] = parent[k];
+    if ((c.progress ?? 0) === 0 && Number(parent.progress) > 0) { c.progress = Number(parent.progress); if (!c.status || c.status === 'NOT_STARTED') c.status = parent.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS'; }
+    (await addWbsHistory(db, parent.id, 'CONVERTED', { field: 'group', oldValue: summary, newValue: '하위 작업으로 이관' }, userId, ts));
+    return c;
+  }
+  (await addWbsHistory(db, parent.id, 'CONVERTED', { field: 'group', oldValue: summary, newValue: '하위 작업 기준으로 전환' }, userId, ts));
+  return child;
+}
+
+export async function createWbs(db, project, input, userId, { skipRenumber = false, skipGuard = false } = {}) {
   if (input.parent_id) {
     const parent = (await getItem(db, project.id, input.parent_id));
     if (!parent || parent.archived_at) throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
     if (parent.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래에는 항목을 만들 수 없습니다.' });
     if ((parent.depth || 0) + 1 >= MAX_DEPTH) throw new ValidationError({ parent_id: `WBS는 최대 ${MAX_DEPTH}단계까지 만들 수 있습니다.` });
+    if (!skipGuard) input = await guardLeafToGroup(db, project, parent, input.convert_parent, userId, { child: input });
   }
   const id = randomUUID(); const ts = now();
   const seq = (await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS s FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND parent_id IS NOT DISTINCT FROM ?', [project.id, input.parent_id || null])).s;
@@ -268,7 +301,7 @@ export async function updateWbs(db, project, existing, input, userId = null) {
 }
 
 /** Move within/between parents. sequence is the 1-based target position among live siblings of the new parent. */
-export async function moveWbs(db, project, existing, { parent_id, sequence }, userId = null) {
+export async function moveWbs(db, project, existing, { parent_id, sequence, convert_parent }, userId = null) {
   const newParent = parent_id === undefined ? existing.parent_id : (parent_id || null);
   if (newParent) {
     const parent = (await getItem(db, project.id, newParent));
@@ -277,6 +310,7 @@ export async function moveWbs(db, project, existing, { parent_id, sequence }, us
     if (newParent === existing.id || (await descendants(db, project.id, existing.id)).includes(newParent)) throw new ValidationError({ parent_id: '자기 자신이나 하위 항목 아래로는 이동할 수 없습니다.' });
     const subDepth = await subtreeDepth(db, project.id, existing.id);
     if ((parent.depth || 0) + 1 + subDepth >= MAX_DEPTH) throw new ValidationError({ parent_id: `WBS는 최대 ${MAX_DEPTH}단계까지 만들 수 있습니다.` });
+    if (newParent !== existing.parent_id) await guardLeafToGroup(db, project, parent, convert_parent, userId);   // BUG-005 (values stay on the moved item; 'move' is only meaningful for create)
   }
   const codeOf = async (pid) => (pid ? ((await getItem(db, project.id, pid))?.wbs_code || '') : '(최상위)');
   const oldParentCode = await codeOf(existing.parent_id); const newParentCode = await codeOf(newParent);
@@ -302,13 +336,13 @@ async function subtreeDepth(db, projectId, rootId) {
 const siblingsOf = (db, projectId, parentId) => db.all('SELECT * FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND parent_id IS NOT DISTINCT FROM ? ORDER BY sequence, created_at', [projectId, parentId || null]);
 
 /** 들여쓰기: become the last child of the previous sibling. */
-export async function indentWbs(db, project, existing, userId = null) {
+export async function indentWbs(db, project, existing, userId = null, { convert_parent } = {}) {
   const sibs = await siblingsOf(db, project.id, existing.parent_id);
   const i = sibs.findIndex((x) => x.id === existing.id);
   if (i <= 0) throw new ValidationError({ parent_id: '바로 위에 같은 레벨의 항목이 없어 들여쓸 수 없습니다.' });
   const prev = sibs[i - 1];
   if (prev.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래로는 들여쓸 수 없습니다.' });
-  await moveWbs(db, project, existing, { parent_id: prev.id, sequence: 9999 }, userId);
+  await moveWbs(db, project, existing, { parent_id: prev.id, sequence: 9999, convert_parent }, userId);
   return { from: { parent_id: existing.parent_id, sequence: existing.sequence }, to: { parent_id: prev.id } };
 }
 /** 내어쓰기: become the sibling right after the current parent. */
