@@ -6,12 +6,33 @@ import { $, fmtShort, html, no2, raw, todayLocal } from '../core/dom.js';
 import { moveToPhase, projectHead, stepInfo } from './guide.js';
 import { PHASE_STATUS } from '../shared/constants.js';
 import { toast } from '../shared/dialogs.js';
+import { bindCoach, phaseIntro } from '../onboarding/ui.js';
+import { ob } from '../onboarding/state.js';
 
 const ATT_TYPE = { ISSUE: 'Issue', RISK: 'Risk', TEST: 'Test', CHANGE: 'Change', WBS: 'WBS', ACCEPTANCE: 'Acceptance', REQUIREMENT: 'Requirement' };
 const H_CLS = { GOOD: 'is-good', WARNING: 'is-warn', CRITICAL: 'is-crit', UNKNOWN: 'is-unknown' };
 
 const attentionRows = (items, pid) => html`<ol class="ovatt__list">${raw(items.map((i) => html`<li><a href="/app/projects/${pid}/${i.href}" data-link>
   <i class="att__dot is-${i.severity}"></i><span class="ovatt__k">${ATT_TYPE[i.type] || i.type}</span><span class="mono">${i.display_id}</span><span class="ovatt__t">${i.title}</span><small>${i.meta}</small></a></li>`).join(''))}</ol>`;
+
+/** Phase 14 — "지금 해야 할 일": rule-based guidance from the server (g.guidance). Always present; never a gate. */
+const guidanceCard = (g, p, archived, created) => {
+  const q = g.guidance; if (!q) return '';
+  const act = (a, cls) => (!a ? '' : /\?move=next$/.test(a.href) ? html`<button type="button" class="btn ${cls} btn--sm" data-move-next>${a.label}</button>` : html`<a class="btn ${cls} btn--sm" href="${a.href}" data-link>${a.label}</a>`);
+  return html`<section class="gcard ${created ? 'is-new' : ''}" aria-labelledby="gcT" data-tour-id="guidance">
+    ${raw(created ? '<div class="gcard__new"><b>프로젝트가 생성되었습니다.</b> 이제 프로젝트의 목표와 범위를 정의해 주세요.</div>' : '')}
+    <div class="gcard__row">
+      <div class="gcard__m">
+        <div class="gcard__k"><span class="gcard__cur">현재 단계 · ${q.current_phase.name}</span><span class="gcard__lbl">지금 할 일</span></div>
+        <h2 id="gcT">${q.title}</h2>
+        ${raw(q.description ? html`<p class="gcard__d">${q.description}</p>` : '')}
+        ${raw(q.why ? html`<p class="gcard__why"><b>왜 필요한가</b>${q.why}</p>` : '')}
+        ${raw(q.warnings && q.warnings.length ? html`<ul class="gcard__warn">${raw(q.warnings.map((w) => html`<li>${w}</li>`).join(''))}</ul>` : '')}
+      </div>
+      <div class="gcard__a">${raw(archived ? '' : act(q.primary_action, 'btn--primary') + act(q.secondary_action, 'btn--secondary'))}
+        ${raw(q.next_preview ? html`<small class="gcard__next"><b>Next</b> ${q.next_preview}</small>` : '')}</div>
+    </div></section>`;
+};
 
 /** 현재 단계 + 다음 할 일. Steps are listed with their live status text and a link to the screen where the work happens. */
 const stagePanel = (g, p, archived) => {
@@ -128,9 +149,14 @@ export async function overviewPage(id, main = $('#main')) {
   const p = g.project;
   document.title = `${p.name} — RELAI`;
   const archived = p.status === 'ARCHIVED';
+  const qp = new URLSearchParams(location.search); const created = qp.get('created') === '1'; const moveNext = qp.get('move') === 'next';
+  if (created || moveNext) history.replaceState(null, '', `/app/projects/${id}`);
+  await ob.get();   // cached; phase intro needs guides_seen
   main.innerHTML = html`<div class="page page--wide page--flow ov">
     ${raw(projectHead(p, g, { tab: 'overview' }))}
     ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 단계와 할 일은 조회만 할 수 있습니다.</div>' : '')}
+    ${raw(guidanceCard(g, p, archived, created))}
+    ${raw(g.current_phase ? phaseIntro(g.current_phase.phase_key, g.current_phase.name) : '')}
     <div class="ov__grid"><div class="ov__main">${raw(stagePanel(g, p, archived))}${raw(executionPanel(g, dash, p))}</div>${raw(attentionPanel(snap, p.id))}</div>
     <div class="ov__sum">${raw(summaryBar(g, dash, p))}${raw(healthLine(snap.health))}</div>
     ${raw(stagesPanel(g, p))}
@@ -139,4 +165,7 @@ export async function overviewPage(id, main = $('#main')) {
   if (more) more.onclick = async () => { more.disabled = true; try { const all = await api('GET', wsApi(`/${id}/attention`)); const list = $('#att .ovatt__list'); if (list) list.outerHTML = attentionRows(all.items, p.id); more.remove(); } catch (e) { toast(e.message); more.disabled = false; } };
   const nb = $('#next');
   if (nb) nb.onclick = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) overviewPage(id); };
+  main.querySelectorAll('[data-move-next]').forEach((b) => { b.onclick = nb ? () => nb.click() : null; });
+  bindCoach(main);
+  if (moveNext && nb) nb.click();
 }

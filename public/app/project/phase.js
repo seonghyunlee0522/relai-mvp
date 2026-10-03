@@ -4,6 +4,7 @@ import { navigate } from '../core/router.js';
 import { moveToPhase, phaseStrip, projectHead, stepInfo } from './guide.js';
 import { PHASE_STATUS } from '../shared/constants.js';
 import { toast } from '../shared/dialogs.js';
+import { bindCoach, phaseIntro } from '../onboarding/ui.js';
 
 export async function phasePage(id, phaseKey) {
   const main = $('#main');
@@ -24,6 +25,7 @@ export async function phasePage(id, phaseKey) {
       ${raw(projectHead(p, g, { tab: 'phase' }))}
       <p class="phase__crumb"><a class="link" href="/app/projects/${p.id}" data-link>← 프로젝트 홈</a><span class="dim">단계별 할 일의 완료 처리와 메모는 여기에서 관리합니다. 실제 작업은 각 업무 탭에서 합니다.</span></p>
       ${raw(phaseStrip(g, p.id))}
+      ${raw(ph ? phaseIntro(ph.phase_key, ph.name) : '')}
 
       <section class="panel phase">
         <div class="phase__h">
@@ -66,6 +68,7 @@ export async function phasePage(id, phaseKey) {
         }).join(''))}</ol>
       </section>
     </div>`;
+    bindCoach(main);
 
     main.querySelectorAll('[data-toggle]').forEach((b) => b.onclick = () => {
       openId = openId === b.dataset.toggle ? null : b.dataset.toggle;

@@ -45,8 +45,11 @@ export async function definitionPage(id) {
       <div class="defp__head">
         <div><h2>프로젝트 정의</h2><p>착수 단계에서 합의해야 할 내용을 항목별로 작성합니다. 일부만 작성해도 저장할 수 있고, 각 항목은 내용을 확인한 뒤 완료 처리합니다. 완료된 항목은 프로젝트 홈의 단계 준비율에 반영됩니다.</p></div>
         <div class="defp__prog"><b>${done} / ${m.progress.total}</b><span>항목 완료</span><span class="pbar"><i style="width:${m.progress.percent}%"></i></span>
-          ${raw(m.needs_review.length ? html`<em class="is-warn">${m.needs_review.length}개 항목 재확인 필요</em>` : done === m.progress.total ? html`<em class="is-ok">착수 단계 준비 완료${g.current_phase && g.current_phase.phase_key === 'INITIATION' && g.next_phase ? ' · 홈에서 다음 단계로 이동할 수 있습니다' : ''}</em>` : '')}</div>
+          ${raw(m.needs_review.length ? html`<em class="is-warn">${m.needs_review.length}개 항목 재확인 필요</em>` : done === m.progress.total ? html`<em class="is-ok">착수 단계 준비 완료</em>` : '')}</div>
       </div>
+      ${raw(done === m.progress.total && !m.needs_review.length ? html`<div class="nextstrip" data-tour-id="definition-done"><div><b>프로젝트 정의가 완료되었습니다.</b><span>이제 요구사항을 정리하세요. 요구사항은 WBS·테스트와 연결되는 프로젝트의 기준입니다.</span></div>
+        <div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="${u}/requirements?new=1" data-link>요구사항 등록</a>${raw(g.current_phase && g.current_phase.phase_key === 'INITIATION' && g.next_phase && !ro ? html`<a class="btn btn--secondary btn--sm" href="${u}?move=next" data-link>${g.next_phase.name} 단계로 이동</a>` : '')}</div></div>`
+        : !ro ? html`<p class="defp__guide">착수 단계에서는 프로젝트의 기준을 정의합니다. 다음 항목: <b>${(m.sections.find((s) => s.status !== 'COMPLETED') || {}).label || '-'}</b></p>` : '')}
       <div class="defp__grid">
         <nav class="defp__nav" aria-label="항목"><ol>${raw(m.sections.map((s) => html`<li class="${s.status === 'COMPLETED' ? (s.changed_after_completion ? 'is-warn' : 'is-done') : s.ready ? 'is-ready' : ''}"><a href="#sec-${s.key}" data-jump="${s.key}"><i>${s.status === 'COMPLETED' ? (s.changed_after_completion ? '!' : '✓') : m.sections.indexOf(s) + 1}</i>${s.label}</a></li>`).join(''))}</ol>
           <a class="link" href="${u}" data-link>← 프로젝트 홈</a></nav>

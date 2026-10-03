@@ -8,6 +8,7 @@ import { openImpactDialog } from '../ai/impact.js';
 import { statusChip, prText } from '../shared/badges.js';
 import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
+import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
 
@@ -39,6 +40,7 @@ export async function changesPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'changes' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(coachMark('CHANGE_REQUEST_INTRO'))}
       <div class="summary summary--inline" style="margin-bottom:8px">
         <div><b>${summary.total}</b><span>전체 변경 요청</span></div>
         <div class="${summary.under_review ? 'is-warn' : ''}"><b>${summary.under_review}</b><span>검토 중</span></div>
@@ -76,7 +78,7 @@ export async function changesPage(id) {
         <aside class="drawer drawer--cr" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? drawerCreate() : sel ? drawerDetail() : '')}</aside>
       </div>
     </div>`;
-    bind();
+    bind(); bindCoach(main);
   };
 
   const drawerCreate = () => html`<form id="cf" novalidate>

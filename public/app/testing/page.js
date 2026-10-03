@@ -7,6 +7,7 @@ import { resBadge, verifyChip } from '../shared/badges.js';
 import { ACC_ACTIONS, ACC_ACTION_LABEL, ACC_STATUS, ACC_STATUS_CHIP, ISSUE_STATUS, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RESULT, TC_PRIORITY, TC_STATUS, TC_STATUS_CHIP, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE, testSummaryText } from '../shared/constants.js';
 import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
+import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
 import { statusChip, prText } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
@@ -50,6 +51,7 @@ export async function testsPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'tests' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 테스트와 검수는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(T === 'acceptance' ? coachMark('ACCEPTANCE_INTRO') : coachMark('TESTING_INTRO'))}
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객이 결과물을 확인하고 승인하는 검수를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">
         <button class="${T === 'cases' ? 'is-on' : ''}" data-tab="cases" role="tab">Test Cases${raw(ts.total ? html`<em>${ts.total}</em>` : '')}</button>
         <button class="${T === 'acceptance' ? 'is-on' : ''}" data-tab="acceptance" role="tab">Acceptance${raw(ac.in_progress ? html`<em>${ac.in_progress}</em>` : '')}</button>
@@ -81,7 +83,7 @@ export async function testsPage(id) {
           : emptyState({ title: '아직 등록된 검수가 없습니다.', body: '검수 대상 요구사항과 테스트를 묶어 고객에게 검수를 요청하고 결과를 기록하세요.', cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }))}</div>
         <aside class="drawer drawer--cr" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? (isAcc() ? createAcc() : createTest()) : sel ? (isAcc() ? detailAcc() : detailTest()) : '')}</aside>
       </div></div>`;
-    bind();
+    bind(); bindCoach(main);
   };
 
   const caseTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>Status</th><th>Priority</th><th>최근 결과</th><th>Owner</th><th class="num">실행</th><th class="num">요구사항</th><th>Updated</th></tr></thead>
