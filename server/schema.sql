@@ -27,6 +27,9 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at);                    -- admin: signups by date, list ordering
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);                          -- admin: status filter, suspended attention
 CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login_at);               -- admin: activation / recency
+-- Phase 13: Google sign-in users have no password; verified e-mail timestamp (set by Google verified email or future e-mail verification)
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,                   -- sha256(token); raw token lives only in the cookie
@@ -591,6 +594,7 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   metadata      JSONB NOT NULL DEFAULT '{}'::jsonb,   -- target label at the time (email / workspace name), reason …; never secrets
   created_at    timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE admin_audit_logs ADD COLUMN IF NOT EXISTS actor_kind TEXT NOT NULL DEFAULT 'ADMIN';   -- Phase 13: ADMIN (operator action) | USER (account/invitation event by a regular user)
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_admin ON admin_audit_logs(admin_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_audit_logs(target_type, target_id, created_at);
@@ -947,3 +951,73 @@ CREATE TABLE IF NOT EXISTS integration_webhooks (
   created_at           timestamptz NOT NULL DEFAULT now(),
   updated_at           timestamptz NOT NULL DEFAULT now()
 );
+
+/* ---------- Identity, invitations, e-mail (Phase 13) ----------
+ * RELAI stays the source of truth for users / memberships. Google only proves identity; the e-mail provider only delivers.
+ * Invitation tokens are stored hashed (sha256); the raw token exists only in the e-mail link. */
+CREATE TABLE IF NOT EXISTS user_identities (
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider         TEXT NOT NULL CHECK (provider IN ('PASSWORD','GOOGLE')),
+  provider_subject TEXT NOT NULL,                  -- PASSWORD: the user id; GOOGLE: the stable `sub` claim (never the e-mail)
+  email            TEXT,
+  email_verified   BOOLEAN NOT NULL DEFAULT false,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  last_used_at     timestamptz,
+  UNIQUE (provider, provider_subject)
+);
+CREATE INDEX IF NOT EXISTS idx_identities_user ON user_identities(user_id);
+CREATE TABLE IF NOT EXISTS invitations (
+  id                     TEXT PRIMARY KEY,
+  type                   TEXT NOT NULL CHECK (type IN ('WORKSPACE_CREATE','WORKSPACE_MEMBER')),
+  workspace_id           TEXT REFERENCES workspaces(id) ON DELETE CASCADE,   -- WORKSPACE_MEMBER only
+  email                  TEXT NOT NULL,                                       -- lower-cased invitee e-mail (must match the accepting account exactly)
+  role                   TEXT CHECK (role IN ('OWNER','ADMIN','MEMBER')),    -- WORKSPACE_MEMBER only
+  workspace_name         TEXT,                                               -- WORKSPACE_CREATE only
+  invitee_name           TEXT,
+  note                   TEXT,
+  token_hash             TEXT NOT NULL UNIQUE,
+  status                 TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','ACCEPTED','REVOKED','EXPIRED')),
+  invited_by             TEXT REFERENCES users(id),
+  accepted_by            TEXT REFERENCES users(id),
+  accepted_workspace_id  TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  expires_at             timestamptz NOT NULL,
+  accepted_at            timestamptz,
+  revoked_at             timestamptz,
+  last_sent_at           timestamptz,
+  created_at             timestamptz NOT NULL DEFAULT now(),
+  updated_at             timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_inv_platform_pending ON invitations(email) WHERE status = 'PENDING' AND type = 'WORKSPACE_CREATE';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_inv_member_pending ON invitations(workspace_id, email) WHERE status = 'PENDING' AND type = 'WORKSPACE_MEMBER';
+CREATE INDEX IF NOT EXISTS idx_inv_workspace ON invitations(workspace_id, status);
+CREATE INDEX IF NOT EXISTS idx_inv_email ON invitations(email);
+CREATE INDEX IF NOT EXISTS idx_inv_created ON invitations(created_at);
+CREATE TABLE IF NOT EXISTS auth_oauth_states (                                 -- user sign-in OAuth only (Jira integration has its own table)
+  state_hash               TEXT PRIMARY KEY,
+  nonce_hash               TEXT NOT NULL,
+  code_verifier_encrypted  TEXT,                                              -- PKCE verifier (AES-GCM, integrations/crypto.js)
+  intent                   TEXT NOT NULL CHECK (intent IN ('LOGIN','SIGNUP','INVITE')),
+  invitation_id            TEXT REFERENCES invitations(id) ON DELETE CASCADE,
+  return_path_encrypted    TEXT,                                              -- where to land after sign-in (may contain an invite token → encrypted)
+  expires_at               timestamptz NOT NULL,
+  consumed_at              timestamptz,
+  created_at               timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS email_deliveries (
+  id                   TEXT PRIMARY KEY,
+  type                 TEXT NOT NULL,              -- PLATFORM_INVITE | WORKSPACE_MEMBER_INVITE | …
+  recipient            TEXT NOT NULL,
+  provider             TEXT NOT NULL,
+  provider_message_id  TEXT,
+  status               TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','SENT','FAILED')),
+  related_user_id      TEXT REFERENCES users(id) ON DELETE SET NULL,
+  invitation_id        TEXT REFERENCES invitations(id) ON DELETE SET NULL,
+  workspace_id         TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  error_code           TEXT,
+  error_message_safe   TEXT,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  sent_at              timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_email_deliveries_created ON email_deliveries(created_at);
+CREATE INDEX IF NOT EXISTS idx_email_deliveries_inv ON email_deliveries(invitation_id);

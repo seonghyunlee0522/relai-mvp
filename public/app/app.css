@@ -1738,3 +1738,19 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .exec__jl{font-weight:700;color:var(--navy)}.exec__jl small{margin-left:4px;color:var(--muted);font-weight:600}
 .exec__jira b{color:var(--navy)}.exec__jira em{font-style:normal;font-weight:700;color:var(--blue-deep)}
 @media (max-width:640px){.jrow{grid-template-columns:76px minmax(0,1fr) 28px}.jrow .chip,.jrow__a,.jrow time{display:none}.jsum{grid-template-columns:repeat(2,minmax(0,1fr))}.jinfo{grid-template-columns:1fr}.icard__d{grid-template-columns:1fr}}
+
+/* ---- Phase 13: Google sign-in, invitation landing, invite tables ---- */
+.auth__or{display:flex;align-items:center;gap:12px;margin:22px 0 16px;color:var(--muted);font-size:13px}
+.auth__or::before,.auth__or::after{content:"";flex:1;height:1px;background:var(--border-soft)}
+.btn--google{display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none}
+.btn--google svg{flex:none}
+.notice--warn{background:#FEF6E7;border-color:#F5D08A;color:#8A4B08}
+.notice--invite{background:var(--bg-tint);border-color:var(--border-blue);color:var(--navy);line-height:1.6}
+.auth--single{grid-template-columns:1fr}
+.auth--single .auth__form{max-width:520px}
+.invite h1{font-size:24px}
+.invite__card{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;background:var(--bg-alt);border:1px solid var(--border-soft);border-radius:12px;padding:16px 20px;margin:4px 0 20px;font-size:14px}
+.invite__k{color:var(--muted)}.invite__v{color:var(--navy)}
+.invite__cta{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.panel__sp{flex:1}
+@media (max-width:640px){.auth--single .auth__form{padding:32px 16px}.invite__card{grid-template-columns:1fr;gap:2px 0}.invite__k{margin-top:8px;font-size:12px}}

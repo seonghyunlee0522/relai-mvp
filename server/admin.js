@@ -16,7 +16,9 @@ import { billingDashboard, workspaceSubscription } from './billing-admin.js';
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
 export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
 export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
-export const AUDIT_ACTIONS = ['SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS'];
+export const AUDIT_ACTIONS = ['SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS',
+  'PLATFORM_INVITE_CREATED', 'PLATFORM_INVITE_RESENT', 'PLATFORM_INVITE_REVOKED', 'PLATFORM_INVITE_ACCEPTED', 'WORKSPACE_INVITE_CREATED', 'WORKSPACE_INVITE_RESENT', 'WORKSPACE_INVITE_REVOKED', 'WORKSPACE_INVITE_ACCEPTED',
+  'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'WORKSPACE_CREATED_FROM_INVITE'];
 export const ACTIVATION = ['REGISTERED', 'WORKSPACE_CREATED', 'PROJECT_CREATED', 'ACTIVE_USER'];
 const ACTIVE_WINDOW_DAYS = 14;
 
@@ -44,8 +46,10 @@ const USER_COLS = `u.id, u.name, u.email, u.status, u.system_role, u.created_at,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.user_id = u.id) AS workspace_count,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.user_id = u.id AND m.role = 'OWNER') AS owned_workspaces,
   (SELECT COUNT(*) FROM projects p WHERE p.created_by = u.id) AS projects_created,
-  (SELECT MAX(p.created_at) FROM projects p WHERE p.created_by = u.id) AS last_project_created_at`;
-const shapeUser = (r) => ({ ...r, email_verified: null, activation: activationOf(r) });   // email verification does not exist yet → null, not false
+  (SELECT MAX(p.created_at) FROM projects p WHERE p.created_by = u.id) AS last_project_created_at,
+  u.email_verified_at,
+  (SELECT string_agg(i.provider, ',' ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS login_methods_csv`;
+const shapeUser = (r) => { const { login_methods_csv, ...rest } = r; const methods = (login_methods_csv ? login_methods_csv.split(',') : []).sort((a, b) => (a === 'PASSWORD' ? -1 : b === 'PASSWORD' ? 1 : 0)); return { ...rest, login_methods: methods, login_method_label: methods.length ? methods.map((m) => (m === 'PASSWORD' ? 'Password' : 'Google')).join(' + ') : '-', email_verified: Boolean(r.email_verified_at), activation: activationOf(r) }; };
 
 /* ---------- users ---------- */
 const USER_SORTS = { created: 'u.created_at DESC', last_login: 'u.last_login_at DESC NULLS LAST', name: 'u.name, u.email', email: 'u.email' };
@@ -55,6 +59,7 @@ export async function listUsers(db, q = {}) {
   if (q.q) { where.push('(u.name ILIKE ? OR u.email ILIKE ?)'); params.push(like(q.q), like(q.q)); }
   const status = oneOf(q.status, USER_STATUSES); if (status) { where.push('u.status = ?'); params.push(status); }
   const role = oneOf(q.system_role, SYSTEM_ROLES); if (role) { where.push('u.system_role = ?'); params.push(role); }
+  const method = oneOf(q.login_method, ['PASSWORD', 'GOOGLE']); if (method) { where.push('EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = u.id AND i.provider = ?)'); params.push(method); }
   if (q.since) { where.push('u.created_at >= ?'); params.push(q.since); }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const total = (await db.get(`SELECT COUNT(*) AS n FROM users u ${w}`, params)).n;
@@ -74,8 +79,10 @@ export async function getUser(db, id) {
   if (u.last_login_at) activity.push({ type: 'LOGIN', at: u.last_login_at, workspace_name: null });
   activity.sort((a, b) => (a.at < b.at ? 1 : -1));
   const audit = await listAudit(db, { target_type: 'USER', target_id: id, size: 20 });
+  const identities = await db.all('SELECT provider, email, email_verified, created_at, last_used_at FROM user_identities WHERE user_id = ? ORDER BY created_at', [id]);   // never provider_subject
+  const invitations = await db.all(`SELECT i.id, i.type, i.status, i.workspace_name, w.name AS target_workspace_name, i.role, i.created_at, i.accepted_at FROM invitations i LEFT JOIN workspaces w ON w.id = i.workspace_id WHERE i.email = ? OR i.accepted_by = ? ORDER BY i.created_at DESC LIMIT 20`, [u.email, id]);
   return {
-    user: shapeUser(u),
+    user: shapeUser(u), identities, invitations,
     workspaces: workspaces.map((w) => ({ ...w, plan: DEFAULT_PLAN, plan_label: PLANS[DEFAULT_PLAN].label, sole_owner: w.role === 'OWNER' && Number(w.owner_count) === 1 })),
     activity: activity.slice(0, 10),
     audit: audit.items,
@@ -87,6 +94,7 @@ const WS_COLS = `w.id, w.name, w.status, w.created_at, w.suspended_at,
   o.id AS owner_id, o.name AS owner_name, o.email AS owner_email,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id = w.id) AS member_count,
   (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status != 'ARCHIVED') AS project_count,
+  (SELECT COUNT(*) FROM invitations i WHERE i.workspace_id = w.id AND i.status = 'PENDING' AND i.expires_at >= now()) AS pending_invitations,
   GREATEST(w.created_at,
     COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id), w.created_at),
     COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at`;
@@ -122,9 +130,11 @@ export async function getWorkspace(db, id) {
   const usage = await workspaceUsage(db, id, planKey);
   const audit = await listAudit(db, { target_type: 'WORKSPACE', target_id: id, size: 20 });
   const owners = members.filter((m) => m.role === 'OWNER');
+  const invitations = await db.all(`SELECT i.id, i.email, i.role, i.status, i.expires_at, i.created_at, i.accepted_at, u.name AS invited_by_name, (SELECT d.status FROM email_deliveries d WHERE d.invitation_id = i.id ORDER BY d.created_at DESC LIMIT 1) AS last_email_status FROM invitations i LEFT JOIN users u ON u.id = i.invited_by WHERE i.workspace_id = ? ORDER BY i.created_at DESC LIMIT 50`, [id]);
+  const origin = await db.get(`SELECT i.id, i.email, u.name AS invited_by_name, i.accepted_at FROM invitations i LEFT JOIN users u ON u.id = i.invited_by WHERE i.accepted_workspace_id = ? AND i.type = 'WORKSPACE_CREATE'`, [id]);
   return {
     workspace: { ...shapeWorkspace(w), plan: planKey, plan_label: PLANS[planKey].label },
-    owners, members, projects,
+    owners, members, projects, invitations: invitations.map((i) => (i.status === 'PENDING' && new Date(i.expires_at) < new Date() ? { ...i, status: 'EXPIRED' } : i)), origin_invitation: origin || null,
     subscription,                                   // null until Billing exists
     usage, activity, audit: audit.items,
     warnings: owners.length && owners.every((o) => o.status !== 'ACTIVE') ? ['모든 OWNER 계정이 정지 상태입니다. Workspace를 관리할 수 있는 사용자가 없습니다.'] : [],
@@ -139,11 +149,22 @@ const SUMMARY = {
   REACTIVATE_WORKSPACE: (m) => `Workspace '${m.name || ''}' 정지 해제${m.reason ? ` — ${m.reason}` : ''}`,
   GRANT_AI_CREDITS: (m) => `Workspace '${m.name || ''}' AI Credit +${m.amount ?? ''} — ${m.reason || ''}`,
   ADJUST_AI_CREDITS: (m) => `Workspace '${m.name || ''}' AI Credit ${m.amount ?? ''} — ${m.reason || ''}`,
+  PLATFORM_INVITE_CREATED: (m) => `고객 초대 발송 ${m.email || ''} → Workspace '${m.workspace_name || ''}'`,
+  PLATFORM_INVITE_RESENT: (m) => `고객 초대 재발송 ${m.email || ''}`,
+  PLATFORM_INVITE_REVOKED: (m) => `고객 초대 취소 ${m.email || ''}`,
+  PLATFORM_INVITE_ACCEPTED: (m) => `고객 초대 수락 ${m.email || ''} → Workspace '${m.workspace_name || ''}' 생성`,
+  WORKSPACE_INVITE_CREATED: (m) => `멤버 초대 ${m.email || ''} → '${m.workspace_name || ''}' (${m.role || ''})`,
+  WORKSPACE_INVITE_RESENT: (m) => `멤버 초대 재발송 ${m.email || ''}`,
+  WORKSPACE_INVITE_REVOKED: (m) => `멤버 초대 취소 ${m.email || ''}`,
+  WORKSPACE_INVITE_ACCEPTED: (m) => `멤버 초대 수락 ${m.email || ''} → '${m.workspace_name || ''}' (${m.role || ''})`,
+  GOOGLE_IDENTITY_LINKED: (m) => `Google 계정 연결 ${m.email || ''}`,
+  USER_CREATED: (m) => `사용자 가입 ${m.email || ''} (${m.method || ''}${m.invitation_id ? ', 초대' : ''})`,
+  WORKSPACE_CREATED_FROM_INVITE: (m) => `초대로 Workspace '${m.name || ''}' 생성`,
 };
 export const auditSummary = (a) => (SUMMARY[a.action] ? SUMMARY[a.action](a.metadata || {}) : a.action);
-export async function writeAudit(db, { adminUserId, action, targetType, targetId, metadata = {} }) {
+export async function writeAudit(db, { adminUserId, action, targetType, targetId, metadata = {}, actorKind = 'ADMIN' }) {
   const id = randomUUID();
-  await db.run('INSERT INTO admin_audit_logs (id, admin_user_id, action, target_type, target_id, metadata) VALUES (?,?,?,?,?,?)', [id, adminUserId, action, targetType, targetId, JSON.stringify(metadata)]);
+  await db.run('INSERT INTO admin_audit_logs (id, admin_user_id, action, target_type, target_id, metadata, actor_kind) VALUES (?,?,?,?,?,?,?)', [id, adminUserId, action, targetType, targetId, JSON.stringify(metadata), actorKind]);
   return id;
 }
 export async function listAudit(db, q = {}) {
@@ -151,13 +172,16 @@ export async function listAudit(db, q = {}) {
   const where = []; const params = [];
   const action = oneOf(q.action, AUDIT_ACTIONS); if (action) { where.push('a.action = ?'); params.push(action); }
   if (q.admin) { where.push('(a.admin_user_id = ? OR adm.email ILIKE ?)'); params.push(String(q.admin), like(q.admin)); }
-  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
+  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
+  // Operator actions by default; account/invitation events raised by regular users (Phase 13) are a separate view (actor_kind=USER) or `all`.
+  const ak = q.actor_kind === 'all' ? '' : oneOf(q.actor_kind, ['ADMIN', 'USER']) || 'ADMIN';
+  if (ak && !q.target_id) { where.push('a.actor_kind = ?'); params.push(ak); }
   if (q.target_id) { where.push('a.target_id = ?'); params.push(String(q.target_id)); }
   if (q.q) { where.push(`(a.target_id = ? OR a.metadata->>'email' ILIKE ? OR a.metadata->>'name' ILIKE ? OR adm.email ILIKE ?)`); params.push(String(q.q), like(q.q), like(q.q), like(q.q)); }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const from = 'FROM admin_audit_logs a LEFT JOIN users adm ON adm.id = a.admin_user_id';
   const total = (await db.get(`SELECT COUNT(*) AS n ${from} ${w}`, params)).n;
-  const rows = await db.all(`SELECT a.id, a.action, a.target_type, a.target_id, a.metadata, a.created_at, a.admin_user_id, adm.name AS admin_name, adm.email AS admin_email
+  const rows = await db.all(`SELECT a.id, a.action, a.target_type, a.target_id, a.metadata, a.created_at, a.admin_user_id, a.actor_kind, adm.name AS admin_name, adm.email AS admin_email
     ${from} ${w} ORDER BY a.created_at DESC, a.seq DESC LIMIT ? OFFSET ?`, [...params, size, offset]);
   return { items: rows.map((a) => ({ ...a, summary: auditSummary(a) })), page, size, total };
 }

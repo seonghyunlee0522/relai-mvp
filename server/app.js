@@ -25,6 +25,10 @@ import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
+import { mountAuthRoutes } from './auth/routes.js';
+import { createDirectSignupUser, createUser, touchIdentity, normEmail } from './accounts.js';
+import * as I from './invitations.js';
+import { writeAudit } from './admin.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
@@ -143,29 +147,47 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
 
   /* ---------- auth ---------- */
+  /** Shared post-authentication step (password login, Google callback): rotate session, stamp last login. */
+  const afterLogin = async (req, res, user) => {
+    if (req.sessionToken) await q.delSession.run(tokenHash(req.sessionToken));
+    await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [user.id]);
+    await startSession(res, user.id);
+  };
+  afterLogin.memberships = (uid) => q.memberships.all(uid);
+
   app.post('/api/auth/signup', wrap(async (req, res) => {
     const ip = req.ip;
     if (signupLimit.blocked(ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
     signupLimit.hit(ip);
     const { name, email, password } = parseSignup(req.body);
     if (await q.userByEmail.get(email)) return fail(res, 409, 'email_taken', '이미 가입된 이메일입니다.', { fields: { email: '이미 가입된 이메일입니다.' } });
+    // Signup through an invitation link: the server reads the invitation (never workspace/role from the browser); the e-mail must match;
+    // the new user gets NO personal workspace — the invitation decides (platform → new customer workspace as OWNER, member → membership).
+    let invite = null;
+    if (req.body?.invite_token) {
+      invite = await I.getByToken(db, String(req.body.invite_token));
+      if (!invite || invite.status !== 'PENDING') return fail(res, 410, 'invite_invalid', '초대가 유효하지 않거나 만료되었습니다. 초대한 사람에게 재발송을 요청하세요.');
+      if (invite.email !== normEmail(email)) return fail(res, 403, 'invite_email_mismatch', '초대받은 이메일로만 가입할 수 있습니다.', { fields: { email: `초대받은 이메일(${I.publicView(invite).email_masked})로 가입해 주세요.` } });
+    }
     const password_hash = await hashPassword(password);
-    const userId = randomUUID();
-    const wsId = randomUUID();
+    let userId; let accepted = null;
     try {
-      (await tx(db, async (db) => {
-        (await db.run('INSERT INTO users (id, email, name, password_hash) VALUES (?,?,?,?)', [userId, email, name, password_hash]));
-        (await db.run('INSERT INTO workspaces (id, name, owner_id) VALUES (?,?,?)', [wsId, `${name}님의 Workspace`, userId]));
-        (await db.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,?)', [wsId, userId, 'OWNER']));
-        await ensureAccount(db, wsId);   // AI credit account (dev/test starter credits only when DEV_INITIAL_AI_CREDITS is set)
-      }));
+      await tx(db, async (db) => {
+        if (invite) {
+          userId = await createUser(db, { email, name, passwordHash: password_hash });
+          const user = { id: userId, email, status: 'ACTIVE' };
+          accepted = await I.acceptInvite(db, invite, user);
+        } else ({ userId } = await createDirectSignupUser(db, { email, name, passwordHash: password_hash }));
+        await writeAudit(db, { adminUserId: userId, action: 'USER_CREATED', targetType: 'USER', targetId: userId, metadata: { email, method: 'PASSWORD', invitation_id: invite ? invite.id : null }, actorKind: 'USER' });
+      });
     } catch (e) {
-      if (String(e.message).includes('UNIQUE')) return fail(res, 409, 'email_taken', '이미 가입된 이메일입니다.', { fields: { email: '이미 가입된 이메일입니다.' } });
+      if (e instanceof I.InviteError) return fail(res, e.status, e.code, e.message, e.extra);
+      if (String(e.message).includes('UNIQUE') || e.code === '23505') return fail(res, 409, 'email_taken', '이미 가입된 이메일입니다.', { fields: { email: '이미 가입된 이메일입니다.' } });
       throw e;
     }
     await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [userId]);
     await startSession(res, userId);
-    res.status(201).json({ user: { id: userId, email, name, system_role: 'NONE' }, workspaces: await q.memberships.all(userId) });
+    res.status(201).json({ user: { id: userId, email, name, system_role: 'NONE' }, workspaces: await q.memberships.all(userId), accepted: accepted ? { type: accepted.type, workspace_id: accepted.workspaceId } : null });
   }));
 
   app.post('/api/auth/login', wrap(async (req, res) => {
@@ -176,15 +198,14 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const user = await q.userByEmail.get(email);
     // Always run a hash comparison so response time does not reveal whether the email exists.
     const ok = await verifyPassword(password, user?.password_hash ?? 'scrypt$16384$AAAAAAAAAAAAAAAAAAAAAA==$AAAA');
-    if (!user || !ok) {
+    if (!user || !user.password_hash || !ok) {
       loginLimit.hit(key);
       return fail(res, 401, 'invalid_credentials', '이메일 또는 비밀번호가 올바르지 않습니다.');
     }
     loginLimit.reset(key);
     if (user.status !== 'ACTIVE') return fail(res, 403, 'account_suspended', '정지된 계정입니다. 운영자에게 문의해 주세요.');
-    if (req.sessionToken) await q.delSession.run(tokenHash(req.sessionToken));
-    await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [user.id]);
-    await startSession(res, user.id);
+    await afterLogin(req, res, user);
+    await touchIdentity(db, 'PASSWORD', user.id);
     res.json({ user: toPublicUser(user), workspaces: await q.memberships.all(user.id) });
   }));
 
@@ -899,6 +920,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountDashboardRoute({ app, db, guard, wrap, loadProject, base });
   mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base });   // Phase 11 AI (draft/candidate endpoints + approval commits)
   mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base });   // Phase 12 integrations (Jira)
+  mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin });   // Phase 13 Google sign-in + invitations
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };
@@ -934,9 +956,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const pub = resolve(here, '../public');
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
   app.get(['/login', '/signup'], (req, res) => {
-    if (req.user) return res.redirect('/app');
+    if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect('/app');
     res.sendFile(resolve(pub, 'app/index.html'));
   });
+  app.get(/^\/invite\/[A-Za-z0-9_-]+\/?$/, (req, res) => { res.set('Cache-Control', 'no-store'); res.sendFile(resolve(pub, 'app/index.html')); });   // public invite landing (Phase 13)
   /* Admin Console page: same SPA bundle, but the server refuses it to non-operators (403) — the frontend hiding is not the control. */
   app.get(/^\/admin(\/.*)?$/, (req, res) => {
     if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);

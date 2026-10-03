@@ -13,11 +13,13 @@ document.addEventListener('click', (e) => {
 });
 window.addEventListener('popstate', render);
 export let routes = [];
-export let shellFn = null; let authFn = null;
-export function registerRoutes(list, { shell, auth }) { routes = list; shellFn = shell; authFn = auth; }
+export let shellFn = null; let authFn = null; let inviteFn = null;
+export function registerRoutes(list, { shell, auth, invite = null }) { routes = list; shellFn = shell; authFn = auth; inviteFn = invite; }
 export async function render() {
   const path = location.pathname;
   if (/^\/(login|signup)\/?$/.test(path)) return authFn(path.startsWith('/signup') ? 'signup' : 'login');
+  const inv = path.match(/^\/invite\/([A-Za-z0-9_-]+)\/?$/);   // public landing: works with or without a session
+  if (inv && inviteFn) return inviteFn(inv[1]);
   if (!state.user) {
     try { Object.assign(state, await api('GET', '/api/me')); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0]; }
     catch { return; }

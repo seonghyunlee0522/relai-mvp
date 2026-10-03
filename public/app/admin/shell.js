@@ -4,7 +4,7 @@ import { api } from '../core/api.js';
 import { $, html, raw, root } from '../core/dom.js';
 import { state } from '../core/state.js';
 
-const NAV = [['/admin', 'Dashboard', /^\/admin\/?$/], ['/admin/users', 'Users', /^\/admin\/users/], ['/admin/workspaces', 'Workspaces', /^\/admin\/workspaces/], ['/admin/subscriptions', 'Subscriptions', /^\/admin\/subscriptions/],
+const NAV = [['/admin', 'Dashboard', /^\/admin\/?$/], ['/admin/users', 'Users', /^\/admin\/users/], ['/admin/workspaces', 'Workspaces', /^\/admin\/workspaces/], ['/admin/invitations', 'Invitations', /^\/admin\/invitations/], ['/admin/email-deliveries', 'Email Delivery', /^\/admin\/email-deliveries/], ['/admin/subscriptions', 'Subscriptions', /^\/admin\/subscriptions/],
   ['/admin/payments', 'Payments', /^\/admin\/payments/], ['/admin/usage', 'Usage', /^\/admin\/usage/], ['/admin/integrations', 'Integrations', /^\/admin\/integrations/], ['/admin/audit', 'Audit', /^\/admin\/audit/]];
 
 export async function adminShell(path, view) {

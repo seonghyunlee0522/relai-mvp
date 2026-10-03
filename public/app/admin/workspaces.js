@@ -22,7 +22,7 @@ export async function adminWorkspacesPage(main = $('#main')) {
         { key: 'name', label: 'Workspace', w: 240, cls: 'ttl' },
         { key: 'owner', label: 'Owner', w: 220, render: (w) => (w.owner_email ? html`${w.owner_name} <small class="dim mono">${w.owner_email}</small>` : '<span class="dim">없음</span>') },
         { key: 'plan_label', label: 'Plan', w: 70 }, { key: 'status', label: 'Status', w: 80, render: (w) => chip(w.status) },
-        { key: 'member_count', label: 'Members', w: 90, cls: 'num', render: (w) => n(w.member_count) }, { key: 'project_count', label: 'Projects', w: 90, cls: 'num', render: (w) => n(w.project_count) },
+        { key: 'member_count', label: 'Members', w: 90, cls: 'num', render: (w) => n(w.member_count) }, { key: 'pending_invitations', label: 'Pending Invites', w: 110, cls: 'num', render: (w) => (Number(w.pending_invitations) ? html`<b>${n(w.pending_invitations)}</b>` : '<span class="dim">0</span>') }, { key: 'project_count', label: 'Projects', w: 90, cls: 'num', render: (w) => n(w.project_count) },
         { key: 'created_at', label: 'Created', w: 110, render: (w) => fmtDay(w.created_at) }, { key: 'last_activity_at', label: 'Last Activity', w: 130, render: (w) => html`<span title="${fmtD(w.last_activity_at)}">${rel(w.last_activity_at)}</span>` },
       ], data.items, { rowHref: (w) => `/admin/workspaces/${w.id}`, empty: '조건에 맞는 Workspace가 없습니다.' }))}
       ${raw(pager(data))}
@@ -52,6 +52,11 @@ export async function adminWorkspacePage(id, main = $('#main')) {
         { key: 'name', label: '이름', w: 150, cls: 'ttl' }, { key: 'email', label: '이메일', w: 240, render: (m) => html`<span class="mono">${m.email}</span>` }, { key: 'role', label: 'Role', w: 90 },
         { key: 'status', label: '계정 상태', w: 90, render: (m) => chip(m.status) }, { key: 'joined_at', label: '가입일', w: 110, render: (m) => fmtDay(m.joined_at) },
       ], d.members, { rowHref: (m) => `/admin/users/${m.id}` })))}
+      ${raw(section(`Pending Invitations (${(d.invitations || []).filter((i) => i.status === 'PENDING').length})`, table([
+        { key: 'email', label: '이메일', w: 240, render: (i) => html`<span class="mono">${i.email}</span>` }, { key: 'role', label: 'Role', w: 90 }, { key: 'invited_by_name', label: '초대한 사람', w: 160, render: (i) => html`${i.invited_by_name || '-'}` },
+        { key: 'status', label: '상태', w: 80, render: (i) => chip(i.status, { PENDING: '대기', ACCEPTED: '수락', REVOKED: '취소', EXPIRED: '만료' }[i.status]) }, { key: 'last_email_status', label: '메일', w: 90, render: (i) => (i.last_email_status ? chip(i.last_email_status === 'SENT' ? 'ok' : i.last_email_status, { SENT: '발송됨', FAILED: '발송 실패', PENDING: '발송 중' }[i.last_email_status]) : '-') },
+        { key: 'expires_at', label: '만료', w: 110, render: (i) => fmtDay(i.expires_at) },
+      ], (d.invitations || []).filter((i) => i.status !== 'ACCEPTED'), { empty: '대기 중인 멤버 초대가 없습니다.' }) + (d.origin_invitation ? html`<p class="hint">이 Workspace는 고객 초대(${d.origin_invitation.email}, ${fmtDay(d.origin_invitation.accepted_at)} 수락)로 생성되었습니다.</p>` : '<p class="hint">멤버 초대는 Workspace OWNER/ADMIN이 Settings › 멤버에서 관리합니다. 운영자는 조회만 할 수 있습니다.</p>')))}
       ${raw(ai ? section('AI Credit · 사용량 (최근 30일)', html`${raw(kpis([
           { label: '현재 Credit', value: n(ai.account.balance), sub: `누적 지급 ${n(ai.account.lifetime_granted)} · 누적 사용 ${n(ai.account.lifetime_used)}` },
           { label: '30일 AI 요청', value: n(ai.kpis.runs_30d), sub: `성공률 ${ai.kpis.success_rate_30d === null ? '-' : ai.kpis.success_rate_30d + '%'}` },
