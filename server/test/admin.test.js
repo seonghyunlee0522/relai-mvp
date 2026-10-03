@@ -48,7 +48,7 @@ test('access control: anonymous 401, MEMBER 403, workspace OWNER 403, SYSTEM_ADM
 test('users: list with aggregates (no N+1 inputs), pagination, search, status/role filters, detail with workspaces + activation + activity', async () => {
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
-  const A = await setup(client, 'a@x.com', '김가나'); await A.c('POST', `/api/workspaces/${A.w}/projects`, project());
+  const A = await setup(client, 'a@x.com', '김가나'); await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째 프로젝트' }));
   for (let i = 0; i < 6; i++) await client()('POST', '/api/auth/signup', { name: `유저${i}`, email: `u${i}@x.com`, password: 'passw0rd!' });
   const all = (await ops.c('GET', '/api/admin/users?size=100')).json;
   assert.equal(all.total, 8);                                                                  // ops + A + 6 (signup rate limit is 10/h per IP)

@@ -106,7 +106,8 @@ export async function transitionTo(db, project, toPhaseId, userId, reason = 'MAN
     (await db.run(`UPDATE project_phases SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?`, [allDone ? 'COMPLETED' : 'IN_PROGRESS', allDone ? ts : null, ts, from.id]));
   }
   (await db.run(`UPDATE project_phases SET status = 'IN_PROGRESS', started_at = COALESCE(started_at, ?), completed_at = NULL, updated_at = ? WHERE id = ?`, [ts, ts, to.id]));
-  (await db.run(`UPDATE projects SET current_phase = ?, updated_at = ? WHERE id = ?`, [to.phase_key, ts, project.id]));
+  // UI-001: a DRAFT (아직 시작 전) project becomes 진행 중 the first time it moves past 착수.
+  (await db.run(`UPDATE projects SET current_phase = ?, status = CASE WHEN status = 'DRAFT' AND ? <> 'INITIATION' THEN 'ACTIVE' ELSE status END, updated_at = ? WHERE id = ?`, [to.phase_key, to.phase_key, ts, project.id]));
   (await db.run(`INSERT INTO phase_transitions (id, project_id, from_phase_id, to_phase_id, reason, changed_by, changed_at)
     VALUES (?,?,?,?,?,?,?)`, [randomUUID(), project.id, from?.id ?? null, to.id, reason, userId, ts]));
   return { ok: true };

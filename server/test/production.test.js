@@ -72,7 +72,7 @@ test('roles: OWNER / ADMIN / MEMBER — project management, member management, o
   assert.equal((await X.c('GET', ws)).status, 404); assert.equal((await X.c('GET', `${ws}/members`)).status, 404);
   // project create: OWNER/ADMIN yes, MEMBER 403
   const po = await O.c('POST', `${ws}/projects`, PROJECT); assert.equal(po.status, 201);
-  assert.equal((await Ad.c('POST', `${ws}/projects`, PROJECT)).status, 201);
+  assert.equal((await Ad.c('POST', `${ws}/projects`, { ...PROJECT, name: 'P-admin' })).status, 201);
   const pm = await M.c('POST', `${ws}/projects`, PROJECT); assert.equal(pm.status, 403); assert.equal(pm.json.error.code, 'forbidden');
   assert.equal((await M.c('PATCH', `${ws}/projects/${po.json.project.id}`, { name: 'x' })).status, 403);
   assert.equal((await M.c('POST', `${ws}/projects/${po.json.project.id}/archive`, {})).status, 403);

@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at         timestamptz NOT NULL DEFAULT now(),
   CHECK (planned_end_date >= planned_start_date)
 );
+-- GAP-006: remember the status a project had before it was archived so 보관 해제 can restore it.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS status_before_archive TEXT;
 
 /* ---------- Project definition (Phase 12b: 착수 입력 → 프로젝트 정의) ----------
  * One row per project. List-type sections are JSON arrays in TEXT (same convention as other JSON columns here).
@@ -266,7 +268,7 @@ CREATE TABLE IF NOT EXISTS wbs_history (
   id          TEXT PRIMARY KEY,
   seq         BIGSERIAL,
   wbs_item_id TEXT NOT NULL REFERENCES wbs_items(id) ON DELETE CASCADE,
-  action_type TEXT NOT NULL,   -- CREATED | UPDATED | MOVED | ARCHIVED | DEP_ADDED | DEP_REMOVED | LINKED_REQ | UNLINKED_REQ | LINK_TYPE_CHANGED
+  action_type TEXT NOT NULL,   -- CREATED | UPDATED | MOVED | ARCHIVED | CONVERTED | DEP_ADDED | DEP_REMOVED | LINKED_REQ | UNLINKED_REQ | LINK_TYPE_CHANGED
   field_name  TEXT,
   old_value   TEXT,
   new_value   TEXT,

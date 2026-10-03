@@ -3,7 +3,7 @@ import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { SITUATION, TYPE, TYPE_DESC } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
-import { showErrors, toast } from '../shared/dialogs.js';
+import { showErrors, toast, confirmDialog } from '../shared/dialogs.js';
 
 export async function projectFormPage(id) {
   const main = $('#main');
@@ -59,7 +59,16 @@ export async function projectFormPage(id) {
     if (Object.keys(local).length) return;
     const btn = $('button[type=submit]', form); btn.disabled = true;
     try {
-      const { project } = editing ? await api('PATCH', wsApi(`/${id}`), d) : await api('POST', wsApi(), d);
+      const send = (body) => (editing ? api('PATCH', wsApi(`/${id}`), body) : api('POST', wsApi(), body));
+      let r;
+      try { r = await send(d); }
+      catch (err) {   // BUG-002: same-named project exists — let the user decide instead of creating a silent duplicate
+        if (err.code !== 'duplicate_name') throw err;
+        const go = await confirmDialog({ title: '같은 이름의 프로젝트가 이미 있습니다', body: `'${d.name.trim()}' 프로젝트가 이 Workspace에 이미 있습니다. 그래도 ${editing ? '저장' : '생성'}할까요? 목록에서 구분하려면 이름을 바꾸는 것이 좋습니다.`, confirm: editing ? '그대로 저장' : '그래도 생성' });
+        if (!go) { btn.disabled = false; showErrors(form, { name: '같은 이름의 프로젝트가 이미 있습니다.' }); return; }
+        r = await send({ ...d, allow_duplicate: true });
+      }
+      const { project } = r;
       if (editing) toast('저장했습니다.');
       else ob.invalidate();   // first project changes onboarding state (checklist, tour routes)
       navigate(editing ? `/app/projects/${project.id}` : `/app/projects/${project.id}?created=1`);

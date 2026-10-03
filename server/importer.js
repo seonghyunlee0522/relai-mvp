@@ -18,12 +18,13 @@ const CODE_RE = /^\d+(\.\d+)*$/;
 /* ---------- cell-level parsers ---------- */
 const norm = (s) => String(s).replace(/\s+/g, '').toLowerCase();
 
-function resolveEnum(column, raw) {
+export function resolveEnum(column, raw) {
   const t = raw.trim();
   if (!t) return { value: null };
   const n = norm(t); const nc = n.replace(/[_-]/g, '');
   for (const o of column.options) {
     if (norm(o.label) === n || o.value.toLowerCase() === n || o.value.toLowerCase().replace(/_/g, '') === nc) return { value: o.value };
+    if ((o.aliases || []).some((a) => norm(a) === n)) return { value: o.value };
   }
   return { error: `${column.label} 값이 올바르지 않습니다. (${column.options.map((o) => o.label).join(', ')})` };
 }
@@ -355,7 +356,7 @@ export async function runImport(db, project, wid, kind, body, userId) {
       const walk = async (pi, parentId) => {
         for (const i of kids.get(pi) || []) {
           const m = validated[i].model;
-          const id = await W.createWbs(t, project, { ...m, parent_id: parentId }, userId, { skipRenumber: true });
+          const id = await W.createWbs(t, project, { ...m, parent_id: parentId }, userId, { skipRenumber: true, skipGuard: true });   // the import validator already decided group/leaf rows
           ids.set(i, id); await walk(i, id);
         }
       };

@@ -42,7 +42,7 @@ const T = {
   async show(i) {
     this.idx = i; const step = this.steps[i]; if (!step) return this.finish();
     pill(false);
-    if (!samePage(step.route)) { this.hide(); const done = waitRender(); navigate(step.route); await done; }
+    if (!samePage(step.route)) { this.hide(); const done = waitRender(); navigate(withPid(step.route)); await done; }
     await ob.update('PRODUCT_TOUR', 'step', step.key);
     const target = await findTarget(step.target);
     this.render(step, target);
@@ -106,7 +106,12 @@ export const tour = T;
 
 /* ---------- helpers ---------- */
 const usable = (o) => (o.tour.steps || []).filter((s) => s.available !== false && !(s.key === 'CREATE_PROJECT' && o.workspace.project_count > 0));
-const samePage = (route) => location.pathname.replace(/\/$/, '') === String(route || '').replace(/\/$/, '');
+/* BUG-001: tour routes come from the server with the workspace's FIRST project id. When the user is inside a project
+ * (e.g. the one just created) the tour must stay in that project instead of navigating away. */
+const currentPid = () => (location.pathname.match(/^\/app\/projects\/(?!new)([\w-]+)/) || [])[1] || null;
+const inProject = (route) => /^\/app\/projects\/(?!new)[\w-]+/.test(route || '');
+const withPid = (route) => { const pid = currentPid(); return pid && inProject(route) ? String(route).replace(/^\/app\/projects\/[\w-]+/, `/app/projects/${pid}`) : route; };
+const samePage = (route) => location.pathname.replace(/\/$/, '') === String(withPid(route) || '').replace(/\/$/, '');
 const waitRender = () => new Promise((res) => { const done = () => { document.removeEventListener('relai:rendered', done); res(); }; document.addEventListener('relai:rendered', done); setTimeout(done, 4000); });
 async function findTarget(id) {
   if (!id) return null;

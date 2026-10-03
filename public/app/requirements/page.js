@@ -60,7 +60,7 @@ export async function requirementsPage(id) {
     activeId: () => (sel ? sel.id : null),
     onOpen: (rid) => openDetail(rid),
     onEdit: async (rid, field, value) => {
-      try { const d = await api('PATCH', rApi(`/${rid}`), { [field]: value, ...crBody() }); summary = d.summary; if (sel && sel.id === rid) sel = d.requirement; await load(); paintKpi(); if (sel && sel.id === rid) drawDetail(); }
+      try { const d = await api('PATCH', rApi(`/${rid}`), { [field]: value, ...crBody() }); summary = d.summary; if (sel && sel.id === rid) sel = d.requirement; await load(); paintKpi(); if (sel && sel.id === rid) drawDetail(); toast(`${d.requirement?.display_id || ''} 저장됨`.trim()); }
       catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); throw e; }
     },
     onSelect: (s) => bulk.update(s.size),
@@ -374,7 +374,7 @@ export async function requirementsPage(id) {
       case 'LINK_TYPE_CHANGED': return html`연결 유형 변경 <q>${lt(h.old_value)}</q> → <q>${lt(h.new_value)}</q>`;
       default: {
         const f = h.field_name; const long = f === 'title' || f === 'description';
-        return html`<b>${REQ_FIELD_LABEL[f] || f}</b> ${long ? (f === 'description' ? '변경' : html`<q>${h.old_value}</q> → <q>${h.new_value}</q>`) : html`${val(f, h.old_value)} → ${val(f, h.new_value)}`}${raw(h.source_change_request_id ? html`<small>변경 출처 <a href="/app/projects/${p.id}/changes?sel=${h.source_change_request_id}" data-link>${h.source_change_display_id || 'CR'} ${h.source_change_title || ''}</a>${h.source_change_archived_at ? ' (보관됨)' : ''}</small>` : '')}`;
+        return html`<b>${REQ_FIELD_LABEL[f] || f}</b> ${raw(long ? (f === 'description' ? '변경' : html`<q>${h.old_value}</q> → <q>${h.new_value}</q>`) : html`${val(f, h.old_value)} → ${val(f, h.new_value)}`)}${raw(h.source_change_request_id ? html`<small>변경 출처 <a href="/app/projects/${p.id}/changes?sel=${h.source_change_request_id}" data-link>${h.source_change_display_id || 'CR'} ${h.source_change_title || ''}</a>${h.source_change_archived_at ? ' (보관됨)' : ''}</small>` : '')}`;
       }
     }
   };

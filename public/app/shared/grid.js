@@ -65,10 +65,11 @@ export function createGrid(cfg) {
     const cur = ed.value ? ed.value(r) : r[ed.field];
     if (ed.type === 'select') {
       const opts = pairs(typeof ed.options === 'function' ? ed.options(r) : ed.options);
-      const sel = html`<select class="cell cell--sel ${ed.cls || ''}" data-edit="${ed.field}" aria-label="${c.label}">${raw(opts.map(([v, l]) => html`<option value="${v}" ${String(cur ?? '') === String(v) ? 'selected' : ''}>${l}</option>`).join(''))}</select>`;
+      const cls = typeof ed.cls === 'function' ? ed.cls(r) : ed.cls;
+      const sel = html`<select class="cell cell--sel ${cls || ''}" data-edit="${ed.field}" aria-label="${c.label}">${raw(opts.map(([v, l]) => html`<option value="${v}" ${String(cur ?? '') === String(v) ? 'selected' : ''}>${l}</option>`).join(''))}</select>`;
       return ed.prefix ? html`<span class="cellwrap">${raw(ed.prefix(r))}${raw(sel)}</span>` : sel;
     }
-    if (ed.type === 'date') return html`<input type="date" class="cell cell--date" data-edit="${ed.field}" value="${cur || ''}" aria-label="${c.label}">`;
+    if (ed.type === 'date') return html`<input type="date" class="cell cell--date ${(typeof ed.cls === 'function' ? ed.cls(r) : ed.cls) || ''}" data-edit="${ed.field}" value="${cur || ''}" aria-label="${c.label}">`;
     if (ed.type === 'number') return html`<input type="number" class="cell cell--num" data-edit="${ed.field}" value="${cur ?? ''}" min="${ed.min ?? 0}" max="${ed.max ?? 100}" step="1" aria-label="${c.label}">`;
     return c.render(r);
   };

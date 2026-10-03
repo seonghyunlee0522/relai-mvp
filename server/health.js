@@ -35,8 +35,9 @@ export async function healthFacts(db, project) {
       COALESCE(SUM((item_type = 'MILESTONE')::int), 0) AS milestones,
       COALESCE(SUM((item_type = 'MILESTONE' AND milestone_date IS NOT NULL)::int), 0) AS milestones_dated,
       COALESCE(SUM((item_type = 'TASK' AND ${LEAF_SQL('w')} AND status != 'COMPLETED' AND planned_end_date IS NOT NULL AND planned_end_date < ${TODAY})::int), 0) AS overdue_tasks,
-      COALESCE(SUM((item_type = 'MILESTONE' AND status != 'COMPLETED' AND milestone_date IS NOT NULL AND milestone_date < ${TODAY})::int), 0) AS overdue_milestones
-    FROM wbs_items w WHERE project_id = ? AND archived_at IS NULL`, [pid]));
+      COALESCE(SUM((item_type = 'MILESTONE' AND status != 'COMPLETED' AND milestone_date IS NOT NULL AND milestone_date < ${TODAY})::int), 0) AS overdue_milestones,
+      COALESCE(SUM((${project.planned_end_date ? '(planned_end_date > ?::date OR milestone_date > ?::date)' : 'false'})::int), 0) AS beyond_project_end
+    FROM wbs_items w WHERE project_id = ? AND archived_at IS NULL`, project.planned_end_date ? [project.planned_end_date, project.planned_end_date, pid] : [pid]));
   const req = (await db.get(`SELECT COUNT(*) AS in_scope,
       COALESCE(SUM((status = 'CONFIRMED')::int), 0) AS confirmed,
       COALESCE(SUM((status != 'CONFIRMED')::int), 0) AS unconfirmed,
@@ -76,8 +77,10 @@ export function scheduleHealth(f, R = HEALTH_RULES.schedule) {
   if (n(w.tasks_dated) === 0 && n(w.milestones_dated) === 0) return { status: STATUS.UNKNOWN, reasons: ['일정이 입력된 WBS 작업/마일스톤이 없습니다.'], hint: '일정 상태를 확인하려면 WBS 일정을 입력하세요.' };
   if (n(w.overdue_tasks)) reasons.push(`종료 예정일이 지난 WBS ${w.overdue_tasks}건`);
   if (n(w.overdue_milestones)) reasons.push(`지난 마일스톤 ${w.overdue_milestones}건`);
+  if (n(w.beyond_project_end)) reasons.push(`프로젝트 종료일을 넘는 WBS ${w.beyond_project_end}건`);   // UX-008
   if (n(w.overdue_tasks) >= R.crit_tasks_min || n(w.overdue_milestones) >= R.crit_milestones_min) return { status: STATUS.CRITICAL, reasons };
   if (n(w.overdue_tasks) >= R.warn_tasks_min || n(w.overdue_milestones) >= R.warn_milestones_min) return { status: STATUS.WARNING, reasons };
+  if (n(w.beyond_project_end)) return { status: STATUS.WARNING, reasons };
   return { status: STATUS.GOOD, reasons: [`일정이 지난 작업/마일스톤이 없습니다 (일정 입력 작업 ${w.tasks_dated}건)`] };
 }
 

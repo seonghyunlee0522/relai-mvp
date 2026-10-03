@@ -157,7 +157,7 @@ const navBadge = (key, g) => {
   switch (key) {
     case 'definition': return g.definition && g.definition.needs_review && g.definition.needs_review.length ? { n: g.definition.needs_review.length, warn: true } : null;
     case 'requirements': return g.requirements && g.requirements.total ? { n: g.requirements.total } : null;
-    case 'wbs': return g.wbs && g.wbs.total ? { n: g.wbs.total } : null;
+    case 'wbs': { const n = g.wbs ? (g.wbs.tasks ?? g.wbs.total) : 0; return n ? { n } : null; }   // UI-008: leaf tasks, same basis as the home card
     case 'changes': return g.changes && (g.changes.under_review || g.changes.approved_unimplemented) ? { n: g.changes.under_review + g.changes.approved_unimplemented, warn: true } : null;
     case 'raid': { const n = (g.issues ? g.issues.active : 0) + (g.risks ? g.risks.high_or_critical : 0); return n ? { n, crit: Boolean((g.issues && g.issues.critical) || (g.risks && g.risks.critical)) } : null; }
     case 'tests': return g.tests && g.tests.last_fail ? { n: g.tests.last_fail, crit: true } : g.acceptances && g.acceptances.in_progress ? { n: g.acceptances.in_progress } : null;

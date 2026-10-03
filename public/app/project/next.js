@@ -115,12 +115,13 @@ const lifecycle = (g, p) => {
 };
 
 export async function nextPage(id, main = $('#main')) {
+  // BUG-001: strip ?created=1 / ?move=next right away (not after the awaits), so a navigation made meanwhile is never overwritten.
+  { const qp0 = new URLSearchParams(location.search); nextPage._flag = qp0.get('created') === '1' ? `created:${id}` : qp0.get('move') === 'next' ? `move:${id}` : null; if (nextPage._flag) history.replaceState(null, '', `/app/projects/${id}`); }
   const g = await api('GET', wsApi(`/${id}`));
   const p = g.project;
   document.title = `What’s Next? — ${p.name} — RELAI`;
   const archived = p.status === 'ARCHIVED';
-  const qp = new URLSearchParams(location.search); const created = qp.get('created') === '1'; const moveNext = qp.get('move') === 'next';
-  if (created || moveNext) history.replaceState(null, '', `/app/projects/${id}`);
+  const created = nextPage._flag === `created:${id}`; const moveNext = nextPage._flag === `move:${id}`; nextPage._flag = null;
   await ob.get();
   main.innerHTML = html`<div class="page page--wide page--flow nx">
     ${raw(projectHead(p, g, { tab: 'next' }))}
