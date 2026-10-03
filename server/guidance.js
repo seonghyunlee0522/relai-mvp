@@ -96,6 +96,6 @@ export function projectGuidance(ctx) {
       return out('LAUNCH_DONE', '프로젝트를 마무리하세요', '오픈 단계의 할 일을 기록하고 종료 사항을 정리합니다.', '종료 정리(결과 공유, 운영 이관)를 남겨야 다음 프로젝트에서 재사용할 수 있습니다.', act('오픈 단계 기록', u('/phases/LAUNCH')), null, null);
     }
     default:
-      return out('UNKNOWN', '프로젝트 홈', '', '', act('프로젝트 홈', u('')), null, null);
+      return out('UNKNOWN', 'What’s Next?', '', '', act('What’s Next?', u('')), null, null);
   }
 }

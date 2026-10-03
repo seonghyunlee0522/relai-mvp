@@ -52,7 +52,7 @@ export function raidStepInfo(stepKey, is, rs, pid) {
 }
 /** INITIATION steps are the five sections of 프로젝트 정의; `def` (GET /definition) is optional — without it the CTA still points at the section. */
 export function initStepInfo(stepKey, def, pid) {
-  const go = (label = '프로젝트 정의에서 작성') => ({ label, href: `/app/projects/${pid}/definition#sec-${stepKey}` });
+  const go = (label = '프로젝트 정의로 이동') => ({ label, href: `/app/projects/${pid}/definition#sec-${stepKey}` });
   const sec = def && def.sections ? def.sections.find((x) => x.key === stepKey) : null;
   if (!sec) return { text: '프로젝트 정의 화면에서 작성합니다.', ok: false, cta: go() };
   if (sec.status === 'COMPLETED' && sec.changed_after_completion) return { text: '완료 후 내용이 수정되었습니다. 다시 확인해 주세요.', ok: false, cta: go('다시 확인') };
@@ -144,7 +144,8 @@ export const phaseStrip = (g, pid) => html`<nav class="flow" aria-label="프로�
 
 /** Project Workspace header: one 44px row (menu · name · status · phase stepper · progress · creator · KPIs · actions) + one tab row. */
 const NAV_TABS = [
-  { key: 'overview', label: '프로젝트 홈', path: '' },
+  { key: 'next', label: 'What’s Next?', path: '' },
+  { key: 'overview', label: 'Overview', path: '/overview' },
   { key: 'definition', label: '프로젝트 정의', path: '/definition' },
   { key: 'requirements', label: 'Requirements', path: '/requirements' },
   { key: 'wbs', label: 'WBS', path: '/wbs' },
@@ -183,7 +184,7 @@ export const projectHead = (p, g, { tab = 'overview' } = {}) => {
       <span class="wsh__prog" title="Guided 진행률"><span class="pbar"><i style="width:${prog}%"></i></span><b>${prog}%</b></span>
       <span class="wsh__owner" data-owner-id="${p.created_by || ''}" title="프로젝트 등록자"></span>
       <span class="wsh__sp"></span>
-      <a class="wsh__kpi" href="/app/projects/${p.id}" data-link title="프로젝트 홈에서 자세히 보기"><span>WBS <b>${pv(k.wbs_progress)}</b></span><span>Req.Cov <b>${pv(k.requirement_coverage)}</b></span><span>Test.Cov <b>${pv(k.test_coverage)}</b></span></a>
+      <a class="wsh__kpi" href="/app/projects/${p.id}/overview" data-link title="Overview에서 자세히 보기"><span>WBS <b>${pv(k.wbs_progress)}</b></span><span>Req.Cov <b>${pv(k.requirement_coverage)}</b></span><span>Test.Cov <b>${pv(k.test_coverage)}</b></span></a>
       <button type="button" class="btn btn--secondary btn--sm wsh__ask" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조">RELAI에게 물어보기</button>
       ${raw(headerActions(p))}${raw(helpButton())}
     </div>

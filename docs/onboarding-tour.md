@@ -24,3 +24,8 @@
 
 ## Tests
 `server/test/onboarding-tour.test.js`; Playwright `/tmp/onboard14-flow.cjs` (§58 1–31).
+
+## Project landing split (What’s Next? / Overview)
+- `/app/projects/:id` → **What’s Next?** (`public/app/project/next.js`): RELAI Guide (완료한 일 → 현재 단계 → 다음 할 일, one primary CTA "[탭]로 이동 →", collapsible but the next action stays visible), current phase progress + checklist (✓ 완료 / ● 진행 중 / ○ 미완료 / ! 재확인), compact lifecycle. No dashboard cards.
+- `/app/projects/:id/overview` → **Overview** (`overview.js`): project progress + lifecycle → attention / issue / risk → execution · requirements · tests → health → upcoming · activity.
+- The `프로젝트 홈` tab is gone; existing deep links (`/app/projects/:id`, `/definition`, `/phases/:key`, `?created=1`, `?move=next`) keep working. Guidance still comes from `server/guidance.js` (no backend changes).

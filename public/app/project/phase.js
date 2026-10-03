@@ -23,7 +23,7 @@ export async function phasePage(id, phaseKey) {
     const nextStep = open[0];
     main.innerHTML = html`<div class="page page--wide page--flow">
       ${raw(projectHead(p, g, { tab: 'phase' }))}
-      <p class="phase__crumb"><a class="link" href="/app/projects/${p.id}" data-link>← 프로젝트 홈</a><span class="dim">단계별 할 일의 완료 처리와 메모는 여기에서 관리합니다. 실제 작업은 각 업무 탭에서 합니다.</span></p>
+      <p class="phase__crumb"><a class="link" href="/app/projects/${p.id}" data-link>← What’s Next?</a><span class="dim">단계별 할 일의 완료 처리와 메모는 여기에서 관리합니다. 실제 작업은 각 업무 탭에서 합니다.</span></p>
       ${raw(phaseStrip(g, p.id))}
       ${raw(ph ? phaseIntro(ph.phase_key, ph.name) : '')}
 

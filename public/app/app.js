@@ -6,6 +6,7 @@ import { invitePage } from './invite.js';
 import { homePage, projectsPage } from './project/list.js';
 import { projectFormPage } from './project/form.js';
 import { overviewPage } from './project/overview.js';
+import { nextPage } from './project/next.js';
 import { phasePage } from './project/phase.js';
 import { definitionPage } from './project/definition.js';
 import { reportPage } from './project/report.js';
@@ -29,7 +30,8 @@ registerRoutes([
   [/^\/app\/?$/, homePage],
   [/^\/app\/projects\/?$/, projectsPage],
   [/^\/app\/projects\/new\/?$/, projectFormPage],
-  [/^\/app\/projects\/([\w-]+)\/?$/, overviewPage],
+  [/^\/app\/projects\/([\w-]+)\/?$/, nextPage],            // landing = What’s Next? (existing deep links keep working)
+  [/^\/app\/projects\/([\w-]+)\/overview\/?$/, overviewPage],
   [/^\/app\/projects\/([\w-]+)\/edit\/?$/, projectFormPage],
   [/^\/app\/projects\/([\w-]+)\/definition\/?$/, definitionPage],
   [/^\/app\/projects\/([\w-]+)\/phases\/([A-Z_]+)\/?$/, phasePage],

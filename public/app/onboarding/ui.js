@@ -43,7 +43,7 @@ export function bindChecklist(root) {
 export const COACH = {
   REQ_TRACE_INTRO: { title: '요구사항 ↔ WBS 연결', body: '요구사항을 열어 WBS 작업을 연결하면 어떤 작업이 어떤 요구사항을 수행하는지(Delivery Trace) 추적할 수 있습니다. 확정된 요구사항은 모두 WBS와 연결하는 것이 목표입니다.' },
   CHANGE_REQUEST_INTRO: { title: '변경 요청', body: '확정된 요구사항을 바꾸거나 추가하는 요청은 변경 요청으로 기록하고, 영향받는 요구사항·WBS와 일정 영향을 함께 관리합니다. 승인된 변경은 WBS에 반영한 뒤 "반영 완료"로 닫습니다.' },
-  ISSUE_RISK_INTRO: { title: 'Issue와 Risk', body: 'Issue는 이미 발생해 진행을 막는 문제, Risk는 아직 발생하지 않았지만 영향을 줄 수 있는 위험입니다. 담당자·기한·심각도를 정해 두면 프로젝트 홈의 확인 필요 목록에 자동으로 올라옵니다.' },
+  ISSUE_RISK_INTRO: { title: 'Issue와 Risk', body: 'Issue는 이미 발생해 진행을 막는 문제, Risk는 아직 발생하지 않았지만 영향을 줄 수 있는 위험입니다. 담당자·기한·심각도를 정해 두면 Overview의 확인 필요 목록에 자동으로 올라옵니다.' },
   TESTING_INTRO: { title: '테스트', body: '요구사항을 기준으로 테스트 항목을 만들고 실행 결과(Pass/Fail/Blocked)를 기록합니다. Fail은 바로 Issue로 등록할 수 있고, Coverage 탭에서 테스트가 없는 요구사항을 확인합니다.' },
   ACCEPTANCE_INTRO: { title: '검수', body: '검수는 고객이 결과물을 확인하는 절차입니다. 대상 요구사항과 테스트를 묶어 검수를 요청하고 승인·반려·보완 결과를 기록하세요.' },
   JIRA_OPTIONAL_INTRO: { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira Issue를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 프로젝트를 계속 진행할 수 있습니다.' },
@@ -85,7 +85,8 @@ const SCREEN_HELP = [
   [/^\/app\/projects\/[\w-]+\/issues/, 'Issues & Risks', '발생한 문제(Issue)와 잠재 위험(Risk)을 담당자·기한과 함께 관리합니다.'],
   [/^\/app\/projects\/[\w-]+\/tests/, 'Tests & Acceptance', '요구사항 기준으로 테스트를 만들고 실행 결과를 기록하며, 고객 검수를 요청·확정합니다.'],
   [/^\/app\/projects\/[\w-]+\/phases/, '단계 기록', '이 단계의 할 일을 완료 처리하고 메모를 남깁니다. 현재 단계 변경도 여기에서 확인 후 진행합니다.'],
-  [/^\/app\/projects\/[\w-]+/, '프로젝트 홈', '현재 단계, 지금 해야 할 일과 그 이유, 실행 진척률, 확인이 필요한 항목을 한 화면에서 봅니다.'],
+  [/^\/app\/projects\/[\w-]+\/overview/, 'Overview', '전체 진행률, Lifecycle, 확인 필요 항목, 실행·요구사항·테스트 현황, 7일 내 일정, 최근 Activity를 한 화면에서 봅니다.'],
+  [/^\/app\/projects\/[\w-]+/, 'What’s Next?', 'RELAI Guide가 완료한 일 → 현재 단계 → 다음 할 일을 안내합니다. 각 항목의 [탭]로 이동 → 을 눌러 실제 업무 화면에서 작업하고 완료 처리하세요.'],
   [/^\/app\/settings/, 'Settings', 'Workspace 이름, 멤버와 역할, 초대 대기, Jira 연결(선택)을 관리합니다.'],
   [/^\/app\/projects/, 'Projects', '이 Workspace의 모든 프로젝트 목록입니다. 프로젝트를 열면 현재 단계와 다음 할 일을 안내합니다.'],
 ];
@@ -114,7 +115,7 @@ function openMenu(btn) {
   });
 }
 export function screenHelp() {
-  const hit = SCREEN_HELP.find(([re]) => re.test(location.pathname)) || [null, '도움말', 'RELAI는 착수 → 요구사항 → 일정 → 실행 → 테스트 → 검수 → 오픈 순서로 프로젝트를 안내합니다. 각 화면 상단의 안내와 프로젝트 홈의 "지금 해야 할 일"을 따라가세요.'];
+  const hit = SCREEN_HELP.find(([re]) => re.test(location.pathname)) || [null, '도움말', 'RELAI는 착수 → 요구사항 → 일정 → 실행 → 테스트 → 검수 → 오픈 순서로 프로젝트를 안내합니다. 각 화면 상단의 안내와 What’s Next?의 RELAI Guide를 따라가세요.'];
   const el = document.createElement('div'); el.className = 'scrim';
   el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="shT"><h3 id="shT">${hit[1]}</h3><div class="dialog__b">${hit[2]}</div>
     <div class="actions"><button type="button" class="btn btn--secondary" data-v="tour">전체 가이드 보기</button><button type="button" class="btn btn--primary" data-v="ok">확인</button></div></div>`;

@@ -27,7 +27,7 @@ export const TOUR_STEPS = {
   OWNER: [
     { key: 'HOME', route: '/app', target: 'nav-home', title: 'Home — 지금 해야 할 일', body: 'Home에서는 참여 중인 프로젝트와 각 프로젝트의 다음 할 일을 한눈에 봅니다.', placement: 'right', fallback: 'center' },
     { key: 'CREATE_PROJECT', route: '/app', target: 'create-project', title: '첫 프로젝트 만들기', body: '프로젝트를 시작하려면 먼저 새 프로젝트를 만들어 주세요. 이름, 유형, 기간만 입력하면 됩니다.', placement: 'bottom', cta: { label: '프로젝트 만들기', href: '/app/projects/new' }, pauseUntilProject: true },
-    { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: '프로젝트 홈 — 지금 할 일', body: 'RELAI가 프로젝트 상태를 읽고 지금 해야 할 일, 이유, 다음 단계를 안내합니다. 막히면 여기로 돌아오세요.', placement: 'bottom', needsProject: true },
+    { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: 'What’s Next? — 지금 할 일', body: 'RELAI Guide가 완료한 일 → 현재 단계 → 다음 할 일을 안내하고 실제 업무 탭으로 보냅니다. 막히면 여기로 돌아오세요. 전체 현황은 Overview 탭에서 봅니다.', placement: 'bottom', needsProject: true },
     { key: 'DEFINITION', route: '/app/projects/:pid', target: 'tab-definition', title: '프로젝트 정의', body: '착수 단계에서는 목표·범위·이해관계자·일정·운영 방식 5개 항목을 정리합니다. 이것이 이후 모든 판단의 기준입니다.', placement: 'bottom', needsProject: true },
     { key: 'REQUIREMENTS', route: '/app/projects/:pid', target: 'tab-requirements', title: '요구사항', body: '요구사항은 프로젝트 범위와 검수 기준입니다. 직접 입력, Excel, AI 추출로 등록할 수 있습니다.', placement: 'bottom', needsProject: true },
     { key: 'WBS', route: '/app/projects/:pid', target: 'tab-wbs', title: 'WBS — 실행 계획', body: '요구사항을 실제 작업 단위로 나누고 담당자와 일정을 정합니다. Jira를 쓴다면 작업과 Jira Issue를 연결할 수 있습니다(선택).', placement: 'bottom', needsProject: true },
@@ -36,7 +36,7 @@ export const TOUR_STEPS = {
   ],
   MEMBER: [
     { key: 'HOME', route: '/app', target: 'nav-home', title: 'Home — 참여 중인 프로젝트', body: 'Home에서 참여 중인 프로젝트와 현재 단계를 확인하고, 프로젝트를 열어 담당 업무를 봅니다.', placement: 'right', fallback: 'center' },
-    { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: '프로젝트 홈', body: '현재 단계와 지금 할 일, 확인이 필요한 항목을 봅니다.', placement: 'bottom', needsProject: true },
+    { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: 'What’s Next?', body: '현재 단계와 지금 할 일을 봅니다. 전체 현황과 확인 필요 항목은 Overview 탭에 있습니다.', placement: 'bottom', needsProject: true },
     { key: 'WBS', route: '/app/projects/:pid', target: 'tab-wbs', title: 'WBS — 내 업무', body: 'WBS에서 담당자 필터로 내 작업을 보고 진행률과 상태를 갱신합니다.', placement: 'bottom', needsProject: true },
     { key: 'TESTS', route: '/app/projects/:pid', target: 'tab-tests', title: 'Tests & Acceptance', body: '테스트 실행 결과와 검수 결과를 기록합니다.', placement: 'bottom', needsProject: true },
   ],
