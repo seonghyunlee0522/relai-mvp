@@ -37,10 +37,10 @@ async function checkLimits(db, cfg, { wid, userId }) {
  * build() → { system, user, schemaName?, inputSummary, inputChars }  (prompt + metadata; runs before any credit is touched)
  * postValidate(data) → { data, warnings }  (feature-level grounding checks; throw AiError('AI_INVALID_OUTPUT') to reject)
  */
-export async function runAiFeature(db, { wid, projectId = null, userId, feature, build, postValidate = async (d) => ({ data: d, warnings: [] }) }) {
+export async function runAiFeature(db, { wid, projectId = null, userId, feature, schema: schemaOverride = null, build, postValidate = async (d) => ({ data: d, warnings: [] }) }) {
   const cfg = aiConfig();
   if (!cfg.enabled) throw new AiError('AI_DISABLED', 'AI 기능을 사용할 수 없습니다. 관리자에게 문의하세요.', { status: 503 });
-  const schema = SCHEMAS[feature]; if (!schema) throw new AiError('AI_BAD_FEATURE', '알 수 없는 AI 기능입니다.', { status: 400 });
+  const schema = schemaOverride || SCHEMAS[feature]; if (!schema) throw new AiError('AI_BAD_FEATURE', '알 수 없는 AI 기능입니다.', { status: 400 });
   const prompt = await build();
   if (prompt.inputChars > cfg.maxInputChars) throw new AiError('AI_INPUT_TOO_LARGE', `입력이 너무 깁니다. 최대 ${cfg.maxInputChars.toLocaleString('en-US')}자까지 분석할 수 있습니다.`, { status: 400, max: cfg.maxInputChars });
   await checkLimits(db, cfg, { wid, userId });

@@ -148,7 +148,7 @@ export async function generateWbs(db, { project, wid, userId, requirementIds }) 
 }
 
 /** Approve: create the selected tree through W.createWbs (real codes/sequence) and link requirements through T.addLink. */
-export async function commitWbs(db, { project, userId, items }) {
+export async function commitWbs(db, { project, userId, items, source = null }) {
   if (!Array.isArray(items) || !items.length) throw new ValidationError({ items: '생성할 항목을 선택해 주세요.' });
   if (items.length > 80) throw new ValidationError({ items: '한 번에 최대 80건까지 생성할 수 있습니다.' });
   const temps = new Set(items.map((i) => str(i.temp_id)));
@@ -169,7 +169,7 @@ export async function commitWbs(db, { project, userId, items }) {
       if (it.parent_temp_id && !idOf.has(it.parent_temp_id)) { pending.push(it); continue; }
       const parentId = it.parent_temp_id ? idOf.get(it.parent_temp_id) : it.parent_id;
       const id = await W.createWbs(t, project, { ...it, parent_id: parentId }, userId, { skipRenumber: true });
-      await addWbsHistory(t, id, 'AI_GENERATED', { field: 'source', newValue: 'AI WBS 초안에서 생성' }, userId);
+      await addWbsHistory(t, id, 'AI_GENERATED', { field: 'source', newValue: source && source.kind === 'AI_PROJECT_WBS_PLANNER' ? `AI Project WBS Planner에서 생성 (plan_id=${source.plan_id})` : 'AI WBS 초안에서 생성' }, userId);
       idOf.set(it.temp_id, id); created.push({ temp_id: it.temp_id, id, requirement_ids: it.requirement_ids });
     }
     await W.renumber(t, project.id);   // real wbs_code / sequence come from the existing numbering, never from the AI

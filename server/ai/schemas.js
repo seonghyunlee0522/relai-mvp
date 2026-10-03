@@ -16,6 +16,28 @@ const en = (values) => ({ type: 'string', enum: values });
 const arr = (items, maxItems) => ({ type: 'array', items, ...(maxItems ? { maxItems } : {}) });
 const obj = (properties) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 
+/* ---------- Phase 15: AI Project WBS Planner ---------- */
+export const PLAN_AREAS = ['PROJECT_MANAGEMENT', 'ANALYSIS_DESIGN', 'FUNCTIONAL_DEVELOPMENT', 'NON_FUNCTIONAL', 'INTERFACE', 'DATA_MIGRATION', 'INFRASTRUCTURE', 'SECURITY', 'ENVIRONMENT', 'TESTING', 'UAT', 'DEPLOYMENT', 'CUTOVER', 'TRAINING', 'DOCUMENTATION', 'OPERATION_HANDOVER', 'STABILIZATION', 'OTHER'];
+export const AREA_STATUS = ['REQUIRED', 'POSSIBLE', 'NOT_NEEDED', 'UNKNOWN'];
+export const AREA_SOURCE = ['REQUIREMENT', 'PROJECT_DEFINITION', 'PROJECT_TYPE', 'USER_ANSWER', 'INFERRED'];
+export const QUESTION_TYPES = ['SINGLE', 'MULTI', 'TEXT', 'BOOLEAN'];
+export const PLAN_ITEM_TYPES = ['TASK', 'MILESTONE'];
+const planItem = () => obj({
+  temp_id: str(20), parent_temp_id: nstr(20), item_type: en(PLAN_ITEM_TYPES), title: str(200), description: str(2000), project_area: str(40),   // validated server-side (unknown → OTHER)
+  planned_duration_days: { type: ['integer', 'null'], minimum: 0, maximum: 365 }, related_requirement_ids: arr(str(20), 20),
+});
+export const PLANNER_SCHEMAS = {
+  wbs_planning_questions: obj({
+    areas: arr(obj({ area: str(40), status: en(AREA_STATUS), source: en(AREA_SOURCE), reason: str(300) }), 30),
+    questions: arr(obj({
+      id: str(40), area: str(40), question: str(200), help_text: nstr(300), type: en(QUESTION_TYPES), required: { type: 'boolean' },
+      options: arr(obj({ id: str(40), label: str(80), followups: arr(obj({ id: str(40), label: str(80) }), 12) }), 12), allow_other: { type: 'boolean' }, reason: str(300),
+    }), 20),
+  }),
+  project_wbs_draft: obj({ items: arr(planItem(), 100), notes: arr(str(300), 8) }),
+  wbs_plan_fix: obj({ items: arr(planItem(), 30), notes: arr(str(300), 5) }),
+};
+
 export const SCHEMAS = {
   REQUIREMENT_EXTRACTION: obj({
     candidates: arr(obj({
@@ -43,6 +65,8 @@ export const SCHEMAS = {
     references: arr(obj({ type: en(REF_TYPES), display_id: str(30) }), 20),
     warnings: arr(str(300), 5),
   }),
+  WBS_PLAN_QUESTIONS: PLANNER_SCHEMAS.wbs_planning_questions,
+  WBS_PLAN_FIX: PLANNER_SCHEMAS.wbs_plan_fix,
 };
 
 /** Minimal JSON-schema validator for the subset above. Returns [] when valid, else ["path: problem", …] (capped). */

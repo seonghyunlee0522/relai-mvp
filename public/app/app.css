@@ -1921,3 +1921,37 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .ovact__list time{grid-row:span 2;color:var(--muted);font-size:12px}.ovact__w{color:var(--text-2);font-weight:600}.ovact__t{color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ovact__list small{grid-column:2/4;color:var(--muted)}
 @media (max-width:1100px){.ov__row3{grid-template-columns:1fr}.ov__row4{grid-template-columns:1fr}.nx__grid{grid-template-columns:1fr}}
 @media (max-width:900px){.rg__flow{grid-template-columns:1fr}.rg__arrow{display:none}.ovp__top{grid-template-columns:1fr}.np__list li{grid-template-columns:20px minmax(0,1fr);grid-auto-rows:auto}.np__lab{grid-column:2}.np__go{grid-column:2}.rg__cur small{padding-left:0}}
+
+/* ---- Phase 15: AI Project WBS Planner wizard ---- */
+.dialog.dialog--ai-xl{max-width:min(1180px,97vw)}
+.wpz__steps{list-style:none;margin:0 0 14px;padding:0;display:flex;gap:6px;flex-wrap:wrap}
+.wpz__steps li{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);padding:4px 10px;border-radius:999px;border:1px solid var(--border-soft);background:#fff}
+.wpz__steps li i{width:18px;height:18px;border-radius:50%;background:var(--border-soft);font-style:normal;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.wpz__steps li.is-cur{color:var(--navy);border-color:var(--blue);font-weight:700}.wpz__steps li.is-cur i{background:var(--blue);color:#fff}
+.wpz__steps li.is-done{color:#0E7A4F}.wpz__steps li.is-done i{background:#E8F7F0;color:#0E7A4F}
+.wpz__known{font-size:12.5px;color:var(--text-2);margin:0 0 12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.wpz__qs{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px}
+.wpz__q{border:1px solid var(--border);border-radius:10px;padding:12px 14px 10px;margin:0;min-width:0}
+.wpz__q legend{font-weight:600;color:var(--navy);font-size:14px;padding:0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wpz__opts{display:flex;flex-direction:column;gap:4px;margin:6px 0}
+.wpz__optw{display:flex;flex-direction:column}
+.wpz__opt{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:4px 6px;border-radius:6px;cursor:pointer}.wpz__opt:hover{background:var(--bg-alt)}.wpz__opt input{margin:0}
+.wpz__opt--sm{font-size:12.5px;padding:2px 6px}
+.wpz__fu{display:flex;flex-wrap:wrap;gap:0 8px;padding:2px 0 6px 26px}
+.wpz__why{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.wpz__none{background:var(--bg-tint);border:1px solid var(--border-blue);border-radius:10px;padding:16px}.wpz__none p{margin:4px 0 0;color:var(--text-2);font-size:13.5px}
+.wpz__legend{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.wtree__r.is-fix{background:#FBFFF9}
+.wtree__dur{width:58px}.wtree__link{width:auto;font-size:12px}
+.wpz__cov{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:14px;margin-bottom:12px}
+.wpz__covc{border:1px solid var(--border);border-radius:10px;padding:12px 14px}.wpz__covc h4{margin:0 0 10px;font-size:13.5px;color:var(--navy)}
+.wpz__big{display:flex;flex-direction:column;gap:4px}.wpz__big b{font-size:28px;color:var(--navy)}.wpz__big span{font-size:13px;color:var(--text-2)}
+.wpz__miss{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px}.wpz__miss li{color:#B42318}.wpz__miss .mono{margin-right:6px}
+.wpz__ok{color:#0E7A4F;font-size:13px;margin:8px 0 0}
+.wpz__areas{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
+.wpz__areas li{display:grid;grid-template-columns:22px 1fr;gap:0 8px;align-items:center;padding:6px 8px;border-radius:8px;background:var(--bg-alt);font-size:13px}
+.wpz__areas li i{grid-row:span 2;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-weight:800;font-size:12px;background:var(--border-soft);color:var(--muted)}
+.wpz__areas li small{color:var(--muted);font-size:11.5px}
+.wpz__areas li.is-ok i{background:#E8F7F0;color:#0E7A4F}.wpz__areas li.is-warn i{background:#FEF6E7;color:#B45309}.wpz__areas li.is-crit i{background:#FEF3F4;color:#B42318}.wpz__areas li.is-crit span{color:#B42318;font-weight:600}
+.wpz__final{display:flex;gap:18px;flex-wrap:wrap;align-items:center;background:var(--bg-tint);border:1px solid var(--border-blue);border-radius:10px;padding:10px 14px;font-size:13.5px;color:var(--text-2)}.wpz__final>b{color:var(--navy)}.wpz__final span b{color:var(--navy)}
+@media (max-width:720px){.wpz__cov{grid-template-columns:1fr}.wpz__qs{grid-template-columns:1fr}.wtree__parent{max-width:120px}}

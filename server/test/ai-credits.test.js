@@ -22,7 +22,7 @@ test('account: created at signup with DEV_INITIAL_AI_CREDITS through a PLAN_GRAN
   assert.equal(led.length, 1); assert.equal(led[0].type, 'PLAN_GRANT'); assert.equal(led[0].amount, 100); assert.equal(led[0].balance_after, 100); assert.ok(led[0].reason.includes('DEV_INITIAL_AI_CREDITS'));
   const s = await status(A);
   assert.deepEqual(s.credits, { balance: 100, reserved: 0, available: 100, lifetime_granted: 100, lifetime_used: 0 });
-  assert.deepEqual(s.costs, { REQUIREMENT_EXTRACTION: 10, WBS_GENERATION: 15, CHANGE_IMPACT: 8, PROJECT_QA: 3 });
+  assert.deepEqual(s.costs, { REQUIREMENT_EXTRACTION: 10, WBS_GENERATION: 15, CHANGE_IMPACT: 8, PROJECT_QA: 3, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0 });
   server.close();
 });
 
@@ -113,7 +113,7 @@ test('admin: SYSTEM_ADMIN grants/adjusts credits with a required reason → ledg
   await A.c('POST', `${A.purl}/ai/ask`, { question: '사용량 테스트' });
   const wu = (await OPS.c('GET', `/api/admin/workspaces/${A.w}/ai`)).json;
   assert.equal(wu.account.balance, 497); assert.equal(wu.kpis.runs_30d, 1); assert.equal(wu.kpis.success_rate_30d, 100); assert.equal(wu.kpis.input_tokens_30d, 1000);
-  assert.equal(wu.features.find((f) => f.feature === 'PROJECT_QA').credits, 3); assert.equal(wu.features.length, 4); assert.equal(wu.ledger.length, 4); assert.equal(wu.runs.length, 1); assert.equal(wu.users[0].runs, 1);
+  assert.equal(wu.features.find((f) => f.feature === 'PROJECT_QA').credits, 3); assert.equal(wu.features.length, 6); assert.equal(wu.ledger.length, 4); assert.equal(wu.runs.length, 1); assert.equal(wu.users[0].runs, 1);
   const ov = (await OPS.c('GET', '/api/admin/ai/usage')).json;
   assert.equal(ov.kpis.runs_today, 1); assert.equal(ov.kpis.credits_30d, 3); assert.equal(ov.workspaces[0].id, A.w); assert.equal(ov.config.enabled, true);
   assert.ok(!JSON.stringify(ov).includes('사용량 테스트'), 'admin usage never carries prompt text');

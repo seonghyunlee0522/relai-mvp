@@ -78,7 +78,7 @@ export const usageBars = (usage) => (!usage ? '' : html`<div class="ause">${raw(
 export const errorBlock = (e) => html`<div class="aempty aempty--err">${e.message}</div>`;
 
 /* ---- AI usage (Phase 11) ---- */
-export const AI_FEATURE = { REQUIREMENT_EXTRACTION: '요구사항 추출', WBS_GENERATION: 'WBS 초안', CHANGE_IMPACT: '변경 영향 분석', PROJECT_QA: '프로젝트 Q&A' };
+export const AI_FEATURE = { REQUIREMENT_EXTRACTION: '요구사항 추출', WBS_GENERATION: 'WBS 초안 (Planner 포함)', CHANGE_IMPACT: '변경 영향 분석', PROJECT_QA: '프로젝트 Q&A', WBS_PLAN_QUESTIONS: 'WBS Planner 질문 (무과금)', WBS_PLAN_FIX: 'WBS Planner 보완 (무과금)' };
 export const usd = (v) => (v === null || v === undefined ? '-' : `$${Number(v).toFixed(4)}`);
 /** Per-feature metering table shared by the dashboard and the workspace page. */
 export const aiFeatureTable = (features) => table([

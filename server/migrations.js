@@ -36,6 +36,7 @@ export const migrations = [
       WHERE u.password_hash IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.provider = 'PASSWORD' AND i.provider_subject = u.id)`);
   } },
   { version: 19, name: 'onboarding & guided activation (Phase 14): user_onboarding, user_feature_guides', up() {} },
+  { version: 20, name: 'AI Project WBS Planner (Phase 15): ai_wbs_plans', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

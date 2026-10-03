@@ -21,7 +21,7 @@ import { activityPane, bindActivity, bindDtabs, dtabs, mergeActivity } from '../
 import { openImport } from '../shared/importer.js';
 import { choiceDialog, confirmDialog, pickerDialog, toast, toastAction } from '../shared/dialogs.js';
 import { aiStatus } from '../shared/ai.js';
-import { openWbsDraftDialog } from '../ai/wbs-draft.js';
+import { openWbsPlanner } from '../ai/wbs-planner.js';
 import { bindJiraPane, execChip, jiraPaneHtml } from '../shared/jira.js';
 
 const GHOST = '__new';
@@ -267,7 +267,7 @@ export async function wbsPage(id) {
     const rows = visible(); const v = view(); const f = quick(); const q = params();
     g.wbs = summary;
     const body = !items.length && !ghost ? html`<div class="wempty" data-tour-id="wbs-empty"><h2>아직 실행 작업이 없습니다.</h2><p>요구사항을 실제 작업 단위로 나누어 계획하세요. 항목을 추가하면 번호(1, 1.1, 1.1.1)는 자동으로 매겨지고, 하위 작업을 넣으면 일정과 진행률이 자동으로 합산됩니다.${g.requirements && g.requirements.total ? '' : ' 요구사항이 아직 없다면 먼저 요구사항을 등록하는 것이 좋습니다.'}</p>
-        ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="add2">WBS 추가</button><button class="btn btn--secondary" id="xl-import2">Excel Import</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--ai" id="ai-wbs2">AI WBS 생성</button>' : '')}</div>`)}</div>`
+        ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="add2">WBS 추가</button><button class="btn btn--secondary" id="xl-import2">Excel Import</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--ai" id="ai-wbs2">AI로 WBS 만들기</button>' : '<button class="btn btn--secondary btn--ai" id="ai-wbs2" disabled title="AI 기능이 설정되지 않았습니다.">AI로 WBS 만들기</button>')}</div>`)}${raw(ai.enabled ? '' : '<p class="hint">AI로 WBS 만들기: AI 기능이 설정되지 않았습니다. 운영자가 AI Provider를 설정하면 사용할 수 있습니다.</p>')}</div>`
       : v === 'gantt' ? html`<div class="rtable-wrap wbs-wrap">${raw(rows.length ? gantt(rows) : emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '보기 조건을 바꾸거나 필터를 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }))}</div>`
       : grid.html();
     main.innerHTML = html`<div class="page page--wide">
@@ -289,7 +289,7 @@ export async function wbsPage(id) {
         ${raw(v === 'list' && items.length ? grid.toolsHtml() : '')}
         <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 WBS 내보내기</button></div></span>
-        ${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-wbs" title="선택한 요구사항으로 WBS 초안 생성">AI로 WBS 초안</button>' : '')}
+        ${raw(archived ? '' : ai.enabled ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-wbs" title="요구사항과 프로젝트 수행 업무(이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs">AI로 WBS 만들기</button>' : '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-wbs" disabled title="AI 기능이 설정되지 않았습니다.">AI로 WBS 만들기</button>')}
         ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm" id="add-ms" title="마일스톤 추가 (기간 없이 날짜만)">◆ 마일스톤 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
@@ -427,7 +427,7 @@ export async function wbsPage(id) {
   };
 
   const bind = () => {
-    for (const idb of ['ai-wbs', 'ai-wbs2']) { const aw = $(`#${idb}`); if (aw) aw.onclick = () => openWbsDraftDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
+    for (const idb of ['ai-wbs', 'ai-wbs2']) { const aw = $(`#${idb}`); if (aw) aw.onclick = () => openWbsPlanner({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
     main.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { setParam('view', b.dataset.view === 'gantt' ? 'gantt' : ''); if (b.dataset.view === 'gantt') gx.mode = 'fit'; ghost = null; syncRows(); draw(); });
     const gf = $('#gfit'); if (gf) gf.onclick = () => { gx.mode = 'fit'; placeGantt(); };
     const gt = $('#gtoday'); if (gt) gt.onclick = () => { gx.mode = 'today'; placeGantt(); };
@@ -479,7 +479,7 @@ export async function wbsPage(id) {
     const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = doImport;
     bindCoach(main);
     if (params().get('import') === '1' && !archived) { setParam('import', ''); doImport(); }
-    if (params().get('ai') === '1' && !archived && ai.enabled) { setParam('ai', ''); openWbsDraftDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
+    if (params().get('ai') === '1' && !archived && ai.enabled) { setParam('ai', ''); openWbsPlanner({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
     grid.bind(main);
     bindDnd();
     bindEscape(() => { if (sel) closeDrawer(); });

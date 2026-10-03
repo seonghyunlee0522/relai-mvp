@@ -1047,3 +1047,25 @@ CREATE TABLE IF NOT EXISTS user_feature_guides (
   seen_at    timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, guide_key)
 );
+
+-- Phase 15: AI Project WBS Planner sessions (normalized questions / answers / draft / coverage only — never raw provider output)
+CREATE TABLE IF NOT EXISTS ai_wbs_plans (
+  id               TEXT PRIMARY KEY,
+  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  created_by       TEXT REFERENCES users(id) ON DELETE SET NULL,
+  status           TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','QUESTIONS_READY','GENERATING','REVIEW','COMMITTED','CANCELLED')),
+  requirement_ids  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  areas            JSONB NOT NULL DEFAULT '[]'::jsonb,       -- area assessment [{area,status,source,reason}]
+  questions        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  answers          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  draft            JSONB,                                    -- { items, notes, warnings }
+  coverage         JSONB,
+  ai_run_id        TEXT REFERENCES ai_runs(id) ON DELETE SET NULL,   -- the charged (draft) run
+  question_run_id  TEXT REFERENCES ai_runs(id) ON DELETE SET NULL,
+  commit_result    JSONB,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  committed_at     timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_ai_wbs_plans_project ON ai_wbs_plans(project_id, created_at);
