@@ -59,9 +59,9 @@ export function projectGuidance(ctx) {
     }
     case 'SCHEDULE': {
       if (n(wbs.tasks) === 0) return out('WBS_EMPTY', '실행 작업(WBS)을 만드세요', '요구사항을 실제 작업 단위로 나누어 계획합니다. 직접 추가, Excel Import, AI 생성(사용 가능 시)을 쓸 수 있습니다.', '실행 작업이 있어야 담당자·일정·진척률을 관리할 수 있습니다.', act('WBS 추가', u('/wbs?new=1')), act('Excel Import', u('/wbs?import=1')), '작업이 준비되면 담당자와 일정을 확인합니다.');
-      if (n(wbs.tasks_without_owner) || n(wbs.tasks_without_dates)) return out('WBS_PLAN', '실행 준비를 위해 담당자와 일정을 확인하세요', `담당자 미지정 ${n(wbs.tasks_without_owner)}건 · 일정 미입력 ${n(wbs.tasks_without_dates)}건`, '담당자와 일정이 있어야 지연과 진행 상황을 추적할 수 있습니다.', act(n(wbs.tasks_without_dates) ? '일정 미입력 작업 보기' : '담당자 미지정 작업 보기', u(n(wbs.tasks_without_dates) ? '/wbs?f=no_dates' : '/wbs?f=no_owner')), act('Gantt 보기', u('/wbs?view=gantt')), '준비가 끝나면 실행 단계로 이동합니다.');
+      if (n(wbs.tasks_without_owner) || n(wbs.tasks_without_dates)) return out('WBS_PLAN', '실행 준비를 위해 담당자와 일정을 확정하세요', `담당자 미지정 ${n(wbs.tasks_without_owner)}건 · 일정 미입력 ${n(wbs.tasks_without_dates)}건`, '담당자와 일정이 있어야 지연과 진행 상황을 추적할 수 있습니다.', act('담당자와 일정 입력하기', u(n(wbs.tasks_without_dates) ? '/wbs?f=no_dates' : '/wbs?f=no_owner')), act('전체 WBS 보기', u('/wbs')), '준비가 끝나면 실행 단계로 이동합니다.');
       if (n(wbs.tasks_unlinked)) warnings.push(`요구사항과 연결되지 않은 작업 ${wbs.tasks_unlinked}건`);
-      if (n(wbs.milestones) === 0) return out('WBS_MILESTONE', '주요 마일스톤을 등록하세요', '중간 점검, 테스트, 검수, 오픈 등 고객과 공유할 주요 시점을 마일스톤으로 추가합니다.', '마일스톤은 일정 상태를 판단하는 기준점입니다.', act('마일스톤 추가', u('/wbs?new=1&type=MILESTONE')), nextPhase ? act(`${nextPhase.name} 단계로 이동`, u('?move=next')) : null, nextPhaseText);
+      if (n(wbs.milestones) === 0) return out('WBS_MILESTONE', '주요 마일스톤을 등록하세요', '중간 점검, 테스트, 검수, 오픈 등 고객과 공유할 주요 시점을 마일스톤으로 추가합니다.', '마일스톤은 일정 상태를 판단하는 기준점입니다.', act('마일스톤 등록', u('/wbs?new=1&type=MILESTONE')), act('전체 WBS 보기', u('/wbs')), nextPhaseText);
       return out('WBS_DONE', '실행 계획이 준비되었습니다', '실행 단계로 이동해 진행 현황과 이슈를 관리하세요.', '실행 단계에서는 지연 작업, Issue, 변경 요청을 중심으로 안내합니다.', nextPhase ? act(`${nextPhase.name} 단계로 이동`, u('?move=next')) : act('WBS 보기', u('/wbs')), act('WBS 보기', u('/wbs')), nextPhaseText);
     }
     case 'EXECUTION': {

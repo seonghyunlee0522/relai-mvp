@@ -85,8 +85,8 @@ const SCREEN_HELP = [
   [/^\/app\/projects\/[\w-]+\/issues/, 'Issues & Risks', '발생한 문제(Issue)와 잠재 위험(Risk)을 담당자·기한과 함께 관리합니다.'],
   [/^\/app\/projects\/[\w-]+\/tests/, 'Tests & Acceptance', '요구사항 기준으로 테스트를 만들고 실행 결과를 기록하며, 고객 검수를 요청·확정합니다.'],
   [/^\/app\/projects\/[\w-]+\/phases/, '단계 기록', '이 단계의 할 일을 완료 처리하고 메모를 남깁니다. 현재 단계 변경도 여기에서 확인 후 진행합니다.'],
-  [/^\/app\/projects\/[\w-]+\/overview/, 'Overview', '전체 진행률, Lifecycle, 확인 필요 항목, 실행·요구사항·테스트 현황, 7일 내 일정, 최근 Activity를 한 화면에서 봅니다.'],
-  [/^\/app\/projects\/[\w-]+/, 'What’s Next?', 'RELAI Guide가 완료한 일 → 현재 단계 → 다음 할 일을 안내합니다. 각 항목의 [탭]로 이동 → 을 눌러 실제 업무 화면에서 작업하고 완료 처리하세요.'],
+  [/^\/app\/projects\/[\w-]+\/overview/, 'Overview', '계획 대비 실제 진척률과 편차, 일정 상태, 확인 필요 항목, Schedule·Scope·Quality 현황, 7일 내 일정, 최근 Activity를 봅니다.'],
+  [/^\/app\/projects\/[\w-]+/, 'What’s Next?', '전체 진행률과 현재 단계, 지금 해야 할 Action을 봅니다. 현재 단계 체크리스트의 작업 버튼으로 실제 업무 화면에서 작업하고 완료 처리하세요.'],
   [/^\/app\/settings/, 'Settings', 'Workspace 이름, 멤버와 역할, 초대 대기, Jira 연결(선택)을 관리합니다.'],
   [/^\/app\/projects/, 'Projects', '이 Workspace의 모든 프로젝트 목록입니다. 프로젝트를 열면 현재 단계와 다음 할 일을 안내합니다.'],
 ];

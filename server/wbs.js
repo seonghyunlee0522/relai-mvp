@@ -195,26 +195,69 @@ export function computeStatus(node, today = todayStr()) {
 /** Live child count (the "group" test used by write guards). */
 export const childCount = async (db, id) => (await db.get('SELECT COUNT(*) n FROM wbs_items WHERE parent_id = ? AND archived_at IS NULL', [id])).n;
 
-/** Project WBS progress = mean of leaf TASK progress (milestones and summaries excluded). */
+/* ---------- project-level progress (one place; Overview / header KPI / guidance all read these) ---------- */
+const leafWeight = (t) => (t.weight === null || t.weight === undefined ? 1 : Number(t.weight));
+/** Weighted mean over leaf TASKs with the same weight rule as computeProgress (weight 0 excluded; all-zero → equal). `value(t)` ∈ [0,100]. */
+function weightedMean(tasks, value) {
+  if (!tasks.length) return null;
+  const totalW = tasks.reduce((a, t) => a + leafWeight(t), 0);
+  const w = (t) => (totalW > 0 ? leafWeight(t) : 1);
+  const den = tasks.reduce((a, t) => a + w(t), 0);
+  return den ? Math.round(tasks.reduce((a, t) => a + value(t) * w(t), 0) / den) : null;
+}
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+/** Planned % of one leaf task at `today` from its planned window (inclusive days): before start 0, after end 100, else elapsed share. */
+export function plannedPercent(task, today) {
+  const s = task.planned_start_date, e = task.planned_end_date;
+  if (!s || !e) return null;
+  if (today < s) return 0;
+  if (today >= e) return 100;
+  const span = daysBetween(s, e) + 1; const done = daysBetween(s, today) + 1;
+  return Math.max(0, Math.min(100, Math.round((done / span) * 100)));
+}
+/**
+ * Schedule figures for Overview (§13–§17 of the landing redesign). Computed from leaf TASKs only — groups are roll-ups.
+ *   actual  = weighted mean of stored leaf progress (same weight rule as the tree roll-up)         — same number the header KPI shows
+ *   planned = weighted mean of plannedPercent over leaf tasks that have both planned dates; null when none has dates
+ *   variance = actual − planned (%p); null when planned is null
+ *   overdue_* / max_overdue_days come from the real planned dates — no predicted end date is invented.
+ */
+export function scheduleFigures(leafTasks, milestones, today = todayStr()) {
+  const actual = weightedMean(leafTasks, (t) => Number(t.progress) || 0);   // stored leaf progress (COMPLETED is always 100 by validation)
+  const dated = leafTasks.filter((t) => t.planned_start_date && t.planned_end_date);
+  const planned = weightedMean(dated, (t) => plannedPercent(t, today));
+  const overdueTasks = leafTasks.filter((t) => t.status !== 'COMPLETED' && t.planned_end_date && t.planned_end_date < today);
+  const overdueMs = milestones.filter((m) => m.status !== 'COMPLETED' && m.milestone_date && m.milestone_date < today);
+  const maxDays = Math.max(0, ...overdueTasks.map((t) => daysBetween(t.planned_end_date, today)), ...overdueMs.map((m) => daysBetween(m.milestone_date, today)));
+  return {
+    progress: actual ?? 0, planned_progress: planned, planned_basis: { dated: dated.length, tasks: leafTasks.length },
+    variance: planned === null || actual === null ? null : actual - planned,
+    overdue_tasks: overdueTasks.length, overdue_milestones: overdueMs.length, max_overdue_days: overdueTasks.length || overdueMs.length ? maxDays : 0,
+  };
+}
+
+/** Project WBS stats. `progress` = weighted mean of leaf TASK progress (milestones and groups excluded) — see scheduleFigures. */
 export async function wbsStats(db, projectId) {
   const items = (await liveItems(db, projectId));
   const hasChild = new Set(items.filter((i) => i.parent_id).map((i) => i.parent_id));
   const leafTasks = items.filter((i) => i.item_type === 'TASK' && !hasChild.has(i.id));
   const tasks = leafTasks;   // groups (TASK with children, legacy SUMMARY) are roll-ups, never counted as work items
   const groups = items.filter((i) => hasChild.has(i.id));
+  const milestones = items.filter((i) => i.item_type === 'MILESTONE');
   const deps = (await db.get(`SELECT COUNT(*) n FROM wbs_dependencies d JOIN wbs_items a ON a.id = d.predecessor_id JOIN wbs_items b ON b.id = d.successor_id
     WHERE d.project_id = ? AND a.archived_at IS NULL AND b.archived_at IS NULL`, [projectId])).n;
   return {
     total: items.length,
     tasks: tasks.length,
     summaries: groups.length,
-    milestones: items.filter((i) => i.item_type === 'MILESTONE').length,
+    milestones: milestones.length,
+    milestones_completed: milestones.filter((i) => i.status === 'COMPLETED').length,
     in_progress: items.filter((i) => i.status === 'IN_PROGRESS').length,
     completed: items.filter((i) => i.status === 'COMPLETED').length,
     dependencies: deps,
     tasks_without_owner: tasks.filter((i) => !i.owner_user_id).length,
     tasks_without_dates: tasks.filter((i) => !i.planned_start_date || !i.planned_end_date).length,
-    progress: leafTasks.length ? Math.round(leafTasks.reduce((a, t) => a + t.progress, 0) / leafTasks.length) : 0,
+    ...scheduleFigures(leafTasks, milestones),
     tasks_unlinked: (await traceStats(db, projectId)).tasks_unlinked,
   };
 }
