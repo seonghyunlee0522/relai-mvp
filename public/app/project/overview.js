@@ -145,12 +145,13 @@ const healthLine = (h) => {
 };
 
 export async function overviewPage(id, main = $('#main')) {
+  // BUG-001: strip ?created=1 / ?move=next right away (not after the awaits), so a navigation made meanwhile is never overwritten.
+  { const qp0 = new URLSearchParams(location.search); overviewPage._flag = qp0.get('created') === '1' ? `created:${id}` : qp0.get('move') === 'next' ? `move:${id}` : null; if (overviewPage._flag) history.replaceState(null, '', `/app/projects/${id}`); }
   const [g, snap, dash] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/snapshot`)), api('GET', wsApi(`/${id}/dashboard`))]);
   const p = g.project;
   document.title = `${p.name} — RELAI`;
   const archived = p.status === 'ARCHIVED';
-  const qp = new URLSearchParams(location.search); const created = qp.get('created') === '1'; const moveNext = qp.get('move') === 'next';
-  if (created || moveNext) history.replaceState(null, '', `/app/projects/${id}`);
+  const created = overviewPage._flag === `created:${id}`; const moveNext = overviewPage._flag === `move:${id}`; overviewPage._flag = null;
   await ob.get();   // cached; phase intro needs guides_seen
   main.innerHTML = html`<div class="page page--wide page--flow ov">
     ${raw(projectHead(p, g, { tab: 'overview' }))}

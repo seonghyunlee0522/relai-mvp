@@ -81,7 +81,7 @@ export async function raidPage(id) {
   const issueTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>Severity</th><th>Status</th><th>Owner</th><th>Due</th><th class="num">관련 WBS</th><th>Updated</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
-      <td class="ttl"><span>${x.title}</span>${raw(x.source_risk_display_id ? html`<small title="Source Risk">${x.source_risk_display_id}</small>` : '')}${raw(x.source_test_execution_id ? '<small title="테스트 Fail에서 등록">TEST</small>' : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
+      <td class="ttl"><span>${x.title}</span>${raw(x.source_risk_display_id ? html`<small title="Source Risk">${x.source_risk_display_id}</small>` : '')}${raw(x.source_test_execution_id ? '<small title="테스트 Fail에서 등록">테스트 Fail</small>' : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
       <td>${raw(sevBadge(x.severity))}</td><td>${raw(statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status))}</td>
       <td>${x.owner_name || raw('<span class="dim">-</span>')}</td>
       <td class="${x.is_overdue ? 'is-overdue' : ''}">${raw(dcell(x.due_date))}${raw(x.is_overdue ? ' <small class="over">지남</small>' : '')}</td>

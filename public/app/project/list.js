@@ -11,7 +11,7 @@ const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 export async function homePage(main = $("#main")) {
   document.title = 'Home — RELAI';
   const [{ projects }, o] = await Promise.all([api('GET', wsApi()), ob.get()]);
-  const active = projects.filter((p) => p.status === 'ACTIVE');
+  const active = projects.filter((p) => p.status === 'ACTIVE' || p.status === 'DRAFT');   // UI-001: 초안 projects are worked on too
   main.innerHTML = html`<div class="page">
     <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${state.workspace.name}</p></div>
       ${raw(projects.length && canManage() ? '<a class="btn btn--primary" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>' : '')}</div>

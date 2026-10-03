@@ -156,7 +156,7 @@ test('metrics count leaf tasks only (groups excluded from dashboard/health count
   const { server, client } = await boot();
   const A = await setup(client);
   const g = await mk(A, { title: '그룹', planned_start_date: day(-20), planned_end_date: day(-5) });    // becomes a group → its own stale dates must not count
-  await mk(A, { title: '자식 지연', parent_id: g.id, planned_start_date: day(-10), planned_end_date: day(-2), progress: 10 });
+  await mk(A, { title: '자식 지연', parent_id: g.id, planned_start_date: day(-10), planned_end_date: day(-2), progress: 10, convert_parent: 'drop' });   // BUG-005: explicit decision
   await mk(A, { title: '자식 정상', parent_id: g.id, planned_start_date: day(1), planned_end_date: day(5) });
   const d = (await A.c('GET', `${A.purl}/dashboard`)).json;
   assert.deepEqual(d.tasks, { total: 2, in_progress: 0, completed: 0, delayed: 1 });

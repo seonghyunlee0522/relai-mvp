@@ -129,7 +129,21 @@ export async function definitionPage(id) {
     const ka = $('#kd-add'); if (ka) ka.onclick = () => { collect(); d.key_dates.push({ id: uid(), title: '', date: '' }); markDirty('MILESTONES'); keepScroll(draw); const last = [...main.querySelectorAll('li[data-kd] [data-kdf="date"]')].pop(); if (last) last.focus(); };
     main.querySelectorAll('[data-kddel]').forEach((b) => b.onclick = () => { collect(); d.key_dates = d.key_dates.filter((x) => x.id !== b.dataset.kddel); markDirty('MILESTONES'); keepScroll(draw); });
     // Enter in a list input adds the next row
-    main.querySelectorAll('[data-item]').forEach((el) => el.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = main.querySelector(`[data-add="${el.dataset.item}"]`); if (b) b.click(); } });
+    // UX-002: ignore the Enter that commits a Korean IME composition; a multi-line paste becomes one row per line.
+    main.querySelectorAll('[data-item]').forEach((el) => {
+      el.onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); const b = main.querySelector(`[data-add="${el.dataset.item}"]`); if (b) b.click(); } };
+      el.onpaste = (e) => {
+        const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+        const lines = text.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+        if (lines.length < 2) return;
+        e.preventDefault(); collect();
+        const key = el.dataset.item; const list = d[key]; const i = list.findIndex((x) => x.id === el.dataset.id);
+        const at = i < 0 ? list.length : i;
+        if (i >= 0 && !list[i].text) list.splice(i, 1, ...lines.map((text) => ({ id: uid(), text })));
+        else list.splice(at + 1, 0, ...lines.map((text) => ({ id: uid(), text })));
+        markDirty(FIELD_SECTION[key]); keepScroll(draw);
+      };
+    });
     // re-apply dirty markers after a re-render
     for (const k of dirty) markDirty(k);
   };
