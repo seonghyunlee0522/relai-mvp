@@ -29,6 +29,12 @@ export const migrations = [
   } },
   { version: 16, name: 'integration foundation: connections, oauth states, project mappings, entity links, activity (Phase 12)', up() {} },
   { version: 17, name: 'jira snapshots, integration events (idempotency), sync runs, webhook registrations (Phase 12)', up() {} },
+  { version: 18, name: 'identity & invitations (Phase 13): user_identities (+PASSWORD backfill), invitations, auth_oauth_states, email_deliveries, users.password_hash nullable', async up(db) {
+    // Every existing password user gets a PASSWORD identity (subject = user id) so "login methods" is uniform from day one.
+    await db.run(`INSERT INTO user_identities (id, user_id, provider, provider_subject, email, email_verified, created_at, last_used_at)
+      SELECT gen_random_uuid()::text, u.id, 'PASSWORD', u.id, u.email, false, u.created_at, u.last_login_at FROM users u
+      WHERE u.password_hash IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.provider = 'PASSWORD' AND i.provider_subject = u.id)`);
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

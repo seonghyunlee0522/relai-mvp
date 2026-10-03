@@ -9,6 +9,7 @@ import { PLANS } from './plans.js';
 import { billingStatus, listSubscriptions, getSubscription, listPayments, getPayment } from './billing-admin.js';
 import { aiUsageOverview, workspaceAiUsage, grantCredits } from './ai/admin.js';
 import { adminIntegrations } from './integrations/routes.js';
+import { mountAdminInvitationRoutes } from './auth/routes.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -53,6 +54,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* Integrations (Phase 12): connection health + sync failures only; never credentials or issue content. */
   app.get('/api/admin/integrations', guard, wrap(async (req, res) => res.json(await adminIntegrations(db))));
+
+  /* Invitations + e-mail deliveries (Phase 13). */
+  mountAdminInvitationRoutes(app, db, { guard, wrap, fail });
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 

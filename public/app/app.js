@@ -2,6 +2,7 @@
 import { registerRoutes, render } from './core/router.js';
 import { shell } from './shell.js';
 import { authPage } from './auth.js';
+import { invitePage } from './invite.js';
 import { homePage, projectsPage } from './project/list.js';
 import { projectFormPage } from './project/form.js';
 import { overviewPage } from './project/overview.js';
@@ -22,6 +23,7 @@ import { adminSubscriptionsPage, adminSubscriptionPage, adminPaymentsPage, admin
 import { adminUsagePage } from './admin/usage.js';
 import { adminAuditPage } from './admin/audit.js';
 import { adminIntegrationsPage } from './admin/integrations.js';
+import { adminInvitationsPage, adminEmailDeliveriesPage } from './admin/invitations.js';
 
 registerRoutes([
   [/^\/app\/?$/, homePage],
@@ -49,7 +51,9 @@ registerRoutes([
   [/^\/admin\/payments\/?$/, adminPaymentsPage],
   [/^\/admin\/payments\/([\w-]+)\/?$/, adminPaymentPage],
   [/^\/admin\/usage\/?$/, adminUsagePage],
+  [/^\/admin\/invitations\/?$/, adminInvitationsPage],
+  [/^\/admin\/email-deliveries\/?$/, adminEmailDeliveriesPage],
   [/^\/admin\/integrations\/?$/, adminIntegrationsPage],
   [/^\/admin\/audit\/?$/, adminAuditPage],
-], { shell: (path, view) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view)), auth: authPage });
+], { shell: (path, view) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view)), auth: authPage, invite: invitePage });
 render();

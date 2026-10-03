@@ -17,7 +17,7 @@ export async function boot() {
       const type = res.headers.get('content-type') || '';
       if (raw || type.includes('spreadsheetml')) return { status: res.status, headers: res.headers, buf: Buffer.from(await res.arrayBuffer()), json: null };
       let json = null; try { json = await res.clone().json(); } catch {}
-      return { status: res.status, json, headers: res.headers };
+      return { status: res.status, json, headers: res.headers, location: res.headers.get('location') || '' };
     };
   };
   return { db, server, client };
