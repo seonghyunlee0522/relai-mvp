@@ -106,7 +106,8 @@ export async function requirementStats(db, projectId) {
       COALESCE(SUM((status = 'DRAFT')::int), 0) AS draft,
       COALESCE(SUM((type = 'UNSPECIFIED')::int), 0) AS type_unspecified,
       COALESCE(SUM((priority = 'UNSPECIFIED')::int), 0) AS priority_unspecified,
-      COALESCE(SUM((scope = 'IN_SCOPE' AND status = 'CONFIRMED')::int), 0) AS in_scope_confirmed
+      COALESCE(SUM((scope = 'IN_SCOPE' AND status = 'CONFIRMED')::int), 0) AS in_scope_confirmed,
+      COALESCE(SUM((type IN ('INTERFACE','DATA','SECURITY'))::int), 0) AS non_functional
     FROM requirements WHERE project_id = ? AND archived_at IS NULL`, [projectId]));
   const t = (await traceStats(db, projectId));
   return { ...base, in_scope_linked: t.in_scope_linked, in_scope_unlinked: t.in_scope_unlinked, coverage: t.coverage, confirmed_unlinked: t.confirmed_unlinked };

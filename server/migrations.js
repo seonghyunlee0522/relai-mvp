@@ -6,7 +6,7 @@
  * cannot be expressed idempotently. Versions 1–9 are the SQLite-era history, kept as markers so a database
  * migrated from SQLite (scripts/migrate-sqlite-to-postgres.js) and a fresh PostgreSQL database end up identical.
  */
-import { ensurePhases } from './guide.js';
+import { ensurePhases, resetPhases } from './guide.js';
 
 export const migrations = [
   { version: 1, name: 'projects.current_phase template-based (SQLite era)', up() {} },
@@ -37,6 +37,9 @@ export const migrations = [
   } },
   { version: 19, name: 'onboarding & guided activation (Phase 14): user_onboarding, user_feature_guides', up() {} },
   { version: 20, name: 'AI Project WBS Planner (Phase 15): ai_wbs_plans', up() {} },
+  { version: 21, name: 'Lifecycle V2: 7-phase lifecycle template, activity importance/SKIPPED, wbs_items.lifecycle_phase — phases of every project re-seeded from 착수 (no legacy phase mapping)', async up(db) {
+    for (const p of await db.all('SELECT * FROM projects')) await resetPhases(db, p);
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

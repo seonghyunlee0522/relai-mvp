@@ -7,7 +7,7 @@ import {
   hashPassword, verifyPassword, newToken, sha256, rateLimiter,
 } from './security.js';
 import { parseSignup, parseProject, ValidationError } from './validate.js';
-import { ensurePhases, loadGuide, updateStep, transitionTo, projectProgress } from './guide.js';
+import { ensurePhases, loadGuide, updateStep, transitionTo } from './guide.js';
 import * as D from './definition.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
@@ -274,13 +274,18 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if ((await ensurePhases(db, project, { createdBy: project.created_by }))) return (await getProject(req.params.wid, req.params.pid));
     return project;
   };
-  const guideResponse = async (project) => {
-    const guide = (await loadGuide(db, project));
+  /** Everything What's Next / the LNB need in one payload: phases with derived activity states, stats, guidance. */
+  const guideContext = async (project) => {
     const stats = (await M.projectStats(db, project));
     const def = (await D.loadDefinition(db, project));
-    const overdue = (await db.get(`SELECT COUNT(*) n FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${W.LEAF_SQL('w')} AND w.status <> 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE`, [project.id])).n;
-    const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review }, stats, overdue_tasks: Number(overdue) || 0 });
-    return { project: { ...project, progress: guide.progress }, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
+    const overdue = Number((await db.get(`SELECT COUNT(*) n FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${W.LEAF_SQL('w')} AND w.status <> 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE`, [project.id])).n) || 0;
+    const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections }, overdue_tasks: overdue }));
+    return { stats, def, overdue, guide };
+  };
+  const guideResponse = async (project, pre = null) => {
+    const { stats, def, overdue, guide } = pre || (await guideContext(project));
+    const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review }, stats, overdue_tasks: overdue });
+    return { project, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
       definition: { progress: def.progress, needs_review: def.needs_review, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
@@ -315,7 +320,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const { status, note } = req.body || {};
     const fields = {};
     if (status !== undefined) {
-      if (!['TODO', 'COMPLETED'].includes(status)) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { status: '상태 값이 올바르지 않습니다.' } });
+      if (!['TODO', 'COMPLETED', 'SKIPPED'].includes(status)) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { status: '상태 값이 올바르지 않습니다.' } });
       fields.status = status;
     }
     if (note !== undefined) {
@@ -333,7 +338,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const project = (await loadProject(req, res));
     if (!project || !mutable(res, project)) return;
     const reason = req.body?.reason === 'NEXT' ? 'NEXT' : 'MANUAL';
-    const r = (await tx(db, async (db) => (await transitionTo(db, project, req.params.phid, req.user.id, reason))));
+    // The leaving phase is COMPLETED only when its REQUIRED activities are done — judged on derived state, not on checkboxes.
+    const cur = (await guideContext(project)).guide.current_phase;
+    const gateMet = cur && cur.summary ? cur.summary.gate_met : null;
+    const r = (await tx(db, async (db) => (await transitionTo(db, project, req.params.phid, req.user.id, reason, { gateMet }))));
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '단계를 찾을 수 없습니다.');
     if (r.error === 'already_current') return fail(res, 409, 'already_current', '이미 현재 단계입니다.');
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));

@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS projects (
                        ('DRAFT','ACTIVE','ON_HOLD','COMPLETED','ARCHIVED')),
   planned_start_date date NOT NULL,              -- YYYY-MM-DD
   planned_end_date   date NOT NULL,              -- YYYY-MM-DD
-  current_phase      TEXT NOT NULL DEFAULT 'INITIATION',   -- phase_key of the current project_phases row
+  current_phase      TEXT NOT NULL DEFAULT 'INITIATION',   -- phase_key of the current project_phases row (Lifecycle V2 keys, templates/default-phases.js)
   created_by         TEXT NOT NULL REFERENCES users(id),
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now(),
@@ -108,12 +108,15 @@ CREATE TABLE IF NOT EXISTS project_definitions (
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-/* ---------- Guided execution (Phase 2) ---------- */
+/* ---------- Project Lifecycle (V2): Project → Phase → Activities ----------
+ * phase_key ∈ INITIATION · REQUIREMENTS · ANALYSIS_DESIGN · DEVELOPMENT · TESTING · TRANSITION_GO_LIVE · OPERATIONS.
+ * Activities (project_steps) carry an importance (REQUIRED gates the phase; RECOMMENDED/OPTIONAL may stay open) and a
+ * stored status that only records a manual 완료 처리 / 제외 — the live state is derived from project data (server/activities.js). */
 CREATE TABLE IF NOT EXISTS project_phases (
   id           TEXT PRIMARY KEY,
   project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   template_key TEXT NOT NULL,                     -- which template produced this phase set
-  phase_key    TEXT NOT NULL,                     -- INITIATION, REQUIREMENTS, …
+  phase_key    TEXT NOT NULL,                     -- Lifecycle V2 key (see templates/default-phases.js)
   name         TEXT NOT NULL,
   description  TEXT NOT NULL DEFAULT '',
   sequence     INTEGER NOT NULL,
@@ -134,9 +137,10 @@ CREATE TABLE IF NOT EXISTS project_steps (
   description         TEXT NOT NULL DEFAULT '',
   completion_criteria TEXT NOT NULL DEFAULT '',
   sequence            INTEGER NOT NULL,
-  is_required         INTEGER NOT NULL DEFAULT 1,
-  linked_feature_type TEXT,                       -- future: requirements | wbs | issues | changes | tests | acceptance
-  status              TEXT NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO','COMPLETED')),
+  is_required         INTEGER NOT NULL DEFAULT 1,  -- = importance IS 'REQUIRED' (kept for aggregate queries)
+  importance          TEXT NOT NULL DEFAULT 'REQUIRED' CHECK (importance IN ('REQUIRED','RECOMMENDED','OPTIONAL')),
+  linked_feature_type TEXT,                       -- requirements | wbs | issues | changes | tests | acceptance | definition
+  status              TEXT NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO','COMPLETED','SKIPPED')),
   note                TEXT NOT NULL DEFAULT '',
   completed_at        timestamptz,
   completed_by        TEXT REFERENCES users(id),
@@ -145,6 +149,9 @@ CREATE TABLE IF NOT EXISTS project_steps (
   UNIQUE (project_phase_id, step_key)
 );
 CREATE INDEX IF NOT EXISTS idx_steps_phase ON project_steps(project_phase_id, sequence);
+ALTER TABLE project_steps ADD COLUMN IF NOT EXISTS importance TEXT NOT NULL DEFAULT 'REQUIRED';
+ALTER TABLE project_steps DROP CONSTRAINT IF EXISTS project_steps_status_check;
+ALTER TABLE project_steps ADD CONSTRAINT project_steps_status_check CHECK (status IN ('TODO','COMPLETED','SKIPPED'));
 
 -- Current-phase change log. Shape is generic enough to become the project activity log later.
 CREATE TABLE IF NOT EXISTS phase_transitions (
@@ -247,6 +254,8 @@ CREATE INDEX IF NOT EXISTS idx_wbs_project ON wbs_items(project_id, archived_at,
 -- SUMMARY is legacy: new data uses TASK, and "group" simply means "has live children".
 ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS weight INTEGER NOT NULL DEFAULT 1 CHECK (weight BETWEEN 0 AND 1000);
+-- Lifecycle V2 (§17): which lifecycle phase a work item belongs to (API 설계 → ANALYSIS_DESIGN, 통합 테스트 → TESTING …). NULL = not classified.
+ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS lifecycle_phase TEXT CHECK (lifecycle_phase IN ('INITIATION','REQUIREMENTS','ANALYSIS_DESIGN','DEVELOPMENT','TESTING','TRANSITION_GO_LIVE','OPERATIONS'));
 
 -- Finish-to-start predecessor links. Many predecessors per item; cycle check is done in code before insert.
 CREATE TABLE IF NOT EXISTS wbs_dependencies (

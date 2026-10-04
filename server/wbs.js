@@ -26,6 +26,9 @@ const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 const dateOrNull = (v) => (v === undefined ? undefined : v === null || v === '' ? null : v);
 
+/** Lifecycle V2 (§17): a work item may be tagged with the lifecycle phase it belongs to. */
+export const LIFECYCLE_PHASES = ['INITIATION', 'REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING', 'TRANSITION_GO_LIVE', 'OPERATIONS'];
+
 /* ---------- validation ---------- */
 export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
   const f = {}; const out = {};
@@ -38,6 +41,7 @@ export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
   if (has('title')) { out.title = str(b.title); if (!out.title || out.title.length > 200) f.title = '업무명을 200자 이내로 입력해 주세요.'; }
   if (given('description')) { out.description = str(b.description); if (out.description.length > 5000) f.description = '설명은 5,000자 이내로 입력해 주세요.'; }
   if (given('owner_user_id')) out.owner_user_id = b.owner_user_id ? String(b.owner_user_id) : null;
+  if (given('lifecycle_phase')) { const v = b.lifecycle_phase || null; if (v !== null && !LIFECYCLE_PHASES.includes(v)) f.lifecycle_phase = 'Lifecycle 단계 값이 올바르지 않습니다.'; else out.lifecycle_phase = v; }
   if (given('weight')) { const n = Number(b.weight); if (!Number.isInteger(n) || n < 0 || n > 1000) f.weight = '가중치는 0~1000 사이의 정수여야 합니다.'; else out.weight = n; }
   if (given('status')) { if (!WBS_STATUSES.includes(b.status)) f.status = '상태 값이 올바르지 않습니다.'; else out.status = b.status; }
   if (b.progress !== undefined) {
@@ -237,6 +241,7 @@ export function scheduleFigures(leafTasks, milestones, today = todayStr()) {
 }
 
 /** Project WBS stats. `progress` = weighted mean of leaf TASK progress (milestones and groups excluded) — see scheduleFigures. */
+const countBy = (rows, f) => rows.reduce((m, r) => { const k = f(r); m[k] = (m[k] || 0) + 1; return m; }, {});
 export async function wbsStats(db, projectId) {
   const items = (await liveItems(db, projectId));
   const hasChild = new Set(items.filter((i) => i.parent_id).map((i) => i.parent_id));
@@ -254,6 +259,10 @@ export async function wbsStats(db, projectId) {
     milestones_completed: milestones.filter((i) => i.status === 'COMPLETED').length,
     in_progress: items.filter((i) => i.status === 'IN_PROGRESS').length,
     completed: items.filter((i) => i.status === 'COMPLETED').length,
+    tasks_completed: tasks.filter((i) => i.status === 'COMPLETED').length,
+    // Lifecycle V2 (§17): leaf tasks per lifecycle phase (NULL = unclassified) so 구현/시험/전환 can look at their own slice of the one WBS
+    by_phase: countBy(tasks, (i) => i.lifecycle_phase || 'UNCLASSIFIED'),
+    by_phase_completed: countBy(tasks.filter((i) => i.status === 'COMPLETED'), (i) => i.lifecycle_phase || 'UNCLASSIFIED'),
     dependencies: deps,
     tasks_without_owner: tasks.filter((i) => !i.owner_user_id).length,
     tasks_without_dates: tasks.filter((i) => !i.planned_start_date || !i.planned_end_date).length,
@@ -309,8 +318,8 @@ export async function createWbs(db, project, input, userId, { skipRenumber = fal
   const id = randomUUID(); const ts = now();
   const seq = (await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS s FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND parent_id IS NOT DISTINCT FROM ?', [project.id, input.parent_id || null])).s;
   (await db.run(`INSERT INTO wbs_items (id, project_id, parent_id, sequence, item_type, title, description, owner_user_id, status, progress, weight,
-      planned_start_date, planned_end_date, actual_start_date, actual_end_date, milestone_date, created_by, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, input.parent_id || null, seq, input.item_type, input.title, input.description ?? '', input.owner_user_id ?? null, input.status ?? 'NOT_STARTED', input.item_type === 'TASK' ? (input.progress ?? (input.status === 'COMPLETED' ? 100 : 0)) : 0, input.weight ?? 1, input.item_type === 'MILESTONE' ? null : input.planned_start_date ?? null, input.item_type === 'MILESTONE' ? null : input.planned_end_date ?? null, input.actual_start_date ?? null, input.actual_end_date ?? null, input.item_type === 'MILESTONE' ? input.milestone_date ?? null : null, userId, ts, ts]));
+      planned_start_date, planned_end_date, actual_start_date, actual_end_date, milestone_date, lifecycle_phase, created_by, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, input.parent_id || null, seq, input.item_type, input.title, input.description ?? '', input.owner_user_id ?? null, input.status ?? 'NOT_STARTED', input.item_type === 'TASK' ? (input.progress ?? (input.status === 'COMPLETED' ? 100 : 0)) : 0, input.weight ?? 1, input.item_type === 'MILESTONE' ? null : input.planned_start_date ?? null, input.item_type === 'MILESTONE' ? null : input.planned_end_date ?? null, input.actual_start_date ?? null, input.actual_end_date ?? null, input.item_type === 'MILESTONE' ? input.milestone_date ?? null : null, input.lifecycle_phase ?? null, userId, ts, ts]));
   (await addWbsHistory(db, id, 'CREATED', {}, userId, ts));
   if (!skipRenumber) (await renumber(db, project.id));
   return id;

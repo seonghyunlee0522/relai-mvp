@@ -3,7 +3,6 @@
  * Single entry point for Overview today and for Phase 9 Dashboard / Weekly Report later.
  * Everything here is computed from source tables at request time — nothing is persisted.
  */
-import { loadGuide } from './guide.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import * as T from './trace.js';
@@ -28,9 +27,7 @@ export async function projectStats(db, project) {
 /** The 4 headline KPIs (0–100 or null when not applicable). */
 export async function headlineKpis(db, project, stats = null) {
   stats = stats || (await projectStats(db, project));
-  const guide = (await loadGuide(db, project));
   return {
-    guided_progress: guide.progress,
     wbs_progress: stats.wbs.progress,
     requirement_coverage: stats.trace.coverage,
     test_coverage: stats.tests.coverage,
