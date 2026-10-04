@@ -8,6 +8,7 @@ import { $, fmtShort, html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { download, keepUi } from '../core/ui.js';
 import { projectHead } from '../project/guide.js';
+import { LIFECYCLE_LABEL } from '../shared/constants.js';
 import { resBadge, sevBadge, verifyChip } from '../shared/badges.js';
 import { ISSUE_STATUS, ISSUE_STATUS_CHIP, LINK_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RISK_STATUS, RISK_STATUS_CHIP, WBS_CSTATUS, WBS_CSTATUS_CHIP, WBS_STATUS, WBS_TYPE } from '../shared/constants.js';
 import { traceStrip } from '../shared/trace-strip.js';
@@ -32,10 +33,13 @@ export async function wbsPage(id) {
   const [g, members, ai] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers(), aiStatus(id)]);
   const p = g.project;
   const archived = p.status === 'ARCHIVED';
+  // Lifecycle V2: one WBS, two entry points — 03 분석·설계 > WBS 작성 (plan) and Overview > WBS (monitor). Same screen, same data; only the context label differs.
+  const ctx = () => (params().get('ctx') === 'monitor' ? 'monitor' : 'plan');
   document.title = `WBS — ${p.name} — RELAI`;
   const wApi = (s = '') => wsApi(`/${id}/wbs${s}`);
   const meId = state.user.id;
-  const params = () => new URLSearchParams(location.search);
+  const params0 = () => new URLSearchParams(location.search);
+  const params = params0;
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
 
   let items = []; let summary = g.wbs; let sel = null;
@@ -62,10 +66,12 @@ export async function wbsPage(id) {
   const visible = () => {
     const m = byId(); const f = quick(); const q = (params().get('q') || '').trim().toLowerCase();
     const owner = params().get('owner') || ''; const cst = params().get('cst') || '';
+    // ?phase=DEVELOPMENT (04 구현 현황 etc.): narrow to tasks tagged with that lifecycle phase — only when any task is tagged, otherwise the whole WBS stays visible.
+    const phaseQ = params().get('phase') || ''; const phase = phaseQ && items.some((it) => it.lifecycle_phase === phaseQ) ? phaseQ : '';
     let keep = null;
     const reqWbs = ctxReq ? new Set(ctxReq.links.map((l) => l.wbs_item_id)) : null;
     const crWbs = ctxCr ? new Set((ctxCr.impacts || []).map((l) => l.wbs_item_id)) : null;
-    if (f || q || owner || cst || reqWbs || crWbs) {
+    if (f || q || owner || cst || reqWbs || crWbs || phase) {
       keep = new Set();
       for (const it of items) {
         let hit = !f || (f === 'linked' ? it.linked_req_count > 0
@@ -74,6 +80,7 @@ export async function wbsPage(id) {
         if (q && !(it.title.toLowerCase().includes(q) || it.wbs_code.toLowerCase().startsWith(q))) hit = false;
         if (owner && (owner === 'none' ? Boolean(it.owner_user_id) : it.owner_user_id !== owner)) hit = false;
         if (cst && it.computed_status !== cst) hit = false;
+        if (phase && it.lifecycle_phase !== phase) hit = false;
         if (reqWbs && !reqWbs.has(it.id)) hit = false;
         if (crWbs && crWbs.size && !crWbs.has(it.id)) hit = false;
         if (!hit) continue;
@@ -271,7 +278,8 @@ export async function wbsPage(id) {
       : v === 'gantt' ? html`<div class="rtable-wrap wbs-wrap">${raw(rows.length ? gantt(rows) : emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '보기 조건을 바꾸거나 필터를 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }))}</div>`
       : grid.html();
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'wbs' }))}
+      ${raw(projectHead(p, g, { tab: ctx() === 'monitor' ? 'overview-wbs' : 'wbs', title: ctx() === 'monitor' ? 'WBS · 운영 조회' : 'WBS 작성' }))}
+      ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 Lifecycle 단계를 지정할 수 있습니다.</div>` : '')}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(items.length && !jira && !archived ? coachMark('JIRA_OPTIONAL_INTRO', { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira Issue를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 WBS 진행률만으로 프로젝트를 계속 진행할 수 있습니다.', cta: { label: '연결하기 (Settings › Integrations)', href: '/app/settings' } }) : '')}
       ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}
@@ -293,7 +301,7 @@ export async function wbsPage(id) {
         ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm" id="add-ms" title="마일스톤 추가 (기간 없이 날짜만)">◆ 마일스톤 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
-      ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: QUICK_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}
+      ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: QUICK_LABEL }, { key: 'phase', label: 'Lifecycle 단계', map: LIFECYCLE_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}
       <div id="bulkslot"></div>
       <div class="rlayout ${sel ? 'has-drawer' : ''}">
         ${raw(body)}
@@ -494,9 +502,9 @@ export async function wbsPage(id) {
     catch (e) { toast(e.message); }
   };
 
-  const wbsLabel = { title: '업무명', description: '설명', item_type: '항목 유형', status: '상태', owner_user_id: '담당자', progress: '진행률', weight: '가중치', planned_start_date: '계획 시작일', planned_end_date: '계획 종료일', actual_start_date: '실적 시작일', actual_end_date: '실적 종료일', milestone_date: '마일스톤 날짜', parent: '상위 항목', sequence: '순서', source: '출처' };
+  const wbsLabel = { lifecycle_phase: 'Lifecycle 단계', title: '업무명', description: '설명', item_type: '항목 유형', status: '상태', owner_user_id: '담당자', progress: '진행률', weight: '가중치', planned_start_date: '계획 시작일', planned_end_date: '계획 종료일', actual_start_date: '실적 시작일', actual_end_date: '실적 종료일', milestone_date: '마일스톤 날짜', parent: '상위 항목', sequence: '순서', source: '출처' };
   const histText = (h, it) => {
-    const val = (f, v) => { if (v == null || v === '') return '-'; if (f === 'status') return STATUS_EDIT[v] || WBS_STATUS[v] || v; if (f === 'item_type') return WBS_TYPE[v] || v; if (f === 'owner_user_id') return (members.find((m) => m.id === v) || {}).name || '미지정'; if (f === 'progress') return `${v}%`; return v; };
+    const val = (f, v) => { if (v == null || v === '') return '-'; if (f === 'status') return STATUS_EDIT[v] || WBS_STATUS[v] || v; if (f === 'item_type') return WBS_TYPE[v] || v; if (f === 'owner_user_id') return (members.find((m) => m.id === v) || {}).name || '미지정'; if (f === 'lifecycle_phase') return LIFECYCLE_LABEL[v] || v; if (f === 'progress') return `${v}%`; return v; };
     switch (h.action_type) {
       case 'CREATED': return h.new_value ? html`생성 <q>${h.new_value}</q>` : html`<b>${it.wbs_code}</b> 생성`;
       case 'AI_GENERATED': return html`AI WBS 초안에서 생성`;
@@ -557,6 +565,7 @@ export async function wbsPage(id) {
                 <div class="field"><label>계획 종료일</label>${raw(dateInput('planned_end_date', it.planned_end_date, readOnly))}<div class="err" data-for="planned_end_date"></div></div></div>
                 <div class="cols2"><div class="field"><label>실적 시작일</label>${raw(dateInput('actual_start_date', it.actual_start_date, readOnly))}</div><div class="field"><label>실적 종료일</label>${raw(dateInput('actual_end_date', it.actual_end_date, readOnly))}</div></div>
                 <div class="dfield"><span>진행률 (%)</span><div><input class="input input--sm" type="number" min="0" max="100" step="1" data-field="progress" value="${it.progress}" ${readOnly ? 'disabled' : ''}></div></div>`)}
+            ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield"><span>Lifecycle 단계</span><div><select class="select select--sm" data-field="lifecycle_phase" ${readOnly ? 'disabled' : ''}><option value="" ${it.lifecycle_phase ? '' : 'selected'}>미지정</option>${raw(Object.entries(LIFECYCLE_LABEL).map(([k, l]) => html`<option value="${k}" ${it.lifecycle_phase === k ? 'selected' : ''}>${l}</option>`).join(''))}</select></div></div>`)}
             ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield"><span>가중치 <small class="dim">(상위 진행률 계산)</small></span><div><input class="input input--sm" type="number" min="0" max="1000" step="1" data-field="weight" value="${it.weight ?? 1}" ${readOnly ? 'disabled' : ''}></div></div>`)}
             <div class="dfield"><span>상위 항목</span><div><select class="select select--sm" id="mv-parent" ${readOnly ? 'disabled' : ''}>${raw(parentOpts(it.parent_id || '', it.id))}</select></div></div>
             ${raw(readOnly ? '' : html`<div class="actions"><button class="btn btn--secondary btn--xs" id="mv-up" ${idx <= 0 ? 'disabled' : ''}>↑ 위로</button><button class="btn btn--secondary btn--xs" id="mv-down" ${idx < 0 || idx >= sibs.length - 1 ? 'disabled' : ''}>↓ 아래로</button><button class="btn btn--secondary btn--xs" id="mv-in" ${idx <= 0 ? 'disabled' : ''}>들여쓰기 →</button><button class="btn btn--secondary btn--xs" id="mv-out" ${it.parent_id ? '' : 'disabled'}>← 내어쓰기</button>${raw(t === 'MILESTONE' ? '' : '<button class="btn btn--secondary btn--xs" id="addchild">+ 하위 작업</button>')}</div>`)}

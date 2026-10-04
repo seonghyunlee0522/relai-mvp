@@ -7,7 +7,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, fmtShort, html, no2, raw, todayLocal } from '../core/dom.js';
 import { projectHead } from './guide.js';
-import { daysUntil, exceptions, phaseProgression, scheduleState, varianceText, varianceTone } from './status.js';
+import { daysUntil, exceptions, scheduleState, varianceText, varianceTone } from './status.js';
 import { relTime } from '../shared/jira.js';
 import { toast } from '../shared/dialogs.js';
 
@@ -25,12 +25,12 @@ const metric = (label, value, { sub = '', tone = '' } = {}) => html`<div class="
 
 /* ---------- Progress: planned vs actual ---------- */
 const progressSection = (g, p) => {
-  const u = `/app/projects/${p.id}`; const w = g.wbs || {}; const cur = g.current_phase; const pp = phaseProgression(g); const sch = scheduleState(w);
+  const u = `/app/projects/${p.id}`; const w = g.wbs || {}; const cur = g.current_phase; const nphase = (g.phases || []).length; const sch = scheduleState(w);
   const planned = w.planned_progress; const actual = n(w.progress); const v = w.variance;
   const basis = w.planned_basis || { dated: 0, tasks: 0 };
   return html`<section class="ovp ovsec" aria-labelledby="ovpT">
-    <div class="ovsec__h"><h2 id="ovpT">Progress</h2><small class="ovsec__ctx">현재 단계 <a class="link" href="${u}" data-link>${cur ? `${no2(cur.sequence)} ${cur.name}` : '-'}</a> · ${pp.total}개 단계 중 ${pp.done}개 완료 · WBS Task ${n(w.tasks)}건</small></div>
-    ${raw(!n(w.tasks) ? html`<p class="ovnone">아직 WBS가 없습니다. 일정 단계에서 작업을 등록하면 계획·실제 진척률이 계산됩니다. <a class="link" href="${u}/wbs" data-link>WBS →</a></p>`
+    <div class="ovsec__h"><h2 id="ovpT">Progress</h2><small class="ovsec__ctx">현재 단계 <a class="link" href="${u}" data-link>${cur ? `${no2(cur.sequence)} ${cur.name}` : '-'}</a>${nphase ? ` (${nphase}단계 중 ${cur ? cur.sequence : '-'}번째)` : ''} · WBS Task ${n(w.tasks)}건</small></div>
+    ${raw(!n(w.tasks) ? html`<p class="ovnone">아직 WBS가 없습니다. 분석·설계 단계에서 작업을 등록하면 계획·실제 진척률이 계산됩니다. <a class="link" href="${u}/wbs" data-link>WBS 작성 시작 →</a></p>`
       : html`<div class="kpi4">
         ${raw(metric('계획 진척률', pv(planned), { sub: planned === null ? '계획 일정이 입력된 Task 없음' : basis.dated < basis.tasks ? `일정 입력 Task ${basis.dated}/${basis.tasks} 기준` : `오늘 기준 · Task ${basis.tasks}건` }))}
         ${raw(metric('실제 진척률', pv(actual), { sub: 'WBS Leaf Task 가중 평균' }))}
@@ -94,7 +94,7 @@ const qualityCol = (g, p) => {
 
 const healthLine = (h) => {
   if (!h) return '';
-  return html`<details class="hline ${H_CLS[h.status]}"><summary><span class="hline__l">Project Health</span><span class="hchip hchip--sm ${H_CLS[h.status]}">${h.status_label}</span>
+  return html`<details class="hline ${H_CLS[h.status]}" id="health" ${location.hash === '#health' ? 'open' : ''}><summary><span class="hline__l">Project Health</span><span class="hchip hchip--sm ${H_CLS[h.status]}">${h.status_label}</span>
       ${raw(Object.values(h.dimensions).map((d) => html`<span class="hline__d"><span>${d.label}</span><span class="hchip hchip--sm ${H_CLS[d.status]}">${d.status_label}</span></span>`).join(''))}
       ${raw(h.partial_unknown ? '<small class="hline__note">일부 정보 부족</small>' : '')}<span class="hline__more">근거 보기</span></summary>
     <div class="hline__r">${raw(Object.values(h.dimensions).map((d) => html`<div><b>${d.label} <span class="hchip hchip--sm ${H_CLS[d.status]}">${d.status_label}</span></b><ul>${raw(d.reasons.map((r) => html`<li>${r}</li>`).join(''))}${raw(d.hint ? html`<li class="dim">${d.hint}</li>` : '')}</ul></div>`).join(''))}</div>
@@ -119,8 +119,9 @@ export async function overviewPage(id, main = $('#main')) {
   const [g, snap, dash] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/snapshot`)), api('GET', wsApi(`/${id}/dashboard`))]);
   const p = g.project;
   document.title = `Overview — ${p.name} — RELAI`;
+  // Overview sub navigation (프로젝트 현황 · WBS · 주간보고 · 일정/마일스톤 · Project Health) lives in the LNB — nothing is duplicated here.
   main.innerHTML = html`<div class="page page--wide page--flow ov">
-    ${raw(projectHead(p, g, { tab: 'overview' }))}
+    ${raw(projectHead(p, g, { tab: location.hash === '#health' ? 'overview-health' : 'overview-main', title: '프로젝트 현황' }))}
     ${raw(p.status === 'ARCHIVED' ? '<div class="notice">보관된 프로젝트입니다. 현황은 조회만 할 수 있습니다.</div>' : '')}
     ${raw(progressSection(g, p))}
     ${raw(attentionSection(g, snap, p.id))}

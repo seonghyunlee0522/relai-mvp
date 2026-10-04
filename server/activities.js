@@ -45,24 +45,25 @@ function requirements(key, ctx) {
   const r = ctx.stats.requirements || {};
   const u = (qs = '') => `/app/projects/${ctx.pid}/requirements${qs}`;
   const empty = none('아직 등록된 요구사항이 없습니다.', act('요구사항 입력 시작 →', u('?new=1')));
+  const dep = none('먼저 요구사항을 등록하세요.', null);   // prerequisite unmet: the first activity already carries the CTA
   switch (key) {
     case 'COLLECT': return n(r.total) === 0 ? empty : ok(`요구사항 ${r.total}건이 등록되어 있습니다.`, act('요구사항 추가 →', u('?new=1')));
-    case 'CLASSIFY': return n(r.total) === 0 ? { ...empty, text: '먼저 요구사항을 등록하세요.' }
+    case 'CLASSIFY': return n(r.total) === 0 ? dep
       : n(r.type_unspecified) ? prog(`${r.total}건 중 ${r.type_unspecified}건의 유형이 지정되지 않았습니다.`, act('요구사항 분류 →', u('?type=UNSPECIFIED')))
       : ok('모든 요구사항에 유형이 지정되었습니다.', act('요구사항 보기 →', u()));
-    case 'PRIORITIZE': return n(r.total) === 0 ? { ...empty, text: '먼저 요구사항을 등록하세요.' }
+    case 'PRIORITIZE': return n(r.total) === 0 ? dep
       : n(r.priority_unspecified) ? prog(`${r.priority_unspecified}건의 우선순위가 지정되지 않았습니다.`, act('우선순위 설정 →', u('?priority=UNSPECIFIED')))
       : ok('모든 요구사항에 우선순위가 지정되었습니다.', act('요구사항 보기 →', u()));
-    case 'SCOPE_CHECK': return n(r.total) === 0 ? { ...empty, text: '먼저 요구사항을 등록하세요.' }
+    case 'SCOPE_CHECK': return n(r.total) === 0 ? dep
       : n(r.scope_undecided) ? prog(`${r.scope_undecided}건의 범위가 결정되지 않았습니다.`, act('범위 결정 →', u('?scope=UNDECIDED')))
       : ok(`범위 내 ${n(r.in_scope)}건 · 범위 외 ${n(r.out_of_scope)}건으로 정리되었습니다.`, act('요구사항 보기 →', u()));
     case 'CONFIRM': {
-      if (n(r.total) === 0) return { ...empty, text: '먼저 요구사항을 등록하세요.' };
+      if (n(r.total) === 0) return dep;
       if (n(r.in_scope) === 0) return none('범위 내 요구사항이 아직 없습니다.', act('범위 결정 →', u('?scope=UNDECIDED')));
       if (n(r.in_scope_confirmed) < n(r.in_scope)) return prog(`범위 내 ${r.in_scope}건 중 ${r.in_scope_confirmed}건이 확정되었습니다.`, act('요구사항 확정 →', u('?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED')));
       return ok('범위 내 요구사항이 모두 확정되었습니다.', act('확정 요구사항 보기 →', u('?scope=IN_SCOPE&status=CONFIRMED')));
     }
-    case 'INTERFACE': return n(r.total) === 0 ? { ...empty, text: '먼저 요구사항을 등록하세요.' }
+    case 'INTERFACE': return n(r.total) === 0 ? dep
       : n(r.non_functional) ? ok(`인터페이스·데이터·보안 유형 요구사항 ${r.non_functional}건이 정리되어 있습니다.`, act('비기능 요구사항 보기 →', u('?type=INTERFACE,DATA,SECURITY')))
       : none('인터페이스·데이터·보안 유형의 요구사항이 아직 없습니다. 해당 사항이 없으면 제외할 수 있습니다.', act('요구사항 추가 →', u('?new=1')));
     default: return manual('');
@@ -73,28 +74,29 @@ function analysisDesign(key, ctx) {
   const w = ctx.stats.wbs || {}; const r = ctx.stats.requirements || {};
   const u = (qs = '') => `/app/projects/${ctx.pid}/wbs${qs}`;
   const empty = none('아직 등록된 WBS가 없습니다.', act('WBS 작성 시작 →', u('?new=1')));
+  const dep = none('먼저 WBS를 작성하세요.', null);
   switch (key) {
     case 'WBS_BUILD': return n(w.tasks) === 0 ? empty : ok(`실행 작업 ${w.tasks}건이 등록되어 있습니다.`, act('WBS 보기 →', u()));
     case 'REQ_TRACE': {
-      if (n(w.tasks) === 0) return { ...empty, text: '먼저 WBS를 작성하세요.' };
+      if (n(w.tasks) === 0) return dep;
       if (n(r.in_scope) === 0) return none('범위 내 요구사항이 없어 연결할 대상이 없습니다.', act('요구사항 보기 →', `/app/projects/${ctx.pid}/requirements`));
       if (n(r.in_scope_unlinked)) return prog(`범위 내 요구사항 ${r.in_scope}건 중 ${r.in_scope_unlinked}건이 WBS와 연결되지 않았습니다.`, act('요구사항 연결 →', `/app/projects/${ctx.pid}/requirements?view=trace&scope=IN_SCOPE&link=unlinked`));
       return ok(`범위 내 요구사항 ${r.in_scope}건이 모두 WBS와 연결되었습니다.`, act('Trace 보기 →', `/app/projects/${ctx.pid}/requirements?view=trace`), { trace: n(w.tasks_unlinked) ? `요구사항과 연결되지 않은 작업 ${w.tasks_unlinked}건` : null });
     }
-    case 'ASSIGN': return n(w.tasks) === 0 ? { ...empty, text: '먼저 WBS를 작성하세요.' }
+    case 'ASSIGN': return n(w.tasks) === 0 ? dep
       : n(w.tasks_without_owner) ? prog(`${w.tasks}건 중 ${w.tasks_without_owner}건에 담당자가 없습니다.`, act('담당자 지정 →', u('?f=no_owner')))
       : ok('모든 작업에 담당자가 지정되었습니다.', act('WBS 보기 →', u()));
-    case 'PLAN': return n(w.tasks) === 0 ? { ...empty, text: '먼저 WBS를 작성하세요.' }
+    case 'PLAN': return n(w.tasks) === 0 ? dep
       : n(w.tasks_without_dates) ? prog(`${w.tasks_without_dates}건의 작업에 일정이 없습니다.`, act('일정 입력 →', u('?f=no_dates')))
       : ok('모든 작업에 계획 일정이 입력되었습니다.', act('Gantt 보기 →', u('?view=gantt')));
-    case 'ORDER': return n(w.tasks) === 0 ? { ...empty, text: '먼저 WBS를 작성하세요.' }
+    case 'ORDER': return n(w.tasks) === 0 ? dep
       : n(w.dependencies) ? ok(`선후관계 ${w.dependencies}건이 설정되어 있습니다.`, act('WBS 보기 →', u()))
       : none('아직 작업 간 선후관계가 없습니다.', act('선후관계 설정 →', u()));
     case 'MILESTONES': return n(w.milestones) ? ok(`마일스톤 ${w.milestones}건이 등록되어 있습니다.`, act('Gantt 보기 →', u('?view=gantt')))
       : none('아직 등록된 마일스톤이 없습니다.', act('마일스톤 등록 →', u('?new=1&type=MILESTONE')));
     case 'NON_DEV_TASKS': {
       const bp = w.by_phase || {}; const nondev = n(bp.TESTING) + n(bp.TRANSITION_GO_LIVE) + n(bp.OPERATIONS);
-      if (n(w.tasks) === 0) return { ...empty, text: '먼저 WBS를 작성하세요.' };
+      if (n(w.tasks) === 0) return dep;
       return nondev ? ok(`시험·전환·운영 단계 작업 ${nondev}건이 WBS에 포함되어 있습니다.`, act('WBS 보기 →', u()))
         : none('작업의 Lifecycle 단계를 지정하면 기능 개발 외 작업(테스트·이관·교육·전환)이 빠졌는지 확인할 수 있습니다.', act('작업 추가 →', u('?new=1')));
     }
@@ -113,7 +115,7 @@ function development(key, ctx) {
       if (n(w.in_progress) + dev.done === 0) return none(`구현 작업 ${dev.total}건이 아직 시작되지 않았습니다.`, act('진행 상태 갱신 →', u('?ctx=monitor')));
       return prog(`구현 작업 ${dev.total}건 중 ${dev.done}건 완료 · 진척률 ${n(w.progress)}%`, act('진행 상태 갱신 →', u('?ctx=monitor')));
     }
-    case 'DELAYS': return n(w.tasks) === 0 ? none('실행 작업이 없습니다.', act('WBS 작성 시작 →', u('?new=1')))
+    case 'DELAYS': return n(w.tasks) === 0 ? none('실행 작업이 없습니다.', null)
       : n(ctx.overdue_tasks) ? prog(`종료 예정일이 지난 작업 ${ctx.overdue_tasks}건이 있습니다.`, act('지연 작업 확인 →', u('?f=overdue')), { crit: true })
       : ok('종료 예정일이 지난 미완료 작업이 없습니다.', act('WBS 보기 →', u('?ctx=monitor')));
     case 'ISSUES': {
@@ -138,6 +140,7 @@ function testing(key, ctx) {
   const t = ctx.stats.tests || {};
   const u = (qs = '') => `/app/projects/${ctx.pid}/tests${qs}`;
   const empty = none('아직 등록된 테스트 케이스가 없습니다.', act('테스트 케이스 작성 →', u('?new=1')));
+  const dep = none('먼저 테스트 케이스를 작성하세요.', null);
   switch (key) {
     case 'TEST_PLAN': {
       if (n(t.in_scope) === 0) return none('범위 내 요구사항이 아직 없습니다.', act('요구사항 보기 →', `/app/projects/${ctx.pid}/requirements?scope=UNDECIDED`));
@@ -146,10 +149,10 @@ function testing(key, ctx) {
         : ok(`범위 내 요구사항 ${t.in_scope}건이 모두 테스트와 연결되었습니다.`, act('Coverage 보기 →', u('?tab=coverage')));
     }
     case 'CASES': return n(t.total) === 0 ? empty : ok(`테스트 케이스 ${t.total}건이 등록되어 있습니다.`, act('테스트 케이스 추가 →', u('?new=1')));
-    case 'RUN': return n(t.total) === 0 ? { ...empty, text: '먼저 테스트 케이스를 작성하세요.' }
+    case 'RUN': return n(t.total) === 0 ? dep
       : n(t.executed) < n(t.total) ? (n(t.executed) ? prog(`${t.total}건 중 ${t.executed}건이 실행되었습니다.`, act('테스트 실행 →', u('?last_result=NOT_RUN'))) : none(`테스트 ${t.total}건이 아직 실행되지 않았습니다.`, act('테스트 실행 →', u('?last_result=NOT_RUN'))))
       : ok(`테스트 ${t.total}건이 모두 실행되었습니다. (Pass ${n(t.last_pass)} · Fail ${n(t.last_fail)} · Blocked ${n(t.last_blocked)})`, act('결과 보기 →', u()));
-    case 'DEFECTS': return n(t.executed) === 0 ? none('먼저 테스트를 실행하세요.', act('테스트 실행 →', u()))
+    case 'DEFECTS': return n(t.executed) === 0 ? none('먼저 테스트를 실행하세요.', null)
       : n(t.last_fail) ? prog(`Fail 테스트 ${t.last_fail}건${n(t.fail_issues_open) ? ` · 처리 중 Issue ${t.fail_issues_open}건` : ''}`, act('결함 조치 →', u('?last_result=FAIL')), { crit: true })
       : ok('최근 결과가 Fail인 테스트가 없습니다.', act('결과 보기 →', u()));
     case 'NON_FUNCTIONAL': return manual('성능·보안·마이그레이션 검증 결과를 테스트 케이스로 기록하거나 메모로 남깁니다.', act('테스트 케이스 추가 →', u('?new=1')));

@@ -10,6 +10,7 @@ import { nextPage } from './project/next.js';
 import { phasePage } from './project/phase.js';
 import { definitionPage } from './project/definition.js';
 import { reportPage } from './project/report.js';
+import { reportsPage } from './project/reports.js';
 import { requirementsPage } from './requirements/page.js';
 import { wbsPage } from './wbs/page.js';
 import { changesPage } from './changes/page.js';
@@ -34,7 +35,8 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/overview\/?$/, overviewPage],
   [/^\/app\/projects\/([\w-]+)\/edit\/?$/, projectFormPage],
   [/^\/app\/projects\/([\w-]+)\/definition\/?$/, definitionPage],
-  [/^\/app\/projects\/([\w-]+)\/phases\/([A-Z_]+)\/?$/, phasePage],
+  [/^\/app\/projects\/([\w-]+)\/phases(?:\/[A-Z_]+)?\/?$/, phasePage],   // legacy deep links → What’s Next
+  [/^\/app\/projects\/([\w-]+)\/reports\/?$/, reportsPage],
   [/^\/app\/projects\/([\w-]+)\/reports\/([\w-]+)\/?$/, reportPage],
   [/^\/app\/projects\/([\w-]+)\/requirements\/?$/, requirementsPage],
   [/^\/app\/projects\/([\w-]+)\/wbs\/?$/, wbsPage],

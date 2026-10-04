@@ -22,8 +22,8 @@ export async function homePage(main = $("#main")) {
         <a class="prow" style="grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) auto" href="/app/projects/${p.id}" data-link>
           <div><div class="nm">${p.name}</div><div class="sub">${TYPE[p.project_type]}</div></div>
           <div><div class="sub" style="margin:0">${no2(p.current_phase_sequence)} ${p.current_phase_name}</div>
-            <div class="pbar" style="margin-top:8px"><i style="width:${p.progress}%"></i></div></div>
-          <span class="link">${p.progress}% · 이어서 보기</span></a>`).join(''))}</div></div>` : projects.length ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>보관된 프로젝트는 Projects에서 볼 수 있습니다.</p></div>' : newWorkspaceHome(o))}
+            <div class="lcpos" style="margin-top:8px" aria-label="Lifecycle 위치">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < p.current_phase_sequence ? 'is-done' : i + 1 === p.current_phase_sequence ? 'is-cur' : ''}"></i>`).join(''))}</div></div>
+          <span class="link">What’s Next →</span></a>`).join(''))}</div></div>` : projects.length ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>보관된 프로젝트는 Projects에서 볼 수 있습니다.</p></div>' : newWorkspaceHome(o))}
   </div>`;
   bindChecklist(main);
 }
@@ -51,7 +51,7 @@ export async function projectsPage(main = $("#main")) {
       { key: 'type', label: '유형', width: 130, sort: (r) => TYPE[r.project_type], render: (r) => TYPE[r.project_type] },
       { key: 'status', label: '상태', width: 90, sort: (r) => STATUS[r.status], render: (r) => html`<span class="chip ${STATUS_CHIP[r.status] || ''}">${STATUS[r.status]}</span>` },
       { key: 'phase', label: '현재 단계', width: 180, sort: (r) => r.current_phase_sequence, render: (r) => html`${no2(r.current_phase_sequence)} ${r.current_phase_name}` },
-      { key: 'progress', label: '진행률', width: 150, sort: (r) => r.progress, render: (r) => html`<div class="pcell"><div class="pbar"><i style="width:${r.progress}%"></i></div><span>${r.progress}%</span></div>` },
+      { key: 'lifecycle', label: 'Lifecycle', width: 150, sort: (r) => r.current_phase_sequence, render: (r) => html`<div class="lcpos" title="${no2(r.current_phase_sequence)} ${r.current_phase_name}">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < r.current_phase_sequence ? 'is-done' : i + 1 === r.current_phase_sequence ? 'is-cur' : ''}"></i>`).join(''))}</div>` },
       { key: 'start', label: '시작', width: 100, sort: (r) => r.planned_start_date, cls: 'mono', render: (r) => fmtDate(r.planned_start_date) },
       { key: 'end', label: '종료', width: 100, sort: (r) => r.planned_end_date, cls: 'mono', render: (r) => fmtDate(r.planned_end_date) },
     ],

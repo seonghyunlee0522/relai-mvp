@@ -35,6 +35,10 @@ export const REQ_STATUS_CHIP = { CONFIRMED: 'chip--done', REVIEWING: 'chip--acti
 export const REQ_SCOPE_CHIP = { IN_SCOPE: 'chip--done', OUT_OF_SCOPE: 'chip--muted', UNDECIDED: 'chip--hold' };
 export const REQ_FIELD_LABEL = { title: '제목', description: '설명', type: '유형', priority: 'Priority', scope: 'Scope', status: 'Status', owner_user_id: 'Owner', requester: '요청자' };
 export const PHASE_STATUS = { NOT_STARTED: '시작 전', IN_PROGRESS: '진행 중', COMPLETED: '완료' };
+/* Lifecycle V2 — the same names the server template uses (templates/default-phases.js); landing page copy must match these. */
+export const LIFECYCLE_LABEL = { INITIATION: '착수', REQUIREMENTS: '요구사항 정의', ANALYSIS_DESIGN: '분석·설계', DEVELOPMENT: '구현', TESTING: '시험', TRANSITION_GO_LIVE: '전환 및 오픈', OPERATIONS: '운영 및 유지보수' };
+export const IMPORTANCE_LABEL = { REQUIRED: '필수', RECOMMENDED: '권장', OPTIONAL: '선택' };
+export const ACTIVITY_STATE = { NOT_STARTED: { icon: '○', label: '미시작' }, IN_PROGRESS: { icon: '●', label: '진행 중' }, COMPLETED: { icon: '✓', label: '완료' }, SKIPPED: { icon: '—', label: '제외' } };
 export const TC_STATUS = { DRAFT: '작성 중', READY: '준비됨', BLOCKED: 'Blocked', COMPLETED: '완료' };
 export const TC_STATUS_CHIP = { READY: 'chip--active', BLOCKED: 'chip--hold', COMPLETED: 'chip--done' };
 export const TC_PRIORITY = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };

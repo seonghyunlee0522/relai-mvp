@@ -53,7 +53,6 @@ function moreMenu(btn, c) {
     ${raw(c.ro ? '' : '<button type="button" role="menuitem" class="amenu__act amenu__act--sm" data-more="report-new">주간보고 생성</button>')}
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
     <button type="button" role="menuitem" data-more="jira">Jira 연동 설정</button>
-    <a role="menuitem" href="/app/projects/${c.pid}/phases" data-link data-phases>단계 기록</a>
     ${raw(c.ro ? '<hr><button type="button" role="menuitem" data-more="unarchive">보관 해제</button>' : '<hr><button type="button" role="menuitem" class="is-danger" data-more="archive">프로젝트 보관</button>')}`);
   const ub = $('[data-more="unarchive"]', m);   // GAP-006
   if (ub) ub.onclick = async () => {
@@ -61,7 +60,6 @@ function moreMenu(btn, c) {
     if (!(await confirmDialog({ title: '보관을 해제할까요?', body: '프로젝트가 목록에 다시 표시되고 수정할 수 있게 됩니다.', confirm: '보관 해제' }))) return;
     try { await api('POST', wsApi(`/${c.pid}/unarchive`), {}); toast('보관을 해제했습니다.'); navigate(`/app/projects/${c.pid}`, { replace: true }); } catch (e) { toast(e.message); }
   };
-  const ph = $('[data-phases]', m); if (ph) ph.href = document.querySelector('.wsh__phase')?.getAttribute('href') || ph.href;
   $('[data-more="activity"]', m).onclick = () => openActivity(c.pid);
   $('[data-more="jira"]', m).onclick = () => { closeMenus(); openJiraProjectSettings(c.pid); };
   const rn = $('[data-more="report-new"]', m); if (rn) rn.onclick = () => { closeMenus(); periodDialog(undefined, async (period) => { try { const r = await api('POST', wsApi(`/${c.pid}/weekly-reports/generate`), period); navigate(`/app/projects/${c.pid}/reports/${r.report.id}`); return true; } catch (e) { return e.fields || { period_end: e.message }; } }); };

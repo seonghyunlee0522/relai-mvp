@@ -61,13 +61,13 @@ export function bindCoach(root) {
 
 /* ---------- Phase intro: "이 단계에서 하는 일" once per phase ---------- */
 export const PHASE_INTRO = {
-  INITIATION: { what: '프로젝트의 목표, 범위, 관계자, 일정, 운영 방식을 정리해 출발 기준을 맞춥니다.', outputs: ['프로젝트 정의 5개 항목'] },
-  REQUIREMENTS: { what: '무엇을 만들어야 하는지 수집·정리해 고객과 합의된 요구사항 목록을 만듭니다.', outputs: ['요구사항 목록', '분류·우선순위·범위', '확정'] },
-  SCHEDULE: { what: '요구사항을 실행 작업(WBS)으로 나누고 담당자와 일정을 정해 실행 계획을 만듭니다.', outputs: ['WBS', '담당자·일정', '마일스톤'] },
-  EXECUTION: { what: '계획대로 진행하면서 지연, 이슈, 변경 요청을 놓치지 않고 관리합니다.', outputs: ['진행 현황', 'Issue', '변경 요청'] },
-  TESTING: { what: '구현된 기능이 요구사항을 충족하는지 검증합니다.', outputs: ['Test Case', 'Execution 결과', 'Fail → Issue'] },
-  ACCEPTANCE: { what: '고객이 결과물을 직접 확인하고 보완사항을 처리해 검수 결과를 확정합니다.', outputs: ['검수 항목', '검수 결과', '보완 처리'] },
-  LAUNCH: { what: '운영 환경에서 서비스를 열고 안정화와 종료 사항을 마무리합니다.', outputs: ['오픈 체크', '안정화', '종료 정리'] },
+  INITIATION: { what: '프로젝트의 목표, 범위, 이해관계자, 상위 일정, 운영 방식을 정리해 출발 기준을 맞춥니다.', outputs: ['프로젝트 정의'] },
+  REQUIREMENTS: { what: '무엇을 만들어야 하는지 수집·정리해 고객과 합의된 요구사항 기준선을 만듭니다.', outputs: ['요구사항 목록', '분류·우선순위·범위', '확정'] },
+  ANALYSIS_DESIGN: { what: '요구사항을 실행 가능한 작업(WBS)으로 구체화하고 담당자·일정·선후관계를 설계합니다.', outputs: ['WBS', 'Requirements ↔ WBS 연결', '담당자·일정·마일스톤'] },
+  DEVELOPMENT: { what: '실행 계획대로 진행하면서 진척, 지연, Issue, 변경 요청을 관리합니다.', outputs: ['진행 현황', 'Issue', '변경 요청'] },
+  TESTING: { what: '요구사항이 실제 시스템에 올바르게 구현되었는지 테스트로 검증하고 결함을 조치합니다.', outputs: ['Test Case', '실행 결과', 'Fail → Issue'] },
+  TRANSITION_GO_LIVE: { what: '검수로 인수 승인을 받고 전환·교육·오픈·안정화를 진행합니다.', outputs: ['검수 승인', '전환 계획', 'Go-Live'] },
+  OPERATIONS: { what: '운영 조직에 이관하고 유지보수 체계와 종료 사항을 정리합니다.', outputs: ['운영 이관', '종료 정리'] },
 };
 export function phaseIntro(phaseKey, phaseName) {
   const key = `PHASE_INTRO_${phaseKey}`; const p = PHASE_INTRO[phaseKey]; if (!p || ob.guideSeen(key)) return '';
@@ -84,7 +84,6 @@ const SCREEN_HELP = [
   [/^\/app\/projects\/[\w-]+\/changes/, '변경 요청', '확정 이후의 추가·변경 요청을 기록하고 영향 요구사항·WBS·일정 영향을 관리합니다.'],
   [/^\/app\/projects\/[\w-]+\/issues/, 'Issues & Risks', '발생한 문제(Issue)와 잠재 위험(Risk)을 담당자·기한과 함께 관리합니다.'],
   [/^\/app\/projects\/[\w-]+\/tests/, 'Tests & Acceptance', '요구사항 기준으로 테스트를 만들고 실행 결과를 기록하며, 고객 검수를 요청·확정합니다.'],
-  [/^\/app\/projects\/[\w-]+\/phases/, '단계 기록', '이 단계의 할 일을 완료 처리하고 메모를 남깁니다. 현재 단계 변경도 여기에서 확인 후 진행합니다.'],
   [/^\/app\/projects\/[\w-]+\/overview/, 'Overview', '계획 대비 실제 진척률과 편차, 일정 상태, 확인 필요 항목, Schedule·Scope·Quality 현황, 7일 내 일정, 최근 Activity를 봅니다.'],
   [/^\/app\/projects\/[\w-]+/, 'What’s Next?', '전체 진행률과 현재 단계, 지금 해야 할 Action을 봅니다. 현재 단계 체크리스트의 작업 버튼으로 실제 업무 화면에서 작업하고 완료 처리하세요.'],
   [/^\/app\/settings/, 'Settings', 'Workspace 이름, 멤버와 역할, 초대 대기, Jira 연결(선택)을 관리합니다.'],

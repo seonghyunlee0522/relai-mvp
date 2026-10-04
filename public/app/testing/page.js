@@ -49,7 +49,7 @@ export async function testsPage(id) {
     const q = params(); const T = tab();
     const hasFilter = ['q', ...filterKeys(), 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'tests' }))}
+      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('tab') === 'acceptance' ? 'acceptance' : q.get('tab') === 'coverage' ? 'test-plan' : q.get('last_result') === 'FAIL' ? 'defects' : 'tests'; })(), title: new URLSearchParams(location.search).get('tab') === 'acceptance' ? '검수 / 인수 승인' : 'Tests' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 테스트와 검수는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(T === 'acceptance' ? coachMark('ACCEPTANCE_INTRO') : coachMark('TESTING_INTRO'))}
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객이 결과물을 확인하고 승인하는 검수를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">

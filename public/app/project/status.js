@@ -2,20 +2,19 @@
  * Everything here is derived from the project GET payload (`g`) — no extra requests, no stored state —
  * so both screens always agree on the same numbers (phase progression, schedule state, exception counts). */
 import { html, no2, raw, todayLocal } from '../core/dom.js';
+import { firstScreen } from '../shared/lifecycle.js';
 
 const n = (v) => Number(v) || 0;
 
-/** Overall project progress for the landing screens = phase progression (completed phases / all phases). */
-export function phaseProgression(g) {
-  const phases = g.phases || []; const done = phases.filter((p) => p.status === 'COMPLETED').length;
-  return { done, total: phases.length, percent: phases.length ? Math.round((done / phases.length) * 100) : 0 };
-}
-
-/** Compact horizontal stepper: ✓ 착수 — ✓ 요구사항 — ● 일정 — ○ 실행 … (Green done · Blue current · Gray not started). */
-export const phaseStepper = (g, pid) => html`<ol class="pstep" aria-label="진행 순서">${raw((g.phases || []).map((ph) => {
+/** Compact lifecycle stepper (no percentages): ✓ 착수 ─ ● 요구사항 정의 ─ ○ 분석·설계 … Green done · Blue current · Gray not started.
+ * A step links to the phase's first work screen (What’s Next for the current phase). */
+export const phaseStepper = (g, pid) => html`<ol class="pstep" aria-label="Project Lifecycle">${raw((g.phases || []).map((ph) => {
   const state = ph.is_current ? 'cur' : ph.status === 'COMPLETED' ? 'done' : 'todo';
-  const href = `/app/projects/${pid}/${ph.phase_key === 'INITIATION' ? 'definition' : `phases/${ph.phase_key}`}`;
-  return html`<li class="is-${state}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${state === 'cur' ? '현재 단계' : state === 'done' ? '완료' : `${ph.progress.done}/${ph.progress.total}`}"><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : '○'}</i><span>${ph.name}</span></a></li>`;
+  const first = firstScreen(pid, ph.phase_key);
+  const href = ph.is_current || !first ? `/app/projects/${pid}` : first.href;
+  const req = ph.summary ? ph.summary.required_open : null;
+  const tip = state === 'cur' ? '현재 단계' : state === 'done' ? '완료' : req ? `필수 업무 ${req}건` : '미시작';
+  return html`<li class="is-${state}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${tip}"><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span></a></li>`;
 }).join(''))}</ol>`;
 
 /** Days from today to `date` (negative when past). null when no date. */

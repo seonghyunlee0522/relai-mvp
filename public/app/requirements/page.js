@@ -146,7 +146,7 @@ export async function requirementsPage(id) {
   const draw = () => {
     const q = params();
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { crumb: `/app/projects/${p.id}`, crumbLabel: p.name, tab: 'requirements' }))}
+      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED' ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : '')}
       ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
       ${raw(summary.total ? coachMark('REQ_TRACE_INTRO') : '')}
