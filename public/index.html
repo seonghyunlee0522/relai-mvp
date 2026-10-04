@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RELAI — 프로젝트를 처음 맡아도 끝까지</title>
-<meta name="description" content="RELAI가 프로젝트의 현재 단계와 지금 해야 할 일을 안내합니다. 순서대로 따라가기만 하면 프로젝트가 끝까지 갑니다.">
+<title>RELAI — 프로젝트 생애주기를 따라 다음 할 일을 안내하는 Project Guidance System</title>
+<meta name="description" content="RELAI는 착수 · 요구사항 정의 · 분석·설계 · 구현 · 시험 · 전환 및 오픈 · 운영 및 유지보수 7단계 생애주기를 따라 현재 단계와 다음 업무를 안내하고, Requirements · WBS · Testing · Change 데이터를 연결해 프로젝트 실행을 돕는 Project Guidance System입니다.">
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18437024959"></script>
 <script>
@@ -313,18 +313,17 @@ p{margin:0}
 .chip.is-on{border-color:var(--blue);background:var(--bg-tint);color:var(--blue-deep);font-weight:600}
 .demo__foot{text-align:center;margin-top:20px;font-size:14px;color:var(--muted)}
 
-/* expert */
-.expert{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
-.expert h2{font-size:29px;margin-bottom:14px}
-.expert p{font-size:16px;color:var(--text-2);line-height:1.75}
-.expert__list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
-.expert__list li{display:flex;align-items:center;gap:12px;font-size:14.5px;color:var(--text-2);
-  background:#fff;border:1px solid var(--border);border-radius:9px;padding:12px 15px;
-  transition:border-color .16s,box-shadow .16s}
-.expert__list li:hover{border-color:var(--border-blue);box-shadow:var(--sh-hover)}
-.expert__list li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--blue-soft);flex:none}
-.expert__list em{margin-left:auto;font-style:normal;font-size:12px;color:var(--muted)}
-
+/* lifecycle mock additions */
+.pstep.sub{padding:4px 8px 4px 34px;font-size:11.5px;color:var(--text-2)}
+.pstep.sub:first-of-type{color:var(--blue-deep)}
+.ui__pm{margin-top:auto;padding-top:10px;border-top:1px solid var(--border-soft)}
+.lcstep{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--muted);padding:2px 4px}
+.lcstep .done{color:var(--ok)}.lcstep .now{color:var(--blue-deep);font-weight:700}
+.gw__k{font-size:11.5px;font-weight:700;color:var(--blue-deep);margin-bottom:4px}
+.check .imp{margin-left:auto;font-size:10.5px;color:var(--muted);white-space:nowrap}
+.check.skip{color:var(--muted)}.check.skip i{border-style:dashed}
+.fgrid .q__t{font-size:15px}
+.footer__c a{color:var(--muted);text-decoration:none;margin-left:14px}
 /* closing */
 .closing{position:relative;background:var(--navy-deep);padding:96px 0;text-align:center;overflow:hidden}
 .closing::before{content:"";position:absolute;inset:0;pointer-events:none;
@@ -360,7 +359,7 @@ p{margin:0}
   .hero h1{font-size:44px}
   .h2{font-size:36px}
   .qgrid{grid-template-columns:repeat(2,1fr)}
-  .pillar,.expert{grid-template-columns:1fr;gap:40px}
+  .pillar{grid-template-columns:1fr;gap:40px}
   .pillar h2{font-size:30px}
   .gw{grid-template-columns:1fr}
 }
@@ -398,9 +397,9 @@ p{margin:0}
     <a href="#top" class="logo">RELAI</a>
     <nav class="nav">
       <a href="#preview">사용 방법</a>
-      <a href="#guide">주요 기능</a>
+      <a href="#lifecycle">Project Lifecycle</a>
+      <a href="#features">주요 기능</a>
       <a href="#ask">RELAI에게 물어보기</a>
-      <a href="#expert">전문가 지원</a>
     </nav>
     <div class="header__cta">
       <a href="/login" class="header__login" data-auth="login" data-loc="nav_login">로그인</a>
@@ -410,9 +409,9 @@ p{margin:0}
   </div>
   <div class="mnav wrap" id="mnav">
     <a href="#preview">사용 방법</a>
-    <a href="#guide">주요 기능</a>
+    <a href="#lifecycle">Project Lifecycle</a>
+    <a href="#features">주요 기능</a>
     <a href="#ask">RELAI에게 물어보기</a>
-    <a href="#expert">전문가 지원</a>
     <a href="/login" data-auth="login" data-loc="nav_mobile_login">로그인</a>
     <a href="/signup" class="btn btn--primary btn--block" data-auth="start" data-loc="nav_mobile">무료로 시작하기</a>
   </div>
@@ -422,16 +421,16 @@ p{margin:0}
 <section class="hero" id="top">
   <div class="wrap">
     <div class="hero__copy">
-      <p class="eyebrow">Guided Project Execution</p>
-      <h1>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h1>
+      <p class="eyebrow">Project Guidance System</p>
+      <h1>프로젝트 생애주기를 따라<br>지금 해야 할 일을 안내합니다.</h1>
       <p class="hero__sub">
-        RELAI가 프로젝트의 현재 단계를 확인하고, <b>지금 해야 할 일</b>과 다음 단계를 안내합니다.
-        착수부터 요구사항, 일정, 실행, 테스트, 검수, 오픈까지 7단계 흐름을 따라 프로젝트를 진행하세요.
+        프로젝트 관리 도구는 많지만, 프로젝트를 처음부터 끝까지 <b>어떤 순서로 무엇을 해야 하는지</b> 안내해 주는 제품은 드뭅니다.
+        RELAI는 현재 단계와 다음 업무를 안내하고, Requirements · WBS · Testing · Change 데이터를 연결해 실행을 돕습니다.
       </p>
-      <p class="hero__punch">순서대로 따라가기만 하면 프로젝트가 끝까지 갑니다.</p>
-      <div class="flowline">
-        <span>착수</span><i>→</i><span>요구사항</span><i>→</i><span>일정</span><i>→</i><span>실행</span>
-        <i>→</i><span>테스트</span><i>→</i><span>검수</span><i>→</i><span>오픈</span>
+      <p class="hero__punch">현재 단계를 확인하고, 다음 할 일 하나를 끝내면 프로젝트가 앞으로 갑니다.</p>
+      <div class="flowline" aria-label="Project Lifecycle">
+        <span>착수</span><i>→</i><span>요구사항 정의</span><i>→</i><span>분석·설계</span><i>→</i><span>구현</span>
+        <i>→</i><span>시험</span><i>→</i><span>전환 및 오픈</span><i>→</i><span>운영 및 유지보수</span>
       </div>
       <div class="hero__actions">
         <a href="/signup" class="btn btn--primary" data-auth="start" data-loc="hero">무료로 시작하기</a>
@@ -440,125 +439,110 @@ p{margin:0}
       <p class="hero__note">회원가입 후 바로 시작할 수 있습니다.</p>
     </div>
 
-    <!-- GUIDED EXECUTION PREVIEW -->
+    <!-- WHAT'S NEXT PREVIEW -->
     <div class="shot" id="preview">
       <div class="shot__chrome">
         <i class="dot"></i><i class="dot"></i><i class="dot"></i>
-        <span class="shot__url">app.relai.kr / 지금 할 일</span>
+        <span class="shot__url">RELAI / A사 상담 시스템 구축 / What’s Next</span>
       </div>
       <div class="ui">
         <aside class="ui__side">
           <div class="ui__brand">RELAI</div>
           <div class="ui__pj">
             <b>A사 상담 시스템 구축</b>
-            <span>전체 7단계 중 1단계 진행 중</span>
-            <div class="bar"><i data-progress="14"></i></div>
+            <span>진행 중 · 현재 단계 02 요구사항 정의</span>
           </div>
           <div class="ui__group">
-            <h6>프로젝트 전체 흐름</h6>
-            <div class="pstep now"><i>1</i>착수<em>진행 중</em></div>
-            <div class="pstep"><i>2</i>요구사항</div>
-            <div class="pstep"><i>3</i>일정</div>
-            <div class="pstep"><i>4</i>실행</div>
-            <div class="pstep"><i>5</i>테스트</div>
-            <div class="pstep"><i>6</i>검수</div>
-            <div class="pstep"><i>7</i>오픈</div>
+            <h6>PROJECT HOME</h6>
+            <div class="pstep now"><i>→</i>What’s Next</div>
+            <div class="pstep"><i>▤</i>Overview</div>
           </div>
-          <div class="ui__conn">
-            <h6>프로젝트 자료 연결</h6>
-            <b>Jira · Slack · Drive</b>
-            <span>있으면 연결하고, 없어도 시작할 수 있습니다.</span>
+          <div class="ui__group">
+            <h6>PROJECT LIFECYCLE</h6>
+            <div class="pstep done"><i>✓</i>01 착수</div>
+            <div class="pstep now"><i>02</i>요구사항 정의<em>현재</em></div>
+            <div class="pstep sub">요구사항</div>
+            <div class="pstep sub">요구사항 분류 / 우선순위</div>
+            <div class="pstep sub">Requirement Trace</div>
+            <div class="pstep"><i>03</i>분석·설계</div>
+            <div class="pstep"><i>04</i>구현</div>
+            <div class="pstep"><i>05</i>시험</div>
+            <div class="pstep"><i>06</i>전환 및 오픈</div>
+            <div class="pstep"><i>07</i>운영 및 유지보수</div>
+          </div>
+          <div class="ui__group ui__pm">
+            <h6>PROJECT MANAGEMENT</h6>
+            <div class="pstep"><i>⇄</i>Changes</div>
+            <div class="pstep"><i>!</i>Issues &amp; Risks</div>
+            <div class="pstep"><i>◷</i>Activity</div>
+            <div class="pstep"><i>▤</i>Reports</div>
           </div>
         </aside>
 
         <div class="ui__main">
+          <div class="lcstep" aria-label="Lifecycle position">
+            <span class="done">✓ 착수</span><span class="now">● 요구사항 정의</span><span>○ 분석·설계</span><span>○ 구현</span><span>○ 시험</span><span>○ 전환 및 오픈</span><span>○ 운영 및 유지보수</span>
+          </div>
           <div class="gw">
             <div class="card card--now">
               <div class="gw__top">
-                <span class="gw__label">현재 단계 · 프로젝트 착수</span>
-                <span class="gw__count">STEP 3 / 5</span>
+                <span class="gw__label">✦ RELAI Guide</span>
+                <span class="gw__count">현재 단계 02 요구사항 정의</span>
               </div>
               <div class="gw__body">
-                <div class="gw__title">고객과 프로젝트 범위를 확정하세요.</div>
-
+                <div class="gw__k">다음 할 일</div>
+                <div class="gw__title">요구사항을 수집하고 정리하세요.</div>
                 <div class="gw__why">
-                  <b>왜 해야 하나요?</b>
-                  <p>처음에 범위를 명확히 하지 않으면, 이후 추가 요청이 들어올 때마다 일정이 흔들립니다. 지금 한 번 정리해두면 나중에 “이건 계약에 있었나요?”를 두고 다투지 않아도 됩니다.</p>
+                  <b>왜 지금 이 일인가요?</b>
+                  <p>현업과 고객의 기능·비기능 요구사항을 정리해 프로젝트 범위를 구체화합니다. 요구사항은 WBS, 테스트, 검수와 연결되는 프로젝트의 기준입니다.</p>
                 </div>
-
-                <div class="gw__prep">
-                  <div class="gw__prep-h">RELAI가 먼저 준비했습니다<em>✦ 프로젝트 자료 확인함</em></div>
-                  <ul>
-                    <li>계약서에서 프로젝트 범위 후보 12개를 찾았습니다</li>
-                    <li>고객에게 확인해야 할 항목 4개를 정리했습니다</li>
-                    <li>바로 보낼 수 있는 확인 요청 메시지 초안을 만들었습니다</li>
-                  </ul>
-                </div>
-
                 <div class="gw__acts">
-                  <span class="fbtn">이 단계 시작하기</span>
-                  <span class="fbtn fbtn--ghost">어떻게 하나요?</span>
-                  <span class="fbtn fbtn--ghost">예시 보기</span>
+                  <span class="fbtn">요구사항 입력 시작 →</span>
                 </div>
-                <p class="gw__hint">준비된 초안을 확인하고 고치기만 하면 됩니다. 처음부터 작성하지 않아도 됩니다.</p>
+                <p class="gw__hint">Requirements 화면에서 직접 입력, Excel 가져오기, AI 추출 중 편한 방법을 고릅니다.</p>
               </div>
             </div>
 
-            <div style="display:flex;flex-direction:column;gap:14px">
-              <div class="card">
-                <div class="card__h">착수 단계 할 일<em>2 / 5 완료</em></div>
-                <div class="checks">
-                  <div class="check ok"><i>✓</i>계약 내용 확인</div>
-                  <div class="check ok"><i>✓</i>프로젝트 담당자 정하기</div>
-                  <div class="check here"><i></i>고객과 범위 확정<span class="check__tag">지금 여기</span></div>
-                  <div class="check"><i></i>전체 일정 만들기</div>
-                  <div class="check"><i></i>킥오프 진행하기</div>
-                </div>
-                <div class="next">
-                  <b>다음에 할 일</b>
-                  범위가 확정되면 그 내용으로 전체 일정 초안을 만들어 드립니다.
-                </div>
+            <div class="card">
+              <div class="card__h">02 요구사항 정의 업무<em>필수 업무 3건 남음</em></div>
+              <div class="checks">
+                <div class="check ok"><i>✓</i>요구사항 수집<span class="imp">필수</span></div>
+                <div class="check here"><i></i>요구사항 분류<span class="imp">필수 · 진행 중</span></div>
+                <div class="check"><i></i>우선순위 설정<span class="imp">권장 · 미시작</span></div>
+                <div class="check"><i></i>범위 확정<span class="imp">필수 · 미시작</span></div>
+                <div class="check"><i></i>요구사항 확정<span class="imp">필수 · 미시작</span></div>
+                <div class="check skip"><i></i>인터페이스 요구사항<span class="imp">선택 · 제외</span></div>
               </div>
-
-              <div class="insight">
-                <div class="insight__h">✦ RELAI가 발견했습니다<em>2시간 전</em></div>
-                <div class="insight__b">
-                  <p>지난 회의록에서 계약 범위에 없는 요청 2건이 추가되었습니다.</p>
-                  <p>이 요청을 그대로 진행하면 일정에 영향을 줄 수 있습니다.</p>
-                </div>
-                <div class="insight__f"><span class="fbtn fbtn--ghost">확인하기</span></div>
+              <div class="next">
+                <b>다음 단계</b>
+                03 분석·설계 — 확정된 요구사항을 기준으로 WBS와 실행 계획을 세웁니다.
               </div>
             </div>
           </div>
 
           <div class="ui__row2">
             <div class="card">
-              <div class="card__h">다음 단계로 가기 전 확인<em>RELAI가 점검했습니다</em></div>
+              <div class="card__h">Overview — 계획대로 가고 있나요?<em>Project Control</em></div>
               <div class="pre">
-                <div><i class="m ok">✓</i>프로젝트 범위 정리 완료</div>
-                <div><i class="m ok">✓</i>고객 확인 완료</div>
-                <div><i class="m ok">✓</i>담당자 지정 완료</div>
-                <div class="miss"><i class="m no">!</i>킥오프 일정이 아직 없습니다</div>
-              </div>
-              <div class="pre__f">
-                <span class="t">하나만 더 완료하면 다음 단계가 열립니다.</span>
-                <span class="fbtn">킥오프 일정 정하기</span>
+                <div><i class="m ok">✓</i>Schedule · 계획 대비 진척 +2%p</div>
+                <div><i class="m ok">✓</i>Scope · 범위 내 요구사항 18건 중 16건 확정</div>
+                <div class="miss"><i class="m no">!</i>Change · 검토 중 변경 요청 1건</div>
+                <div class="miss"><i class="m no">!</i>Risk · High 이상 Risk 1건</div>
               </div>
             </div>
-
             <div class="card">
-              <div class="card__h">이 단계에서 챙겨야 할 산출물<em>착수 단계 기준</em></div>
+              <div class="card__h">Traceability<em>Requirements ↔ WBS ↔ Test</em></div>
               <div class="outrow">
-                <div class="ot"><b>RFP · 제안서</b><span class="sub">고객이 요청한 내용과 우리가 약속한 내용을 맞춰봅니다</span></div>
-                <span class="tagp tagp--ok">확인 완료</span>
+                <div class="ot"><b>REQ-007 상담 이력 조회</b><span class="sub">WBS 2.3 · TC-011 Pass · CR-002 반영 완료</span></div>
+                <span class="tagp tagp--ok">검증 완료</span>
               </div>
               <div class="outrow">
-                <div class="ot"><b>기술 협상 정리</b><span class="sub">개발 방식, 환경, 연동처럼 미리 합의해야 할 것을 적어둡니다</span></div>
-                <span class="tagp tagp--now">진행 중</span>
+                <div class="ot"><b>REQ-012 SSO 로그인</b><span class="sub">WBS 1.4 · 테스트 미연결</span></div>
+                <span class="tagp tagp--now">테스트 필요</span>
               </div>
               <div class="outrow">
-                <div class="ot"><b>산출물 테일러링</b><span class="sub">이 프로젝트에서 실제로 만들 문서만 골라 정하는 일입니다</span></div>
-                <span class="tagp tagp--wait">다음에</span>
+                <div class="ot"><b>REQ-015 통계 대시보드</b><span class="sub">연결된 작업 없음</span></div>
+                <span class="tagp tagp--wait">WBS 연결 필요</span>
               </div>
             </div>
           </div>
@@ -573,36 +557,36 @@ p{margin:0}
   <div class="wrap">
     <div class="head-block center reveal">
       <p class="eyebrow">The problem</p>
-      <h2 class="h2">프로젝트는 시작됐는데<br>물어볼 사람이 없습니다.</h2>
+      <h2 class="h2">도구는 많은데,<br>“지금 뭘 해야 하는지”는 아무도 알려주지 않습니다.</h2>
       <p class="lead" style="margin-top:18px">
-        일을 못해서가 아닙니다. 프로젝트를 처음부터 끝까지 끌고 가본 사람이 팀에 없기 때문입니다.
+        일정표와 이슈 목록은 있어도, 프로젝트를 처음부터 끝까지 어떤 순서로 끌고 가야 하는지는 경험이 없으면 알기 어렵습니다.
       </p>
     </div>
     <div class="qgrid reveal">
       <div class="q">
-        <div class="q__who">계약 직후</div>
+        <div class="q__who">착수</div>
         <div class="q__t">“계약은 했는데 이제 뭐부터 해야 하지?”</div>
         <p class="q__n">할 일이 많다는 건 알겠는데 순서를 모르겠습니다.</p>
       </div>
       <div class="q">
-        <div class="q__who">진행 중</div>
-        <div class="q__t">“이 프로젝트, 제대로 가고 있는 건가?”</div>
-        <p class="q__n">물어볼 때마다 답이 다르고, 확인할 기준도 없습니다.</p>
+        <div class="q__who">요구사항 정의</div>
+        <div class="q__t">“요구사항이 계속 늘어나는데 어디까지가 범위지?”</div>
+        <p class="q__n">기준선이 없으면 변경과 추가를 구분할 수 없습니다.</p>
       </div>
       <div class="q">
-        <div class="q__who">고객 응대</div>
-        <div class="q__t">“고객 요청을 어디까지 받아줘야 하지?”</div>
-        <p class="q__n">거절하면 관계가 상하고, 받으면 일정이 무너집니다.</p>
-      </div>
-      <div class="q">
-        <div class="q__who">자료 요청</div>
+        <div class="q__who">분석·설계</div>
         <div class="q__t">“WBS를 달라고 하는데 이게 뭐지?”</div>
         <p class="q__n">이름은 들어봤지만 무엇을 어디까지 써야 하는지 모릅니다.</p>
       </div>
       <div class="q">
-        <div class="q__who">검수 직전</div>
+        <div class="q__who">구현</div>
+        <div class="q__t">“이 프로젝트, 제대로 가고 있는 건가?”</div>
+        <p class="q__n">물어볼 때마다 답이 다르고, 확인할 기준도 없습니다.</p>
+      </div>
+      <div class="q">
+        <div class="q__who">시험 · 검수</div>
         <div class="q__t">“다음 주가 검수인데 무엇을 준비하지?”</div>
-        <p class="q__n">시연만 하면 되는 줄 알았는데 자료를 달라고 합니다.</p>
+        <p class="q__n">요구사항이 테스트로 검증됐는지 보여줄 자료가 없습니다.</p>
       </div>
       <div class="q">
         <div class="q__who">단계 전환</div>
@@ -613,89 +597,112 @@ p{margin:0}
   </div>
 </section>
 
-<!-- GUIDE -->
-<section class="section" id="guide">
+<!-- LIFECYCLE -->
+<section class="section" id="lifecycle">
   <div class="wrap pillar">
     <div class="reveal">
-      <h2>다음 할 일을 따라가면<br>프로젝트가 앞으로 갑니다.</h2>
-      <p>RELAI는 프로젝트를 7단계로 나누고, 지금 해야 할 일을 하나씩 꺼내 보여줍니다. 하는 일은 세 가지입니다.</p>
+      <p class="eyebrow">Project Lifecycle</p>
+      <h2>프로젝트 생애주기 7단계를<br>그대로 따라갑니다.</h2>
+      <p>RELAI의 메뉴와 화면은 기능이 아니라 프로젝트의 생애주기 순서로 놓여 있습니다. 현재 단계는 파란색, 끝난 단계는 초록색으로 표시되고, 각 단계에는 그 단계에서 해야 할 업무와 실제 업무 화면이 연결되어 있습니다.</p>
       <ul class="three">
         <li>
           <b class="n">1</b>
           <div>
-            <strong>찾아줍니다</strong>
-            <span>프로젝트의 유형과 현재 상황을 기준으로 지금 가장 먼저 해야 할 일을 찾습니다. 왜 그 일이 먼저인지도 함께 알려줍니다.</span>
+            <strong>현재 위치를 보여줍니다</strong>
+            <span>7단계 중 프로젝트가 지금 어디에 있는지, 이 단계의 업무가 완료 · 진행 중 · 미시작 중 어떤 상태인지 한눈에 봅니다.</span>
           </div>
         </li>
         <li>
           <b class="n">2</b>
           <div>
-            <strong>준비합니다</strong>
-            <span>그 일에 필요한 자료와 산출물이 무엇인지 단계별로 알려줍니다. 막막하게 검색하며 시작하지 않아도 됩니다.</span>
+            <strong>다음 할 일 하나를 정합니다</strong>
+            <span>RELAI Guide가 프로젝트 데이터를 읽어 지금 가장 먼저 해야 할 일과 그 이유를 알려주고, 실제 업무 화면으로 바로 보냅니다.</span>
           </div>
         </li>
         <li>
           <b class="n">3</b>
           <div>
-            <strong>확인합니다</strong>
-            <span>일을 마치면 빠진 것이 없는지 점검하고, 다음에 할 일을 알려줍니다.</span>
+            <strong>계획대로 가는지 확인합니다</strong>
+            <span>Overview에서 계획 대비 진척, 범위, 품질, 변경, 리스크를 보고 다음 단계로 넘어갈 준비가 됐는지 판단합니다.</span>
           </div>
         </li>
       </ul>
-      <div class="guide__note">하나를 끝내면 RELAI가 빠진 것이 없는지 확인합니다. 준비가 끝나면 다음 할 일이 열립니다.</div>
+      <div class="guide__note">필수 업무를 마치면 다음 단계로 이동합니다. 권장 · 선택 업무는 프로젝트에 맞게 건너뛸 수 있습니다.</div>
     </div>
     <div class="reveal">
       <div class="journey">
         <div class="jrow">
-          <div><b>1. 착수</b><p>시작 준비</p></div>
-          <div class="jout"><span>프로젝트 개요</span><span>범위 확인 목록</span><span>킥오프 자료</span></div>
+          <div><b>01 착수</b><p>Initiation</p></div>
+          <div class="jout"><span>목표</span><span>범위</span><span>조직</span><span>상위 일정</span></div>
         </div>
         <div class="jrow">
-          <div><b>2. 요구사항</b><p>무엇을 만들지</p></div>
-          <div class="jout"><span>요구사항 목록</span><span>고객 확인 요청</span></div>
+          <div><b>02 요구사항 정의</b><p>Requirements Definition</p></div>
+          <div class="jout"><span>요구사항 수집</span><span>분류</span><span>범위 확정</span></div>
         </div>
         <div class="jrow">
-          <div><b>3. 일정</b><p>언제까지</p></div>
-          <div class="jout"><span>전체 일정표</span><span>WBS</span></div>
+          <div><b>03 분석·설계</b><p>Analysis &amp; Design</p></div>
+          <div class="jout"><span>Requirements 기반 WBS</span><span>실행계획</span></div>
         </div>
         <div class="jrow">
-          <div><b>4. 실행</b><p>만들면서</p></div>
-          <div class="jout"><span>주간 보고</span><span>변경 요청서</span><span>이슈 기록</span></div>
+          <div><b>04 구현</b><p>Development</p></div>
+          <div class="jout"><span>실행 Task 진행</span><span>지연 · Issue · 변경</span></div>
         </div>
         <div class="jrow">
-          <div><b>5. 테스트</b><p>확인하기</p></div>
-          <div class="jout"><span>테스트 항목</span><span>결과 정리</span></div>
+          <div><b>05 시험</b><p>Testing</p></div>
+          <div class="jout"><span>Test</span><span>Defect 검증</span></div>
         </div>
         <div class="jrow">
-          <div><b>6. 검수</b><p>고객 확인</p></div>
-          <div class="jout"><span>검수 자료</span><span>확인서</span></div>
+          <div><b>06 전환 및 오픈</b><p>Transition &amp; Go-Live</p></div>
+          <div class="jout"><span>검수</span><span>Migration</span><span>Go-Live</span><span>안정화</span></div>
         </div>
         <div class="jrow">
-          <div><b>7. 오픈</b><p>넘기기</p></div>
-          <div class="jout"><span>오픈 점검표</span><span>인수인계 자료</span></div>
+          <div><b>07 운영 및 유지보수</b><p>Operations &amp; Maintenance</p></div>
+          <div class="jout"><span>운영</span><span>유지보수</span><span>지속 개선</span></div>
         </div>
       </div>
       <p style="margin-top:16px;font-size:14px;color:var(--muted);line-height:1.6">
-        문서를 채우는 게 목적이 아닙니다. 할 일을 하다 보면 자료는 결과로 남습니다.
+        “일정”은 별도 단계가 아닙니다. 착수에서 상위 일정을, 분석·설계에서 WBS의 세부 일정을 세웁니다.
       </p>
     </div>
   </div>
 </section>
 
+<!-- FEATURES -->
+<section class="section section--alt" id="features">
+  <div class="wrap">
+    <div class="head-block center reveal">
+      <p class="eyebrow">Features</p>
+      <h2 class="h2">단계마다 필요한 업무 화면이<br>이미 연결되어 있습니다.</h2>
+      <p class="lead" style="margin-top:18px">
+        요구사항에서 WBS, 테스트, 변경까지 하나의 데이터로 이어지므로 같은 내용을 두 번 적지 않습니다.
+      </p>
+    </div>
+    <div class="qgrid fgrid reveal">
+      <div class="q"><div class="q__who">What’s Next</div><div class="q__t">현재 단계와 다음 업무 안내</div><p class="q__n">지금 어디에 있고, 가장 먼저 무엇을 해야 하는지. 업무 상태는 실제 프로젝트 데이터에서 읽습니다.</p></div>
+      <div class="q"><div class="q__who">Project Lifecycle</div><div class="q__t">프로젝트 전체 흐름 관리</div><p class="q__n">착수부터 운영까지 7단계. 필수 · 권장 · 선택 업무로 단계 완료 기준을 명확히 합니다.</p></div>
+      <div class="q"><div class="q__who">Requirements</div><div class="q__t">요구사항 수집 · 분류 · 추적</div><p class="q__n">직접 입력, Excel 가져오기, AI 추출로 등록하고 유형 · 우선순위 · 범위를 정리해 확정합니다.</p></div>
+      <div class="q"><div class="q__who">WBS</div><div class="q__t">Requirements 기반 실행계획</div><p class="q__n">계층 구조, 담당자, 일정, 선후관계, 마일스톤. 분석·설계에서 작성하고 Overview에서 운영 조회합니다.</p></div>
+      <div class="q"><div class="q__who">Traceability</div><div class="q__t">Requirements ↔ WBS ↔ Change ↔ Test</div><p class="q__n">빠진 요구사항, 테스트되지 않은 요구사항, 승인 후 미반영 변경을 연결 관계로 찾아냅니다.</p></div>
+      <div class="q"><div class="q__who">Project Overview</div><div class="q__t">계획 대비 실제 진행 · Health · Risk</div><p class="q__n">Schedule · Scope · Quality · Change · Risk 상태와 확인 필요 항목, 그리고 주간보고 초안.</p></div>
+      <div class="q"><div class="q__who">AI Assistance</div><div class="q__t">Requirements · WBS 초안 · 프로젝트 Q&amp;A</div><p class="q__n">문서에서 요구사항을 추출하고, 요구사항 기반 WBS 초안을 만들고, 프로젝트 데이터를 근거로 질문에 답합니다.</p></div>
+    </div>
+  </div>
+</section>
+
 <!-- ASK -->
-<section class="section section--alt" id="ask">
+<section class="section" id="ask">
   <div class="wrap">
     <div class="head-block center reveal">
       <p class="eyebrow">Ask RELAI</p>
       <h2 class="h2">RELAI가 먼저 알려주고,<br>궁금한 건 바로 물어보세요.</h2>
       <p class="lead" style="margin-top:18px">
         프로젝트를 하다 막히는 순간마다 떠오르는 질문들입니다.
-        RELAI는 현재 단계를 기준으로 무엇을 해야 할지 안내합니다.
+        RELAI는 현재 단계와 프로젝트 데이터(요구사항 · WBS · 테스트 · Issue · 변경)를 근거로 답합니다.
       </p>
     </div>
 
     <div class="demo reveal">
-      <div class="demo__h">✦ RELAI<em>A사 상담 시스템 구축</em></div>
+      <div class="demo__h">✦ RELAI<em>A사 상담 시스템 구축 · 02 요구사항 정의</em></div>
       <div class="demo__log" id="log">
         <div class="msg msg--ai">
           <div class="lab">✦ RELAI</div>
@@ -711,26 +718,7 @@ p{margin:0}
         <button class="chip" data-q="meeting">고객 미팅이 있는데 뭘 확인해야 해?</button>
       </div>
     </div>
-    <p class="demo__foot reveal">프로젝트 관리 표준과 현직 PM의 실무 경험을 기반으로 안내합니다.</p>
-  </div>
-</section>
-
-<!-- EXPERT -->
-<section class="section section--tight" id="expert">
-  <div class="wrap expert">
-    <div class="reveal">
-      <p class="eyebrow">Expert support</p>
-      <h2>사람의 판단이 필요한 순간에는<br>전문가 지원도 연결할 예정입니다.</h2>
-      <p>고객과의 협상, 범위를 두고 생기는 갈등, 검수 대응처럼 판단이 필요한 순간이 있습니다. 필요한 경우 현직 PM의 도움을 받을 수 있도록 RELAI에 전문가 지원을 연결할 예정입니다.</p>
-    </div>
-    <div class="reveal">
-      <ul class="expert__list">
-        <li>진행 상황 점검과 리스크 확인<em>정기</em></li>
-        <li>고객 커뮤니케이션 도움<em>필요할 때</em></li>
-        <li>범위 변경 협의 지원<em>필요할 때</em></li>
-        <li>검수와 오픈 대응<em>단계별</em></li>
-      </ul>
-    </div>
+    <p class="demo__foot reveal">예시 답변입니다. 실제 서비스에서는 프로젝트에 등록된 데이터와 현재 단계를 근거로 답합니다.</p>
   </div>
 </section>
 
@@ -752,17 +740,26 @@ p{margin:0}
     <div class="footer__in">
       <div>
         <div class="logo">RELAI</div>
-        <p class="footer__tag">프로젝트를 처음 맡아도 끝까지.</p>
+        <p class="footer__tag">프로젝트 생애주기를 따라 다음 해야 할 일을 안내하는 Project Guidance System</p>
       </div>
       <nav class="footer__links">
         <a href="#top">서비스 소개</a>
+        <a href="#lifecycle">Project Lifecycle</a>
+        <a href="#features">주요 기능</a>
         <a href="mailto:enj.shlee@gmail.com">문의</a>
         <a href="/login" data-auth="login">로그인</a>
         <a href="/signup" data-auth="start">무료로 시작하기</a>
       </nav>
     </div>
+    <!-- 사업자 정보 · 이용약관 · 개인정보처리방침 · 통신판매업 신고번호 · 요금 안내:
+         저장소/배포 이력 어디에도 실제 값이 없어 비워 둡니다. 값이 확정되면 아래 블록을 채워 노출합니다.
+         <div class="footer__legal">
+           <span>상호 …</span><span>대표자 …</span><span>사업자등록번호 …</span><span>주소 …</span><span>전화 …</span><span>통신판매업 신고번호 …</span>
+           <a href="/terms">이용약관</a><a href="/privacy">개인정보처리방침</a><a href="/pricing">요금 안내</a>
+         </div> -->
     <div class="footer__c">
       <span>© RELAI</span>
+      <a href="mailto:enj.shlee@gmail.com">enj.shlee@gmail.com</a>
     </div>
   </div>
 </footer>
@@ -818,40 +815,40 @@ fetch('/api/me', {credentials:'same-origin'}).then(function(r){
 /* ---------- ask relay demo ---------- */
 var A = {
   after_contract:{
-    q:'계약했는데 이제 뭘 해야 돼?', tag:'현재 프로젝트 기준',
-    body:'계약서를 읽어보니 만들기로 한 것 12개와 검수 조건 3개가 적혀 있습니다. 그런데 고객사 담당자와 전체 일정의 큰 마디가 아직 정해지지 않았습니다. 개발보다 이걸 먼저 맞춰야 합니다.',
-    acts:['계약서에서 뽑은 납품물 12개를 고객과 함께 확인하기','고객사에서 결정을 내려주는 사람이 누구인지 확인하기','전체 일정의 큰 마디 4개 정하기','요구사항을 정리할 회의 날짜 잡기','매주 어떤 형식으로 보고할지 합의하기'],
-    do:'범위 확인 목록 열기'
+    q:'계약했는데 이제 뭘 해야 돼?', tag:'현재 단계 01 착수',
+    body:'프로젝트 정의가 아직 비어 있습니다. 착수 단계에서는 목표·범위·이해관계자·상위 일정·운영 방식을 먼저 정리합니다. 이 다섯 가지가 이후 요구사항, WBS, 검수의 판단 기준이 됩니다.',
+    acts:['프로젝트 목표와 성공 기준 1개 이상 적기','수행 범위와 제외 범위 구분하기','고객사·수행사 담당자와 역할 정리하기','시작일·종료 예정일과 주요 마일스톤 적기','보고·회의·의사결정 방식 정하기'],
+    do:'프로젝트 정의 시작 →'
   },
   wbs:{
-    q:'고객이 WBS를 달라고 하는데 뭘 만들어야 해?', tag:'현재 프로젝트 기준',
-    body:'WBS는 일정표가 아니라 만들어야 할 것들을 잘게 나눈 목록입니다. 지금 계약서에서 뽑아둔 납품물 12개가 있으니, 그 아래에 작업을 붙이면 됩니다. 한 칸이 1~2주 안에 끝나는 크기면 충분합니다.',
-    acts:['납품물 12개를 그대로 상위 항목으로 놓기','각 납품물 아래에 필요한 작업 나열하기','작업마다 담당자와 걸리는 기간 적기','고객 확인이 필요한 지점 표시하기','RELAI가 만든 초안 확인하고 다듬기'],
-    do:'WBS 초안 만들기'
+    q:'고객이 WBS를 달라고 하는데 뭘 만들어야 해?', tag:'현재 단계 03 분석·설계',
+    body:'WBS는 일정표가 아니라 요구사항을 실제 작업 단위로 나눈 실행 계획입니다. 확정된 범위 내 요구사항 16건을 기준으로 작업을 만들고, 작업마다 담당자와 계획 일정을 넣으면 됩니다. 한 작업이 1~2주 안에 끝나는 크기면 충분합니다.',
+    acts:['요구사항 16건 각각에 구현 작업 연결하기','테스트·이관·교육처럼 기능 개발 외 작업도 추가하기','작업마다 담당자와 시작일·종료일 넣기','선후관계와 마일스톤 표시하기','AI WBS 초안을 만들어 다듬기'],
+    do:'WBS 작성 시작 →'
   },
   scope:{
-    q:'요구사항이 계속 늘어나는데 어떻게 해야 해?', tag:'현재 프로젝트 기준',
-    body:'현재 프로젝트를 확인해보니 요구사항 24건 중 최근 회의에서 추가된 항목이 5건 있습니다. 그중 2건은 기존 계약 범위에 없는 요청일 가능성이 높습니다. 받을지 말지를 정하기 전에, 먼저 이 5건을 기존 범위와 추가 요청으로 나누는 게 좋습니다.',
-    acts:['신규 요청 5건 확인','범위 밖 2건 변경 요청으로 분리','일정 영향 확인','고객 확인 요청 보내기'],
-    do:'신규 요청 정리하기'
+    q:'요구사항이 계속 늘어나는데 어떻게 해야 해?', tag:'현재 단계 04 구현',
+    body:'요구사항 24건 중 확정된 기준선은 18건이고, 이번 주 추가된 5건은 아직 범위가 결정되지 않았습니다. 확정 이후의 추가 요청은 변경 요청으로 분리해 영향도를 보고 결정하는 것이 좋습니다.',
+    acts:['범위 미결정 요구사항 5건의 범위 결정하기','기준선에 없는 2건은 변경 요청으로 등록하기','변경 요청의 WBS 영향(일정·재작업) 적기','고객에게 승인 요청 보내기'],
+    do:'범위 결정 →'
   },
   acceptance:{
-    q:'다음 주 검수인데 뭘 준비해야 해?', tag:'현재 프로젝트 기준',
-    body:'검수까지 6일 남았습니다. 요구사항 24건 중 3건이 아직 확인 결과가 비어 있고, 테스트 결과도 정리되지 않았습니다. 검수는 시연이 아니라 약속한 걸 다 했는지 확인하는 자리라, 이 연결부터 채워야 합니다.',
-    acts:['요구사항 24건에 확인 결과 채워넣기','테스트한 항목과 결과 한 장으로 정리하기','아직 못 고친 것과 언제 고칠지 함께 적기','검수 확인서 초안 미리 보내기','검수 당일 진행 순서 합의하기'],
-    do:'검수 자료 준비하기'
+    q:'다음 주 검수인데 뭘 준비해야 해?', tag:'현재 단계 05 시험',
+    body:'검수는 06 전환 및 오픈의 첫 관문입니다. 범위 내 요구사항 18건 중 3건은 아직 테스트가 연결되지 않았고, Fail 테스트 2건이 남아 있습니다. 검수 항목에는 승인받을 요구사항과 그 테스트 결과를 묶어 넣습니다.',
+    acts:['테스트가 없는 요구사항 3건에 테스트 케이스 연결하기','Fail 테스트 2건 조치 후 재실행하기','검수 항목에 대상 요구사항과 테스트 묶기','검수 요청 보내고 승인·보완 결과 기록하기'],
+    do:'검수 항목 작성 →'
   },
   schedule:{
-    q:'지금 일정대로 오픈할 수 있어?', tag:'현재 프로젝트 기준',
-    body:'지금 속도라면 테스트 시작이 5일 정도 밀립니다. 개발이 느려서가 아니라 고객 답변을 기다리는 항목 4건이 그대로 남아 있어서입니다. 여기부터 풀면 일정은 회복할 수 있습니다.',
-    acts:['고객 답변 대기 4건을 한 장으로 정리해 보내기','확정하지 못한 요구사항의 마감일 정하기','가장 오래 걸리는 작업이 무엇인지 확인하기','밀릴 경우의 일정을 미리 계산해두기','고객에게 상황을 먼저 알리기'],
-    do:'고객 확인 요청 보내기'
+    q:'지금 일정대로 오픈할 수 있어?', tag:'현재 단계 04 구현',
+    body:'계획 진척률 62%, 실제 진척률 55%로 7%p 뒤처져 있습니다. 종료 예정일이 지난 작업 3건이 모두 고객 확인 대기 상태입니다. 이 3건을 풀면 일정은 회복할 수 있습니다.',
+    acts:['지연 작업 3건의 원인과 대응책 적기','고객 확인 대기 항목을 Issue로 기록하기','가장 오래 걸리는 작업의 일정 다시 잡기','Overview의 일정 상태를 주간보고에 반영하기'],
+    do:'지연 작업 확인 →'
   },
   meeting:{
-    q:'고객 미팅이 있는데 뭘 확인해야 해?', tag:'현재 프로젝트 기준',
-    body:'지난 회의에서 정한 3가지 중 1건이 아직 완료되지 않았고, 범위 밖 요청 2건도 아직 고객에게 알리지 못했습니다. 이번 회의에서 이 두 가지를 정리하고 넘어가는 게 좋습니다.',
-    acts:['지난 회의에서 정한 것과 지금 상태 정리하기','오늘 반드시 결정받아야 할 3가지 고르기','범위 밖 요청 2건을 그 자리에서 알리기','결정된 것과 미룬 것을 회의 끝에 확인하기','회의 후 24시간 안에 정리해서 보내기'],
-    do:'회의 준비 자료 열기'
+    q:'고객 미팅이 있는데 뭘 확인해야 해?', tag:'현재 단계 04 구현',
+    body:'검토 중인 변경 요청 1건과 High Risk 1건이 결정을 기다리고 있습니다. 지난 주간보고의 의사결정 필요 사항과 함께 이번 회의에서 정리하고 넘어가는 것이 좋습니다.',
+    acts:['검토 중 변경 요청의 승인·반려 받기','High Risk의 대응 전략 합의하기','지연 작업 3건의 조정된 일정 공유하기','결정된 것과 미룬 것을 회의 후 기록하기'],
+    do:'변경 요청 결정 →'
   }
 };
 var log = document.getElementById('log'), busy = false;
@@ -923,16 +920,6 @@ new IntersectionObserver(function(en){
   en.forEach(function(x){ if(x.isIntersecting && !seen){ seen = true; track('contact_view'); } });
 }, {threshold:.3}).observe(document.getElementById('contact'));
 
-var filled = false, shot = document.querySelector('.shot');
-var cio = new IntersectionObserver(function(en){
-  en.forEach(function(x){
-    if (!x.isIntersecting || filled) return; filled = true;
-    document.querySelectorAll('[data-progress]').forEach(function(b){
-      b.style.width = b.getAttribute('data-progress') + '%';
-    });
-  });
-}, {threshold:.2});
-if (shot) cio.observe(shot);
 })();
 </script>
 </body>
