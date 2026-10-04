@@ -40,7 +40,7 @@ test('definition: save partial, complete needs content, step status is the singl
   r = await A.c('POST', `${D}/sections/GOALS/complete`, {}); assert.equal(r.status, 200);
   assert.equal(r.json.sections[0].status, 'COMPLETED'); assert.equal(r.json.progress.done, 1);
   const g = r.json.guide; const init = g.phases.find((p) => p.phase_key === 'INITIATION');
-  assert.equal(init.steps.find((s) => s.step_key === 'GOALS').status, 'COMPLETED'); assert.equal(init.progress.done, 1);
+  assert.equal(init.steps.find((s) => s.step_key === 'GOALS').status, 'COMPLETED'); assert.equal(init.summary.completed, 1);
   assert.equal(g.definition.progress.done, 1); assert.deepEqual(g.definition.needs_review, []);
   // edit after completion → stays completed, flagged; confirm clears; reopen → TODO
   await new Promise((res) => setTimeout(res, 20));

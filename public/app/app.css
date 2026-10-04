@@ -933,27 +933,9 @@ h1,h2,h3{letter-spacing:-0.025em}
 .wsh__phase{font-size:12.5px;font-weight:700;color:var(--blue-deep);background:var(--blue-soft);border-radius:6px;padding:2px 8px;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
 .wsh__phk{font-size:11px;font-weight:600;color:var(--blue-deep);opacity:.75}
 .wsh__title{font-size:13px;font-weight:600;color:var(--text-2);white-space:nowrap}
-.wsh__steps{display:inline-flex;gap:3px;align-items:center}
-.ps{width:16px;height:6px;border-radius:3px;background:var(--border);display:block}
-.ps.is-done{background:var(--ok)}.ps.is-open{background:#F5C67A}.ps.is-cur{background:var(--blue);width:22px}
-.wsh__prog{display:inline-flex;align-items:center;gap:6px;width:112px;font-size:12px;color:var(--text-2)}
-.wsh__prog .pbar{flex:1;height:5px;min-width:40px}.wsh__prog b{font-variant-numeric:tabular-nums;color:var(--navy)}
 .wsh__owner{display:inline-flex;align-items:center;font-size:12.5px;color:var(--text-2);white-space:nowrap}
 .wsh__sp{flex:1}
-.wsh__kpi{display:inline-flex;gap:14px;font-size:12px;color:var(--muted);white-space:nowrap}
-.wsh__kpi b{color:var(--navy);font-variant-numeric:tabular-nums;margin-left:2px}
-.wsh__kpi:hover b{color:var(--blue-deep)}
-.wsh__tabs{display:flex;padding:0 8px;height:34px;align-items:stretch;overflow-x:auto;border-top:1px solid var(--border-soft);scrollbar-width:none}
-.wsh__tabs::-webkit-scrollbar{display:none}
-.wsh__tabs a{display:inline-flex;align-items:center;gap:6px;padding:0 12px;font-size:13px;font-weight:600;color:var(--text-2);border-bottom:2px solid transparent;white-space:nowrap}
-.wsh__tabs a:hover{color:var(--navy)}
-.wsh__tabs a.is-active{color:var(--blue-deep);border-color:var(--blue)}
-.wsh__tabs em{font-style:normal;font-size:11px;font-weight:700;background:var(--border-soft);color:var(--text-2);border-radius:999px;padding:0 6px}
-.wsh__tabs em.is-warn{background:#FEF6E7;color:#B45309}.wsh__tabs em.is-crit{background:#FEF3F4;color:#B42318}
-.wsh__tabs a.is-active em{background:var(--blue-soft);color:var(--blue-deep)}
-@media (max-width:1180px){.wsh__kpi,.wsh__owner{display:none}}
-@media (max-width:820px){.wsh__steps,.wsh__prog,.wsh__back,.wsh__sep{display:none}}
-
+@media (max-width:1180px){@media (max-width:820px){
 /* summary strips → one compact line of figures */
 .summary{display:flex;flex-wrap:wrap;border-radius:8px;margin-bottom:8px;overflow:hidden}
 .summary>div{display:flex;align-items:baseline;gap:6px;padding:5px 14px;border-left:1px solid var(--border-soft);min-width:0}

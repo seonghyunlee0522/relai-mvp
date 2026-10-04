@@ -134,7 +134,7 @@ test('metrics: snapshot endpoint + attention items + kpis from computed data onl
   const a = await A.acc({ title: 'A' }); await A.c('POST', `${A.purl}/acceptances/${a.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/acceptances/${a.id}/transition`, { action: 'rework', decision_note: 'x' });
   const s = await A.c('GET', `${A.purl}/snapshot`);
   assert.equal(s.status, 200);
-  assert.deepEqual(Object.keys(s.json.kpis), ['guided_progress', 'wbs_progress', 'requirement_coverage', 'test_coverage']);
+  assert.deepEqual(Object.keys(s.json.kpis), ['wbs_progress', 'requirement_coverage', 'test_coverage']);   // Lifecycle V2: no guided progress percentage
   assert.equal(s.json.kpis.requirement_coverage, 50); assert.equal(s.json.kpis.test_coverage, 50);
   const types = s.json.attention.map((x) => `${x.type}:${x.severity}`);
   for (const t2 of ['ISSUE:crit', 'TEST:crit', 'CHANGE:warn', 'WBS:warn', 'ACCEPTANCE:warn']) assert.ok(types.includes(t2), t2);

@@ -1,3 +1,4 @@
+import { DEFAULT_PHASES } from '../templates/default-phases.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { testDb, TEST_DATABASE_URL } from './helpers.js';
@@ -22,6 +23,7 @@ async function boot(db = null) {
   };
   return { db, server, client };
 }
+const STEPS_PER_PROJECT = DEFAULT_PHASES.reduce((n, p) => n + p.steps.length, 0);
 const project = (o = {}) => ({ name: 'P', project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
 
 async function userWithProject(client, email = 'u@x.com') {
@@ -32,23 +34,29 @@ async function userWithProject(client, email = 'u@x.com') {
   return { c, w, p: r.json.project, url: `/api/workspaces/${w}/projects/${r.json.project.id}` };
 }
 
-test('new project: 7 phases × 5 steps, first phase current, history has creation entry', async () => {
+test('new project (Lifecycle V2): 7 phases with importance-tagged activities, first phase current, history has creation entry', async () => {
   const { server, client } = await boot();
   const { c, url } = await userWithProject(client);
   const g = (await c('GET', url)).json;
   assert.equal(g.phases.length, 7);
-  assert.deepEqual(g.phases.map((p) => p.phase_key), ['INITIATION', 'REQUIREMENTS', 'SCHEDULE', 'EXECUTION', 'TESTING', 'ACCEPTANCE', 'LAUNCH']);
-  assert.ok(g.phases.every((p) => p.steps.length === 5 && p.steps.every((s) => s.completion_criteria)));
+  assert.deepEqual(g.phases.map((p) => p.phase_key), ['INITIATION', 'REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING', 'TRANSITION_GO_LIVE', 'OPERATIONS']);
+  assert.deepEqual(g.phases.map((p) => p.name), ['착수', '요구사항 정의', '분석·설계', '구현', '시험', '전환 및 오픈', '운영 및 유지보수']);
+  assert.ok(g.phases.every((p) => p.steps.length >= 5 && p.steps.every((s) => s.completion_criteria && ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'].includes(s.importance) && ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'SKIPPED'].includes(s.state))));
+  assert.ok(g.phases.every((p) => p.steps.some((s) => s.importance === 'REQUIRED')), 'every phase has a REQUIRED gate');
+  // 검수 / 인수 승인 is the first activity of 06 전환 및 오픈 (§6)
+  const tr = g.phases.find((p) => p.phase_key === 'TRANSITION_GO_LIVE'); assert.equal(tr.steps[0].step_key, 'ACCEPTANCE'); assert.equal(tr.steps[0].title, '검수 / 인수 승인'); assert.equal(tr.steps[0].importance, 'REQUIRED');
+  // summary is REQUIRED-based, never a percentage
+  assert.deepEqual(Object.keys(g.phases[0].summary).sort(), ['completed', 'gate_met', 'required_done', 'required_open', 'required_total', 'skipped', 'total']);
+  assert.ok(!('progress' in g) && !('progress' in g.phases[0]) && !('percent' in g.phases[0].summary));
   assert.equal(g.current_phase.phase_key, 'INITIATION');
   assert.equal(g.current_phase.status, 'IN_PROGRESS');
   assert.equal(g.phases[1].status, 'NOT_STARTED');
   assert.equal(g.next_phase.phase_key, 'REQUIREMENTS');
-  assert.equal(g.progress, 0);
   assert.equal(g.history.length, 1); assert.equal(g.history[0].reason, 'PROJECT_CREATED'); assert.equal(g.history[0].from_key, null);
   server.close();
 });
 
-test('step complete / undo / note; phase & project progress', async () => {
+test('activity complete / skip / undo / note; derived state wins over stored marks; REQUIRED summary', async () => {
   const { server, client } = await boot();
   const { c, url } = await userWithProject(client);
   let g = (await c('GET', url)).json;
@@ -56,10 +64,21 @@ test('step complete / undo / note; phase & project progress', async () => {
   for (const s of steps.slice(0, 3)) assert.equal((await c('PATCH', `${url}/steps/${s.id}`, { status: 'COMPLETED' })).status, 200);
   g = (await c('PATCH', `${url}/steps/${steps[0].id}`, { note: '  목표: 상담 자동화  ' })).json;
   assert.equal(g.step.note, '목표: 상담 자동화'); assert.equal(g.step.status, 'COMPLETED'); assert.ok(g.step.completed_at);
-  assert.deepEqual(g.phases[0].progress, { done: 3, total: 5, percent: 60 });
-  assert.equal(g.progress, Math.round(60 / 7)); // 9
+  assert.equal(g.phases[0].summary.completed, 3); assert.equal(g.phases[0].summary.required_done, 3); assert.equal(g.phases[0].summary.required_open, 1);
+  assert.ok(g.phases[0].steps.slice(0, 3).every((s) => s.state === 'COMPLETED'));
   g = (await c('PATCH', `${url}/steps/${steps[0].id}`, { status: 'TODO' })).json;
-  assert.equal(g.step.completed_at, null); assert.equal(g.phases[0].progress.done, 2);
+  assert.equal(g.step.completed_at, null); assert.equal(g.phases[0].summary.completed, 2);
+  // SKIPPED is a stored mark; it counts toward the REQUIRED gate and shows as state SKIPPED
+  const opt = g.phases[1].steps.find((s) => s.importance === 'OPTIONAL');
+  g = (await c('PATCH', `${url}/steps/${opt.id}`, { status: 'SKIPPED' })).json;
+  assert.equal(g.phases[1].steps.find((s) => s.id === opt.id).state, 'SKIPPED'); assert.equal(g.phases[1].summary.skipped, 1);
+  // derived state from live data: a requirement makes 요구사항 수집 COMPLETED without any stored mark
+  assert.equal(g.phases[1].steps.find((s) => s.step_key === 'COLLECT').state, 'NOT_STARTED');
+  await c('POST', `${url}/requirements`, { title: 'R1' });
+  g = (await c('GET', url)).json;
+  const collect = g.phases[1].steps.find((s) => s.step_key === 'COLLECT'); assert.equal(collect.status, 'TODO'); assert.equal(collect.state, 'COMPLETED'); assert.equal(collect.derived, 'COMPLETED');
+  assert.equal(g.phases[1].steps.find((s) => s.step_key === 'CLASSIFY').state, 'IN_PROGRESS');
+  assert.ok(g.phases[1].steps.find((s) => s.step_key === 'CLASSIFY').cta.label.endsWith('→'));
   assert.equal((await c('PATCH', `${url}/steps/${steps[0].id}`, { status: 'NOPE' })).status, 400);
   assert.equal((await c('PATCH', `${url}/steps/does-not-exist`, { status: 'TODO' })).status, 404);
   // reload persists
@@ -67,26 +86,25 @@ test('step complete / undo / note; phase & project progress', async () => {
   server.close();
 });
 
-test('transitions: next with all done → COMPLETED; incomplete → stays IN_PROGRESS; back to earlier; history', async () => {
+test('transitions: next with REQUIRED gate met → COMPLETED; incomplete → stays IN_PROGRESS; back to earlier; history', async () => {
   const { server, client } = await boot();
   const { c, url } = await userWithProject(client);
   let g = (await c('GET', url)).json;
-  for (const s of g.phases[0].steps) await c('PATCH', `${url}/steps/${s.id}`, { status: 'COMPLETED' });
+  for (const s of g.phases[0].steps.filter((x) => x.importance === 'REQUIRED')) await c('PATCH', `${url}/steps/${s.id}`, { status: 'COMPLETED' });   // RECOMMENDED may stay open
   g = (await c('POST', `${url}/phases/${g.phases[1].id}/activate`, { reason: 'NEXT' })).json;
   assert.equal(g.project.current_phase, 'REQUIREMENTS');
   assert.equal(g.phases[0].status, 'COMPLETED'); assert.ok(g.phases[0].completed_at);
   assert.equal(g.phases[1].status, 'IN_PROGRESS'); assert.ok(g.phases[1].started_at);
-  assert.equal(g.progress, Math.round(100 / 7));
   // skip ahead with incomplete steps: allowed, leaving phase stays IN_PROGRESS
   g = (await c('POST', `${url}/phases/${g.phases[2].id}/activate`, {})).json;
   assert.equal(g.phases[1].status, 'IN_PROGRESS'); assert.equal(g.phases[1].completed_at, null);
-  assert.equal(g.current_phase.phase_key, 'SCHEDULE');
+  assert.equal(g.current_phase.phase_key, 'ANALYSIS_DESIGN');
   // explicit move back to a completed phase re-opens it
   g = (await c('POST', `${url}/phases/${g.phases[0].id}/activate`, {})).json;
   assert.equal(g.current_phase.phase_key, 'INITIATION'); assert.equal(g.phases[0].status, 'IN_PROGRESS');
   assert.equal((await c('POST', `${url}/phases/${g.phases[0].id}/activate`, {})).status, 409);
   assert.deepEqual(g.history.map((h) => [h.from_key, h.to_key, h.reason]), [
-    [null, 'INITIATION', 'PROJECT_CREATED'], ['INITIATION', 'REQUIREMENTS', 'NEXT'], ['REQUIREMENTS', 'SCHEDULE', 'MANUAL'], ['SCHEDULE', 'INITIATION', 'MANUAL']]);
+    [null, 'INITIATION', 'PROJECT_CREATED'], ['INITIATION', 'REQUIREMENTS', 'NEXT'], ['REQUIREMENTS', 'ANALYSIS_DESIGN', 'MANUAL'], ['ANALYSIS_DESIGN', 'INITIATION', 'MANUAL']]);
   // list view carries progress + phase name
   const list = (await c('GET', url.replace(/\/[^/]+$/, ''))).json.projects[0];
   assert.equal(list.current_phase_name, '착수'); assert.equal(typeof list.progress, 'number');
@@ -120,7 +138,7 @@ test('tenant isolation holds for step/phase routes (ids from another workspace)'
   server.close();
 });
 
-test('migration: database recorded at an older version gets phases backfilled once; re-run is a no-op', async () => {
+test('migration: database recorded at an older version gets Lifecycle V2 phases seeded once (v21 reset); re-run is a no-op', async () => {
   // Fresh schema with the current tables, but bookkeeping says only v1 was applied and no phases exist (what a SQLite-era import looks like).
   const db = await openDb({ url: TEST_DATABASE_URL, schema: 't_mig_' + Date.now(), createSchema: true, max: 2, applyMigrations: false });
   const c = await db.pool.connect();
@@ -137,7 +155,8 @@ test('migration: database recorded at an older version gets phases backfilled on
   assert.equal(applied.length, LATEST_VERSION - 1); // everything after v1
   assert.equal((await db.get('SELECT MAX(version) AS v FROM schema_migrations')).v, LATEST_VERSION);
   assert.equal((await db.get('SELECT COUNT(*) n FROM project_phases')).n, 14);
-  assert.equal((await db.get('SELECT COUNT(*) n FROM project_steps')).n, 70);
+  assert.equal((await db.get('SELECT COUNT(*) n FROM project_steps')).n, 2 * STEPS_PER_PROJECT);
+  assert.equal((await db.get("SELECT COUNT(*) n FROM project_phases WHERE phase_key IN ('SCHEDULE','EXECUTION','ACCEPTANCE','LAUNCH')")).n, 0, 'no legacy phase keys');
   assert.equal((await db.get("SELECT status FROM project_phases WHERE project_id='p1' AND phase_key='INITIATION'")).status, 'IN_PROGRESS');
   assert.equal((await db.get("SELECT COUNT(*) n FROM phase_transitions WHERE project_id='p1'")).n, 1);
   assert.ok(await db.get("SELECT 1 FROM pg_trigger WHERE tgname = 'trg_projects_creator_is_member'"));

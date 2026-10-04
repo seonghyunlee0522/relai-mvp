@@ -61,9 +61,9 @@ test('GET project: wbs stats carry planned/actual/variance/overdue figures; head
   assert.equal(w.overdue_tasks, 1); assert.equal(w.overdue_milestones, 1); assert.equal(w.max_overdue_days, 3);
   assert.equal(w.milestones, 1); assert.equal(w.milestones_completed, 0);
   assert.equal(g.kpis.wbs_progress, w.progress);
-  // SCHEDULE-phase guidance uses the action-oriented CTA names (no "WBS로 이동")
-  await A.c('POST', `${A.purl}/phases/${g.phases.find((p) => p.phase_key === 'SCHEDULE').id}/activate`, { reason: 'MANUAL' });
+  // ANALYSIS_DESIGN guidance uses task-centred CTA labels (no "WBS로 이동")
+  await A.c('POST', `${A.purl}/phases/${g.phases.find((p) => p.phase_key === 'ANALYSIS_DESIGN').id}/activate`, { reason: 'MANUAL' });
   const q = (await A.c('GET', A.purl)).json.guidance;
-  assert.equal(q.rule, 'WBS_PLAN'); assert.equal(q.primary_action.label, '담당자와 일정 입력하기'); assert.equal(q.secondary_action.label, '전체 WBS 보기');
+  assert.equal(q.rule, 'WBS_ASSIGN'); assert.equal(q.primary_action.label, '담당자 지정 →'); assert.equal(q.secondary_action.label, '일정 입력 →');
   server.close();
 });

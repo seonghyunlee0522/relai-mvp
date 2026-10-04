@@ -135,7 +135,7 @@ export function sectionsFromData(d) {
     `- 현재 단계: ${S.phase_name}`,
     `- 프로젝트 상태: ${S.health.label}${S.health.partial_unknown ? ' (일부 정보 부족)' : ''}`,
     ...S.dimensions.map((x) => `  - ${x.label}: ${x.status_label}${x.status === 'GOOD' || x.status === 'UNKNOWN' ? '' : ` — ${x.reasons.join(', ')}`}`),
-    `- Guided Progress: ${pct(S.kpis.guided_progress)}`, `- WBS 진행률: ${pct(S.kpis.wbs_progress)}`,
+    `- WBS 진행률: ${pct(S.kpis.wbs_progress)}`,
     `- Requirement Coverage: ${pct(S.kpis.requirement_coverage)}`, `- Test Coverage: ${pct(S.kpis.test_coverage)}`,
   ].join('\n');
   out.completed = d.completed_items.length ? d.completed_items.map((c) => `- [${TYPE_KO[c.type]}] ${c.display_id} ${c.title} — ${EVENT[c.event] || c.event} (${md(c.at)})`).join('\n') : '- 기간 내 완료 처리된 항목이 없습니다.';

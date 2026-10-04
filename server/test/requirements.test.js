@@ -103,7 +103,7 @@ test('acceptance criteria: add/update/delete/reorder with history; list search &
   assert.equal((await c('GET', `${url}?scope=IN_SCOPE&status=REJECTED`)).json.requirements.length, 0);
   assert.equal((await c('GET', `${url}?owner=${uid}`)).json.requirements.length, 1);
   assert.equal((await c('GET', `${url}?owner=none`)).json.requirements.length, 2);
-  assert.deepEqual({ ...all.summary }, { total: 3, in_scope: 1, out_of_scope: 1, scope_undecided: 1, confirmed: 1, reviewing: 0, draft: 1, type_unspecified: 1, priority_unspecified: 1, in_scope_confirmed: 1, in_scope_linked: 0, in_scope_unlinked: 1, coverage: 0, confirmed_unlinked: 1 });
+  assert.deepEqual({ ...all.summary }, { total: 3, in_scope: 1, out_of_scope: 1, scope_undecided: 1, confirmed: 1, reviewing: 0, draft: 1, type_unspecified: 1, priority_unspecified: 1, in_scope_confirmed: 1, non_functional: 2, in_scope_linked: 0, in_scope_unlinked: 1, coverage: 0, confirmed_unlinked: 1 });
   server.close();
 });
 

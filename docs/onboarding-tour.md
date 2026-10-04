@@ -29,3 +29,6 @@
 - `/app/projects/:id` → **What’s Next?** (`public/app/project/next.js`): RELAI Guide (완료한 일 → 현재 단계 → 다음 할 일, one primary CTA "[탭]로 이동 →", collapsible but the next action stays visible), current phase progress + checklist (✓ 완료 / ● 진행 중 / ○ 미완료 / ! 재확인), compact lifecycle. No dashboard cards.
 - `/app/projects/:id/overview` → **Overview** (`overview.js`): project progress + lifecycle → attention / issue / risk → execution · requirements · tests → health → upcoming · activity.
 - The `프로젝트 홈` tab is gone; existing deep links (`/app/projects/:id`, `/definition`, `/phases/:key`, `?created=1`, `?move=next`) keep working. Guidance still comes from `server/guidance.js` (no backend changes).
+
+
+> **Lifecycle V2 (2026-10)**: 투어 target은 상단 탭(`tab-*`)이 아니라 LNB(`lnb-*`)를 가리킨다. PHASE_INTRO 키는 INITIATION · REQUIREMENTS · ANALYSIS_DESIGN · DEVELOPMENT · TESTING · TRANSITION_GO_LIVE · OPERATIONS.

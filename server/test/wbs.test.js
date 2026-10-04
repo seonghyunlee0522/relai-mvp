@@ -111,7 +111,7 @@ test('progress roll-up: summary mean (recursive, milestones excluded), project w
   assert.equal(t.summary.milestones, 1); assert.equal(t.summary.tasks, 3);
   const g = (await c('GET', purl)).json;
   assert.equal(g.wbs.progress, 57); assert.equal(g.wbs.total, 8);
-  assert.equal(g.progress, 0); // guide progress untouched
+  assert.ok(!('progress' in g)); // Lifecycle V2: no guided progress percentage on the project payload
   server.close();
 });
 

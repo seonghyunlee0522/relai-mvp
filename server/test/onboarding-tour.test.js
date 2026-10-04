@@ -110,50 +110,57 @@ test('feature guides: seen once → hidden; reset shows again; unknown key 404; 
   server.close();
 });
 
-test('guidance engine (pure rules): INITIATION / REQUIREMENTS empty+populated / WBS empty / overdue / TEST empty / failed test / acceptance / Jira & AI optional', () => {
-  const base = { project: { id: 'p1', current_phase: 'INITIATION' }, next_phase: { name: '요구사항' }, stats: {} };
+test('guidance engine (pure rules, Lifecycle V2): INITIATION / REQUIREMENTS / ANALYSIS_DESIGN / DEVELOPMENT / TESTING / TRANSITION_GO_LIVE / OPERATIONS; task-centred CTAs; Jira & AI never required', () => {
+  const base = { project: { id: 'p1', current_phase: 'INITIATION' }, next_phase: { name: '요구사항 정의', sequence: 2 }, stats: {} };
   const g = (over) => projectGuidance({ ...base, ...over });
-  // 19. INITIATION
+  const arrow = (a) => a && a.label.endsWith('→') && !/로 이동/.test(a.label);
+  // INITIATION
   let r = g({ phase: { phase_key: 'INITIATION', name: '착수', sequence: 1 }, definition: { progress: { done: 0, total: 5 }, needs_review: [] } });
-  assert.equal(r.rule, 'INIT_DEFINE'); assert.equal(r.primary_action.href, '/app/projects/p1/definition'); assert.ok(r.why && r.next_preview);
+  assert.equal(r.rule, 'INIT_DEFINE'); assert.equal(r.primary_action.href, '/app/projects/p1/definition'); assert.ok(arrow(r.primary_action)); assert.ok(r.why && r.next_preview);
   r = g({ phase: { phase_key: 'INITIATION', name: '착수', sequence: 1 }, definition: { progress: { done: 5, total: 5 }, needs_review: [] }, stats: { requirements: { total: 0 } } });
-  assert.equal(r.rule, 'INIT_DONE'); assert.equal(r.primary_action.label, '요구사항 등록'); assert.equal(r.secondary_action.href, '/app/projects/p1?move=next');
+  assert.equal(r.rule, 'INIT_DONE'); assert.equal(r.primary_action.href, '/app/projects/p1?move=next'); assert.equal(r.secondary_action.label, '요구사항 입력 시작 →');
   r = g({ phase: { phase_key: 'INITIATION', name: '착수', sequence: 1 }, definition: { progress: { done: 5, total: 5 }, needs_review: ['SCOPE'] } });
   assert.equal(r.rule, 'INIT_REVIEW');
-  // 20. REQUIREMENTS empty  21. populated
-  const RQ = { phase: { phase_key: 'REQUIREMENTS', name: '요구사항', sequence: 2 }, next_phase: { name: '일정' } };
-  r = g({ ...RQ, stats: { requirements: { total: 0 } } }); assert.equal(r.rule, 'REQ_EMPTY'); assert.equal(r.primary_action.href, '/app/projects/p1/requirements?new=1'); assert.equal(r.secondary_action.label, 'Excel 가져오기');
-  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 0, type_unspecified: 0, priority_unspecified: 0, scope_undecided: 0 } } }); assert.equal(r.rule, 'REQ_CONFIRM');
-  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 3 }, wbs: { tasks: 0 } } }); assert.equal(r.rule, 'REQ_DONE'); assert.equal(r.primary_action.label, 'WBS 만들기');
-  // 22. WBS empty
-  const SC = { phase: { phase_key: 'SCHEDULE', name: '일정', sequence: 3 }, next_phase: { name: '실행' } };
-  r = g({ ...SC, stats: { wbs: { tasks: 0 } } }); assert.equal(r.rule, 'WBS_EMPTY'); assert.equal(r.primary_action.href, '/app/projects/p1/wbs?new=1');
-  r = g({ ...SC, stats: { wbs: { tasks: 4, tasks_without_owner: 2, tasks_without_dates: 0 } } }); assert.equal(r.rule, 'WBS_PLAN'); assert.match(r.title, /담당자와 일정/);
-  r = g({ ...SC, stats: { wbs: { tasks: 4, tasks_without_owner: 0, tasks_without_dates: 0, milestones: 1, tasks_unlinked: 1 } } }); assert.equal(r.rule, 'WBS_DONE'); assert.ok(r.warnings.some((w) => /연결되지 않은 작업/.test(w)));
-  // 23. overdue
-  const EX = { phase: { phase_key: 'EXECUTION', name: '실행', sequence: 4 }, next_phase: { name: '테스트' } };
-  r = g({ ...EX, stats: { wbs: { tasks: 5 }, issues: {} }, overdue_tasks: 2 }); assert.equal(r.rule, 'EXEC_OVERDUE'); assert.equal(r.primary_action.href, '/app/projects/p1/wbs?f=overdue');
-  r = g({ ...EX, stats: { wbs: { tasks: 5 }, issues: { blocked: 1 } }, overdue_tasks: 2 }); assert.equal(r.rule, 'EXEC_BLOCKED', 'blocker outranks overdue');
-  r = g({ ...EX, stats: { wbs: { tasks: 5, in_progress: 2, completed: 1, progress: 30 }, issues: {} } }); assert.equal(r.rule, 'EXEC_STATUS');
-  // 24. TEST empty  25. failed test  (Scenario C)
-  const TS = { phase: { phase_key: 'TESTING', name: '테스트', sequence: 5 }, next_phase: { name: '검수' } };
-  r = g({ ...TS, stats: { tests: { total: 0 } } }); assert.equal(r.rule, 'TEST_EMPTY'); assert.equal(r.title, '테스트 케이스를 작성하세요'); assert.equal(r.primary_action.label, '테스트 케이스 작성'); assert.match(r.why, /요구사항을 충족/); assert.match(r.next_preview, /실행 결과/);
+  // REQUIREMENTS: empty → classify → scope → confirm → done
+  const RQ = { phase: { phase_key: 'REQUIREMENTS', name: '요구사항 정의', sequence: 2 }, next_phase: { name: '분석·설계', sequence: 3 } };
+  r = g({ ...RQ, stats: { requirements: { total: 0 } } }); assert.equal(r.rule, 'REQ_EMPTY'); assert.equal(r.primary_action.label, '요구사항 입력 시작 →'); assert.equal(r.primary_action.href, '/app/projects/p1/requirements?new=1'); assert.equal(r.secondary_action, null, 'Excel import is chosen inside Requirements, not from What’s Next');
+  r = g({ ...RQ, stats: { requirements: { total: 3, type_unspecified: 2 } } }); assert.equal(r.rule, 'REQ_CLASSIFY'); assert.equal(r.primary_action.label, '요구사항 분류 →');
+  r = g({ ...RQ, stats: { requirements: { total: 3, type_unspecified: 0, scope_undecided: 1 } } }); assert.equal(r.rule, 'REQ_SCOPE');
+  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 0, type_unspecified: 0, priority_unspecified: 0, scope_undecided: 0 } } }); assert.equal(r.rule, 'REQ_CONFIRM'); assert.equal(r.primary_action.label, '요구사항 확정 →');
+  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 3 }, wbs: { tasks: 0 } } }); assert.equal(r.rule, 'REQ_DONE'); assert.equal(r.primary_action.href, '/app/projects/p1?move=next');
+  // ANALYSIS_DESIGN: WBS empty → trace → assign → plan → done
+  const AD = { phase: { phase_key: 'ANALYSIS_DESIGN', name: '분석·설계', sequence: 3 }, next_phase: { name: '구현', sequence: 4 } };
+  r = g({ ...AD, stats: { wbs: { tasks: 0 } } }); assert.equal(r.rule, 'WBS_EMPTY'); assert.equal(r.primary_action.label, 'WBS 작성 시작 →'); assert.equal(r.primary_action.href, '/app/projects/p1/wbs?new=1');
+  r = g({ ...AD, stats: { wbs: { tasks: 4 }, requirements: { in_scope: 3, in_scope_unlinked: 1 } } }); assert.equal(r.rule, 'WBS_TRACE');
+  r = g({ ...AD, stats: { wbs: { tasks: 4, tasks_without_owner: 2, tasks_without_dates: 0 } } }); assert.equal(r.rule, 'WBS_ASSIGN'); assert.equal(r.primary_action.label, '담당자 지정 →');
+  r = g({ ...AD, stats: { wbs: { tasks: 4, tasks_without_owner: 0, tasks_without_dates: 1 } } }); assert.equal(r.rule, 'WBS_PLAN'); assert.equal(r.primary_action.label, '일정 입력 →');
+  r = g({ ...AD, stats: { wbs: { tasks: 4, tasks_without_owner: 0, tasks_without_dates: 0, milestones: 1, tasks_unlinked: 1 } } }); assert.equal(r.rule, 'WBS_DONE'); assert.ok(r.warnings.some((w) => /연결되지 않은 작업/.test(w)));
+  // DEVELOPMENT: blocker > overdue > critical > change > status/done
+  const DV = { phase: { phase_key: 'DEVELOPMENT', name: '구현', sequence: 4 }, next_phase: { name: '시험', sequence: 5 } };
+  r = g({ ...DV, stats: { wbs: { tasks: 5 }, issues: {} }, overdue_tasks: 2 }); assert.equal(r.rule, 'DEV_OVERDUE'); assert.equal(r.primary_action.href, '/app/projects/p1/wbs?f=overdue');
+  r = g({ ...DV, stats: { wbs: { tasks: 5 }, issues: { blocked: 1 } }, overdue_tasks: 2 }); assert.equal(r.rule, 'DEV_BLOCKED', 'blocker outranks overdue');
+  r = g({ ...DV, stats: { wbs: { tasks: 5, in_progress: 2, tasks_completed: 1, progress: 30 }, issues: {} } }); assert.equal(r.rule, 'DEV_STATUS'); assert.equal(r.primary_action.label, '진행 상태 갱신 →');
+  r = g({ ...DV, stats: { wbs: { tasks: 5, tasks_completed: 5, progress: 100 }, issues: {} } }); assert.equal(r.rule, 'DEV_DONE');
+  // TESTING
+  const TS = { phase: { phase_key: 'TESTING', name: '시험', sequence: 5 }, next_phase: { name: '전환 및 오픈', sequence: 6 } };
+  r = g({ ...TS, stats: { tests: { total: 0 } } }); assert.equal(r.rule, 'TEST_EMPTY'); assert.equal(r.primary_action.label, '테스트 케이스 작성 →'); assert.match(r.why, /요구사항을 충족/);
   r = g({ ...TS, stats: { tests: { total: 5, executed: 5, last_fail: 2 } } }); assert.equal(r.rule, 'TEST_FAIL'); assert.equal(r.primary_action.href, '/app/projects/p1/tests?last_result=FAIL');
   r = g({ ...TS, stats: { tests: { total: 5, executed: 3, last_fail: 0 } } }); assert.equal(r.rule, 'TEST_RUN');
-  r = g({ ...TS, stats: { tests: { total: 5, executed: 5, last_fail: 0 } } }); assert.equal(r.rule, 'TEST_DONE');
-  // 26. acceptance
-  const AC = { phase: { phase_key: 'ACCEPTANCE', name: '검수', sequence: 6 }, next_phase: { name: '오픈' } };
-  r = g({ ...AC, stats: { acceptances: { total: 0 } } }); assert.equal(r.rule, 'ACC_EMPTY');
-  r = g({ ...AC, stats: { acceptances: { total: 2, requested: 1 } } }); assert.equal(r.rule, 'ACC_PENDING');
-  r = g({ ...AC, stats: { acceptances: { total: 2, rework: 1, requested: 1 } } }); assert.equal(r.rule, 'ACC_REWORK');
-  r = g({ ...AC, stats: { acceptances: { total: 2, accepted: 2 } } }); assert.equal(r.rule, 'ACC_DONE');
-  // LAUNCH
-  const LA = { phase: { phase_key: 'LAUNCH', name: '오픈', sequence: 7 }, next_phase: null };
-  r = g({ ...LA, stats: { issues: { active: 1 } } }); assert.equal(r.rule, 'LAUNCH_OPEN');
-  r = g({ ...LA, stats: {} }); assert.equal(r.rule, 'LAUNCH_DONE');
-  // 27/28. Jira and AI never appear as required actions
-  const all = [RQ, SC, EX, TS, AC, LA].flatMap((ph) => [g({ ...ph, stats: {} }), g({ ...ph, stats: { wbs: { tasks: 3 }, requirements: { total: 2 }, tests: { total: 1, executed: 1 }, acceptances: { total: 1, accepted: 1 } } })]);
-  for (const x of all) { assert.ok(!/jira/i.test(x.primary_action.label), x.rule); assert.ok(!/^AI/.test(x.primary_action.label), x.rule); }
+  r = g({ ...TS, stats: { tests: { total: 5, executed: 5, last_fail: 0 } } }); assert.equal(r.rule, 'TEST_DONE'); assert.equal(r.primary_action.href, '/app/projects/p1?move=next');
+  // TRANSITION_GO_LIVE: acceptance is the first gate, then open items, then transition activities
+  const TR = { phase: { phase_key: 'TRANSITION_GO_LIVE', name: '전환 및 오픈', sequence: 6 }, next_phase: { name: '운영 및 유지보수', sequence: 7 } };
+  r = g({ ...TR, stats: { acceptances: { total: 0 } } }); assert.equal(r.rule, 'ACC_EMPTY'); assert.equal(r.primary_action.label, '검수 항목 작성 →');
+  r = g({ ...TR, stats: { acceptances: { total: 2, requested: 1 } } }); assert.equal(r.rule, 'ACC_PENDING');
+  r = g({ ...TR, stats: { acceptances: { total: 2, rework: 1, requested: 1 } } }); assert.equal(r.rule, 'ACC_REWORK');
+  r = g({ ...TR, stats: { acceptances: { total: 2, accepted: 2 }, issues: { active: 1 } } }); assert.equal(r.rule, 'GO_LIVE_OPEN');
+  r = g({ ...TR, stats: { acceptances: { total: 2, accepted: 2 } } }); assert.equal(r.rule, 'TRANSITION_RUN');
+  // OPERATIONS
+  const OP = { phase: { phase_key: 'OPERATIONS', name: '운영 및 유지보수', sequence: 7 }, next_phase: null };
+  r = g({ ...OP, stats: { issues: { active: 1 } } }); assert.equal(r.rule, 'OPS_ISSUES');
+  r = g({ ...OP, stats: {} }); assert.equal(r.rule, 'OPS_HANDOVER');
+  // Jira and AI never appear as required actions; every navigation CTA is task-centred (ends with →, no "…로 이동")
+  const all = [RQ, AD, DV, TS, TR, OP].flatMap((ph) => [g({ ...ph, stats: {} }), g({ ...ph, stats: { wbs: { tasks: 3 }, requirements: { total: 2 }, tests: { total: 1, executed: 1 }, acceptances: { total: 1, accepted: 1 } } })]);
+  for (const x of all) { assert.ok(!/jira/i.test(x.primary_action.label), x.rule); assert.ok(!/^AI/.test(x.primary_action.label), x.rule); assert.ok(arrow(x.primary_action), `${x.rule}: ${x.primary_action.label}`); if (x.secondary_action) assert.ok(arrow(x.secondary_action), x.rule); }
   // determinism
   assert.deepEqual(g({ ...TS, stats: { tests: { total: 0 } } }), g({ ...TS, stats: { tests: { total: 0 } } }));
 });

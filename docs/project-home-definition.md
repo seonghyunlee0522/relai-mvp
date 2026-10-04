@@ -19,3 +19,6 @@
 
 ## 완료·재확인 규칙
 완료된 섹션을 수정하면 완료는 유지되고 `changed_after_completion`(section_updated > completed_at)으로 표시 → "다시 확인 완료"(confirm)로 completed_at 갱신. "완료 취소"(reopen)는 내용은 남기고 step만 TODO. 홈·탭 배지에 재확인 필요 수 노출.
+
+
+> **Lifecycle V2 (2026-10)**: 이 문서의 Phase/Step·진행률 설명은 V1 기준이다. 현재 구조(7단계 Lifecycle, Activity importance, 파생 상태, LNB)는 `docs/lifecycle-v2.md`를 본다.
