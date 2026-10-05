@@ -8,6 +8,7 @@
  * drives What's Next drives the menu. Expanded / collapsed (icons + phase numbers) is a persisted preference. */
 import { $, html, no2, raw } from '../core/dom.js';
 import { store } from '../core/ui.js';
+import { navigate } from '../core/router.js';
 import { HOME_ITEMS, PHASE_ITEMS, PM_ITEMS, phaseOfPath } from '../shared/lifecycle.js';
 import { phaseState, phaseTip } from './status.js';
 
@@ -51,7 +52,7 @@ export function projectNav(p, g, activeKey) {
     const isOpen = open[ph.phase_key] !== undefined ? open[ph.phase_key] : (ph.is_current || pathPhase === ph.phase_key);
     const reqOpen = ph.summary ? ph.summary.required_open : 0;
     return html`<div class="lnb__ph is-${state} ${isOpen ? 'is-open' : ''} ${items.length ? '' : 'is-leaf'}" data-grp="${ph.phase_key}">
-      <button type="button" class="lnb__phh" data-lnb-toggle="${ph.phase_key}" aria-expanded="${isOpen}" title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)}">
+      <button type="button" class="lnb__phh" data-lnb-toggle="${ph.phase_key}" data-phase-href="/app/projects/${pid}${ph.is_current ? '' : `?phase=${ph.phase_key}`}" aria-expanded="${isOpen}" title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기">
         <i class="lnb__mark" aria-hidden="true">${state === 'done' ? '✓' : no2(ph.sequence)}</i>
         <span class="lnb__t"><span class="lnb__pn">${ph.name}</span></span>
         ${raw(state === 'cur' && reqOpen ? html`<span class="lnb__n" title="필수 업무 ${reqOpen}건 남음">${reqOpen}</span>` : '')}
@@ -75,6 +76,13 @@ function wire() {
   if (wired) return; wired = true;
   document.addEventListener('click', (e) => {
     const tg = e.target.closest('[data-lnb-toggle]');
+    // Phase name → that phase's activity list on What's Next (and open its menu). Only the chevron just folds/unfolds.
+    if (tg && tg.dataset.phaseHref && !e.target.closest('.lnb__chev')) {
+      const grp = tg.closest('[data-grp]'); const pidEl = grp && grp.closest('[data-lnb-pid]');
+      if (grp && !grp.classList.contains('is-open') && !grp.classList.contains('is-leaf')) { grp.classList.add('is-open'); tg.setAttribute('aria-expanded', 'true'); if (pidEl) setOpen(pidEl.dataset.lnbPid, tg.dataset.lnbToggle, true); }
+      if (location.pathname + location.search !== tg.dataset.phaseHref) navigate(tg.dataset.phaseHref);
+      return;
+    }
     if (tg) {
       const grp = tg.closest('[data-grp]'); const pid = grp && grp.closest('[data-lnb-pid]') ? grp.closest('[data-lnb-pid]').dataset.lnbPid : null;
       const openNow = !grp.classList.contains('is-open');
