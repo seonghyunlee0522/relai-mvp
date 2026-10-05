@@ -3,6 +3,6 @@
   "framework": null,
   "buildCommand": "",
   "outputDirectory": ".vercel-static",
-  "functions": { "api/index.js": { "includeFiles": "{public,server}/**", "maxDuration": 30 } },
+  "functions": { "api/index.js": { "includeFiles": "{public,server}/**", "maxDuration": 60 } },
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
 }

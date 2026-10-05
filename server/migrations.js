@@ -49,6 +49,7 @@ export async function migrate(db, schemaSql, bindClient) {
   const lock = db.schema ? 'hashtext($1)' : '$1::int';
   const client = await db.pool.connect();
   try {
+    await client.query(`SET lock_timeout = '20s'`);   // a stale lock (e.g. a frozen serverless instance) fails fast instead of hanging every boot
     await client.query(`SELECT pg_advisory_lock(${lock})`, [db.schema ? db.schema : 7101]);
     const fresh = !(await client.query(`SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'users'`)).rowCount;
     await client.query(schemaSql);

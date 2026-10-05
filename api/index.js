@@ -9,7 +9,9 @@ let ready;
 const dbUrl = () => ['DATABASE_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_URL_NON_POOLING', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL'].map((k) => (process.env[k] || '').trim()).find(Boolean);
 async function boot() {
   const url = dbUrl(); if (!url) throw new Error('DATABASE_URL is not set (Vercel → Settings → Environment Variables; Neon/Postgres storage injects DATABASE_URL or POSTGRES_URL)');
+  const t0 = Date.now(); console.log('[vercel] boot: connecting to', url.replace(/:\/\/([^:]+):[^@]*@/, '://$1:***@'));
   const db = await openDb({ url, max: Number(process.env.DB_POOL_MAX || 3) });
+  console.log(`[vercel] boot: db ready in ${Date.now() - t0}ms`);
   return createApp(db);
 }
 export default async function handler(req, res) {
