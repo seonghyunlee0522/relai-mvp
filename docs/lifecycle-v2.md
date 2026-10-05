@@ -52,7 +52,7 @@ RELAI의 정보구조는 기능이 아니라 프로젝트 생애주기 순서로
 
 ## What's Next 정보 밀도 개선 (2026-10-05)
 * **Header** (`project/guide.js projectHead`): 등록자 아바타·이름 제거(shell.js 하이드레이션 코드 삭제). What's Next 에서는 현재 단계 badge 를 표시하지 않는다(바로 아래 Lifecycle stepper 와 Guide 가 보여줌). 다른 업무 화면에서는 "01 착수" compact badge 만 남기고 "현재 단계" 문구는 뺐다.
-* **RELAI Guide** (`project/next.js guideCard`, `.rg*`): 왼쪽 파란 세로선 제거. 헤더 행에 `현재 NN 단계 → 다음 NN 단계` 흐름을 함께 두고, 제목과 primary CTA 를 한 행(우측 정렬)에, 설명(1~2문장)과 경고를 그 아래 한 줄에 둔다. 높이 약 190px → 105px.
-* **업무 Row** (`activityRow`, `.np__row`, `.badge*`): 상태는 badge(완료 green ✓ · 진행 중 blue · 미시작 gray · 제외 dashed · 확인 필요 red), 중요도는 badge(필수 light red · 권장/선택 gray). 왼쪽 = 제목+중요도, 오른쪽 = 상태 badge │ 액션 링크. 목적·작성 여부는 한 줄(` · `). row 약 70px → 48px.
+* **RELAI Guide** (`project/next.js guideCard`, `.rg*`): 왼쪽 파란 세로선 제거. 현재/다음 단계 표시는 두지 않는다(바로 위 stepper 가 담당). 제목 → 설명(1~2문장, 경고 inline) → CTA(카드 우하단). 높이 약 190px → 120px.
+* **업무 Row** (`activityRow`, `.np__row`, `.badge*`): 상태는 badge(완료 green ✓ · 진행 중 blue · 미시작 gray · 제외 dashed · 확인 필요 red), 중요도는 badge(필수 light red · 권장/선택 gray). 고정 컬럼 `아이콘 | 제목·목적 | 중요도 | 상태 | 액션` 으로 badge 가 행마다 같은 위치에 정렬된다. 작성 여부 텍스트(`a.text`)는 표시하지 않는다. 행 자체를 클릭해 들어가는 업무(착수 · definition)는 별도 '입력하기 →' 링크를 두지 않는다. row 약 70px → 48px.
 * **Guide 문구** (`server/guidance.js`): `description` 을 "왜 지금 이 단계가 중요한지" 설명형 1~2문장으로 재작성(동적 건수 유지). `title·why·rule·CTA·href` 불변. `project_steps.description`(업무 설명)은 저장값이라 손대지 않음.
 * 데이터 모델·API·Next Action 로직·필수/권장 판정·LNB 변경 없음.
