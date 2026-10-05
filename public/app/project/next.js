@@ -18,7 +18,7 @@ import { ob } from '../onboarding/state.js';
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
 const ctaLink = (a, cls) => (a ? html`<a class="${cls}" href="${a.href}" data-link>${a.label}</a>` : '');
 
-/* ---------- RELAI Guide: one compact card — 현재 → 다음 on the header line, title + CTA on one row, 1–2 lines of "why" ---------- */
+/* ---------- RELAI Guide: one compact card — title, 1–2 lines of "why", CTA bottom-right. The phase position is the stepper's job. ---------- */
 const guideCard = (g, p, archived, created) => {
   const q = g.guidance; if (!q) return '';
   const cur = g.current_phase; const nx = g.next_phase;
@@ -28,40 +28,39 @@ const guideCard = (g, p, archived, created) => {
   return html`<section class="rg" aria-labelledby="rgT" data-tour-id="guidance">
     <header class="rg__h">
       <span class="rg__mark" aria-hidden="true"><svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg></span><b id="rgT">RELAI Guide</b>
-      <span class="rg__flow"><span class="rg__fk">현재</span><b class="rg__fv">${cur ? `${no2(cur.sequence)} ${cur.name}` : '-'}</b><i class="rg__arrow" aria-hidden="true">→</i><span class="rg__fk">다음</span><b class="rg__fv ${nx ? '' : 'is-last'}">${nx ? `${no2(nx.sequence)} ${nx.name}` : '마지막 단계'}</b></span>
       ${raw(created ? '<span class="rg__new">프로젝트가 생성되었습니다.</span>' : '')}</header>
     <div class="rg__body">
-      <div class="rg__row"><h2 class="rg__title">${q.title}</h2><div class="rg__cta">${raw(primary)}${raw(secondary)}</div></div>
-      ${raw(q.description || (q.warnings && q.warnings.length) ? html`<p class="rg__d">${q.description || ''}${raw(q.warnings && q.warnings.length ? q.warnings.map((w) => html`<span class="rg__warn"><i class="st st--warn" aria-hidden="true">!</i>${w}</span>`).join('') : '')}</p>` : '')}
+      <h2 class="rg__title">${q.title}</h2>
+      <div class="rg__row">
+        <p class="rg__d">${q.description || ''}${raw(q.warnings && q.warnings.length ? q.warnings.map((w) => html`<span class="rg__warn"><i class="st st--warn" aria-hidden="true">!</i>${w}</span>`).join('') : '')}</p>
+        ${raw(primary || secondary ? html`<div class="rg__cta">${raw(secondary)}${raw(primary)}</div>` : '')}
+      </div>
     </div></section>`;
 };
 
 /* ---------- current phase activities (Process + Read view) ---------- */
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
-/** CTA only where action is due: the current activity (first open one) and in-progress ones. Done / future / skipped rows carry none. */
+/** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not.
+ * State is shown once, by the badge on the right (no leading icon). 완료 처리 lives on the work screen, not here. */
 const activityRow = (a, archived, isCurrent) => {
   const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED; const cls = stateCls(a);
   const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
-  const showCta = !archived && a.cta && (isCurrent || a.state === 'IN_PROGRESS');
+  const href = !archived && a.cta && (isCurrent || a.state === 'IN_PROGRESS' || a.linked_feature_type === 'definition') ? a.cta.href : null;   // the row itself opens the work screen (same href the server CTA carries) — no separate '… →' link
   const acts = [];
   if (!archived) {
-    if (showCta) acts.push(html`<a class="link np__go" href="${a.cta.href}" data-link>${a.cta.label}</a>`);
     if (skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">업무 다시 시작 →</button>`);
     else if (manualDone && isCurrent) acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
     else if (a.state !== 'COMPLETED' && (isCurrent || a.state === 'IN_PROGRESS')) {
-      const manual = !a.derived && a.linked_feature_type !== 'definition';
-      if (manual || (a.state === 'IN_PROGRESS' && a.linked_feature_type !== 'definition')) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="COMPLETED" title="${a.derived ? '실제 데이터 기준과 별개로 이 업무를 완료로 표시합니다' : '이 업무를 완료로 표시합니다'}">완료 처리</button>`);
+      // 완료 처리 is done on the work screen itself; here only 건너뛰기 (non-required) remains.
       if (a.importance !== 'REQUIRED' && a.linked_feature_type !== 'definition') acts.push(html`<button type="button" class="link linkbtn np__act np__skip" data-step="${a.id}" data-status="SKIPPED" data-title="${a.title}" title="이번 프로젝트에서는 수행하지 않는 업무로 기록합니다">↷ 건너뛰기</button>`);
     }
   }
-  const href = a.linked_feature_type === 'definition' && a.cta ? a.cta.href : null;   // 착수 activities open their work screen from the row itself
   const impCls = a.importance === 'REQUIRED' ? 'badge--req' : 'badge--muted';
   const stLabel = cls === 'crit' ? '확인 필요' : st.label;
   return html`<li class="np__row is-${cls} ${isCurrent ? 'is-cur' : ''} ${href ? 'is-link' : ''}" data-act="${a.id}" ${raw(href ? html`data-href="${href}" tabindex="0" role="link"` : '')}>
-    <i class="st st--${cls}" aria-hidden="true">${st.icon}</i>
     <div class="np__m">
-      <span class="np__st">${a.title}<span class="badge ${impCls}">${a.importance_label}</span></span>
-      <span class="np__desc"><span class="np__purpose">${a.description}</span>${raw(a.text ? html`<i class="np__dot" aria-hidden="true">·</i><span class="np__info">${a.text}</span>` : '')}</span>
+      <span class="np__st"><span class="badge badge--imp ${impCls}">${a.importance_label}</span>${a.title}</span>
+      <span class="np__purpose">${a.description}</span>
     </div>
     <span class="badge badge--st is-${cls}">${stLabel}</span>
     <span class="np__acts">${raw(acts.join(''))}</span>
@@ -75,13 +74,15 @@ const phasePanel = (g, p, archived) => {
   const current = acts.find((a) => a.state !== 'COMPLETED' && a.state !== 'SKIPPED');
   const allDone = !current;
   const remain = s.required_open ? `필수 업무 ${s.required_open}건 남음` : allDone ? '이 단계의 업무를 모두 처리했습니다' : '필수 업무를 모두 마쳤습니다';
+  const rows = acts.map((a) => activityRow(a, archived, current && a.id === current.id)).join('');
+  const hasActs = /class="np__acts">(?!<\/span>)/.test(rows);   // status badges hug the right edge when no row carries an action
   return html`<section class="np" aria-labelledby="npT">
     <div class="np__h">
       <div class="np__t"><span class="np__no mono">${no2(cur.sequence)}</span><h2 id="npT">${cur.name}</h2><span class="np__cur">현재 단계</span></div>
       <span class="np__remain ${s.required_open ? '' : 'is-good'}">${remain}</span>
     </div>
     <p class="np__d">${cur.description}</p>
-    <ol class="np__list">${raw(acts.map((a) => activityRow(a, archived, current && a.id === current.id)).join(''))}</ol>
+    <ol class="np__list ${hasActs ? '' : 'np__list--noacts'}">${raw(rows)}</ol>
     <div class="np__f ${allDone && g.next_phase ? 'np__f--ready' : ''}">
       <span class="np__msg">${raw(g.next_phase ? (allDone ? html`<b>${cur.name} 단계의 필요한 업무가 정리되었습니다.</b> 다음 단계 · ${no2(g.next_phase.sequence)} ${g.next_phase.name}` : html`다음 단계: <b>${no2(g.next_phase.sequence)} ${g.next_phase.name}</b>${s.gate_met ? ' · 남은 권장·선택 업무를 정리하거나 건너뛰면 진행할 수 있습니다.' : ' · 필수 업무를 마치면 진행할 수 있습니다.'}`) : '마지막 단계입니다.')}</span>
       ${raw(!archived && g.next_phase && !movePrimary ? html`<button type="button" class="${allDone ? 'btn btn--primary btn--sm' : 'link linkbtn np__move'}" id="next">${g.next_phase.name}(으)로 진행 →</button>` : '')}
