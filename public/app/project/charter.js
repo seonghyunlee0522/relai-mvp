@@ -143,26 +143,26 @@ export async function charterPage(id) {
     ${raw(block('Change Management', om.changeManagement, ['변경관리 방식이 작성되지 않았습니다.', '변경 요청을 어떻게 검토·승인하는지 작성하면 AI가 변경 영향 분석 후 필요한 승인 절차를 안내할 수 있습니다.', def('OPERATIONS', 'change_management'), '변경관리 방식 입력 →']))}
     ${raw(block('Acceptance / Completion', om.acceptance, ['검수 / 완료 기준이 작성되지 않았습니다.', '무엇이 충족되면 검수·완료로 보는지 작성하면 AI가 테스트와 검수 준비 상태를 판단하는 데 활용합니다.', def('OPERATIONS', 'acceptance'), '검수 / 완료 기준 입력 →']))}`);
 
-  /* ---------- right rail: fill status · outline (scroll-spy) · what to complete · next milestone ---------- */
+  /* ---------- right rail: outline (scroll-spy) · next milestone · what to complete · fill status ---------- */
   const SECTIONS = [['profile', 'Project Profile'], ['goals', 'Goals & Success Criteria'], ['scope', 'Scope & Deliverables'], ['stakeholders', 'Stakeholders & Governance'], ['timeline', 'Timeline & Milestones'], ['conditions', 'Assumptions, Constraints & Risks'], ['operating', 'Operating Model']];
   const missing = ITEMS.filter((x) => !x.ok);
   const nextMs = tl.milestones.find((m) => m.date && m.date >= today);
   const dday = nextMs ? Math.round((dnum(nextMs.date) - dnum(today)) / DAY) : null;
   const rail = html`<aside class="chr" aria-label="Project Chater 요약">
+    <nav class="chr__box chr__toc" aria-label="목차"><div class="chr__k">목차</div><ol>${raw(SECTIONS.map(([k, t], i) => {
+      const its = ITEMS.filter((x) => x.sec === k); const n = its.filter((x) => x.ok).length;
+      return html`<li><button type="button" class="chr__ti" data-goto="ch-${k}"><span class="chr__tn mono">${i + 1}</span><span class="chr__tt">${t}</span><span class="chr__tc ${n === its.length ? 'is-ok' : ''}">${n === its.length ? '✓' : `${n}/${its.length}`}</span></button></li>`;
+    }).join(''))}</ol></nav>
+    ${raw(nextMs ? html`<div class="chr__box"><div class="chr__k">다음 마일스톤</div><div class="chr__ms"><b>${nextMs.title}</b><span>${fmtDate(nextMs.date)} · ${dday === 0 ? 'D-Day' : `D-${dday}`}</span></div></div>` : '')}
+    ${raw(missing.length && !ro ? html`<div class="chr__box"><div class="chr__k">보완하면 AI 판단이 정확해지는 항목 <em>${missing.length}</em></div>
+      <ul class="chr__miss">${raw(missing.slice(0, 6).map((x) => html`<li><a href="${x.href}" data-link><span>${x.label}</span><i aria-hidden="true">입력 →</i></a></li>`).join(''))}</ul>
+      ${raw(missing.length > 6 ? html`<a class="link chr__more" href="${u}/definition" data-link>외 ${missing.length - 6}개 · 프로젝트 정의에서 보기 →</a>` : '')}</div>` : '')}
     <div class="chr__box">
       <div class="chr__k">기준정보 작성 현황</div>
       <div class="chr__fill"><b>${nFilled}</b><span>/ ${ITEMS.length} 항목</span></div>
       <div class="chr__seg" role="img" aria-label="${ITEMS.length}개 중 ${nFilled}개 작성">${raw(ITEMS.map((x) => `<i class="${x.ok ? 'is-ok' : ''}"></i>`).join(''))}</div>
       <p class="chr__hint">${nFilled === ITEMS.length ? 'RELAI AI가 모든 기준정보를 참고하고 있습니다.' : '비어 있는 항목은 AI가 추정하지 않고 판단에서 제외합니다.'}</p>
     </div>
-    <nav class="chr__box chr__toc" aria-label="목차"><div class="chr__k">목차</div><ol>${raw(SECTIONS.map(([k, t], i) => {
-      const its = ITEMS.filter((x) => x.sec === k); const n = its.filter((x) => x.ok).length;
-      return html`<li><button type="button" class="chr__ti" data-goto="ch-${k}"><span class="chr__tn mono">${i + 1}</span><span class="chr__tt">${t}</span><span class="chr__tc ${n === its.length ? 'is-ok' : ''}">${n === its.length ? '✓' : `${n}/${its.length}`}</span></button></li>`;
-    }).join(''))}</ol></nav>
-    ${raw(missing.length && !ro ? html`<div class="chr__box"><div class="chr__k">보완하면 AI 판단이 정확해지는 항목 <em>${missing.length}</em></div>
-      <ul class="chr__miss">${raw(missing.slice(0, 6).map((x) => html`<li><a href="${x.href}" data-link><span>${x.label}</span><i aria-hidden="true">입력 →</i></a></li>`).join(''))}</ul>
-      ${raw(missing.length > 6 ? html`<a class="link chr__more" href="${u}/definition" data-link>외 ${missing.length - 6}개 · 프로젝트 정의에서 보기 →</a>` : '')}</div>` : '')}
-    ${raw(nextMs ? html`<div class="chr__box"><div class="chr__k">다음 마일스톤</div><div class="chr__ms"><b>${nextMs.title}</b><span>${fmtDate(nextMs.date)} · ${dday === 0 ? 'D-Day' : `D-${dday}`}</span></div></div>` : '')}
   </aside>`;
 
   main.innerHTML = html`<div class="page page--wide page--flow chp">
