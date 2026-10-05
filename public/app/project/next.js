@@ -40,7 +40,8 @@ const guideCard = (g, p, archived, created) => {
 
 /* ---------- current phase activities (Process + Read view) ---------- */
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
-/** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not. */
+/** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not.
+ * State is shown once, by the badge on the right (no leading icon). 완료 처리 lives on the work screen, not here. */
 const activityRow = (a, archived, isCurrent) => {
   const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED; const cls = stateCls(a);
   const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
@@ -50,15 +51,13 @@ const activityRow = (a, archived, isCurrent) => {
     if (skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">업무 다시 시작 →</button>`);
     else if (manualDone && isCurrent) acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
     else if (a.state !== 'COMPLETED' && (isCurrent || a.state === 'IN_PROGRESS')) {
-      const manual = !a.derived && a.linked_feature_type !== 'definition';
-      if (manual || (a.state === 'IN_PROGRESS' && a.linked_feature_type !== 'definition')) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="COMPLETED" title="${a.derived ? '실제 데이터 기준과 별개로 이 업무를 완료로 표시합니다' : '이 업무를 완료로 표시합니다'}">완료 처리</button>`);
+      // 완료 처리 is done on the work screen itself; here only 건너뛰기 (non-required) remains.
       if (a.importance !== 'REQUIRED' && a.linked_feature_type !== 'definition') acts.push(html`<button type="button" class="link linkbtn np__act np__skip" data-step="${a.id}" data-status="SKIPPED" data-title="${a.title}" title="이번 프로젝트에서는 수행하지 않는 업무로 기록합니다">↷ 건너뛰기</button>`);
     }
   }
   const impCls = a.importance === 'REQUIRED' ? 'badge--req' : 'badge--muted';
   const stLabel = cls === 'crit' ? '확인 필요' : st.label;
   return html`<li class="np__row is-${cls} ${isCurrent ? 'is-cur' : ''} ${href ? 'is-link' : ''}" data-act="${a.id}" ${raw(href ? html`data-href="${href}" tabindex="0" role="link"` : '')}>
-    <i class="st st--${cls}" aria-hidden="true">${st.icon}</i>
     <div class="np__m">
       <span class="np__st"><span class="badge badge--imp ${impCls}">${a.importance_label}</span>${a.title}</span>
       <span class="np__purpose">${a.description}</span>
