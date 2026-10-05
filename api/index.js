@@ -5,8 +5,11 @@ import { openDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 
 let ready;
+/* Vercel Postgres/Neon integrations inject their own names — accept them when DATABASE_URL itself is unset or blank. */
+const dbUrl = () => ['DATABASE_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_URL_NON_POOLING', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL'].map((k) => (process.env[k] || '').trim()).find(Boolean);
 async function boot() {
-  const db = await openDb({ max: Number(process.env.DB_POOL_MAX || 3) });
+  const url = dbUrl(); if (!url) throw new Error('DATABASE_URL is not set (Vercel → Settings → Environment Variables; Neon/Postgres storage injects DATABASE_URL or POSTGRES_URL)');
+  const db = await openDb({ url, max: Number(process.env.DB_POOL_MAX || 3) });
   return createApp(db);
 }
 export default async function handler(req, res) {
