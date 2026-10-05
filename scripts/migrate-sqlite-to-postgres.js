@@ -24,6 +24,8 @@ export const TABLES = [
   'risks', 'issues', 'raid_links', 'raid_history', 'test_cases', 'test_executions', 'test_links', 'acceptances', 'acceptance_links', 'qa_history', 'weekly_reports',
 ];
 const SKIP_COLS = new Set(['seq']); // bigserial columns are generated on the PostgreSQL side
+// SQLite-era projects.project_type (SI / MIGRATION / …) is a different, retired field: never copied into the new enum column (stays NULL = 미설정)
+const SKIP_TABLE_COLS = { projects: new Set(['project_type']) };
 
 export const ORPHAN_CHECKS = [
   ['workspace_members → users', `SELECT COUNT(*) AS n FROM workspace_members m LEFT JOIN users u ON u.id = m.user_id WHERE u.id IS NULL`],
@@ -69,7 +71,7 @@ export async function migrateData(sqliteFile, pg, { truncate = false, dryRun = f
       if (!srcTables.has(table)) { copied[table] = 0; continue; }
       const rows = src.prepare(`SELECT * FROM ${table}`).all();
       const pgCols = (await t.all(`SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?`, [table])).map((r) => r.column_name);
-      const cols = rows.length ? Object.keys(rows[0]).filter((c) => pgCols.includes(c) && !SKIP_COLS.has(c)) : [];
+      const cols = rows.length ? Object.keys(rows[0]).filter((c) => pgCols.includes(c) && !SKIP_COLS.has(c) && !(SKIP_TABLE_COLS[table] && SKIP_TABLE_COLS[table].has(c))) : [];
       // history rows carry no seq in SQLite: keep their original insertion order (rowid) so seq reproduces it
       const ordered = table.endsWith('_history') || table === 'phase_transitions' ? src.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all() : rows;
       const CHUNK = 500;

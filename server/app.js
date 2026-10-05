@@ -41,7 +41,8 @@ import { ensureAccount } from './ai/credits.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
 const PROJECT_COLS = `id, workspace_id, name, description, client_name, project_scale, status,
-  planned_start_date, planned_end_date, current_phase, created_by, created_at, updated_at`;
+  planned_start_date, planned_end_date, current_phase, created_by, created_at, updated_at,
+  project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration`;
 
 export function createApp(db, { secureCookies = process.env.NODE_ENV === 'production', sessionSecret = process.env.SESSION_SECRET || '' } = {}) {
   const app = express();
@@ -250,14 +251,16 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const duplicateName = async (wid, name, exceptId = null) =>
     db.get(`SELECT id, name FROM projects WHERE workspace_id = ? AND lower(trim(name)) = lower(trim(?)) AND status <> 'ARCHIVED' ${exceptId ? 'AND id <> ?' : ''} LIMIT 1`, exceptId ? [wid, name, exceptId] : [wid, name]);
   app.post(base, manage, wrap(async (req, res) => {
-    const p = parseProject(req.body);
+    const p = parseProject(req.body, { requireType: true });   // 프로젝트 유형 is required on create only
     if (!req.body.allow_duplicate && await duplicateName(req.params.wid, p.name)) return fail(res, 409, 'duplicate_name', '같은 이름의 프로젝트가 이미 있습니다.', { fields: { name: '같은 이름의 프로젝트가 이미 있습니다.' } });
     const id = randomUUID();
     // Every project starts in 01 착수 as 진행 중; goals/scope/stakeholders are entered step by step in the lifecycle flow, never here.
     (await tx(db, async (db) => {
       (await db.run(`INSERT INTO projects (id, workspace_id, name, description, client_name, project_scale,
-          status, planned_start_date, planned_end_date, current_phase, created_by)
-        VALUES (?,?,?,?,?,?, 'ACTIVE', ?,?, 'INITIATION', ?)`, [id, req.params.wid, p.name, p.description, p.client_name, p.project_scale, p.planned_start_date, p.planned_end_date, req.user.id]));
+          status, planned_start_date, planned_end_date, current_phase, created_by,
+          project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration)
+        VALUES (?,?,?,?,?,?, 'ACTIVE', ?,?, 'INITIATION', ?, ?,?,?,?,?,?)`, [id, req.params.wid, p.name, p.description, p.client_name, p.project_scale, p.planned_start_date, p.planned_end_date, req.user.id,
+        p.project_type, p.data_migration, p.deployment_environment, p.delivery_model, p.has_existing_system, p.has_external_integration]));
       await ensurePhases(db, await getProject(req.params.wid, id, db), { createdBy: req.user.id });
       if (Number((await db.get(`SELECT COUNT(*) n FROM projects WHERE workspace_id = ?`, [req.params.wid])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: id, kind: 'project' });
     }));
@@ -397,8 +400,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const p = parseProject({ ...existing, ...req.body });
     if (!req.body.allow_duplicate && p.name !== existing.name && await duplicateName(req.params.wid, p.name, existing.id)) return fail(res, 409, 'duplicate_name', '같은 이름의 프로젝트가 이미 있습니다.', { fields: { name: '같은 이름의 프로젝트가 이미 있습니다.' } });
     (await db.run(`UPDATE projects SET name=?, description=?, client_name=?, project_scale=?,
-        planned_start_date=?, planned_end_date=?, updated_at=now()
-      WHERE workspace_id=? AND id=?`, [p.name, p.description, p.client_name, p.project_scale, p.planned_start_date, p.planned_end_date, req.params.wid, req.params.pid]));
+        planned_start_date=?, planned_end_date=?, project_type=?, data_migration=?, deployment_environment=?, delivery_model=?,
+        has_existing_system=?, has_external_integration=?, updated_at=now()
+      WHERE workspace_id=? AND id=?`, [p.name, p.description, p.client_name, p.project_scale, p.planned_start_date, p.planned_end_date,
+        p.project_type, p.data_migration, p.deployment_environment, p.delivery_model, p.has_existing_system, p.has_external_integration, req.params.wid, req.params.pid]));
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
   }));
 

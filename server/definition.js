@@ -15,16 +15,20 @@
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
 import { updateStep } from './guide.js';
+import { parseTraits } from './validate.js';
+import { TRAIT_FIELDS } from '../public/app/shared/project-traits.js';
 
 export const SECTIONS = ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'];
 export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '이해관계자', MILESTONES: '주요 일정과 마일스톤', OPERATIONS: '운영 방식' };
 const OPS_KEYS = ['meetings', 'reporting', 'communication', 'decisions'];
 /** Project Chater free-text fields (2026-10-05). Stored as plain text columns; the owning section decides which work screen edits them.
  * They never gate completion — readiness (missingFor) is unchanged. API name → column. */
-export const TEXT_FIELDS = { project_type: 'project_type', deliverables: 'deliverables', assumptions: 'assumptions', constraints: 'constraints_text', initial_risks: 'initial_risks', change_management: 'change_management', acceptance: 'acceptance' };
-const TEXT_SECTION = { project_type: 'GOALS', deliverables: 'SCOPE', assumptions: 'SCOPE', constraints: 'SCOPE', initial_risks: 'SCOPE', change_management: 'OPERATIONS', acceptance: 'OPERATIONS' };
-const TEXT_MAX = { project_type: 200 };
-const textOf = (row) => Object.fromEntries(Object.entries(TEXT_FIELDS).map(([k, col]) => [k, row ? row[col] || '' : '']));
+export const TEXT_FIELDS = { deliverables: 'deliverables', assumptions: 'assumptions', constraints: 'constraints_text', initial_risks: 'initial_risks', change_management: 'change_management', acceptance: 'acceptance' };
+const TEXT_SECTION = { deliverables: 'SCOPE', assumptions: 'SCOPE', constraints: 'SCOPE', initial_risks: 'SCOPE', change_management: 'OPERATIONS', acceptance: 'OPERATIONS' };
+const TEXT_MAX = {};
+// project_definitions.project_type (free text, 2026-10-05 morning) is superseded by projects.project_type (enum, 프로젝트 기본 특성):
+// read-only here as a fallback label for the Charter; `project_type` in a save body is the enum and goes to the project.
+const textOf = (row) => ({ ...Object.fromEntries(Object.entries(TEXT_FIELDS).map(([k, col]) => [k, row ? row[col] || '' : ''])), project_type: row ? row.project_type || '' : '' });
 /** Stakeholder 조직 구분 (Lifecycle V2 UX): 당사 · 고객사 · 협력사 · 기타. Hierarchy = 조직 구분 → 부서 → 사람. (의사결정 권한 항목은 제거됨) */
 export const ORG_TYPES = ['OWN', 'CLIENT', 'PARTNER', 'OTHER'];
 export const ORG_TYPE_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
@@ -119,7 +123,7 @@ export function missingFor(key, d, ctx = {}) {
 /** One-line read summary of each section for the Process View ("고객사 5명 · 당사 4명 등록"). Empty string when nothing is entered. */
 export function sectionSummary(key, d, ctx = {}) {
   switch (key) {
-    case 'GOALS': { const parts = []; if (d.project_type) parts.push(`유형: ${d.project_type}`); if (d.goal) parts.push('목표 작성됨'); if (d.success_criteria.length) parts.push(`성공 기준 ${d.success_criteria.length}건`); return parts.join(' · '); }
+    case 'GOALS': { const parts = []; if (d.goal) parts.push('목표 작성됨'); if (d.success_criteria.length) parts.push(`성공 기준 ${d.success_criteria.length}건`); return parts.join(' · '); }
     case 'SCOPE': { const parts = []; if (d.scope_in.length) parts.push(`수행 범위 ${d.scope_in.length}건`); if (d.scope_out.length) parts.push(`제외 범위 ${d.scope_out.length}건`); if (d.deliverables) parts.push('주요 산출물'); const n = ['assumptions', 'constraints', 'initial_risks'].filter((k) => d[k]).length; if (n) parts.push(`전제·제약·리스크 ${n}개 항목`); return parts.join(' · '); }
     case 'STAKEHOLDERS': { if (!d.stakeholders.length) return ''; const by = {}; for (const x of d.stakeholders) by[x.org_type || 'OTHER'] = (by[x.org_type || 'OTHER'] || 0) + 1; return ORG_TYPES.filter((k) => by[k]).map((k) => `${ORG_TYPE_LABEL[k]} ${by[k]}명`).join(' · ') + ' 등록'; }
     case 'MILESTONES': { const parts = []; if (d.key_dates.length) parts.push(`주요 일정 ${d.key_dates.length}건`); if ((ctx.wbs_milestones || []).length) parts.push(`WBS 마일스톤 ${ctx.wbs_milestones.length}건`); return parts.join(' · '); }
@@ -158,7 +162,9 @@ export async function loadDefinition(db, project) {
   const done = sections.filter((s) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
   return { definition: d, sections, progress: { done, total: sections.length, percent: Math.round((done / sections.length) * 100) },
     needs_review: sections.filter((s) => s.changed_after_completion).map((s) => s.key),
-    project_dates: { planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date }, wbs_milestones: ms };
+    project_dates: { planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date }, wbs_milestones: ms,
+    // 프로젝트 기본 특성 live on projects (same values as the create form); shown and edited here, never part of a step's completion
+    project_traits: Object.fromEntries(TRAIT_FIELDS.map((k) => [k, project[k] ?? (k === 'project_type' ? null : 'TBD')])) };
 }
 
 /* ---------- writes ---------- */
@@ -168,9 +174,20 @@ const SECTION_OF = { goal: 'GOALS', success_criteria: 'GOALS', scope_in: 'SCOPE'
 /** Partial save. Body may carry any subset of the fields; untouched fields stay. Returns the full read model. */
 export async function saveDefinition(db, project, body = {}, userId = null) {
   const b = body || {}; const patch = {};
+  // 프로젝트 기본 특성: same save flow as the rest of the definition, stored on projects. Saving them never completes anything.
+  const tf = {}; const traits = parseTraits(b, tf, { partial: true });
+  if (Object.keys(tf).length) throw new ValidationError(tf);
+  if (Object.keys(traits).length) {
+    const keys = Object.keys(traits);
+    await db.run(`UPDATE projects SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = now() WHERE id = ?`, [...keys.map((k) => traits[k]), project.id]);
+    project = { ...project, ...traits };
+  }
   for (const key of SECTIONS) Object.assign(patch, cleanSection(key, b));
   if (b.memo !== undefined) patch.memo = str(b.memo, 4000);
-  if (!Object.keys(patch).length) throw new ValidationError({ body: '저장할 내용이 없습니다.' });
+  if (!Object.keys(patch).length) {
+    if (Object.keys(traits).length) return loadDefinition(db, project);
+    throw new ValidationError({ body: '저장할 내용이 없습니다.' });
+  }
   const existing = await row(db, project.id);
   const ts = new Date().toISOString();
   const touched = new Set(Object.keys(patch).map((k) => SECTION_OF[k]).filter(Boolean));

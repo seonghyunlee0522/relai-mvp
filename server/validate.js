@@ -1,3 +1,4 @@
+import { PROJECT_TRAITS } from '../public/app/shared/project-traits.js';
 export const STATUSES = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'ARCHIVED'];
 export const PHASES = ['INITIATION', 'REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING', 'TRANSITION_GO_LIVE', 'OPERATIONS'];
 
@@ -27,7 +28,29 @@ export function parseSignup(b = {}) {
 }
 
 /** Used for create (partial=false) and update (partial=false too: edit form always sends full basic info). */
-export function parseProject(b = {}) {
+/**
+ * Project basics + 프로젝트 기본 특성. `requireType` is set on create only: projects made before project_type existed keep NULL
+ * ("미설정") through later edits until someone sets it. Unknown option values are refused; missing traits default to TBD.
+ */
+/** Validate 프로젝트 기본 특성 against the shared option set. `partial` = only the keys present in `b` (definition save). Errors go into `f`. */
+export function parseTraits(b = {}, f = {}, { requireType = false, partial = false } = {}) {
+  const out = {};
+  for (const t of PROJECT_TRAITS) {
+    const has = b[t.field] !== undefined;
+    if (partial && !has) continue;
+    const raw = b[t.field] === null || b[t.field] === undefined ? '' : String(b[t.field]).trim();
+    if (!raw) {
+      if (t.required && requireType) f[t.field] = '프로젝트 유형을 선택해 주세요.';
+      else out[t.field] = t.required ? null : t.default;
+      continue;
+    }
+    if (!t.options.some((o) => o.value === raw)) { f[t.field] = `${t.label} 값이 올바르지 않습니다.`; continue; }
+    out[t.field] = raw;
+  }
+  return out;
+}
+
+export function parseProject(b = {}, { requireType = false } = {}) {
   const f = {};
   const name = str(b.name);
   const description = str(b.description);
@@ -43,6 +66,7 @@ export function parseProject(b = {}) {
   if (!f.planned_start_date && !f.planned_end_date && planned_end_date < planned_start_date)
     f.planned_end_date = '종료일은 시작일 이후여야 합니다.';
   if (description.length > 2000) f.description = '설명은 2,000자 이내로 입력해 주세요.';
+  const traits = parseTraits(b, f, { requireType });
   if (Object.keys(f).length) throw new ValidationError(f);
-  return { name, description, client_name, project_scale, planned_start_date, planned_end_date };
+  return { name, description, client_name, project_scale, planned_start_date, planned_end_date, ...traits };
 }

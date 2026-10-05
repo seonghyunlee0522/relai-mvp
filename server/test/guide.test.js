@@ -24,7 +24,7 @@ async function boot(db = null) {
   return { db, server, client };
 }
 const STEPS_PER_PROJECT = DEFAULT_PHASES.reduce((n, p) => n + p.steps.length, 0);
-const project = (o = {}) => ({ name: 'P', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
+const project = (o = {}) => ({ name: 'P', client_name: '테스트 고객사', project_type: 'NEW_BUILD', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
 
 async function userWithProject(client, email = 'u@x.com') {
   const c = client();

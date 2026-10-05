@@ -2260,3 +2260,19 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .np__back{font-size:12.5px}
 .chr__more{display:inline-block;margin-top:6px;font-size:12.5px}
 .chx__sec{scroll-margin-top:56px}
+/* 프로젝트 기본 특성 — create form sections, definition block, read grid */
+.pform__sec{margin:6px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border-soft);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.pform__sec:not(:first-of-type){margin-top:14px}
+.pform__sec b{font-size:14px;color:var(--navy)}.pform__sec small{font-size:12.5px;color:var(--muted)}
+.trf .select{height:44px}
+.trf__help{min-height:1.5em}
+.pvp{margin:2px 0 12px;padding:10px 14px 12px;border:1px solid var(--border);border-radius:10px;background:#fff}
+.pvp__h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.pvp__h b{display:block;font-size:13.5px;color:var(--navy)}.pvp__h small{font-size:12px;color:var(--muted)}
+.trg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 24px;margin:0}
+.trg__i{min-width:0}.trg dt{font-size:11.5px;font-weight:700;color:var(--muted)}
+.trg dd{margin:1px 0 0;font-size:14px;font-weight:600;color:var(--navy)}.trg dd.is-unset{color:var(--muted);font-weight:500}
+@media (max-width:760px){.trg{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.trf2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+@media (max-width:640px){.trf2{grid-template-columns:1fr}}
+.chx__kvs--traits{margin-top:4px}
