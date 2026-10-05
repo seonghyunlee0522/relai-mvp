@@ -3,7 +3,7 @@
  *   2. the one thing to do first                  → RELAI Guide (one primary CTA, task-centred label, → for navigation)
  *   3. activities of the current phase and state  → ✓ 완료 · ● 진행 중 · ○ 미시작 · — 제외, with importance 필수/권장/선택
  *   4. what the next phase is                     → footer line + "NN 다음 단계 시작 →" once the REQUIRED gate is met
- * No percentage anywhere. Activity states are derived server-side (server/activities.js) from real project data;
+ * Status (완료/진행 중/미시작/제외) and importance (필수/권장/선택) are badges; no percentage anywhere. Activity states are derived server-side (server/activities.js) from real project data;
  * 완료 처리 / 제외 / 되돌리기 are the only stored marks (PATCH …/steps/:sid). No intermediate phase screens. */
 import { api, wsApi } from '../core/api.js';
 import { $, html, no2, raw } from '../core/dom.js';
@@ -18,28 +18,21 @@ import { ob } from '../onboarding/state.js';
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
 const ctaLink = (a, cls) => (a ? html`<a class="${cls}" href="${a.href}" data-link>${a.label}</a>` : '');
 
-/* ---------- RELAI Guide: 현재 단계 → 다음 할 일, one primary CTA ---------- */
+/* ---------- RELAI Guide: one compact card — 현재 → 다음 on the header line, title + CTA on one row, 1–2 lines of "why" ---------- */
 const guideCard = (g, p, archived, created) => {
   const q = g.guidance; if (!q) return '';
   const cur = g.current_phase; const nx = g.next_phase;
   const movePrimary = isMove(q.primary_action);
-  const primary = archived ? '' : movePrimary ? html`<button type="button" class="btn btn--primary" data-move-next>${nx ? `${no2(nx.sequence)} ${nx.name} 단계 시작 →` : q.primary_action.label}</button>` : ctaLink(q.primary_action, 'btn btn--primary');
+  const primary = archived ? '' : movePrimary ? html`<button type="button" class="btn btn--primary btn--sm" data-move-next>${nx ? `${no2(nx.sequence)} ${nx.name} 단계 시작 →` : q.primary_action.label}</button>` : ctaLink(q.primary_action, 'btn btn--primary btn--sm');
   const secondary = archived || !q.secondary_action || isMove(q.secondary_action) ? '' : ctaLink(q.secondary_action, 'link rg__sec');
   return html`<section class="rg" aria-labelledby="rgT" data-tour-id="guidance">
-    <header class="rg__h"><span class="rg__mark" aria-hidden="true"><svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg></span><b id="rgT">RELAI Guide</b>
+    <header class="rg__h">
+      <span class="rg__mark" aria-hidden="true"><svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg></span><b id="rgT">RELAI Guide</b>
+      <span class="rg__flow"><span class="rg__fk">현재</span><b class="rg__fv">${cur ? `${no2(cur.sequence)} ${cur.name}` : '-'}</b><i class="rg__arrow" aria-hidden="true">→</i><span class="rg__fk">다음</span><b class="rg__fv ${nx ? '' : 'is-last'}">${nx ? `${no2(nx.sequence)} ${nx.name}` : '마지막 단계'}</b></span>
       ${raw(created ? '<span class="rg__new">프로젝트가 생성되었습니다.</span>' : '')}</header>
     <div class="rg__body">
-      <dl class="rg__meta">
-        <div><dt>현재 단계</dt><dd><i class="st st--cur" aria-hidden="true">●</i>${cur ? `${no2(cur.sequence)} ${cur.name}` : '-'}</dd></div>
-        <div><dt>다음 단계</dt><dd><i class="st st--todo" aria-hidden="true">○</i>${nx ? `${no2(nx.sequence)} ${nx.name}` : '마지막 단계'}</dd></div>
-      </dl>
-      <div class="rg__next">
-        <span class="rg__k">다음 할 일</span>
-        <h2 class="rg__title">${q.title}</h2>
-        ${raw(q.description ? html`<p class="rg__d">${q.description}</p>` : '')}
-        ${raw(q.warnings && q.warnings.length ? html`<ul class="rg__warn">${raw(q.warnings.map((w) => html`<li><i class="st st--warn" aria-hidden="true">!</i>${w}</li>`).join(''))}</ul>` : '')}
-        <div class="rg__cta">${raw(primary)}${raw(secondary)}</div>
-      </div>
+      <div class="rg__row"><h2 class="rg__title">${q.title}</h2><div class="rg__cta">${raw(primary)}${raw(secondary)}</div></div>
+      ${raw(q.description || (q.warnings && q.warnings.length) ? html`<p class="rg__d">${q.description || ''}${raw(q.warnings && q.warnings.length ? q.warnings.map((w) => html`<span class="rg__warn"><i class="st st--warn" aria-hidden="true">!</i>${w}</span>`).join('') : '')}</p>` : '')}
     </div></section>`;
 };
 
@@ -62,14 +55,15 @@ const activityRow = (a, archived, isCurrent) => {
     }
   }
   const href = a.linked_feature_type === 'definition' && a.cta ? a.cta.href : null;   // 착수 activities open their work screen from the row itself
+  const impCls = a.importance === 'REQUIRED' ? 'badge--req' : 'badge--muted';
+  const stLabel = cls === 'crit' ? '확인 필요' : st.label;
   return html`<li class="np__row is-${cls} ${isCurrent ? 'is-cur' : ''} ${href ? 'is-link' : ''}" data-act="${a.id}" ${raw(href ? html`data-href="${href}" tabindex="0" role="link"` : '')}>
     <i class="st st--${cls}" aria-hidden="true">${st.icon}</i>
     <div class="np__m">
-      <span class="np__st">${a.title}<small class="np__imp">${a.importance_label}</small></span>
-      <span class="np__purpose">${a.description}</span>
-      <span class="np__info">${a.text}</span>
+      <span class="np__st">${a.title}<span class="badge ${impCls}">${a.importance_label}</span></span>
+      <span class="np__desc"><span class="np__purpose">${a.description}</span>${raw(a.text ? html`<i class="np__dot" aria-hidden="true">·</i><span class="np__info">${a.text}</span>` : '')}</span>
     </div>
-    <span class="np__lab">${st.label}</span>
+    <span class="badge badge--st is-${cls}">${stLabel}</span>
     <span class="np__acts">${raw(acts.join(''))}</span>
   </li>`;
 };
