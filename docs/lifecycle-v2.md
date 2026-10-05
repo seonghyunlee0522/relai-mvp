@@ -36,3 +36,13 @@ RELAI의 정보구조는 기능이 아니라 프로젝트 생애주기 순서로
 
 ## Landing
 `public/index.html`은 앱과 동일한 Lifecycle 명칭을 쓴다(Hero flowline · Lifecycle 섹션 · What’s Next 목업). gtag `AW-18437024959` 유지. Footer의 사업자/약관/개인정보/통신판매/요금 정보는 저장소·배포 이력 어디에도 실제 값이 없어 비워 두었다(HTML 주석에 채울 자리 표시).
+
+## Process View / Work Screen (01 착수, 2026-10-05)
+- 화면 계층: Project → Lifecycle Phase → Business Activity → Work Screen → View/Tab/Function. 같은 Phase의 Activity는 동일 업무 레벨, presentation만 다를 수 있다.
+- **Main Process View**(`/definition`, `project/definition.js`): 단계 설명 · 현재 해야 할 일(Primary CTA 1개, 우측) · Activity 행(목적 1줄 + 입력값 요약 + 상태) · 다음 단계 CTA(모든 Activity가 COMPLETED/SKIPPED이면 Primary, 필수만 끝났으면 link). 입력 Form·메모 없음.
+- **Work Screen**: 행 선택 → 우측 Drawer(560px, 이해관계자/일정은 700px) → [확대]로 Full Screen. 같은 DOM·같은 working copy라 확대/축소 시 입력값 유지. Drawer 중첩 없음(Excel 업로드는 Modal).
+- Footer: `임시저장`(PUT /definition) · `완료 처리`(POST …/sections/:key/complete + body → 저장+검증+COMPLETED 한 번에) · `↷ 이 업무 건너뛰기`(RECOMMENDED/OPTIONAL만, 확인 dialog → POST …/skip → SKIPPED) · 건너뛴 업무는 `업무 다시 시작 →`(POST …/resume).
+- Phase Gate: REQUIRED = COMPLETED 필요, 그 외 COMPLETED 또는 SKIPPED. `PATCH /steps/:sid {status:'SKIPPED'}`는 REQUIRED에 409.
+- 색상: 현재 Activity만 Blue left bar, 완료는 ✓ 아이콘만 Green, Skip 액션은 Amber 텍스트, SKIPPED 결과는 Gray. 라벨·배지는 Neutral 텍스트.
+- 이해관계자: `org_type`(OWN/CLIENT/PARTNER/OTHER = 당사/고객사/협력사/기타) · 조직 · 부서 · 이름 · 역할. 의사결정 권한 제거. Excel: `GET …/definition/stakeholders/template.xlsx`, `POST …/definition/stakeholders/import/preview {data}` → Modal에서 검증 후 목록에 병합 → 임시저장/완료 처리로 저장. 요약은 조직 구분 → 부서 → 사람 계층.
+- What's Next: 착수 Activity 행은 클릭 시 해당 Work Screen(`/definition?activity=KEY`)으로 이동. 행 CTA는 현재 Activity와 진행 중 Activity에만, 완료/미래/건너뜀 행은 CTA 없음. 메모·완료조건 섹션 제거.

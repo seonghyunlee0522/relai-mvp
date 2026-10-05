@@ -31,14 +31,15 @@ const act = (label, href) => ({ label, href });
 
 /* ---------- per-phase rules ---------- */
 function initiation(key, ctx) {
-  const u = (h) => `/app/projects/${ctx.pid}/definition${h}`;
+  const u = `/app/projects/${ctx.pid}/definition?activity=${key}`;
   const sec = ctx.definition && ctx.definition.sections ? ctx.definition.sections.find((x) => x.key === key) : null;
-  const go = (label) => act(label, u(`#sec-${key}`));
-  if (!sec) return none('프로젝트 정의 화면에서 작성합니다.', go('작성 시작 →'));
-  if (sec.status === 'COMPLETED' && sec.changed_after_completion) return prog('완료 후 내용이 수정되었습니다. 다시 확인해 주세요.', go('다시 확인 →'));
-  if (sec.status === 'COMPLETED') return ok('작성이 완료되었습니다.', go('내용 보기 →'));
-  if (sec.ready) return prog('작성한 내용을 확인하고 완료 처리하세요.', go('확인 후 완료 →'));
-  return none(sec.missing && sec.missing[0] ? sec.missing[0] : '아직 작성되지 않았습니다.', go('작성 시작 →'));
+  const go = (label) => act(label, u);
+  if (!sec) return none('프로젝트 정의에서 작성합니다.', go('입력하기 →'));
+  if (sec.status === 'SKIPPED') return { derived: 'SKIPPED', text: '이번 프로젝트에서는 수행하지 않음', cta: null };
+  if (sec.status === 'COMPLETED' && sec.changed_after_completion) return prog(`${sec.summary || '작성됨'} · 완료 후 수정되어 다시 확인이 필요합니다.`, go('다시 확인 →'));
+  if (sec.status === 'COMPLETED') return ok(sec.summary || '작성 완료', null);
+  if (sec.has_data || sec.ready) return prog(sec.summary || '작성 중', go('계속 작성 →'));
+  return none('아직 작성되지 않았습니다.', go('입력하기 →'));
 }
 
 function requirements(key, ctx) {

@@ -20,7 +20,7 @@ import { projectDashboard, projectActivity } from './dashboard.js';
 
 /** JSON bodies of the import endpoints may carry a base64 xlsx (≤5 MB file → ≈6.7 MB); everything else keeps the 64 KB limit. */
 export const BIG_BODY_LIMIT = '8mb';
-export const BIG_JSON_PATH = /^\/api\/(workspaces\/[^/]+\/projects\/[^/]+\/(requirements|wbs)\/import(\/preview|\/inspect|\/errors\.xlsx)?|integrations\/jira\/webhook\/[^/]+\/[^/]+)\/?$/;
+export const BIG_JSON_PATH = /^\/api\/(workspaces\/[^/]+\/projects\/[^/]+\/((requirements|wbs)\/import(\/preview|\/inspect|\/errors\.xlsx)?|definition\/stakeholders\/import\/preview)|integrations\/jira\/webhook\/[^/]+\/[^/]+)\/?$/;
 const bigJson = express.json({ limit: BIG_BODY_LIMIT });
 
 /* ---------- download helpers ---------- */

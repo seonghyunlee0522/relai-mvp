@@ -19,8 +19,11 @@ import { updateStep } from './guide.js';
 export const SECTIONS = ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'];
 export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '이해관계자', MILESTONES: '주요 일정과 마일스톤', OPERATIONS: '운영 방식' };
 const OPS_KEYS = ['meetings', 'reporting', 'communication', 'decisions'];
-const AUTHORITY = ['DECIDER', 'APPROVER', 'CONSULTED', 'INFORMED'];
-export const AUTHORITY_LABEL = { DECIDER: '의사결정', APPROVER: '승인', CONSULTED: '협의', INFORMED: '공유' };
+/** Stakeholder 조직 구분 (Lifecycle V2 UX): 당사 · 고객사 · 협력사 · 기타. Hierarchy = 조직 구분 → 부서 → 사람. (의사결정 권한 항목은 제거됨) */
+export const ORG_TYPES = ['OWN', 'CLIENT', 'PARTNER', 'OTHER'];
+export const ORG_TYPE_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
+export const ORG_TYPE_ALIAS = { OWN: ['당사', '수행사', '자사', 'own', 'vendor', 'us'], CLIENT: ['고객사', '고객', '발주사', 'client', 'customer'], PARTNER: ['협력사', '파트너', '협력업체', 'partner', 'subcontractor'], OTHER: ['기타', 'other', 'etc'] };
+export const parseOrgType = (v) => { const t = String(v ?? '').trim().toLowerCase(); if (!t) return ''; if (ORG_TYPES.includes(t.toUpperCase())) return t.toUpperCase(); for (const k of ORG_TYPES) if (ORG_TYPE_ALIAS[k].some((a) => a.toLowerCase() === t)) return k; return null; };
 
 const str = (v, max) => { const s = typeof v === 'string' ? v.trim() : ''; return max && s.length > max ? s.slice(0, max) : s; };
 const parse = (s, fb) => { try { const v = JSON.parse(s); return v ?? fb; } catch { return fb; } };
@@ -56,12 +59,13 @@ export function cleanSection(key, body = {}) {
       if (!Array.isArray(b.stakeholders)) throw new ValidationError({ stakeholders: '목록 형식이 올바르지 않습니다.' });
       const f = {};
       out.stakeholders = b.stakeholders.map((x, i) => {
-        const s = { id: str(x?.id) || randomUUID(), name: str(x?.name, 100), org: str(x?.org, 100), role: str(x?.role, 100), area: str(x?.area, 200), authority: str(x?.authority), note: str(x?.note, 500) };
-        if (s.authority && !AUTHORITY.includes(s.authority)) f[`stakeholders.${i}.authority`] = '권한 값이 올바르지 않습니다.';
+        const ot = parseOrgType(x?.org_type);
+        const s = { id: str(x?.id) || randomUUID(), org_type: ot || '', org: str(x?.org, 100), department: str(x?.department, 100), name: str(x?.name, 100), role: str(x?.role, 100), area: str(x?.area, 200), note: str(x?.note, 500) };
+        if (ot === null) f[`stakeholders.${i}.org_type`] = '조직 구분은 당사 · 고객사 · 협력사 · 기타 중 하나여야 합니다.';
         return s;
-      }).filter((s) => s.name || s.org || s.role);
-      for (const s of out.stakeholders) if (!s.name && !s.org) { f.stakeholders = '이해관계자는 이름 또는 조직 중 하나는 입력해야 합니다.'; break; }
-      if (out.stakeholders.length > 100) f.stakeholders = '이해관계자는 최대 100명까지 등록할 수 있습니다.';
+      }).filter((s) => s.name || s.org || s.department || s.role);
+      for (const s of out.stakeholders) { if (!s.name) { f.stakeholders = '이해관계자는 이름을 입력해야 합니다.'; break; } if (!s.org_type) { f.stakeholders = '이해관계자마다 조직 구분(당사 · 고객사 · 협력사 · 기타)을 선택하세요.'; break; } }
+      if (out.stakeholders.length > 300) f.stakeholders = '이해관계자는 최대 300명까지 등록할 수 있습니다.';
       if (Object.keys(f).length) throw new ValidationError(f);
       return out;
     }
@@ -102,6 +106,18 @@ export function missingFor(key, d, ctx = {}) {
   }
 }
 
+/** One-line read summary of each section for the Process View ("고객사 5명 · 당사 4명 등록"). Empty string when nothing is entered. */
+export function sectionSummary(key, d, ctx = {}) {
+  switch (key) {
+    case 'GOALS': { const parts = []; if (d.goal) parts.push('목표 작성됨'); if (d.success_criteria.length) parts.push(`성공 기준 ${d.success_criteria.length}건`); return parts.join(' · '); }
+    case 'SCOPE': { const parts = []; if (d.scope_in.length) parts.push(`수행 범위 ${d.scope_in.length}건`); if (d.scope_out.length) parts.push(`제외 범위 ${d.scope_out.length}건`); return parts.join(' · '); }
+    case 'STAKEHOLDERS': { if (!d.stakeholders.length) return ''; const by = {}; for (const x of d.stakeholders) by[x.org_type || 'OTHER'] = (by[x.org_type || 'OTHER'] || 0) + 1; return ORG_TYPES.filter((k) => by[k]).map((k) => `${ORG_TYPE_LABEL[k]} ${by[k]}명`).join(' · ') + ' 등록'; }
+    case 'MILESTONES': { const parts = []; if (d.key_dates.length) parts.push(`주요 일정 ${d.key_dates.length}건`); if ((ctx.wbs_milestones || []).length) parts.push(`WBS 마일스톤 ${ctx.wbs_milestones.length}건`); return parts.join(' · '); }
+    case 'OPERATIONS': { const n = OPS_KEYS.filter((k) => d.operations[k]).length; return n ? `운영 방식 ${n}개 항목 작성됨` : ''; }
+    default: return '';
+  }
+}
+
 /* ---------- reads ---------- */
 async function row(db, projectId) { return db.get('SELECT * FROM project_definitions WHERE project_id = ?', [projectId]); }
 async function initiationSteps(db, projectId) {
@@ -120,14 +136,16 @@ export async function loadDefinition(db, project) {
   const sections = SECTIONS.map((key) => {
     const st = steps.find((s) => s.step_key === key) || null;
     const missing = missingFor(key, d, { wbs_milestones: ms });
-    const completed = st?.status === 'COMPLETED';
+    const completed = st?.status === 'COMPLETED'; const skipped = st?.status === 'SKIPPED';
     const upd = d.section_updated[key] || null;
+    const summary = sectionSummary(key, d, { wbs_milestones: ms });
     return { key, label: SECTION_LABEL[key], step_id: st?.id || null, title: st?.title || SECTION_LABEL[key], description: st?.description || '',
-      status: completed ? 'COMPLETED' : 'TODO', completed_at: st?.completed_at || null, completed_by_name: st?.completed_by_name || null,
+      importance: st?.importance || 'REQUIRED', skippable: (st?.importance || 'REQUIRED') !== 'REQUIRED',
+      status: completed ? 'COMPLETED' : skipped ? 'SKIPPED' : 'TODO', completed_at: st?.completed_at || null, completed_by_name: st?.completed_by_name || null,
       updated_at: upd, changed_after_completion: Boolean(completed && upd && st.completed_at && new Date(upd) > new Date(st.completed_at)),
-      ready: missing.length === 0, missing, legacy_note: st?.note || '' };
+      ready: missing.length === 0, missing, summary, has_data: Boolean(summary), legacy_note: st?.note || '' };
   });
-  const done = sections.filter((s) => s.status === 'COMPLETED').length;
+  const done = sections.filter((s) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
   return { definition: d, sections, progress: { done, total: sections.length, percent: Math.round((done / sections.length) * 100) },
     needs_review: sections.filter((s) => s.changed_after_completion).map((s) => s.key),
     project_dates: { planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date }, wbs_milestones: ms };
@@ -161,14 +179,46 @@ export async function saveDefinition(db, project, body = {}, userId = null) {
   return loadDefinition(db, project);
 }
 
-/** complete | confirm | reopen a section. complete/confirm need readiness; all three write the INITIATION step. */
-export async function setSectionStatus(db, project, key, action, userId) {
+/**
+ * complete | confirm | reopen | skip | resume a section — all write the INITIATION step.
+ * complete/confirm need readiness and may carry the section's fields (`body`) so one click saves and completes.
+ * skip is refused for REQUIRED sections; resume puts a SKIPPED section back to TODO.
+ */
+export async function setSectionStatus(db, project, key, action, userId, body = null) {
   if (!SECTIONS.includes(key)) return { error: 'not_found' };
+  if (body && Object.keys(cleanSection(key, body)).length) await saveDefinition(db, project, body, userId);
   const model = await loadDefinition(db, project);
   const sec = model.sections.find((s) => s.key === key);
   if (!sec.step_id) return { error: 'not_found' };
-  if (action === 'reopen') { await updateStep(db, project, sec.step_id, { status: 'TODO' }, userId); return { ok: true }; }
+  if (action === 'reopen' || action === 'resume') { await updateStep(db, project, sec.step_id, { status: 'TODO' }, userId); return { ok: true }; }
+  if (action === 'skip') {
+    if (!sec.skippable) throw new ValidationError({ section: '필수 업무는 건너뛸 수 없습니다.' });
+    await updateStep(db, project, sec.step_id, { status: 'SKIPPED' }, userId); return { ok: true };
+  }
   if (!sec.ready) throw new ValidationError({ section: sec.missing[0] });
   await updateStep(db, project, sec.step_id, { status: 'COMPLETED' }, userId);   // confirm == complete again: completed_at moves past section_updated
   return { ok: true };
+}
+
+/* ---------- stakeholder Excel (template · preview) ---------- */
+export const STAKEHOLDER_COLUMNS = [
+  { key: 'org_type', label: '조직 구분 *', required: true, width: 12, options: ORG_TYPES.map((k) => ORG_TYPE_LABEL[k]) },
+  { key: 'org', label: '조직(회사)', width: 20 }, { key: 'department', label: '부서', width: 18 }, { key: 'name', label: '이름 *', required: true, width: 14 },
+  { key: 'role', label: '역할', width: 18 }, { key: 'area', label: '담당 영역', width: 24 }, { key: 'note', label: '비고', width: 24 },
+];
+/** Map raw workbook rows (header text → cell) to stakeholder rows with per-row validation. */
+export function previewStakeholderRows({ headers, rows }) {
+  const norm = (t) => String(t || '').replace(/\s+/g, '').replace(/\*+$/, '').toLowerCase();
+  const colOf = {}; for (const c of STAKEHOLDER_COLUMNS) { const h = headers.find((x) => norm(x.text) === norm(c.label)); if (h) colOf[c.key] = h.n; }
+  if (!colOf.name) throw new ValidationError({ file: "'이름' 열을 찾을 수 없습니다. 템플릿의 열 제목을 사용해 주세요." });
+  const out = rows.map((r) => {
+    const v = (k) => (colOf[k] ? String(r.cells[colOf[k]] || '').trim() : '');
+    const errors = {};
+    const ot = parseOrgType(v('org_type'));
+    if (!v('name')) errors.name = '이름을 입력하세요.';
+    if (ot === null) errors.org_type = '당사 · 고객사 · 협력사 · 기타 중 하나여야 합니다.'; else if (!ot) errors.org_type = '조직 구분을 입력하세요.';
+    const values = { org_type: ot || '', org_type_label: ot ? ORG_TYPE_LABEL[ot] : v('org_type'), org: v('org').slice(0, 100), department: v('department').slice(0, 100), name: v('name').slice(0, 100), role: v('role').slice(0, 100), area: v('area').slice(0, 200), note: v('note').slice(0, 500) };
+    return { row: r.row, ok: !Object.keys(errors).length, errors, values };
+  });
+  return { columns: STAKEHOLDER_COLUMNS.map(({ key, label, required }) => ({ key, label, required: Boolean(required) })), rows: out, summary: { total: out.length, ok: out.filter((x) => x.ok).length, error: out.filter((x) => !x.ok).length } };
 }

@@ -27,10 +27,10 @@ export const HOME_ITEMS = (pid) => [
 /** Work screens per lifecycle phase. `enabled:false` = defined in the IA, no screen yet → not rendered. */
 export const PHASE_ITEMS = {
   INITIATION: (pid) => [
-    { key: 'definition', label: '프로젝트 정의', href: P(pid, '/definition'), match: (path) => isPath(path, pid, '/definition') && !['#sec-STAKEHOLDERS', '#sec-MILESTONES', '#sec-OPERATIONS'].includes(location.hash) },
-    { key: 'stakeholders', label: '이해관계자 / 조직', href: P(pid, '/definition#sec-STAKEHOLDERS'), match: (path) => isPath(path, pid, '/definition') && location.hash === '#sec-STAKEHOLDERS' },
-    { key: 'milestones', label: '상위 일정 / 마일스톤', href: P(pid, '/definition#sec-MILESTONES'), match: (path) => isPath(path, pid, '/definition') && location.hash === '#sec-MILESTONES' },
-    { key: 'operations', label: '프로젝트 운영 방식', href: P(pid, '/definition#sec-OPERATIONS'), match: (path) => isPath(path, pid, '/definition') && location.hash === '#sec-OPERATIONS' },
+    { key: 'definition', label: '프로젝트 정의', href: P(pid, '/definition'), match: (path, qs) => isPath(path, pid, '/definition') && !['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'].includes(qs.get('activity')) },
+    { key: 'stakeholders', label: '이해관계자 / 조직', href: P(pid, '/definition?activity=STAKEHOLDERS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'STAKEHOLDERS') },
+    { key: 'milestones', label: '상위 일정 / 마일스톤', href: P(pid, '/definition?activity=MILESTONES'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'MILESTONES') },
+    { key: 'operations', label: '프로젝트 운영 방식', href: P(pid, '/definition?activity=OPERATIONS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'OPERATIONS') },
   ],
   REQUIREMENTS: (pid) => [
     { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') && !(qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED') },

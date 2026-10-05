@@ -47,7 +47,7 @@ test('planner: AI disabled → 503; questions from fake provider; all vs selecte
   const r1 = await mkReq(A, { title: '로그인 기능', status: 'CONFIRMED', scope: 'IN_SCOPE' }); const r2 = await mkReq(A, { title: '권한 관리' }); const r3 = await mkReq(A, { title: '보관됨' });
   await A.c('POST', `${A.req}/${r3.id}/archive`, {});
   await mkWbs(A, { item_type: 'TASK', title: '기존 착수회의' });
-  await A.c('PUT', `${A.purl}/definition`, { goal: 'ERP 구축 — 고객사 Azure 환경, 기존 시스템 데이터 존재', scope_in: ['회계'], stakeholders: [{ name: '김', org: 'ACME' }] });
+  await A.c('PUT', `${A.purl}/definition`, { goal: 'ERP 구축 — 고객사 Azure 환경, 기존 시스템 데이터 존재', scope_in: ['회계'], stakeholders: [{ name: '김', org: 'ACME', org_type: '고객사' }] });
   // 1. AI disabled
   process.env.AI_ENABLED = 'false';
   let r = await A.c('POST', P(A), { all: true }); assert.equal(r.status, 503); assert.equal(r.json.error.code, 'AI_DISABLED');

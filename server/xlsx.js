@@ -90,6 +90,21 @@ function buildGuideSheet(wb, spec) {
 const toBuffer = async (wb) => Buffer.from(await wb.xlsx.writeBuffer());
 const newBook = () => { const wb = new ExcelJS.Workbook(); wb.creator = 'RELAI'; wb.created = new Date(); return wb; };
 
+/** Simple one-sheet template from an ad-hoc column list ({ key, label, required, width, options? }) — used for 이해관계자 Excel. */
+export async function buildSimpleTemplate(sheetName, columns, guide = []) {
+  const wb = newBook();
+  const ws = wb.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 1 }] });
+  ws.columns = columns.map((c) => ({ key: c.key, width: c.width || 18 }));
+  ws.getRow(1).height = 24;
+  columns.forEach((c, i) => {
+    const col = ws.getColumn(i + 1); col.font = FONT; col.numFmt = TEXT_FMT;
+    styleHeader(ws.getCell(1, i + 1), Boolean(c.required)); ws.getCell(1, i + 1).value = c.label;
+    if (c.options) { const letter = ws.getColumn(i + 1).letter; ws.dataValidations.add(`${letter}2:${letter}${VALIDATION_LAST_ROW}`, { type: 'list', allowBlank: true, showErrorMessage: true, errorStyle: 'warning', errorTitle: '목록 값 확인', error: `목록에서 값을 선택해 주세요. (${c.label})`, formulae: [`"${c.options.join(',')}"`] }); }
+  });
+  if (guide.length) { const g = wb.addWorksheet('작성 안내'); g.getColumn(1).width = 90; guide.forEach((line, i) => { const cell = g.getCell(i + 1, 1); cell.value = line; cell.font = i === 0 ? { ...FONT, bold: true, size: 12 } : FONT; cell.alignment = { wrapText: true, vertical: 'top' }; }); }
+  return toBuffer(wb);
+}
+
 export async function buildTemplate(kind) {
   const spec = KINDS[kind]; const wb = newBook();
   buildDataSheet(wb, spec, []); buildGuideSheet(wb, spec);

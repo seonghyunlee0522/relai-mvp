@@ -10,7 +10,8 @@ import { $, html, no2, raw } from '../core/dom.js';
 import { moveToPhase, projectHead } from './guide.js';
 import { phaseStepper } from './status.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
-import { toast } from '../shared/dialogs.js';
+import { confirmDialog, toast } from '../shared/dialogs.js';
+import { navigate } from '../core/router.js';
 import { bindCoach } from '../onboarding/ui.js';
 import { ob } from '../onboarding/state.js';
 
@@ -42,32 +43,33 @@ const guideCard = (g, p, archived, created) => {
     </div></section>`;
 };
 
-/* ---------- current phase activities ---------- */
+/* ---------- current phase activities (Process + Read view) ---------- */
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
-const activityRow = (a, archived) => {
+/** CTA only where action is due: the current activity (first open one) and in-progress ones. Done / future / skipped rows carry none. */
+const activityRow = (a, archived, isCurrent) => {
   const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED; const cls = stateCls(a);
   const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
-  // row actions: contextual CTA (→ work screen) · 완료 처리 (derived not complete) · 제외 (RECOMMENDED/OPTIONAL) · 되돌리기 (manual marks)
+  const showCta = !archived && a.cta && (isCurrent || a.state === 'IN_PROGRESS');
   const acts = [];
   if (!archived) {
-    if (a.cta) acts.push(html`<a class="link np__go" href="${a.cta.href}" data-link>${a.cta.label}</a>`);
-    if (manualDone || skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
-    else if (a.state !== 'COMPLETED') {
-      // 완료 처리 only where a human judgement is needed: manual activities, or data exists but the criterion is not met. Definition sections complete in their own screen.
+    if (showCta) acts.push(html`<a class="link np__go" href="${a.cta.href}" data-link>${a.cta.label}</a>`);
+    if (skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">업무 다시 시작 →</button>`);
+    else if (manualDone && isCurrent) acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
+    else if (a.state !== 'COMPLETED' && (isCurrent || a.state === 'IN_PROGRESS')) {
       const manual = !a.derived && a.linked_feature_type !== 'definition';
       if (manual || (a.state === 'IN_PROGRESS' && a.linked_feature_type !== 'definition')) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="COMPLETED" title="${a.derived ? '실제 데이터 기준과 별개로 이 업무를 완료로 표시합니다' : '이 업무를 완료로 표시합니다'}">완료 처리</button>`);
-      if (a.importance !== 'REQUIRED') acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="SKIPPED" title="이 프로젝트에 해당하지 않는 업무로 표시합니다">제외</button>`);
+      if (a.importance !== 'REQUIRED' && a.linked_feature_type !== 'definition') acts.push(html`<button type="button" class="link linkbtn np__act np__skip" data-step="${a.id}" data-status="SKIPPED" data-title="${a.title}" title="이번 프로젝트에서는 수행하지 않는 업무로 기록합니다">↷ 건너뛰기</button>`);
     }
   }
-  return html`<li class="np__row is-${cls}" data-act="${a.id}">
+  const href = a.linked_feature_type === 'definition' && a.cta ? a.cta.href : null;   // 착수 activities open their work screen from the row itself
+  return html`<li class="np__row is-${cls} ${isCurrent ? 'is-cur' : ''} ${href ? 'is-link' : ''}" data-act="${a.id}" ${raw(href ? html`data-href="${href}" tabindex="0" role="link"` : '')}>
     <i class="st st--${cls}" aria-hidden="true">${st.icon}</i>
     <div class="np__m">
-      <button type="button" class="np__st linkbtn" data-exp="${a.id}" aria-expanded="false" title="완료 조건 보기">${a.title}</button>
+      <span class="np__st">${a.title}<small class="np__imp">${a.importance_label}</small></span>
+      <span class="np__purpose">${a.description}</span>
       <span class="np__info">${a.text}</span>
-      <div class="np__detail" hidden><div><b>무엇을 하나요?</b><p>${a.description}</p></div><div><b>완료 조건</b><p>${a.completion_criteria}</p></div>
-        <label class="np__note"><span>메모</span><textarea class="textarea" data-note="${a.id}" maxlength="4000" ${archived ? 'disabled' : ''} placeholder="정리한 내용이나 확인한 사실을 적어두세요.">${a.note || ''}</textarea><small class="hint" data-note-status="${a.id}">${a.note ? '저장됨' : ''}</small></label></div>
     </div>
-    <span class="np__chips"><em class="np__imp np__imp--${a.importance.toLowerCase()}">${a.importance_label}</em><em class="np__lab np__lab--${cls}">${st.label}</em></span>
+    <span class="np__lab">${st.label}</span>
     <span class="np__acts">${raw(acts.join(''))}</span>
   </li>`;
 };
@@ -76,17 +78,19 @@ const phasePanel = (g, p, archived) => {
   const cur = g.current_phase; if (!cur) return '';
   const acts = cur.steps || []; const s = cur.summary || { required_open: 0, gate_met: true };
   const movePrimary = isMove(g.guidance && g.guidance.primary_action);
-  const remain = s.required_open ? `필수 업무 ${s.required_open}건 남음` : '필수 업무를 모두 마쳤습니다';
+  const current = acts.find((a) => a.state !== 'COMPLETED' && a.state !== 'SKIPPED');
+  const allDone = !current;
+  const remain = s.required_open ? `필수 업무 ${s.required_open}건 남음` : allDone ? '이 단계의 업무를 모두 처리했습니다' : '필수 업무를 모두 마쳤습니다';
   return html`<section class="np" aria-labelledby="npT">
     <div class="np__h">
       <div class="np__t"><span class="np__no mono">${no2(cur.sequence)}</span><h2 id="npT">${cur.name}</h2><span class="np__cur">현재 단계</span></div>
       <span class="np__remain ${s.required_open ? '' : 'is-good'}">${remain}</span>
     </div>
     <p class="np__d">${cur.description}</p>
-    <ol class="np__list">${raw(acts.map((a) => activityRow(a, archived)).join(''))}</ol>
-    <div class="np__f">
-      <span class="np__msg">${raw(g.next_phase ? html`다음 단계: <b>${no2(g.next_phase.sequence)} ${g.next_phase.name}</b>${s.gate_met ? '' : ' · 필수 업무를 마치면 다음 단계로 이동할 수 있습니다. (미완료 상태로도 이동 가능)'}` : '마지막 단계입니다.')}</span>
-      ${raw(!archived && g.next_phase && !movePrimary ? html`<button type="button" class="${s.gate_met ? 'btn btn--primary btn--sm' : 'link linkbtn np__move'}" id="next">${no2(g.next_phase.sequence)} ${g.next_phase.name} 단계 시작 →</button>` : '')}
+    <ol class="np__list">${raw(acts.map((a) => activityRow(a, archived, current && a.id === current.id)).join(''))}</ol>
+    <div class="np__f ${allDone && g.next_phase ? 'np__f--ready' : ''}">
+      <span class="np__msg">${raw(g.next_phase ? (allDone ? html`<b>${cur.name} 단계의 필요한 업무가 정리되었습니다.</b> 다음 단계 · ${no2(g.next_phase.sequence)} ${g.next_phase.name}` : html`다음 단계: <b>${no2(g.next_phase.sequence)} ${g.next_phase.name}</b>${s.gate_met ? ' · 남은 권장·선택 업무를 정리하거나 건너뛰면 진행할 수 있습니다.' : ' · 필수 업무를 마치면 진행할 수 있습니다.'}`) : '마지막 단계입니다.')}</span>
+      ${raw(!archived && g.next_phase && !movePrimary ? html`<button type="button" class="${allDone ? 'btn btn--primary btn--sm' : 'link linkbtn np__move'}" id="next">${g.next_phase.name}(으)로 진행 →</button>` : '')}
     </div>
   </section>`;
 };
@@ -112,23 +116,12 @@ export async function nextPage(id, main = $('#main')) {
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { g = await api('GET', wsApi(`/${id}`)); draw(); } };
     const nb = $('#next'); if (nb) nb.onclick = move;
     main.querySelectorAll('[data-move-next]').forEach((b) => { b.onclick = g.next_phase ? move : null; });
-    main.querySelectorAll('[data-exp]').forEach((b) => b.onclick = () => { const row = b.closest('.np__row'); const d = row.querySelector('.np__detail'); const open = d.hidden; d.hidden = !open; b.setAttribute('aria-expanded', String(open)); row.classList.toggle('is-open', open); });
+    main.querySelectorAll('.np__row[data-href]').forEach((row) => { const go = () => navigate(row.dataset.href); row.onclick = (e) => { if (!e.target.closest('a,button')) go(); }; row.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a,button')) { e.preventDefault(); go(); } }; });
     main.querySelectorAll('[data-step]').forEach((b) => b.onclick = async () => {
+      if (b.dataset.status === 'SKIPPED' && !(await confirmDialog({ title: '이 업무를 건너뛸까요?', body: `'${b.dataset.title}'은(는) 이번 프로젝트에서 수행하지 않는 것으로 기록됩니다. 나중에 다시 시작할 수 있습니다.`, confirm: '건너뛰기' }))) return;
       b.disabled = true;
-      try { g = await api('PATCH', wsApi(`/${id}/steps/${b.dataset.step}`), { status: b.dataset.status }); toast(b.dataset.status === 'COMPLETED' ? '완료 처리했습니다.' : b.dataset.status === 'SKIPPED' ? '이 업무를 제외했습니다.' : '되돌렸습니다.'); draw(); }
+      try { g = await api('PATCH', wsApi(`/${id}/steps/${b.dataset.step}`), { status: b.dataset.status }); toast(b.dataset.status === 'COMPLETED' ? '완료 처리했습니다.' : b.dataset.status === 'SKIPPED' ? '이 업무를 건너뛰었습니다.' : '업무를 다시 시작합니다.'); draw(); }
       catch (e) { toast(e.message); b.disabled = false; }
-    });
-    main.querySelectorAll('[data-note]').forEach((ta) => {
-      let timer; const st = main.querySelector(`[data-note-status="${ta.dataset.note}"]`);
-      const save = async () => {
-        const step = (g.current_phase.steps || []).find((s) => s.id === ta.dataset.note);
-        if (!step || ta.value.trim() === (step.note || '')) return;
-        st.textContent = '저장 중…';
-        try { g = await api('PATCH', wsApi(`/${id}/steps/${ta.dataset.note}`), { note: ta.value }); st.textContent = '저장됨'; }
-        catch (e) { st.textContent = e.message; }
-      };
-      ta.oninput = () => { st.textContent = ''; clearTimeout(timer); timer = setTimeout(save, 800); };
-      ta.onblur = () => { clearTimeout(timer); save(); };
     });
     bindCoach(main);
     if (pendingMove && g.next_phase) { pendingMove = false; move(); }

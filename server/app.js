@@ -32,6 +32,7 @@ import { writeAudit } from './admin.js';
 import { mountOnboardingRoutes } from './onboarding-routes.js';
 import { recordFirst } from './onboarding.js';
 import { projectGuidance } from './guidance.js';
+import * as XL from './xlsx.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
@@ -321,6 +322,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const fields = {};
     if (status !== undefined) {
       if (!['TODO', 'COMPLETED', 'SKIPPED'].includes(status)) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { status: '상태 값이 올바르지 않습니다.' } });
+      if (status === 'SKIPPED') {   // REQUIRED activities cannot be skipped (importance ↔ skippable kept loosely coupled: an is_skippable column can override later)
+        const st = (await db.get(`SELECT s.importance FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
+        if (st && st.importance === 'REQUIRED') return fail(res, 409, 'not_skippable', '필수 업무는 건너뛸 수 없습니다.');
+      }
       fields.status = status;
     }
     if (note !== undefined) {
@@ -356,11 +361,25 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
     res.json((await tx(db, async (db) => D.saveDefinition(db, project, req.body, req.user.id))));
   }));
-  app.post(`${base}/:pid/definition/sections/:key/:action(complete|confirm|reopen)`, guard, wrap(async (req, res) => {
+  // complete/confirm may carry the section fields → one click = 저장 + 완료 처리. skip (non-REQUIRED only) / resume mark the activity SKIPPED / TODO.
+  app.post(`${base}/:pid/definition/sections/:key/:action(complete|confirm|reopen|skip|resume)`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
-    const r = (await tx(db, async (db) => D.setSectionStatus(db, project, req.params.key, req.params.action, req.user.id)));
+    const body = ['complete', 'confirm'].includes(req.params.action) && req.body && typeof req.body === 'object' ? req.body : null;
+    const r = (await tx(db, async (db) => D.setSectionStatus(db, project, req.params.key, req.params.action, req.user.id, body)));
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '섹션을 찾을 수 없습니다.');
     res.json({ ...(await D.loadDefinition(db, project)), guide: (await guideResponse(project)) });
+  }));
+  // 이해관계자 Excel: template + preview (rows are committed through PUT /definition by the client after review; no nested import flow)
+  app.get(`${base}/:pid/definition/stakeholders/template.xlsx`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    const buf = await XL.buildSimpleTemplate('이해관계자', D.STAKEHOLDER_COLUMNS, ['이해관계자 등록 템플릿', '• 조직 구분: 당사 · 고객사 · 협력사 · 기타 중 하나 (필수)', '• 이름: 필수', '• 조직(회사) · 부서 · 역할 · 담당 영역 · 비고: 선택', '• 1행(열 제목)은 수정하지 말고 2행부터 입력하세요.']);
+    res.set({ 'Content-Type': XL.XLSX_MIME, 'Content-Disposition': `attachment; filename="stakeholders-template.xlsx"; filename*=UTF-8''${encodeURIComponent('이해관계자 등록 템플릿.xlsx')}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+    res.end(buf);
+  }));
+  app.post(`${base}/:pid/definition/stakeholders/import/preview`, guard, express.json({ limit: '8mb' }), wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    try { res.json(D.previewStakeholderRows(await XL.parseWorkbookRaw(XL.decodeBase64Xlsx(req.body?.data), { maxRows: 300 }))); }
+    catch (e) { if (e instanceof XL.ImportFileError) return fail(res, e.status || 400, e.code || 'import_file', e.message); throw e; }
   }));
 
   app.patch(`${base}/:pid`, manage, wrap(async (req, res) => {

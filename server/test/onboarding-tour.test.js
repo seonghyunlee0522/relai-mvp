@@ -8,7 +8,7 @@ import { activationState } from '../activation.js';
 const OB = (A) => `/api/workspaces/${A.w}/onboarding`;
 const fresh = async (client, email, name = '신규') => { const c = client(); const s = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!' }); return { c, w: s.json.workspaces[0].id, uid: s.json.user.id }; };
 async function completeDefinition(A) {
-  await A.c('PUT', `${A.purl}/definition`, { goal: '목표', success_criteria: ['기준'], scope_in: ['범위'], stakeholders: [{ name: '김', org: 'ACME' }], key_dates: [{ title: '오픈', date: '2027-01-01' }], operations: { meetings: '주간' } });
+  await A.c('PUT', `${A.purl}/definition`, { goal: '목표', success_criteria: ['기준'], scope_in: ['범위'], stakeholders: [{ name: '김', org: 'ACME', org_type: '고객사' }], key_dates: [{ title: '오픈', date: '2027-01-01' }], operations: { meetings: '주간' } });
   for (const k of ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS']) assert.equal((await A.c('POST', `${A.purl}/definition/sections/${k}/complete`, {})).status, 200, k);
 }
 

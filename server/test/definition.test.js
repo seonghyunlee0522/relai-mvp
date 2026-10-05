@@ -22,12 +22,13 @@ test('definition: save partial, complete needs content, step status is the singl
   r = await A.c('PUT', D, { success_criteria: ['평균 2영업일 이내', { text: '' }, { id: 'keep-1', text: '만족도 4.5 이상' }], scope_in: [{ text: '국문 표준계약 5종' }], scope_out: ['영문 계약'] });
   assert.equal(r.status, 200); assert.deepEqual(r.json.definition.success_criteria.map((x) => x.text), ['평균 2영업일 이내', '만족도 4.5 이상']);
   assert.equal(r.json.definition.success_criteria[1].id, 'keep-1'); assert.equal(r.json.definition.goal, '계약 검토 리드타임 50% 단축');   // untouched field kept
-  // stakeholders: multiple, name-or-org required, authority enum
-  r = await A.c('PUT', D, { stakeholders: [{ name: '김부장', org: '고객사 법무팀', role: '고객 PM', area: '요구사항 확정', authority: 'DECIDER' }, { org: '당사', role: '개발 리드' }, { name: '', org: '', role: '빈 행' }] });
-  assert.equal(r.status, 400); assert.match(r.json.error.fields.stakeholders, /이름 또는 조직/);
-  r = await A.c('PUT', D, { stakeholders: [{ name: '김부장', org: '고객사 법무팀', role: '고객 PM', area: '요구사항 확정', authority: 'DECIDER' }, { org: '당사', role: '개발 리드' }, { name: '', org: '', role: '' }] });
-  assert.equal(r.status, 200); assert.equal(r.json.definition.stakeholders.length, 2); assert.equal(r.json.definition.stakeholders[0].authority, 'DECIDER');
-  assert.equal((await A.c('PUT', D, { stakeholders: [{ name: 'x', authority: 'KING' }] })).status, 400);
+  // stakeholders (V2 UX): name + 조직 구분(당사/고객사/협력사/기타, aliases accepted) required; blank rows dropped; no authority field
+  r = await A.c('PUT', D, { stakeholders: [{ name: '김부장', org_type: 'CLIENT', org: '고객사 법무팀', department: '법무팀', role: '고객 PM' }, { org: '당사', role: '개발 리드' }, { name: '', org: '', role: '빈 행' }] });
+  assert.equal(r.status, 400); assert.match(r.json.error.fields.stakeholders, /이름/);
+  r = await A.c('PUT', D, { stakeholders: [{ name: '김부장', org_type: '고객사', org: 'ACME', department: '법무팀', role: '고객 PM', area: '요구사항 확정' }, { name: '이리드', org_type: 'own', role: '개발 리드' }, { name: '', org: '', role: '' }] });
+  assert.equal(r.status, 200); assert.equal(r.json.definition.stakeholders.length, 2); assert.equal(r.json.definition.stakeholders[0].org_type, 'CLIENT'); assert.equal(r.json.definition.stakeholders[1].org_type, 'OWN'); assert.ok(!('authority' in r.json.definition.stakeholders[0]));
+  assert.match(r.json.sections.find((s) => s.key === 'STAKEHOLDERS').summary, /당사 1명 · 고객사 1명/);
+  assert.equal((await A.c('PUT', D, { stakeholders: [{ name: 'x', org_type: 'KING' }] })).status, 400);
   // key dates: title required when date given; sorted by date
   r = await A.c('PUT', D, { key_dates: [{ title: '최종 검수', date: '2026-12-20' }, { title: '킥오프', date: '2026-11-03' }, { title: '', date: '2026-11-05' }] }); assert.equal(r.status, 400);
   r = await A.c('PUT', D, { key_dates: [{ title: '최종 검수', date: '2026-12-20' }, { title: '킥오프', date: '2026-11-03' }] });
