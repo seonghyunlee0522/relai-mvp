@@ -48,9 +48,18 @@ export const LATEST_VERSION = migrations[migrations.length - 1].version;
 export async function migrate(db, schemaSql, bindClient) {
   const lock = db.schema ? 'hashtext($1)' : '$1::int';
   const client = await db.pool.connect();
+  const upToDate = async () => { try { const r = await client.query('SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations'); return Number(r.rows[0].v) >= LATEST_VERSION; } catch { return false; } };
   try {
-    await client.query(`SET lock_timeout = '20s'`);   // a stale lock (e.g. a frozen serverless instance) fails fast instead of hanging every boot
-    await client.query(`SELECT pg_advisory_lock(${lock})`, [db.schema ? db.schema : 7101]);
+    if (await upToDate()) return [];   // nothing to apply → no lock needed (serverless instances boot without touching the lock)
+    // A frozen serverless instance can keep a session-level advisory lock forever: fail fast, kick idle holders once, retry.
+    await client.query(`SET lock_timeout = '15s'`);
+    try { await client.query(`SELECT pg_advisory_lock(${lock})`, [db.schema ? db.schema : 7101]); }
+    catch (e) {
+      if (!/lock timeout/.test(e.message)) throw e;
+      await client.query(`SELECT pg_terminate_backend(a.pid) FROM pg_stat_activity a JOIN pg_locks l ON l.pid = a.pid WHERE l.locktype = 'advisory' AND a.state = 'idle' AND a.pid <> pg_backend_pid()`).catch(() => {});
+      if (await upToDate()) return [];
+      await client.query(`SELECT pg_advisory_lock(${lock})`, [db.schema ? db.schema : 7101]);
+    }
     const fresh = !(await client.query(`SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'users'`)).rowCount;
     await client.query(schemaSql);
     const { rows } = await client.query('SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations');
