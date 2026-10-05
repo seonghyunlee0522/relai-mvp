@@ -70,6 +70,9 @@ export async function loadGuide(db, project, ctx = null) {
     LEFT JOIN users u ON u.id = t.changed_by
     WHERE t.project_id = ? ORDER BY t.changed_at, t.seq`, [project.id]));
   const current = out.find((p) => p.is_current) || null;
+  // A phase before the current one has been left for the next step — shown as ended (✓) even if some activities stayed open.
+  // Display only: status stays IN_PROGRESS for such a phase (transitionTo), so the open activities are still visible.
+  for (const p of out) p.is_passed = Boolean(current && p.sequence < current.sequence);
   const next = current ? out.find((p) => p.sequence === current.sequence + 1) || null : null;
   return { phases: out, current_phase: current, next_phase: next, history };
 }

@@ -8,15 +8,23 @@ import { attentionAll, upcomingDates } from '../metrics.js';
 import { projectHealth } from '../health.js';
 import { REQ_TYPES } from '../requirements.js';
 import { jiraContextLines } from '../integrations/jira/sync.js';
+import { buildProjectCharter, charterPromptBlock } from '../charter.js';
 
 const clip = (s, n) => { const t = neutralize(String(s ?? '').replace(/\s+/g, ' ').trim()); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 const lines = (title, rows, fn, empty = '(없음)') => `## ${title}\n${rows.length ? rows.map(fn).join('\n') : empty}`;
 const LAST_RESULT = `(SELECT e.result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
 
 /* ---------- shared pieces ---------- */
+/** Project Chater block — the project's reference information, the same object the Project Chater screen shows (server/charter.js). */
+export async function charterBlock(db, project) { return charterPromptBlock(await buildProjectCharter(db, project), clip); }
+
+/**
+ * Header of every AI request: Project Chater (기준정보) + live position (current phase, scale).
+ * Every feature (요구사항 추출 · WBS 초안 · WBS Planner · 변경 영향 · Assistant) builds its context from this, so the charter is always sent.
+ */
 export async function projectBlock(db, project) {
   const ph = await db.get('SELECT name, sequence FROM project_phases WHERE project_id = ? AND phase_key = ?', [project.id, project.current_phase]);
-  return `## 프로젝트\n이름: ${clip(project.name, 100)}\n고객사: ${clip(project.client_name || '', 100) || '(없음)'}\n규모/금액: ${clip(project.project_scale || '', 200) || '(없음)'}\n설명: ${clip(project.description, 600) || '(없음)'}\n현재 단계: ${ph ? `${ph.sequence}. ${ph.name}` : project.current_phase}\n계획 기간: ${project.planned_start_date || '?'} ~ ${project.planned_end_date || '?'}`;
+  return `${await charterBlock(db, project)}\n\n## 프로젝트 현재 상태\n현재 단계: ${ph ? `${ph.sequence}. ${ph.name}` : project.current_phase}\n규모/금액: ${clip(project.project_scale || '', 200) || '(없음)'}`;
 }
 export const requirementRows = (db, projectId, { limit = 200, ids = null } = {}) => db.all(`SELECT id, display_id, title, description, type, priority, scope, status FROM requirements
   WHERE project_id = ? AND archived_at IS NULL ${ids ? 'AND id = ANY(?::text[])' : ''} ORDER BY sequence_number LIMIT ?`, ids ? [projectId, ids, limit] : [projectId, limit]);

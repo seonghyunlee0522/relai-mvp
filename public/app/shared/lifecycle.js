@@ -1,6 +1,6 @@
 /* Lifecycle V2 information architecture — the one place that says which work screen each lifecycle activity lives in.
  *
- *   PROJECT HOME        What's Next · Overview (+ sub views)
+ *   PROJECT HOME        What's Next · Overview (+ sub views: 프로젝트 현황 · Project Chater · WBS · 주간보고 · 일정/마일스톤 · Project Health)
  *   PROJECT LIFECYCLE   01 착수 … 07 운영 및 유지보수, each with its work screens
  *   PROJECT MANAGEMENT  Changes · Issues & Risks · Activity · Reports (cross-cutting, not phase-bound)
  *
@@ -17,6 +17,7 @@ export const HOME_ITEMS = (pid) => [
   { key: 'overview', label: 'Overview', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !qs.get('ctx'),
     children: [
       { key: 'overview-main', label: '프로젝트 현황', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !location.hash.includes('health') },
+      { key: 'overview-charter', label: 'Project Chater', href: P(pid, '/charter'), match: (path) => isPath(path, pid, '/charter') },
       { key: 'overview-wbs', label: 'WBS', href: P(pid, '/wbs?ctx=monitor'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && !q(qs, 'view', 'gantt') },
       { key: 'overview-reports', label: '주간보고', href: P(pid, '/reports'), match: (path) => path.startsWith(P(pid, '/reports')) },
       { key: 'overview-schedule', label: '일정 / 마일스톤', href: P(pid, '/wbs?ctx=monitor&view=gantt'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && q(qs, 'view', 'gantt') },

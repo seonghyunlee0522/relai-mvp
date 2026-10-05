@@ -19,6 +19,12 @@ import { updateStep } from './guide.js';
 export const SECTIONS = ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'];
 export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '이해관계자', MILESTONES: '주요 일정과 마일스톤', OPERATIONS: '운영 방식' };
 const OPS_KEYS = ['meetings', 'reporting', 'communication', 'decisions'];
+/** Project Chater free-text fields (2026-10-05). Stored as plain text columns; the owning section decides which work screen edits them.
+ * They never gate completion — readiness (missingFor) is unchanged. API name → column. */
+export const TEXT_FIELDS = { project_type: 'project_type', deliverables: 'deliverables', assumptions: 'assumptions', constraints: 'constraints_text', initial_risks: 'initial_risks', change_management: 'change_management', acceptance: 'acceptance' };
+const TEXT_SECTION = { project_type: 'GOALS', deliverables: 'SCOPE', assumptions: 'SCOPE', constraints: 'SCOPE', initial_risks: 'SCOPE', change_management: 'OPERATIONS', acceptance: 'OPERATIONS' };
+const TEXT_MAX = { project_type: 200 };
+const textOf = (row) => Object.fromEntries(Object.entries(TEXT_FIELDS).map(([k, col]) => [k, row ? row[col] || '' : '']));
 /** Stakeholder 조직 구분 (Lifecycle V2 UX): 당사 · 고객사 · 협력사 · 기타. Hierarchy = 조직 구분 → 부서 → 사람. (의사결정 권한 항목은 제거됨) */
 export const ORG_TYPES = ['OWN', 'CLIENT', 'PARTNER', 'OTHER'];
 export const ORG_TYPE_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
@@ -29,10 +35,10 @@ const str = (v, max) => { const s = typeof v === 'string' ? v.trim() : ''; retur
 const parse = (s, fb) => { try { const v = JSON.parse(s); return v ?? fb; } catch { return fb; } };
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 
-const EMPTY = { goal: '', success_criteria: [], scope_in: [], scope_out: [], stakeholders: [], key_dates: [], operations: {}, memo: '', section_updated: {} };
+const EMPTY = { goal: '', success_criteria: [], scope_in: [], scope_out: [], stakeholders: [], key_dates: [], operations: {}, memo: '', section_updated: {}, ...textOf(null) };
 const hydrate = (row) => (row ? {
   goal: row.goal, success_criteria: parse(row.success_criteria, []), scope_in: parse(row.scope_in, []), scope_out: parse(row.scope_out, []),
-  stakeholders: parse(row.stakeholders, []), key_dates: parse(row.key_dates, []), operations: parse(row.operations, {}), memo: row.memo,
+  stakeholders: parse(row.stakeholders, []), key_dates: parse(row.key_dates, []), operations: parse(row.operations, {}), memo: row.memo, ...textOf(row),
   section_updated: parse(row.section_updated, {}), updated_at: row.updated_at, updated_by: row.updated_by, created_at: row.created_at,
 } : { ...EMPTY, updated_at: null, updated_by: null, created_at: null });
 
@@ -45,6 +51,10 @@ const textList = (arr, field, max = 500, limit = 50) => {
 };
 export function cleanSection(key, body = {}) {
   const b = body || {}; const out = {};
+  for (const [f, sec] of Object.entries(TEXT_SECTION)) if (sec === key && b[f] !== undefined) {
+    if (b[f] !== null && typeof b[f] !== 'string') throw new ValidationError({ [f]: '텍스트로 입력해 주세요.' });
+    out[f] = str(b[f], TEXT_MAX[f] || 4000);
+  }
   switch (key) {
     case 'GOALS':
       if (b.goal !== undefined) out.goal = str(b.goal, 2000);
@@ -109,11 +119,11 @@ export function missingFor(key, d, ctx = {}) {
 /** One-line read summary of each section for the Process View ("고객사 5명 · 당사 4명 등록"). Empty string when nothing is entered. */
 export function sectionSummary(key, d, ctx = {}) {
   switch (key) {
-    case 'GOALS': { const parts = []; if (d.goal) parts.push('목표 작성됨'); if (d.success_criteria.length) parts.push(`성공 기준 ${d.success_criteria.length}건`); return parts.join(' · '); }
-    case 'SCOPE': { const parts = []; if (d.scope_in.length) parts.push(`수행 범위 ${d.scope_in.length}건`); if (d.scope_out.length) parts.push(`제외 범위 ${d.scope_out.length}건`); return parts.join(' · '); }
+    case 'GOALS': { const parts = []; if (d.project_type) parts.push(`유형: ${d.project_type}`); if (d.goal) parts.push('목표 작성됨'); if (d.success_criteria.length) parts.push(`성공 기준 ${d.success_criteria.length}건`); return parts.join(' · '); }
+    case 'SCOPE': { const parts = []; if (d.scope_in.length) parts.push(`수행 범위 ${d.scope_in.length}건`); if (d.scope_out.length) parts.push(`제외 범위 ${d.scope_out.length}건`); if (d.deliverables) parts.push('주요 산출물'); const n = ['assumptions', 'constraints', 'initial_risks'].filter((k) => d[k]).length; if (n) parts.push(`전제·제약·리스크 ${n}개 항목`); return parts.join(' · '); }
     case 'STAKEHOLDERS': { if (!d.stakeholders.length) return ''; const by = {}; for (const x of d.stakeholders) by[x.org_type || 'OTHER'] = (by[x.org_type || 'OTHER'] || 0) + 1; return ORG_TYPES.filter((k) => by[k]).map((k) => `${ORG_TYPE_LABEL[k]} ${by[k]}명`).join(' · ') + ' 등록'; }
     case 'MILESTONES': { const parts = []; if (d.key_dates.length) parts.push(`주요 일정 ${d.key_dates.length}건`); if ((ctx.wbs_milestones || []).length) parts.push(`WBS 마일스톤 ${ctx.wbs_milestones.length}건`); return parts.join(' · '); }
-    case 'OPERATIONS': { const n = OPS_KEYS.filter((k) => d.operations[k]).length; return n ? `운영 방식 ${n}개 항목 작성됨` : ''; }
+    case 'OPERATIONS': { const n = OPS_KEYS.filter((k) => d.operations[k]).length + ['change_management', 'acceptance'].filter((k) => d[k]).length; return n ? `운영 방식 ${n}개 항목 작성됨` : ''; }
     default: return '';
   }
 }
@@ -152,8 +162,8 @@ export async function loadDefinition(db, project) {
 }
 
 /* ---------- writes ---------- */
-const COLS = { goal: 'goal', success_criteria: 'success_criteria', scope_in: 'scope_in', scope_out: 'scope_out', stakeholders: 'stakeholders', key_dates: 'key_dates', operations: 'operations', memo: 'memo' };
-const SECTION_OF = { goal: 'GOALS', success_criteria: 'GOALS', scope_in: 'SCOPE', scope_out: 'SCOPE', stakeholders: 'STAKEHOLDERS', key_dates: 'MILESTONES', operations: 'OPERATIONS' };
+const COLS = { goal: 'goal', success_criteria: 'success_criteria', scope_in: 'scope_in', scope_out: 'scope_out', stakeholders: 'stakeholders', key_dates: 'key_dates', operations: 'operations', memo: 'memo', ...TEXT_FIELDS };
+const SECTION_OF = { goal: 'GOALS', success_criteria: 'GOALS', scope_in: 'SCOPE', scope_out: 'SCOPE', stakeholders: 'STAKEHOLDERS', key_dates: 'MILESTONES', operations: 'OPERATIONS', ...TEXT_SECTION };
 
 /** Partial save. Body may carry any subset of the fields; untouched fields stay. Returns the full read model. */
 export async function saveDefinition(db, project, body = {}, userId = null) {
@@ -167,10 +177,11 @@ export async function saveDefinition(db, project, body = {}, userId = null) {
   const su = { ...(existing ? parse(existing.section_updated, {}) : {}) }; for (const k of touched) su[k] = ts;
   const vals = (k) => (typeof patch[k] === 'string' ? patch[k] : JSON.stringify(patch[k]));
   if (!existing) {
-    const base = { goal: '', success_criteria: '[]', scope_in: '[]', scope_out: '[]', stakeholders: '[]', key_dates: '[]', operations: '{}', memo: '' };
+    const base = { goal: '', success_criteria: '[]', scope_in: '[]', scope_out: '[]', stakeholders: '[]', key_dates: '[]', operations: '{}', memo: '', ...Object.fromEntries(Object.keys(TEXT_FIELDS).map((k) => [k, ''])) };
     for (const k of Object.keys(patch)) base[k] = vals(k);
-    await db.run(`INSERT INTO project_definitions (project_id, goal, success_criteria, scope_in, scope_out, stakeholders, key_dates, operations, memo, section_updated, updated_by, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [project.id, base.goal, base.success_criteria, base.scope_in, base.scope_out, base.stakeholders, base.key_dates, base.operations, base.memo, JSON.stringify(su), userId, ts, ts]);
+    const keys = Object.keys(base);
+    await db.run(`INSERT INTO project_definitions (project_id, ${keys.map((k) => COLS[k]).join(', ')}, section_updated, updated_by, created_at, updated_at)
+      VALUES (${Array(keys.length + 5).fill('?').join(',')})`, [project.id, ...keys.map((k) => base[k]), JSON.stringify(su), userId, ts, ts]);
   } else {
     const sets = Object.keys(patch).map((k) => `${COLS[k]} = ?`); const params = Object.keys(patch).map(vals);
     sets.push('section_updated = ?', 'updated_by = ?', 'updated_at = ?'); params.push(JSON.stringify(su), userId, ts, project.id);

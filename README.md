@@ -47,6 +47,8 @@ API: `POST /api/auth/{signup,login,logout}` · `GET /api/me` · `GET|POST /api/w
 
 UI/UX 개편(Project Workspace · Data Grid · Excel Import · Bulk · Activity): `docs/ux-overhaul.md`
 
+Project Chater(`/app/projects/:id/charter`, `GET …/:pid/charter`): 프로젝트 정의를 읽기 전용 기준문서로 재구성 · 같은 객체가 `server/charter.js` → `[PROJECT CHATER]` 블록으로 모든 AI 요청(`ai/context.js projectBlock`)에 포함 · 정의에 없던 항목(유형·산출물·가정·제약·초기 리스크·변경관리·검수 기준)은 자유 텍스트 컬럼
+
 Workspace Home(프로젝트별 상황 카드 · 우선순위 · `GET …/projects/home`): `docs/workspace-home.md`
 
 Admin Console(운영자 권한·정지 정책·Audit·Billing 연동 계약): `docs/admin-console.md` — 운영자 부여: `node scripts/grant-system-admin.js <email>`
