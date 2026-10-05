@@ -43,6 +43,7 @@ export const migrations = [
   { version: 22, name: 'Project creation form: client_name + project_scale replace project_type / current_situation (columns dropped, no legacy mapping)', async up(db) {
     await db.run('ALTER TABLE projects DROP COLUMN IF EXISTS project_type, DROP COLUMN IF EXISTS current_situation');
   } },
+  { version: 23, name: 'Project Chater: free-text definition fields (project_type, deliverables, assumptions, constraints_text, initial_risks, change_management, acceptance)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

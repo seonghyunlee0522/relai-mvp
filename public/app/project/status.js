@@ -2,19 +2,26 @@
  * Everything here is derived from the project GET payload (`g`) — no extra requests, no stored state —
  * so both screens always agree on the same numbers (phase progression, schedule state, exception counts). */
 import { html, no2, raw, todayLocal } from '../core/dom.js';
-import { firstScreen } from '../shared/lifecycle.js';
 
 const n = (v) => Number(v) || 0;
 
-/** Compact lifecycle stepper (no percentages): ✓ 착수 ─ ● 요구사항 정의 ─ ○ 분석·설계 … Green done · Blue current · Gray not started.
- * A step links to the phase's first work screen (What’s Next for the current phase). */
-export const phaseStepper = (g, pid) => html`<ol class="pstep" aria-label="Project Lifecycle">${raw((g.phases || []).map((ph) => {
-  const state = ph.is_current ? 'cur' : ph.status === 'COMPLETED' ? 'done' : 'todo';
-  const first = firstScreen(pid, ph.phase_key);
-  const href = ph.is_current || !first ? `/app/projects/${pid}` : first.href;
-  const req = ph.summary ? ph.summary.required_open : null;
-  const tip = state === 'cur' ? '현재 단계' : state === 'done' ? '완료' : req ? `필수 업무 ${req}건` : '미시작';
-  return html`<li class="is-${state}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${tip}"><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span></a></li>`;
+/** Display state of a phase: cur · done (completed, or left for a later phase even with open activities) · todo. Shared by the stepper and the LNB. */
+export const phaseState = (ph) => (ph.is_current ? 'cur' : ph.status === 'COMPLETED' || ph.is_passed ? 'done' : 'todo');
+/** Tooltip text for a phase: "완료" / "다음 단계로 진행됨 · 남은 필수 업무 N건" / "현재 단계" / "미시작". */
+export const phaseTip = (ph) => {
+  const st = phaseState(ph); const req = ph.summary ? ph.summary.required_open : 0;
+  if (st === 'cur') return '현재 단계';
+  if (st === 'done') return ph.status === 'COMPLETED' ? '완료' : `다음 단계로 진행됨${req ? ` · 남은 필수 업무 ${req}건` : ''}`;
+  return req ? `미시작 · 필수 업무 ${req}건` : '미시작';
+};
+/** Compact lifecycle stepper (no percentages): ✓ 착수 ─ ● 요구사항 정의 ─ ○ 분석·설계 … Green done/ended · Blue current · Gray not started.
+ * A step opens that phase's activity list on What’s Next (…?phase=KEY; the current phase is What’s Next itself) — never a work screen.
+ * `selKey` = the phase whose list is shown (outlined). */
+export const phaseStepper = (g, pid, selKey = null) => html`<ol class="pstep" aria-label="Project Lifecycle">${raw((g.phases || []).map((ph) => {
+  const state = phaseState(ph);
+  const href = ph.is_current ? `/app/projects/${pid}` : `/app/projects/${pid}?phase=${ph.phase_key}`;
+  const sel = selKey && selKey === ph.phase_key && !ph.is_current;
+  return html`<li class="is-${state} ${sel ? 'is-sel' : ''}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기" ${sel ? 'aria-current="page"' : ''}><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span></a></li>`;
 }).join(''))}</ol>`;
 
 /** Days from today to `date` (negative when past). null when no date. */

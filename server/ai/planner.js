@@ -16,7 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { ValidationError } from '../validate.js';
-import * as D from '../definition.js';
+import { buildProjectCharter } from '../charter.js';
 import * as W from '../wbs.js';
 import { runAiFeature, AiError } from './service.js';
 import { SYSTEM, dataBlock, inputBlock, neutralize, AREA_LABEL } from './prompts.js';
@@ -61,14 +61,16 @@ async function plannerContext(db, project, requirementIds) {
   const wbs = await wbsRows(db, project.id, { limit: 200 });
   const links = wbs.length ? await db.all(`SELECT l.wbs_item_id, r.display_id FROM requirement_wbs_links l JOIN requirements r ON r.id = l.requirement_id WHERE l.project_id = ? AND r.archived_at IS NULL`, [project.id]) : [];
   const linkBy = new Map(); for (const l of links) linkBy.set(l.wbs_item_id, [...(linkBy.get(l.wbs_item_id) || []), l.display_id]);
-  const def = await D.loadDefinition(db, project); const d = def.definition;
-  const list = (a, n = 12) => (Array.isArray(a) && a.length ? a.slice(0, n).map((x) => clip(typeof x === 'string' ? x : x.text || x.title || x.name || '', 160)).filter(Boolean).join(' / ') : '(없음)');
-  const defText = `## 프로젝트 정의\n목표: ${clip(d.goal, 800) || '(없음)'}\n성공 기준: ${list(d.success_criteria)}\n수행 범위: ${list(d.scope_in, 20)}\n제외 범위: ${list(d.scope_out, 20)}\n이해관계자: ${(d.stakeholders || []).slice(0, 15).map((s) => clip(`${s.name || ''}${s.org ? `(${s.org})` : ''} ${s.role || ''}`, 80)).join(', ') || '(없음)'}\n주요 일정: ${(d.key_dates || []).slice(0, 15).map((k) => clip(`${k.date || '?'} ${k.title}`, 80)).join(', ') || '(없음)'}\n운영 방식: ${Object.entries(d.operations || {}).filter(([, v]) => v).map(([k, v]) => `${k}: ${clip(v, 200)}`).join(' / ') || '(없음)'}`;
+  // 프로젝트 정의 is sent once, as the [PROJECT CHATER] block inside projectBlock(); the same text drives "이미 확인된 정보".
+  const head = await projectBlock(db, project);
+  // "이미 확인된 정보" is matched against what the user actually wrote, never the block's own labels.
+  const flat = (o) => (o === null || o === undefined ? '' : typeof o === 'object' ? Object.values(o).map(flat).join('\n') : String(o));
+  const defText = flat(await buildProjectCharter(db, project));
   const reqText = `## 선택 요구사항 (${reqs.length}건)\n${reqs.length ? reqs.map((r) => `- ${r.display_id} [${r.type}/${r.priority}/${r.scope}/${r.status}] ${clip(r.title, 150)}\n  설명: ${clip(r.description, 400) || '(없음)'}${critBy.get(r.id) ? `\n  완료 조건: ${critBy.get(r.id).map((c) => clip(c, 120)).join(' / ')}` : ''}`).join('\n') : '(선택된 요구사항 없음 — 프로젝트 수행 WBS만 제안)'}`;
   const wbsText = `## 기존 WBS (${wbs.length}건, 중복 방지용)\n${wbs.length ? wbs.map((w) => `- ${w.wbs_code} [${w.item_type}/${w.status}] ${clip(w.title, 100)}${linkBy.get(w.id) ? ` ← ${linkBy.get(w.id).join(', ')}` : ''}`).join('\n') : '(없음)'}`;
   const known = knownAreasFrom({ definitionText: defText, requirementText: reqs.map((r) => `${r.title} ${r.description || ''}`).join('\n') });
   const knownText = `## 이미 확인된 정보 (다시 묻지 말 것)\n${known.length ? known.map((k) => `- ${k.area} (${AREA_LABEL[k.area]}): ${k.reason}`).join('\n') : '(없음)'}`;
-  const base = `${await projectBlock(db, project)}\n\n${defText}\n\n${reqText}\n\n${wbsText}`;
+  const base = `${head}\n\n${reqText}\n\n${wbsText}`;
   return { reqs, wbs, linkBy, known, base, knownText };
 }
 

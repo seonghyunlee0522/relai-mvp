@@ -17,18 +17,33 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
 
 const ORG_TYPE = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
-const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 킥오프/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정·에스컬레이션', '예: 범위 변경은 변경 요청으로 등록 후 고객 PM 승인, 일정 변경은 운영위원회 결정']];
+const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 킥오프/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 Steering Committee 승인']];
+/** Project Chater free-text fields (Label · 짧은 설명 · Textarea). Free text on purpose — structure comes later in a separate design.
+ * [field, label, hint, placeholder, rows] grouped by the activity whose work screen edits them. */
+const CHARTER_TEXT = {
+  SCOPE: [
+    ['deliverables', '주요 산출물', '납품·제출해야 하는 결과물', '예: 요구사항 정의서, 화면 설계서, 테스트 결과서, 운영 매뉴얼 (한 줄에 하나씩)', 3],
+    ['assumptions', '가정사항', '계획이 성립하기 위한 전제 조건', '예: 고객사가 필요한 API 접근 권한을 일정 내 제공한다.', 3],
+    ['constraints', '제약사항', '수행을 제한하는 조건', '예: 고객사 내부망에서만 개발 가능 / 외부 SaaS 사용 불가 / 오픈 일정 변경 불가', 3],
+    ['initial_risks', '초기 리스크', '착수 시점에 인지한 주요 위험', '예: Legacy 시스템 문서 부족 / 고객사 의사결정 지연 가능성', 3],
+  ],
+  OPERATIONS: [
+    ['change_management', '변경관리 방식', '범위·일정 변경 요청의 검토·승인 절차', '예: 일정 또는 범위 영향이 있는 변경은 PM 검토 후 고객 승인', 2],
+    ['acceptance', '검수 / 완료 기준', '검수와 프로젝트 완료로 보는 조건', '예: UAT 완료 및 Critical Issue 0건 / 운영 이관 완료 후 최종 검수', 2],
+  ],
+};
+const textField = ([f, label, hint, ph, rows]) => ({ f, label, hint, ph, rows });
 /** One-line purpose per activity (Main view). Validation wording stays inside the work screen. */
 const PURPOSE = {
   GOALS: '프로젝트 목표와 성공 기준을 정해 프로젝트가 무엇을 위해 진행되는지 명확히 합니다.',
-  SCOPE: '이번 프로젝트에서 하는 것과 하지 않는 것을 구분해 범위 논쟁의 기준을 만듭니다.',
+  SCOPE: '이번 프로젝트에서 하는 것과 하지 않는 것, 주요 산출물과 전제·제약·리스크를 정리해 범위 논쟁의 기준을 만듭니다.',
   STAKEHOLDERS: '고객사·당사·협력사의 담당자와 역할을 정리해 누구와 무엇을 결정할지 분명히 합니다.',
   MILESTONES: '시작·종료 예정일과 반드시 지켜야 할 시점을 정리합니다. WBS의 세부 일정과는 다른 상위 일정입니다.',
-  OPERATIONS: '회의·보고·소통·의사결정 방식을 정해 프로젝트 운영 규칙을 공유합니다.',
+  OPERATIONS: '회의·보고·소통·의사결정·변경관리·검수 방식을 정해 프로젝트 운영 규칙을 공유합니다.',
 };
 const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '범위 입력 →', STAKEHOLDERS: '이해관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →' };
 const WIDE = new Set(['STAKEHOLDERS', 'MILESTONES']);
-const SECTION_FIELDS = { GOALS: ['goal', 'success_criteria'], SCOPE: ['scope_in', 'scope_out'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations'] };
+const SECTION_FIELDS = { GOALS: ['project_type', 'goal', 'success_criteria'], SCOPE: ['scope_in', 'scope_out', 'deliverables', 'assumptions', 'constraints', 'initial_risks'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations', 'change_management', 'acceptance'] };
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
@@ -50,7 +65,7 @@ export async function definitionPage(id) {
   const sec = (k) => m.sections.find((s) => s.key === k);
   const phase = () => (g.phases || []).find((x) => x.phase_key === 'INITIATION');
   const currentKey = () => { const c = m.sections.find((s) => s.status !== 'COMPLETED' && s.status !== 'SKIPPED'); return c ? c.key : null; };
-  const setUrl = () => { const q = new URLSearchParams(location.search); if (open) q.set('activity', open.key); else q.delete('activity'); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
+  const setUrl = () => { const q = new URLSearchParams(location.search); if (open) q.set('activity', open.key); else q.delete('activity'); if (!open || open.key !== qp.get('activity')) q.delete('field'); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
 
   /* ---------- Main Process View ---------- */
   const processView = () => {
@@ -95,14 +110,19 @@ export async function definitionPage(id) {
     return html`<details class="def__hier"><summary>목록 요약 (조직 구분 → 부서 → 사람) <em>${list.length}명</em></summary>
       ${raw(Object.keys(ORG_TYPE).filter((t) => groups[t]).map((t) => html`<div class="def__hg"><b>${ORG_TYPE[t]}</b>${raw(Object.entries(groups[t]).map(([dep, ppl]) => html`<div class="def__hd"><span>${dep}</span><span class="def__hp">${ppl.map((x) => x.name + (x.role ? ` (${x.role})` : '')).join(' · ')}</span></div>`).join(''))}</div>`).join(''))}</details>`;
   };
+  const textAreas = (list) => list.map(textField).map((x) => html`<div class="field" data-field="${x.f}"><label>${x.label} <small class="dim">${x.hint}</small></label><textarea class="textarea" data-f="${x.f}" rows="${x.rows}" maxlength="4000" placeholder="${x.ph}" ${ro ? 'disabled' : ''}>${d[x.f] || ''}</textarea></div>`).join('');
   const form = (key) => {
     switch (key) {
-      case 'GOALS': return html`<div class="field"><label>프로젝트 목표</label><textarea class="textarea" data-f="goal" rows="3" maxlength="2000" placeholder="이 프로젝트로 달성하려는 결과를 1~3문장으로 적습니다. 예: 법무팀 계약 검토 리드타임을 50% 단축하는 AI 검토 시스템 구축" ${ro ? 'disabled' : ''}>${d.goal}</textarea></div>
-        <div class="field"><label>성공 기준 <small class="dim">측정 가능한 완료·성공 조건</small></label>${raw(listRows('success_criteria', d.success_criteria, '예: 검토 요청 접수부터 결과 회신까지 평균 2영업일 이내'))}</div>
+      case 'GOALS': return html`<div class="field" data-field="project_type"><label>프로젝트 유형 <small class="dim">예: 신규 구축 · 고도화 · 마이그레이션 · 운영/유지보수 · 컨설팅</small></label><input class="input input--sm" data-f="project_type" maxlength="200" value="${d.project_type || ''}" placeholder="예: 신규 구축" ${ro ? 'disabled' : ''}></div>
+        <div class="field" data-field="goal"><label>프로젝트 목표</label><textarea class="textarea" data-f="goal" rows="3" maxlength="2000" placeholder="이 프로젝트로 달성하려는 결과를 1~3문장으로 적습니다. 예: 법무팀 계약 검토 리드타임을 50% 단축하는 AI 검토 시스템 구축" ${ro ? 'disabled' : ''}>${d.goal}</textarea></div>
+        <div class="field" data-field="success_criteria"><label>성공 기준 <small class="dim">측정 가능한 완료·성공 조건</small></label>${raw(listRows('success_criteria', d.success_criteria, '예: 검토 요청 접수부터 결과 회신까지 평균 2영업일 이내'))}</div>
         <p class="hint">완료 처리하려면 목표 또는 성공 기준을 1개 이상 입력합니다.</p>`;
-      case 'SCOPE': return html`<div class="field"><label>수행 범위 <small class="dim">이번 프로젝트에서 하는 것</small></label>${raw(listRows('scope_in', d.scope_in, '예: 계약서 자동 검토 기능(국문 표준계약 5종)'))}</div>
-        <div class="field"><label>제외 범위 <small class="dim">하지 않기로 한 것</small></label>${raw(listRows('scope_out', d.scope_out, '예: 영문 계약서, 기존 ERP 연동'))}</div>
-        <p class="hint">완료 처리하려면 수행 범위를 1개 이상 입력합니다.</p>`;
+      case 'SCOPE': return html`<div class="field" data-field="scope_in"><label>수행 범위 <small class="dim">이번 프로젝트에서 하는 것</small></label>${raw(listRows('scope_in', d.scope_in, '예: 계약서 자동 검토 기능(국문 표준계약 5종)'))}</div>
+        <div class="field" data-field="scope_out"><label>제외 범위 <small class="dim">하지 않기로 한 것</small></label>${raw(listRows('scope_out', d.scope_out, '예: 영문 계약서, 기존 ERP 연동'))}</div>
+        ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(0, 1)))}
+        <div class="def__sub"><b>전제 · 제약 · 초기 리스크</b><small>Project Chater와 RELAI AI가 WBS·요구사항·변경 영향을 판단할 때 함께 고려합니다.</small></div>
+        ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(1)))}
+        <p class="hint">완료 처리하려면 수행 범위를 1개 이상 입력합니다. 산출물·전제·제약·리스크는 선택 항목입니다.</p>`;
       case 'STAKEHOLDERS': return html`${raw(hierarchy(d.stakeholders))}
         <div class="def__tools">${raw(ro ? '' : html`<button type="button" class="btn btn--secondary btn--sm" id="sh-add">+ 직접 추가</button><button type="button" class="btn btn--secondary btn--sm" id="sh-xl">Excel 업로드</button><button type="button" class="link linkbtn def__tpl" id="sh-tpl">등록 템플릿 내려받기</button>`)}</div>
         <div class="def__tblwrap"><table class="def__tbl def__tbl--sh"><thead><tr><th>조직 구분</th><th>조직(회사)</th><th>부서</th><th>이름</th><th>역할</th><th></th></tr></thead>
@@ -115,15 +135,16 @@ export async function definitionPage(id) {
             <td>${raw(ro ? '' : html`<button type="button" class="def__x" data-shdel="${x.id}" aria-label="삭제">×</button>`)}</td></tr>`).join(''))}
           ${raw(d.stakeholders.length ? '' : '<tr class="def__empty"><td colspan="6">아직 등록된 이해관계자가 없습니다. 직접 추가하거나 Excel 템플릿으로 한 번에 등록하세요.</td></tr>')}</tbody></table></div>
         <p class="hint">완료 처리하려면 조직 구분과 이름이 있는 이해관계자를 1명 이상 등록합니다.</p>`;
-      case 'MILESTONES': return html`<div class="def__dates"><span>프로젝트 기간</span><b>${fmtShort(m.project_dates.planned_start_date)} ~ ${fmtShort(m.project_dates.planned_end_date)}</b>${raw(ro ? '' : html`<a class="link" href="${u}/edit" data-link>정보 수정</a>`)}</div>
-        <div class="field"><label>주요 일정 <small class="dim">계약·보고·검수 등 반드시 지켜야 할 시점</small></label>
+      case 'MILESTONES': return html`<div class="def__dates" data-field="project_dates"><span>프로젝트 기간</span><b>${fmtShort(m.project_dates.planned_start_date)} ~ ${fmtShort(m.project_dates.planned_end_date)}</b>${raw(ro ? '' : html`<a class="link" href="${u}/edit" data-link>정보 수정</a>`)}</div>
+        <div class="field" data-field="key_dates"><label>주요 일정 · 마일스톤 <small class="dim">계약·보고·검수 등 반드시 지켜야 할 시점 — Project Chater 타임라인에 표시됩니다</small></label>
           <ul class="def__list def__list--dates">${raw(d.key_dates.map((x) => html`<li data-kd="${x.id}"><input class="input input--sm" type="date" data-kdf="date" value="${x.date}" ${ro ? 'disabled' : ''}><input class="input input--sm" data-kdf="title" value="${x.title}" maxlength="200" placeholder="예: 킥오프, 중간보고, 최종 검수" ${ro ? 'disabled' : ''}>${raw(ro ? '' : html`<button type="button" class="def__x" data-kddel="${x.id}" aria-label="삭제">×</button>`)}</li>`).join(''))}</ul>
           ${raw(ro ? '' : '<button type="button" class="link linkbtn def__add" id="kd-add">+ 일정 추가</button>')}</div>
         <div class="field"><label>WBS 마일스톤 <small class="dim">분석·설계 단계에서 WBS에 등록한 마일스톤 (조회만)</small></label>
           ${raw(m.wbs_milestones.length ? html`<ul class="def__ms">${raw(m.wbs_milestones.map((x) => html`<li><a href="${u}/wbs?sel=${x.id}" data-link><i class="wms">◆</i><span class="mono">${x.wbs_code}</span>${x.title}<time>${x.milestone_date ? fmtShort(x.milestone_date) : '날짜 미정'}</time></a></li>`).join(''))}</ul>` : '<p class="hint">아직 WBS 마일스톤이 없습니다.</p>')}</div>
         <p class="hint">완료 처리하려면 주요 일정을 1개 이상 입력하거나 WBS에 마일스톤이 있어야 합니다.</p>`;
-      case 'OPERATIONS': return html`${raw(OPS.map(([k, label, ph]) => html`<div class="field"><label>${label}</label><textarea class="textarea" data-op="${k}" rows="2" maxlength="2000" placeholder="${ph}" ${ro ? 'disabled' : ''}>${d.operations[k] || ''}</textarea></div>`).join(''))}
-        <p class="hint">완료 처리하려면 운영 방식 항목 중 1개 이상을 입력합니다.</p>`;
+      case 'OPERATIONS': return html`${raw(OPS.map(([k, label, ph]) => html`<div class="field" data-field="${k}"><label>${label}</label><textarea class="textarea" data-op="${k}" rows="2" maxlength="2000" placeholder="${ph}" ${ro ? 'disabled' : ''}>${d.operations[k] || ''}</textarea></div>`).join(''))}
+        ${raw(textAreas(CHARTER_TEXT.OPERATIONS))}
+        <p class="hint">완료 처리하려면 회의·보고·소통·의사결정 중 1개 이상을 입력합니다. 변경관리·검수 기준은 선택 항목입니다.</p>`;
       default: return '';
     }
   };
@@ -162,7 +183,8 @@ export async function definitionPage(id) {
   const collect = () => {
     const el = $('#wdrawer'); if (!el || !open) return;
     const v = (sel) => { const x = el.querySelector(sel); return x ? x.value : undefined; };
-    if (open.key === 'GOALS') { if (v('[data-f="goal"]') !== undefined) d.goal = v('[data-f="goal"]'); d.success_criteria = [...el.querySelectorAll('[data-item="success_criteria"]')].map((x) => ({ id: x.dataset.id, text: x.value })); }
+    el.querySelectorAll('[data-f]').forEach((x) => { d[x.dataset.f] = x.value; });   // single-value fields (goal, project_type, Project Chater free text)
+    if (open.key === 'GOALS') { d.success_criteria = [...el.querySelectorAll('[data-item="success_criteria"]')].map((x) => ({ id: x.dataset.id, text: x.value })); }
     if (open.key === 'SCOPE') for (const key of ['scope_in', 'scope_out']) d[key] = [...el.querySelectorAll(`[data-item="${key}"]`)].map((x) => ({ id: x.dataset.id, text: x.value }));
     if (open.key === 'STAKEHOLDERS') d.stakeholders = [...el.querySelectorAll('tr[data-sh]')].map((tr) => { const o = { id: tr.dataset.sh }; tr.querySelectorAll('[data-shf]').forEach((x) => { o[x.dataset.shf] = x.value; }); return o; });
     if (open.key === 'MILESTONES') d.key_dates = [...el.querySelectorAll('li[data-kd]')].map((li) => { const o = { id: li.dataset.kd }; li.querySelectorAll('[data-kdf]').forEach((x) => { o[x.dataset.kdf] = x.value; }); return o; });
@@ -275,5 +297,14 @@ export async function definitionPage(id) {
     document.onkeydown = (e) => { if (e.key === 'Escape' && open && !document.querySelector('.scrim')) closeDrawer(); };
   };
   const bind = () => { bindView(); bindDrawer(); };
+  /** Deep link from Project Chater (…?activity=KEY&field=FIELD): scroll the input into view, focus it and flash it once. */
+  const focusField = (name) => {
+    const box = name && $(`#wdrawer [data-field="${CSS.escape(name)}"]`); if (!box) return;
+    box.scrollIntoView({ block: 'center' });
+    const input = box.querySelector('textarea:not([disabled]), input:not([disabled]), select:not([disabled])') || box.parentElement.querySelector(`[data-add="${CSS.escape(name)}"], #kd-add`);
+    if (input) input.focus({ preventScroll: true });
+    box.classList.add('is-target'); setTimeout(() => box.classList.remove('is-target'), 2200);
+  };
   draw();
+  if (open && qp.get('field')) focusField(qp.get('field'));
 }

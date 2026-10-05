@@ -1,6 +1,6 @@
 /* Project LNB (Lifecycle V2) — the primary navigation inside a project.
  *
- *   PROJECT HOME        What's Next · Overview ▾ (프로젝트 현황 · WBS · 주간보고 · 일정/마일스톤 · Project Health)
+ *   PROJECT HOME        What's Next · Overview ▾ (프로젝트 현황 · Project Chater · WBS · 주간보고 · 일정/마일스톤 · Project Health)
  *   PROJECT LIFECYCLE   01…07 as an accordion: current phase open + blue bar, completed phases ✓ green, future gray
  *   PROJECT MANAGEMENT  Changes · Issues & Risks · Activity · Reports
  *
@@ -9,6 +9,7 @@
 import { $, html, no2, raw } from '../core/dom.js';
 import { store } from '../core/ui.js';
 import { HOME_ITEMS, PHASE_ITEMS, PM_ITEMS, phaseOfPath } from '../shared/lifecycle.js';
+import { phaseState, phaseTip } from './status.js';
 
 const ICON = {
   next: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10h11M11 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -46,11 +47,11 @@ export function projectNav(p, g, activeKey) {
 
   const phases = (g.phases || []).map((ph) => {
     const items = (PHASE_ITEMS[ph.phase_key] ? PHASE_ITEMS[ph.phase_key](pid) : []).filter((it) => it.enabled !== false);
-    const state = ph.is_current ? 'cur' : ph.status === 'COMPLETED' ? 'done' : 'todo';
+    const state = phaseState(ph);   // a phase left for a later one shows as ended (✓), same as the stepper
     const isOpen = open[ph.phase_key] !== undefined ? open[ph.phase_key] : (ph.is_current || pathPhase === ph.phase_key);
     const reqOpen = ph.summary ? ph.summary.required_open : 0;
     return html`<div class="lnb__ph is-${state} ${isOpen ? 'is-open' : ''} ${items.length ? '' : 'is-leaf'}" data-grp="${ph.phase_key}">
-      <button type="button" class="lnb__phh" data-lnb-toggle="${ph.phase_key}" aria-expanded="${isOpen}" title="${no2(ph.sequence)} ${ph.name}${state === 'cur' ? ' · 현재 단계' : state === 'done' ? ' · 완료' : ''}">
+      <button type="button" class="lnb__phh" data-lnb-toggle="${ph.phase_key}" aria-expanded="${isOpen}" title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)}">
         <i class="lnb__mark" aria-hidden="true">${state === 'done' ? '✓' : no2(ph.sequence)}</i>
         <span class="lnb__t"><span class="lnb__pn">${ph.name}</span></span>
         ${raw(state === 'cur' && reqOpen ? html`<span class="lnb__n" title="필수 업무 ${reqOpen}건 남음">${reqOpen}</span>` : '')}

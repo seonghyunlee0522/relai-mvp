@@ -9,6 +9,7 @@ import {
 import { parseSignup, parseProject, ValidationError } from './validate.js';
 import { ensurePhases, loadGuide, updateStep, transitionTo } from './guide.js';
 import * as D from './definition.js';
+import { buildProjectCharter } from './charter.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import * as T from './trace.js';
@@ -370,6 +371,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const r = (await tx(db, async (db) => D.setSectionStatus(db, project, req.params.key, req.params.action, req.user.id, body)));
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '섹션을 찾을 수 없습니다.');
     res.json({ ...(await D.loadDefinition(db, project)), guide: (await guideResponse(project)) });
+  }));
+  /* ---------- Project Chater (read-only view of 프로젝트 정의; the same object feeds every AI request — server/charter.js) ---------- */
+  app.get(`${base}/:pid/charter`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json({ charter: (await buildProjectCharter(db, project)) });
   }));
   // 이해관계자 Excel: template + preview (rows are committed through PUT /definition by the client after review; no nested import flow)
   app.get(`${base}/:pid/definition/stakeholders/template.xlsx`, guard, wrap(async (req, res) => {

@@ -8,7 +8,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, html, no2, raw } from '../core/dom.js';
 import { moveToPhase, projectHead } from './guide.js';
-import { phaseStepper } from './status.js';
+import { phaseStepper, phaseState } from './status.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { navigate } from '../core/router.js';
@@ -42,10 +42,11 @@ const guideCard = (g, p, archived, created) => {
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
 /** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not.
  * State is shown once, by the badge on the right (no leading icon). 완료 처리 lives on the work screen, not here. */
-const activityRow = (a, archived, isCurrent) => {
+const activityRow = (a, archived, isCurrent, browse = false) => {
   const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED; const cls = stateCls(a);
   const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
-  const href = !archived && a.cta && (isCurrent || a.state === 'IN_PROGRESS' || a.linked_feature_type === 'definition') ? a.cta.href : null;   // the row itself opens the work screen (same href the server CTA carries) — no separate '… →' link
+  // browse = another phase's list opened from the stepper: every row with a work screen is a way into it
+  const href = !archived && a.cta && (browse || isCurrent || a.state === 'IN_PROGRESS' || a.linked_feature_type === 'definition') ? a.cta.href : null;   // the row itself opens the work screen (same href the server CTA carries) — no separate '… →' link
   const acts = [];
   if (!archived) {
     if (skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">업무 다시 시작 →</button>`);
@@ -65,6 +66,26 @@ const activityRow = (a, archived, isCurrent) => {
     <span class="badge badge--st is-${cls}">${stLabel}</span>
     <span class="np__acts">${raw(acts.join(''))}</span>
   </li>`;
+};
+
+/** Another phase's activities, opened from the stepper (…?phase=KEY). Same rows as the current phase, no phase-move footer. */
+const otherPhasePanel = (g, ph, archived) => {
+  const acts = ph.steps || []; const s = ph.summary || { required_open: 0 }; const cur = g.current_phase;
+  const st = phaseState(ph);
+  const tag = st === 'done' ? (ph.status === 'COMPLETED' ? '<span class="np__tag is-done">✓ 완료</span>' : '<span class="np__tag is-done">✓ 다음 단계로 진행됨</span>') : '<span class="np__tag">예정</span>';
+  const remain = st === 'done' ? (s.required_open ? `남은 필수 업무 ${s.required_open}건 — 필요하면 지금도 처리할 수 있습니다` : '이 단계의 필수 업무를 모두 마쳤습니다') : `필수 업무 ${s.required_open || 0}건`;
+  const rows = acts.map((a) => activityRow(a, archived, false, true)).join('');
+  const hasActs = /class="np__acts">(?!<\/span>)/.test(rows);
+  return html`<section class="np np--other" aria-labelledby="npT">
+    <div class="np__h">
+      <div class="np__t"><span class="np__no mono">${no2(ph.sequence)}</span><h2 id="npT">${ph.name}</h2>${raw(tag)}</div>
+      <span class="np__remain ${st === 'done' && !s.required_open ? 'is-good' : ''}">${remain}</span>
+    </div>
+    <p class="np__d">${ph.description}</p>
+    <ol class="np__list ${hasActs ? '' : 'np__list--noacts'}">${raw(rows)}</ol>
+    <div class="np__f"><span class="np__msg">${raw(cur ? html`현재 단계는 <b>${no2(cur.sequence)} ${cur.name}</b>입니다.` : '')}</span>
+      <a class="link np__back" href="/app/projects/${g.project.id}" data-link>현재 단계 업무 보기 →</a></div>
+  </section>`;
 };
 
 const phasePanel = (g, p, archived) => {
@@ -100,13 +121,15 @@ export async function nextPage(id, main = $('#main')) {
   const created = nextPage._flag === `created:${id}`; const moveNext = nextPage._flag === `move:${id}`; nextPage._flag = null;
   await ob.get();
   let pendingMove = moveNext && !archived;
+  const viewKey = new URLSearchParams(location.search).get('phase');   // stepper click on another phase → that phase's activity list
   const draw = () => {
+    const view = viewKey ? (g.phases || []).find((x) => x.phase_key === viewKey && !x.is_current) : null;
     main.innerHTML = html`<div class="page page--wide page--flow nx">
       ${raw(projectHead(p, g, { tab: 'next' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 단계와 업무는 조회만 할 수 있습니다.</div>' : '')}
-      ${raw(phaseStepper(g, p.id))}
-      ${raw(guideCard(g, p, archived, created))}
-      ${raw(phasePanel(g, p, archived))}
+      ${raw(phaseStepper(g, p.id, view ? view.phase_key : null))}
+      ${raw(view ? '' : guideCard(g, p, archived, created))}
+      ${raw(view ? otherPhasePanel(g, view, archived) : phasePanel(g, p, archived))}
     </div>`;
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { g = await api('GET', wsApi(`/${id}`)); draw(); } };
     const nb = $('#next'); if (nb) nb.onclick = move;

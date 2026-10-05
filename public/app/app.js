@@ -10,6 +10,7 @@ import { overviewPage } from './project/overview.js';
 import { nextPage } from './project/next.js';
 import { phasePage } from './project/phase.js';
 import { definitionPage } from './project/definition.js';
+import { charterPage } from './project/charter.js';
 import { reportPage } from './project/report.js';
 import { reportsPage } from './project/reports.js';
 import { requirementsPage } from './requirements/page.js';
@@ -36,6 +37,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/overview\/?$/, overviewPage],
   [/^\/app\/projects\/([\w-]+)\/edit\/?$/, projectFormPage],
   [/^\/app\/projects\/([\w-]+)\/definition\/?$/, definitionPage],
+  [/^\/app\/projects\/([\w-]+)\/charter\/?$/, charterPage],         // Overview › Project Chater (read-only view of 프로젝트 정의)
   [/^\/app\/projects\/([\w-]+)\/phases(?:\/[A-Z_]+)?\/?$/, phasePage],   // legacy deep links → What’s Next
   [/^\/app\/projects\/([\w-]+)\/reports\/?$/, reportsPage],
   [/^\/app\/projects\/([\w-]+)\/reports\/([\w-]+)\/?$/, reportPage],
