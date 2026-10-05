@@ -2139,7 +2139,30 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 @media (max-width:640px){.hc__next{grid-template-columns:auto minmax(0,1fr)}.hc__next .btn,.hc__next .hc__go{grid-column:2}.hc__h{flex-wrap:wrap}.hc__h .chip{margin-left:0}}
 
 /* ---- Overview › Project Chater (read-only reference document; sections over cards, only the AI strip is emphasised) ---- */
-.chx{max-width:880px;margin:6px auto 0;padding:0 4px}
+.chl{display:grid;grid-template-columns:minmax(0,920px) clamp(272px,22vw,320px);gap:0 40px;align-items:start;justify-content:start}
+.chx{max-width:none;margin:6px 0 0;padding:0 4px;min-width:0}
+/* right rail */
+.chr{position:sticky;top:64px;margin-top:62px;width:100%;display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 80px);overflow-y:auto;scrollbar-width:thin;padding-bottom:8px}
+.chr__box{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.chr__k{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.02em;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.chr__k em{font-style:normal;font-size:11px;background:#FEF6E7;color:#B45309;border-radius:999px;padding:0 7px}
+.chr__fill{display:flex;align-items:baseline;gap:5px}.chr__fill b{font-size:26px;line-height:1.1;color:var(--navy);font-variant-numeric:tabular-nums}.chr__fill span{font-size:13px;color:var(--text-2)}
+.chr__seg{display:grid;grid-template-columns:repeat(16,1fr);gap:2px;margin:8px 0 6px}.chr__seg i{height:6px;border-radius:2px;background:#E4EAF2}.chr__seg i.is-ok{background:var(--blue)}
+.chr__hint{font-size:12px;color:var(--text-2);line-height:1.5}
+.chr__toc ol{list-style:none;margin:0;padding:0}
+.chr__ti{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;padding:5px 6px;margin:0 -6px;border:0;background:none;border-radius:6px;text-align:left;cursor:pointer;font-size:13px;color:var(--text-2);width:calc(100% + 12px)}
+.chr__ti:hover{background:var(--bg-alt);color:var(--navy)}
+.chr__ti.is-cur{background:var(--bg-tint);color:var(--blue-deep);font-weight:600}
+.chr__tn{font-size:11px;color:var(--muted);font-weight:700}
+.chr__tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chr__tc{font-size:11px;font-weight:700;color:#B45309;font-variant-numeric:tabular-nums}.chr__tc.is-ok{color:#0E7A4F}
+.chr__miss{list-style:none;margin:0;padding:0}
+.chr__miss a{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border-soft);font-size:13px;color:var(--navy)}
+.chr__miss li:last-child a{border-bottom:0}
+.chr__miss i{font-style:normal;font-size:12px;color:var(--blue-deep);font-weight:600;white-space:nowrap;opacity:.75}
+.chr__miss a:hover i{opacity:1;text-decoration:underline}
+.chr__ms b{display:block;font-size:14px;color:var(--navy)}.chr__ms span{font-size:12.5px;color:var(--text-2);font-variant-numeric:tabular-nums}
+@media (max-width:1100px){.chl{grid-template-columns:minmax(0,1fr)}.chr{display:none}.chx{margin:6px auto 0}}
 .chx__head{margin:6px 0 14px}
 .chx__head h1{font-size:24px;letter-spacing:-.03em}
 .chx__head p{margin-top:4px;color:var(--text-2);font-size:14px}
@@ -2235,3 +2258,21 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .np__tag{font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;background:#F2F4F7;color:var(--text-2)}
 .np__tag.is-done{background:#E8F7F0;color:#0E7A4F}
 .np__back{font-size:12.5px}
+.chr__more{display:inline-block;margin-top:6px;font-size:12.5px}
+.chx__sec{scroll-margin-top:56px}
+/* 프로젝트 기본 특성 — create form sections, definition block, read grid */
+.pform__sec{margin:6px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border-soft);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.pform__sec:not(:first-of-type){margin-top:14px}
+.pform__sec b{font-size:14px;color:var(--navy)}.pform__sec small{font-size:12.5px;color:var(--muted)}
+.trf .select{height:44px}
+.trf__help{min-height:1.5em}
+.pvp{margin:2px 0 12px;padding:10px 14px 12px;border:1px solid var(--border);border-radius:10px;background:#fff}
+.pvp__h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.pvp__h b{display:block;font-size:13.5px;color:var(--navy)}.pvp__h small{font-size:12px;color:var(--muted)}
+.trg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 24px;margin:0}
+.trg__i{min-width:0}.trg dt{font-size:11.5px;font-weight:700;color:var(--muted)}
+.trg dd{margin:1px 0 0;font-size:14px;font-weight:600;color:var(--navy)}.trg dd.is-unset{color:var(--muted);font-weight:500}
+@media (max-width:760px){.trg{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.trf2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+@media (max-width:640px){.trf2{grid-template-columns:1fr}}
+.chx__kvs--traits{margin-top:4px}

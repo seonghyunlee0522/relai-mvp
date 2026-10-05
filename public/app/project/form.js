@@ -3,11 +3,12 @@ import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { ob } from '../onboarding/state.js';
 import { showErrors, toast, confirmDialog } from '../shared/dialogs.js';
+import { traitFields, wireTraitFields } from '../shared/trait-fields.js';
 
 export async function projectFormPage(id) {
   const main = $('#main');
   const editing = Boolean(id);
-  let p = { name: '', client_name: '', project_scale: '', planned_start_date: '', planned_end_date: '', description: '' };
+  let p = { name: '', client_name: '', project_scale: '', planned_start_date: '', planned_end_date: '', description: '', project_type: null };
   if (editing) {
     p = (await api('GET', wsApi(`/${id}`))).project;
     if (p.status === 'ARCHIVED') { navigate(`/app/projects/${id}`, { replace: true }); return; }
@@ -16,9 +17,10 @@ export async function projectFormPage(id) {
   main.innerHTML = html`<div class="page page--form">
     <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : 'Projects'}</a>
     <div class="page__head"><div><h1>${editing ? '프로젝트 정보 수정' : '새 프로젝트 시작하기'}</h1>
-      ${raw(editing ? '' : '<p>기본 정보만 입력하면 됩니다. 목표·범위·이해관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
+      ${raw(editing ? '' : '<p>기본 정보와 프로젝트 유형만 정하면 됩니다. 목표·범위·이해관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
     <form class="panel form-panel pform" id="f" novalidate>
       <div class="form-err full" role="alert" hidden></div>
+      <div class="pform__sec full"><b>프로젝트 기본 정보</b></div>
       <div class="field full"><label for="name">프로젝트 이름 <span class="req">*</span></label>
         <input class="input" id="name" name="name" maxlength="100" placeholder="예: A사 AI 상담 시스템 구축" value="${p.name}"><div class="err" data-for="name"></div></div>
       <div class="field"><label for="client">고객사명 <span class="req">*</span></label>
@@ -34,11 +36,14 @@ export async function projectFormPage(id) {
       <div class="field full"><label for="d">프로젝트 설명 <span style="color:var(--muted);font-weight:500">(선택)</span></label>
         <textarea class="textarea" id="d" name="description" maxlength="2000" placeholder="프로젝트의 목적이나 배경을 간단히 적어주세요.">${p.description}</textarea>
         <div class="err" data-for="description"></div></div>
+      <div class="pform__sec full"><b>프로젝트 특성</b><small>모르는 항목은 '미정'으로 두고, 생성 후 01 착수 › 프로젝트 정의에서 언제든 바꿀 수 있습니다.</small></div>
+      ${raw(traitFields(p, { bind: 'name', idPrefix: 'pf' }))}
       <div class="actions actions--end full" style="margin-top:4px">
         <a class="btn btn--secondary" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>취소</a>
         <button class="btn btn--primary" type="submit">${editing ? '저장하기' : '프로젝트 시작하기 →'}</button></div>
     </form></div>`;
   const form = $('#f');
+  wireTraitFields(form);
   if (!editing) $('#name').focus();
   if (editing) { /* description is a textarea: set via value to avoid whitespace artefacts */ $('#d').value = p.description; }
   // Deep link from Project Chater (…/edit?focus=description): land on the field that is missing.
@@ -50,6 +55,7 @@ export async function projectFormPage(id) {
     const local = {};
     if (!d.name?.trim()) local.name = '프로젝트 이름을 입력해 주세요.';
     if (!d.client_name?.trim()) local.client_name = '고객사명을 입력해 주세요.';
+    if (!editing && !d.project_type) local.project_type = '프로젝트 유형을 선택해 주세요.';   // required on create; older projects may stay 미설정
     if (!d.planned_start_date) local.planned_start_date = '예상 시작일을 입력해 주세요.';
     if (!d.planned_end_date) local.planned_end_date = '예상 종료일을 입력해 주세요.';
     if (d.planned_start_date && d.planned_end_date && d.planned_end_date < d.planned_start_date) local.planned_end_date = '종료일은 시작일 이후여야 합니다.';

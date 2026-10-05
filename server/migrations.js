@@ -44,6 +44,11 @@ export const migrations = [
     await db.run('ALTER TABLE projects DROP COLUMN IF EXISTS project_type, DROP COLUMN IF EXISTS current_situation');
   } },
   { version: 23, name: 'Project Chater: free-text definition fields (project_type, deliverables, assumptions, constraints_text, initial_risks, change_management, acceptance)', up() {} },
+  { version: 24, name: 'project traits on projects: project_type (enum, NULL = 미설정) + data_migration / deployment_environment / delivery_model / has_existing_system / has_external_integration (TBD)', async up(db) {
+    // schema.sql adds these columns before versioned steps run; a database upgraded across v22 (which drops the legacy free-text
+    // projects.project_type) loses it again in the same boot, so re-add it here. Existing projects: type NULL, the rest TBD.
+    await db.run(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT CHECK (project_type IN ('NEW_BUILD','ENHANCEMENT','TRANSITION','OTHER'))`);
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

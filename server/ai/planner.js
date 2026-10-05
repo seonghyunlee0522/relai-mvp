@@ -65,7 +65,9 @@ async function plannerContext(db, project, requirementIds) {
   const head = await projectBlock(db, project);
   // "이미 확인된 정보" is matched against what the user actually wrote, never the block's own labels.
   const flat = (o) => (o === null || o === undefined ? '' : typeof o === 'object' ? Object.values(o).map(flat).join('\n') : String(o));
-  const defText = flat(await buildProjectCharter(db, project));
+  const ch = await buildProjectCharter(db, project);
+  // 프로젝트 기본 특성 (profile.traits) are not used by AI yet — keep them out of "이미 확인된 정보" (their labels, e.g. "외부 시스템 연계", would match area hints)
+  const defText = flat({ ...ch, profile: { ...ch.profile, traits: undefined, project_type: ch.profile.project_type_text } });
   const reqText = `## 선택 요구사항 (${reqs.length}건)\n${reqs.length ? reqs.map((r) => `- ${r.display_id} [${r.type}/${r.priority}/${r.scope}/${r.status}] ${clip(r.title, 150)}\n  설명: ${clip(r.description, 400) || '(없음)'}${critBy.get(r.id) ? `\n  완료 조건: ${critBy.get(r.id).map((c) => clip(c, 120)).join(' / ')}` : ''}`).join('\n') : '(선택된 요구사항 없음 — 프로젝트 수행 WBS만 제안)'}`;
   const wbsText = `## 기존 WBS (${wbs.length}건, 중복 방지용)\n${wbs.length ? wbs.map((w) => `- ${w.wbs_code} [${w.item_type}/${w.status}] ${clip(w.title, 100)}${linkBy.get(w.id) ? ` ← ${linkBy.get(w.id).join(', ')}` : ''}`).join('\n') : '(없음)'}`;
   const known = knownAreasFrom({ definitionText: defText, requirementText: reqs.map((r) => `${r.title} ${r.description || ''}`).join('\n') });

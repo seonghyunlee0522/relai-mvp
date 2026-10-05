@@ -86,6 +86,14 @@ CREATE TABLE IF NOT EXISTS projects (
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS status_before_archive TEXT;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_scale TEXT NOT NULL DEFAULT '';
+/* 프로젝트 기본 특성 (2026-10-05). Option set: public/app/shared/project-traits.js (also used for API validation).
+ * project_type is required on create but NULL for projects created before it existed ("미설정"); the rest default to TBD ("미정"), never NO. */
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT CHECK (project_type IN ('NEW_BUILD','ENHANCEMENT','TRANSITION','OTHER'));
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS data_migration TEXT NOT NULL DEFAULT 'TBD' CHECK (data_migration IN ('YES','NO','TBD'));
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS deployment_environment TEXT NOT NULL DEFAULT 'TBD' CHECK (deployment_environment IN ('CLOUD','ON_PREMISE','HYBRID','TBD'));
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS delivery_model TEXT NOT NULL DEFAULT 'TBD' CHECK (delivery_model IN ('ONSITE','REMOTE','HYBRID','TBD'));
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_existing_system TEXT NOT NULL DEFAULT 'TBD' CHECK (has_existing_system IN ('YES','NO','TBD'));
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_external_integration TEXT NOT NULL DEFAULT 'TBD' CHECK (has_external_integration IN ('YES','NO','TBD'));
 
 /* ---------- Project definition (Phase 12b: 착수 입력 → 프로젝트 정의) ----------
  * One row per project. List-type sections are JSON arrays in TEXT (same convention as other JSON columns here).
