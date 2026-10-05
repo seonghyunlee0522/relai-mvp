@@ -48,3 +48,6 @@ API: `POST /api/auth/{signup,login,logout}` · `GET /api/me` · `GET|POST /api/w
 UI/UX 개편(Project Workspace · Data Grid · Excel Import · Bulk · Activity): `docs/ux-overhaul.md`
 
 Admin Console(운영자 권한·정지 정책·Audit·Billing 연동 계약): `docs/admin-console.md` — 운영자 부여: `node scripts/grant-system-admin.js <email>`
+
+## Deploy on Vercel
+`api/index.js` wraps the Express app as one serverless function and `vercel.json` rewrites every path to it (static files are served by Express, same as elsewhere). Import the GitHub repo in Vercel (preset **Other**, root `./`, no build command) and set the environment variables: `DATABASE_URL` (Postgres, e.g. Neon — use the direct/non-pooled URL), `NODE_ENV=production`, `SESSION_SECRET`, `INTEGRATION_ENCRYPTION_KEY` (`openssl rand -hex 32`), `APP_BASE_URL` (the https Vercel URL), `EMAIL_PROVIDER=fake` until Resend is configured, `AI_ENABLED=false` unless a provider key is set. `server/index.js` remains the entry for long-running hosts.
