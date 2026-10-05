@@ -1892,20 +1892,14 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .pstep li.is-todo .st{color:#C2CAD6}
 /* RELAI Guide (compact: 완료 · 현재 meta → next action) */
 .rg{background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
-.rg__h{display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap;min-width:0}
+.rg__h{display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid var(--border-soft);min-width:0}
 .rg__mark{width:18px;height:18px;border-radius:5px;background:var(--navy);color:#CFE0FF;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .rg__h>b{font-size:12.5px;color:var(--navy);flex:none}
-.rg__flow{display:inline-flex;align-items:center;gap:6px;font-size:13px;min-width:0;flex-wrap:wrap;margin-left:6px;padding-left:12px;border-left:1px solid var(--border-soft)}
-.rg__fk{font-size:11px;font-weight:600;color:var(--muted)}
-.rg__fv{color:var(--navy);font-weight:700;white-space:nowrap}.rg__fv.is-last{color:var(--text-2);font-weight:600}
-.rg__flow .rg__fk+.rg__fv{color:var(--blue-deep)}.rg__flow .rg__arrow+.rg__fk+.rg__fv{color:var(--navy)}
-.rg__arrow{color:#C2CAD6;font-style:normal;margin:0 4px}
 .rg__new{font-size:12px;color:#0E7A4F;font-weight:600;margin-left:auto}
 .rg__body{padding:9px 14px 10px;min-width:0}
-.rg__row{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap}
-.rg__title{font-size:15.5px;margin:0;color:var(--navy);line-height:1.35;font-weight:700;letter-spacing:-.01em;min-width:0;flex:1 1 320px}
-.rg__cta{display:inline-flex;align-items:center;gap:12px;flex:none;margin-left:auto}.rg__sec{font-size:12.5px;white-space:nowrap}
-.rg__d{margin:4px 0 0;font-size:12.5px;color:var(--text-2);line-height:1.5;max-width:92ch}
+.rg__title{font-size:15.5px;margin:0;color:var(--navy);line-height:1.35;font-weight:700;letter-spacing:-.01em;min-width:0}
+.rg__cta{display:flex;align-items:center;justify-content:flex-end;gap:14px;margin-top:8px;flex-wrap:wrap}.rg__sec{font-size:12.5px;white-space:nowrap}
+.rg__d{margin:3px 0 0;font-size:12.5px;color:var(--text-2);line-height:1.5;max-width:92ch}
 .rg__warn{display:inline-flex;gap:5px;align-items:center;font-size:12px;color:#B45309;margin-left:10px;white-space:nowrap}.rg__warn .st{width:14px;height:14px;font-size:10px}
 .np{background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px 14px 8px}
 .np__h{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
@@ -1915,18 +1909,16 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .np__p{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2)}.np__p b{font-size:14px;color:var(--navy);font-variant-numeric:tabular-nums}.np__p .pbar{width:120px}
 .np__d{margin:1px 0 6px;color:var(--muted);font-size:12.5px}
 .np__list{list-style:none;margin:0;padding:0;border-top:1px solid var(--border-soft)}
-.np__row{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:10px;align-items:start;padding:6px 6px 6px 4px;font-size:13px;border-bottom:1px solid var(--border-soft);border-radius:0}
+.np__row{display:grid;grid-template-columns:18px minmax(0,1fr) 44px 64px auto;gap:10px;align-items:start;padding:6px 6px 6px 4px;font-size:13px;border-bottom:1px solid var(--border-soft);border-radius:0}
 .np__row.is-cur{box-shadow:inset 3px 0 0 var(--blue);padding-left:10px;background:#FAFBFE}
-.np__row>.badge--st{margin-top:1px}
+.np__row>.badge{margin-top:1px;justify-self:start}.np__row>.badge--st{width:64px;justify-content:center}.np__row>.badge--req,.np__row>.badge--muted{width:44px;justify-content:center;height:20px;font-size:11.5px}
 .np__row.is-link{cursor:pointer}.np__row.is-link:hover{background:var(--bg-alt)}
 .np__row>.st{margin-top:1px}
 .np__m{display:flex;flex-direction:column;gap:0;min-width:0}
 .np__st{font-weight:600;color:var(--navy);font-size:13px;display:inline-flex;align-items:center;gap:7px;line-height:1.4}
 .np__row.is-done .np__st,.np__row.is-skip .np__st{color:var(--text-2);font-weight:500}.np__row.is-skip .np__st{text-decoration:line-through;text-decoration-color:#C2CAD6}
-.np__desc{font-size:12px;color:var(--muted);line-height:1.45;display:block;min-width:0}
-.np__purpose{color:var(--muted)}.np__dot{font-style:normal;color:#C2CAD6;margin:0 5px}
-.np__info{color:var(--text-2)}.np__row.is-todo .np__info,.np__row.is-skip .np__info{color:var(--muted)}
-.np__acts{display:inline-flex;gap:12px;align-items:center;justify-content:flex-end;white-space:nowrap;min-width:120px;margin-top:2px;padding-left:12px;border-left:1px solid var(--border-soft)}.np__acts:empty{display:none}
+.np__purpose{font-size:12px;color:var(--muted);line-height:1.45;display:block;min-width:0}
+.np__acts{display:inline-flex;gap:12px;align-items:center;justify-content:flex-end;white-space:nowrap;min-width:150px;margin-top:2px}
 .np__go{font-size:12.5px;white-space:nowrap}
 .np__act{font-size:12.5px;width:auto;padding:0;color:var(--text-2)}.np__act:hover{color:var(--blue-deep)}.np__act--dim{color:#98A2B3}
 .np__skip{color:#B45309}.np__skip:hover{color:#92400E}
@@ -1936,7 +1928,7 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .np__f--ready{background:var(--bg-alt);border-radius:8px;padding:10px 12px}
 .np__msg{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.np__msg b{color:var(--navy)}
 .np__move{font-size:12.5px;color:var(--text-2);width:auto}.np__move:hover{color:var(--blue-deep)}
-@media (max-width:760px){.np__row{grid-template-columns:18px minmax(0,1fr)}.np__chips,.np__acts{grid-column:2;justify-content:flex-start;min-width:0}}
+@media (max-width:760px){.np__row{grid-template-columns:18px minmax(0,1fr) 44px 64px}.np__acts{grid-column:2/5;justify-content:flex-start;min-width:0}}
 /* Overview: sections, not cards */
 .ovsec{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 16px 12px;margin-bottom:10px;min-width:0}
 .ovsec__h{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}
@@ -1997,7 +1989,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .hline{margin-bottom:10px}
 @media (max-width:1100px){.ov__row4{grid-template-columns:1fr}.ovband{grid-template-columns:1fr}.ovcol+.ovcol{border-left:0;border-top:1px solid var(--border-soft)}.kpi4{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi:nth-child(3){border-left:0}.kpi:nth-child(n+3){border-top:1px solid var(--border-soft)}}
 @media (max-width:900px){.psum{grid-template-columns:repeat(2,minmax(0,1fr))}.psum__m:nth-child(3){border-left:0}.psum__m:nth-child(n+3){border-top:1px solid var(--border-soft)}}
-@media (max-width:640px){.np__list li{grid-template-columns:18px minmax(0,1fr) auto;grid-auto-rows:auto}.badge--st{grid-column:3}.np__go{grid-column:2/4;text-align:left;min-width:0}.rg__cta{margin-left:0}}
+@media (max-width:640px){.np__list li{grid-template-columns:18px minmax(0,1fr) 44px 64px;grid-auto-rows:auto}.np__go{text-align:left;min-width:0}}
 
 /* ---- Phase 15: AI Project WBS Planner wizard ---- */
 .dialog.dialog--ai-xl{max-width:min(1180px,97vw)}
