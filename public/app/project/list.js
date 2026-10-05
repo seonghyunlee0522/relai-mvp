@@ -5,28 +5,8 @@ import { navigate } from '../core/router.js';
 import { createGrid } from '../shared/grid.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
-import { bindChecklist, checklistCard } from '../onboarding/ui.js';
+import { checklistCard } from '../onboarding/ui.js';
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
-
-export async function homePage(main = $("#main")) {
-  document.title = 'Home — RELAI';
-  const [{ projects }, o] = await Promise.all([api('GET', wsApi()), ob.get()]);
-  const active = projects.filter((p) => p.status === 'ACTIVE' || p.status === 'DRAFT');   // UI-001: 초안 projects are worked on too
-  main.innerHTML = html`<div class="page">
-    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${state.workspace.name}</p></div>
-      ${raw(projects.length && canManage() ? '<a class="btn btn--primary" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>' : '')}</div>
-    ${raw(projects.length ? checklistCard(o, { compact: true }) : '')}
-    ${raw(active.length && !canManage() ? html`<p class="home__member">${state.workspace.name} Workspace에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${active[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
-    ${raw(active.length ? html`<div class="panel"><div class="panel__h">지금 해야 할 일</div>
-      <div class="plist" style="border:0;border-radius:0 0 12px 12px">${raw(active.map((p) => html`
-        <a class="prow" style="grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) auto" href="/app/projects/${p.id}" data-link>
-          <div><div class="nm">${p.name}</div><div class="sub">${p.client_name || ''}</div></div>
-          <div><div class="sub" style="margin:0">${no2(p.current_phase_sequence)} ${p.current_phase_name}</div>
-            <div class="lcpos" style="margin-top:8px" aria-label="Lifecycle 위치">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < p.current_phase_sequence ? 'is-done' : i + 1 === p.current_phase_sequence ? 'is-cur' : ''}"></i>`).join(''))}</div></div>
-          <span class="link">What’s Next →</span></a>`).join(''))}</div></div>` : projects.length ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>보관된 프로젝트는 Projects에서 볼 수 있습니다.</p></div>' : newWorkspaceHome(o))}
-  </div>`;
-  bindChecklist(main);
-}
 
 /** Project-0 home: one clear CTA + how RELAI guides a project (product UI, not a landing page). Members see the join message instead. */
 export const newWorkspaceHome = (o = null) => (canManage()

@@ -31,7 +31,7 @@ import * as I from './invitations.js';
 import { writeAudit } from './admin.js';
 import { mountOnboardingRoutes } from './onboarding-routes.js';
 import { recordFirst } from './onboarding.js';
-import { projectGuidance } from './guidance.js';
+import { guidanceContext, workspaceHome } from './home.js';
 import * as XL from './xlsx.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
@@ -230,9 +230,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const base = '/api/workspaces/:wid/projects';
   const guard = [requireAuth, requireMember, requireWorkspaceActive];
 
-  app.get(base, guard, wrap(async (req, res) => {
-    const includeArchived = req.query.include_archived === '1';
-    const rows = (await db.all(`SELECT ${PROJECT_COLS},
+  const listProjects = (wid, includeArchived) => db.all(`SELECT ${PROJECT_COLS},
         (SELECT name FROM project_phases ph WHERE ph.project_id = projects.id AND ph.phase_key = projects.current_phase) AS current_phase_name,
         (SELECT sequence FROM project_phases ph WHERE ph.project_id = projects.id AND ph.phase_key = projects.current_phase) AS current_phase_sequence,
         COALESCE((SELECT ROUND(AVG(r)) FROM (
@@ -241,8 +239,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
           WHERE ph.project_id = projects.id GROUP BY ph.id) pr), 0) AS progress
       FROM projects
       WHERE workspace_id = ? ${includeArchived ? '' : "AND status != 'ARCHIVED'"}
-      ORDER BY created_at DESC`, [req.params.wid]));
-    res.json({ projects: rows });
+      ORDER BY created_at DESC`, [wid]);
+  app.get(base, guard, wrap(async (req, res) => {
+    res.json({ projects: (await listProjects(req.params.wid, req.query.include_archived === '1')) });
   }));
 
   const manage = [...guard, requireAction('project_manage')];
@@ -274,23 +273,27 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if ((await ensurePhases(db, project, { createdBy: project.created_by }))) return (await getProject(req.params.wid, req.params.pid));
     return project;
   };
-  /** Everything What's Next / the LNB need in one payload: phases with derived activity states, stats, guidance. */
-  const guideContext = async (project) => {
-    const stats = (await M.projectStats(db, project));
-    const def = (await D.loadDefinition(db, project));
-    const overdue = Number((await db.get(`SELECT COUNT(*) n FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${W.LEAF_SQL('w')} AND w.status <> 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE`, [project.id])).n) || 0;
-    const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections }, overdue_tasks: overdue }));
-    return { stats, def, overdue, guide };
-  };
+  /** Everything What's Next / the LNB need in one payload: phases with derived activity states, stats, guidance.
+   * guidanceContext() (home.js) is shared with the Workspace Home cards so both screens show the same Next Action. */
+  const guideContext = (project) => guidanceContext(db, project);
   const guideResponse = async (project, pre = null) => {
-    const { stats, def, overdue, guide } = pre || (await guideContext(project));
-    const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review }, stats, overdue_tasks: overdue });
+    const { stats, def, guide, guidance } = pre || (await guideContext(project));
     return { project, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
       definition: { progress: def.progress, needs_review: def.needs_review, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
   };
 
+  /** Workspace Home cards: list rows + per-project guidance / health / attention / upcoming (home.js). Registered before /:pid. */
+  app.get(`${base}/home`, guard, wrap(async (req, res) => {
+    const rows = (await listProjects(req.params.wid, false));
+    const ensure = async (row) => {   // older rows without phases: seed them (same as loadProject) and fill the phase columns the list query missed
+      if (!(await ensurePhases(db, row, { createdBy: row.created_by }))) return row;
+      const ph = (await db.get('SELECT name, sequence FROM project_phases WHERE project_id = ? AND phase_key = ?', [row.id, row.current_phase]));
+      return { ...row, current_phase_name: ph?.name ?? row.current_phase_name, current_phase_sequence: ph?.sequence ?? row.current_phase_sequence };
+    };
+    res.json((await workspaceHome(db, rows, { ensure })));
+  }));
   app.get(`${base}/:pid`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;

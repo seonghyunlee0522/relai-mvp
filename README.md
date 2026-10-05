@@ -47,6 +47,8 @@ API: `POST /api/auth/{signup,login,logout}` · `GET /api/me` · `GET|POST /api/w
 
 UI/UX 개편(Project Workspace · Data Grid · Excel Import · Bulk · Activity): `docs/ux-overhaul.md`
 
+Workspace Home(프로젝트별 상황 카드 · 우선순위 · `GET …/projects/home`): `docs/workspace-home.md`
+
 Admin Console(운영자 권한·정지 정책·Audit·Billing 연동 계약): `docs/admin-console.md` — 운영자 부여: `node scripts/grant-system-admin.js <email>`
 
 ## Deploy on Vercel

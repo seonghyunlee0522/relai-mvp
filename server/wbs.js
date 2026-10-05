@@ -19,7 +19,7 @@ export const MAX_DEPTH = 5;
 /** SQL fragment: `alias` row is a leaf (no live children). Metrics count leaf tasks only — groups are roll-ups. */
 export const LEAF_SQL = (alias = 'w') => `NOT EXISTS (SELECT 1 FROM wbs_items ${alias}_c WHERE ${alias}_c.parent_id = ${alias}.id AND ${alias}_c.archived_at IS NULL)`;
 const GROUP_ONLY = ['progress', 'planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date'];
-const todayStr = () => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+export const todayStr = () => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 const now = () => new Date().toISOString();
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
