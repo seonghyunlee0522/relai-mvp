@@ -3,7 +3,8 @@ import { registerRoutes, render } from './core/router.js';
 import { shell } from './shell.js';
 import { authPage } from './auth.js';
 import { invitePage } from './invite.js';
-import { homePage, projectsPage } from './project/list.js';
+import { homePage } from './project/home.js';   // Workspace Home: project status cards
+import { projectsPage } from './project/list.js';
 import { projectFormPage } from './project/form.js';
 import { overviewPage } from './project/overview.js';
 import { nextPage } from './project/next.js';
