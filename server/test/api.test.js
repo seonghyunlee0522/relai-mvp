@@ -23,7 +23,7 @@ async function boot() {
   };
   return { db, server, client };
 }
-const project = (o = {}) => ({ name: 'A사 AI 상담 시스템 구축', client_name: 'A사', project_scale: '3억 원 · 6개월',
+const project = (o = {}) => ({ name: 'A사 AI 상담 시스템 구축', client_name: 'A사', project_type: 'NEW_BUILD', project_scale: '3억 원 · 6개월',
   planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', description: '', ...o });
 
 test('signup creates workspace + OWNER membership, session persists, logout revokes', async () => {

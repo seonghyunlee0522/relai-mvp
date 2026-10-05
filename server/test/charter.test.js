@@ -27,14 +27,14 @@ test('charter: definition fields (existing + new free text) flow through unchang
   const { server, client } = await boot();
   const A = await setup(client, 'ch2@x.com');
   const D = `${A.purl}/definition`;
-  let r = await A.c('PUT', D, { project_type: ' 신규 구축 ', goal: '검토 리드타임 50% 단축', success_criteria: ['평균 2일 이내', '만족도 4.5'],
+  let r = await A.c('PUT', D, { project_type: 'NEW_BUILD', goal: '검토 리드타임 50% 단축', success_criteria: ['평균 2일 이내', '만족도 4.5'],
     scope_in: ['계약 검토'], scope_out: ['영문 계약'], deliverables: '요구사항 정의서\n운영 매뉴얼',
     assumptions: '고객사가 API 권한 제공', constraints: '내부망 개발', initial_risks: 'Legacy 문서 부족',
     stakeholders: [{ name: '김부장', org_type: 'CLIENT', org: 'ACME', department: '법무팀', role: '고객 PM', area: '요구사항 확정' }, { name: '이리드', org_type: 'OWN', org: 'BHSN', role: 'PM' }],
     key_dates: [{ title: '오픈', date: '2027-02-15' }, { title: '요구사항 확정', date: '2026-11-20' }],
     operations: { meetings: '매주 화 PM 회의', reporting: '금 주간보고', communication: '', decisions: 'SteerCo 승인' }, change_management: 'PM 검토 후 고객 승인', acceptance: 'UAT 완료, Critical 0건' });
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.equal(r.json.definition.project_type, '신규 구축'); assert.equal(r.json.definition.constraints, '내부망 개발');
+  assert.equal(r.json.project_traits.project_type, 'NEW_BUILD'); assert.equal(r.json.definition.constraints, '내부망 개발');
   const sec = (k) => r.json.sections.find((s) => s.key === k);
   assert.ok(sec('GOALS').updated_at);
   assert.match(sec('SCOPE').summary, /주요 산출물/); assert.match(sec('SCOPE').summary, /전제·제약·리스크 3개/);

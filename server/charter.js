@@ -8,6 +8,7 @@
  * So what the screen says "AI 가 참고합니다" is exactly what the AI receives.
  */
 import { loadDefinition, ORG_TYPE_LABEL } from './definition.js';
+import { PROJECT_TRAITS, traitLabel } from '../public/app/shared/project-traits.js';
 
 const OPS_LABEL = { meetings: '회의', reporting: '보고', communication: '소통 채널' };
 const texts = (list) => (Array.isArray(list) ? list.map((x) => (typeof x === 'string' ? x : x?.text || '')).filter(Boolean) : []);
@@ -32,7 +33,12 @@ export async function buildProjectCharter(db, project, { definition = null } = {
     profile: {
       name: project.name, description: project.description || '', client: project.client_name || '',
       performer: own.join(', ') || (ws ? ws.name : ''), performer_source: own.length ? 'STAKEHOLDERS' : 'WORKSPACE',
-      start_date: dateStr(project.planned_start_date), end_date: dateStr(project.planned_end_date), project_type: d.project_type || '',
+      start_date: dateStr(project.planned_start_date), end_date: dateStr(project.planned_end_date),
+      // 유형 = the structured project_type (label); the older free-text definition field is only a fallback for projects not yet set
+      project_type: project.project_type ? traitLabel('project_type', project.project_type) : d.project_type || '',
+      project_type_text: d.project_type || '',   // what the AI block still reads — structured traits reach AI in a later phase
+      // 프로젝트 기본 특성 as stored codes + display labels (read straight from projects; not sent to AI in this phase)
+      traits: PROJECT_TRAITS.map((t) => ({ field: t.field, label: t.label, value: project[t.field] ?? null, value_label: traitLabel(t.field, project[t.field]) })),
     },
     goals: d.goal || '',
     successCriteria: texts(d.success_criteria).join('\n'),
@@ -69,7 +75,7 @@ Project Profile:
 설명/배경: ${v(p.description, (x) => ml(x, 800))}
 고객사: ${v(p.client, (x) => clip(x, 100))}
 수행사: ${v(p.performer, (x) => clip(x, 100))}
-유형: ${v(p.project_type, (x) => clip(x, 100))}
+유형: ${v(p.project_type_text, (x) => clip(x, 100))}
 기간: ${p.start_date || '?'} ~ ${p.end_date || '?'}
 
 Goals:

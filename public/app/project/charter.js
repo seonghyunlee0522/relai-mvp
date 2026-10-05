@@ -44,7 +44,7 @@ export async function charterPage(id) {
   /* ---------- AI Project Context (always on top, compact) ---------- */
   /** Every Charter item once: section · label · filled? · where to enter it. Drives the fill count, the outline and the "보완" list. */
   const ITEMS = [
-    ['profile', '프로젝트 설명', c.profile.description, info('description')], ['profile', '프로젝트 유형', c.profile.project_type, def('GOALS', 'project_type')],
+    ['profile', '프로젝트 설명', c.profile.description, info('description')], ['profile', '프로젝트 유형', c.profile.project_type, def('PROFILE', 'project_type')],
     ['goals', '프로젝트 목표', c.goals, def('GOALS', 'goal')], ['goals', '성공 기준', c.successCriteria, def('GOALS', 'success_criteria')],
     ['scope', '수행 범위', c.scope.inScope, def('SCOPE', 'scope_in')], ['scope', '제외 범위', c.scope.outOfScope, def('SCOPE', 'scope_out')], ['scope', '주요 산출물', c.deliverables, def('SCOPE', 'deliverables')],
     ['stakeholders', '이해관계자', c.stakeholders.length, def('STAKEHOLDERS')], ['stakeholders', '의사결정 / 승인 체계', c.governance, def('OPERATIONS', 'decisions')],
@@ -74,10 +74,12 @@ export async function charterPage(id) {
     <dl class="chx__kvs">
       ${raw(kv('고객사', pf.client))}
       ${raw(kv('수행사', pf.performer))}
-      ${raw(kv('프로젝트 유형', pf.project_type, ro ? null : html`<span class="chx__none">미입력</span> <a class="link chx__cta chx__cta--in" href="${def('GOALS', 'project_type')}" data-link>유형 입력 →</a>`))}
       ${raw(kv('시작일', pf.start_date ? fmtDate(pf.start_date) : ''))}
       ${raw(kv('종료일', pf.end_date ? fmtDate(pf.end_date) : ''))}
-    </dl>`);
+    </dl>
+    <div class="chx__blk"><h3 class="chx__lbl">프로젝트 기본 특성${raw(ro ? '' : html` <a class="link chx__cta chx__cta--in" href="${def('PROFILE')}" data-link>수정 →</a>`)}</h3>
+      <dl class="chx__kvs chx__kvs--traits">${raw((pf.traits || []).map((t) => html`<div class="chx__kv"><dt>${t.label}</dt><dd>${raw(t.value && t.value !== 'TBD' ? html`${t.value_label}`
+        : t.field === 'project_type' && pf.project_type ? html`${pf.project_type}` : html`<span class="chx__none">${t.value_label}</span>`)}</dd></div>`).join(''))}</dl></div>`);
 
   /* ---------- 2. Goals & Success Criteria ---------- */
   const goals = section('2', 'goals', 'Goals & Success Criteria', '요구사항과 WBS가 프로젝트 목표 및 성공 기준에 기여하는지 판단합니다.', html`

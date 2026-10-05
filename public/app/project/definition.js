@@ -15,6 +15,8 @@ import { download, fileToBase64 } from '../core/ui.js';
 import { projectHead, moveToPhase } from './guide.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
+import { TRAIT_FIELDS } from '../shared/project-traits.js';
+import { traitFields, traitGrid, wireTraitFields } from '../shared/trait-fields.js';
 
 const ORG_TYPE = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 킥오프/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 Steering Committee 승인']];
@@ -43,7 +45,7 @@ const PURPOSE = {
 };
 const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '범위 입력 →', STAKEHOLDERS: '이해관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →' };
 const WIDE = new Set(['STAKEHOLDERS', 'MILESTONES']);
-const SECTION_FIELDS = { GOALS: ['project_type', 'goal', 'success_criteria'], SCOPE: ['scope_in', 'scope_out', 'deliverables', 'assumptions', 'constraints', 'initial_risks'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations', 'change_management', 'acceptance'] };
+const SECTION_FIELDS = { PROFILE: TRAIT_FIELDS, GOALS: ['goal', 'success_criteria'], SCOPE: ['scope_in', 'scope_out', 'deliverables', 'assumptions', 'constraints', 'initial_risks'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations', 'change_management', 'acceptance'] };
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
@@ -58,7 +60,8 @@ export async function definitionPage(id) {
   const p = g.project; const ro = p.status === 'ARCHIVED';
   document.title = `01 착수 · 프로젝트 정의 — ${p.name} — RELAI`;
   const u = `/app/projects/${p.id}`;
-  let d = clone(m.definition);            // working copy of the open activity's values (kept across drawer ⇄ full screen)
+  const fresh = () => ({ ...clone(m.definition), ...clone(m.project_traits) });   // definition + 프로젝트 기본 특성 (stored on the project)
+  let d = fresh();            // working copy of the open activity's values (kept across drawer ⇄ full screen)
   let dirty = false;
   let open = null;                         // { key, full }
   const qp = new URLSearchParams(location.search); if (qp.get('activity') && SECTION_FIELDS[qp.get('activity')]) open = { key: qp.get('activity'), full: false };
@@ -95,6 +98,10 @@ export async function definitionPage(id) {
     return html`<section class="pv" aria-labelledby="pvT">
       <div class="pv__h"><span class="pv__no mono">01</span><h2 id="pvT">착수</h2>${raw(isCurrentPhase ? '<span class="np__cur">현재 단계</span>' : '')}</div>
       <p class="pv__d">${ph ? ph.description : '프로젝트의 목표, 범위, 조직과 기본 계획을 정합니다.'}</p>
+      <div class="pvp" data-row-profile>
+        <div class="pvp__h"><div><b>프로젝트 기본 특성</b><small>프로젝트 유형과 수행 환경 · 생성 시 입력한 값이며 여기서 수정합니다.</small></div>${raw(ro ? '' : '<button type="button" class="link linkbtn pv__go" data-open="PROFILE">수정 →</button>')}</div>
+        ${raw(traitGrid(m.project_traits))}
+      </div>
       ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 정의는 조회만 할 수 있습니다.</div>' : nowRow)}
       <ol class="pv__list">${raw(rows)}</ol>
       ${raw(foot)}
@@ -113,8 +120,7 @@ export async function definitionPage(id) {
   const textAreas = (list) => list.map(textField).map((x) => html`<div class="field" data-field="${x.f}"><label>${x.label} <small class="dim">${x.hint}</small></label><textarea class="textarea" data-f="${x.f}" rows="${x.rows}" maxlength="4000" placeholder="${x.ph}" ${ro ? 'disabled' : ''}>${d[x.f] || ''}</textarea></div>`).join('');
   const form = (key) => {
     switch (key) {
-      case 'GOALS': return html`<div class="field" data-field="project_type"><label>프로젝트 유형 <small class="dim">예: 신규 구축 · 고도화 · 마이그레이션 · 운영/유지보수 · 컨설팅</small></label><input class="input input--sm" data-f="project_type" maxlength="200" value="${d.project_type || ''}" placeholder="예: 신규 구축" ${ro ? 'disabled' : ''}></div>
-        <div class="field" data-field="goal"><label>프로젝트 목표</label><textarea class="textarea" data-f="goal" rows="3" maxlength="2000" placeholder="이 프로젝트로 달성하려는 결과를 1~3문장으로 적습니다. 예: 법무팀 계약 검토 리드타임을 50% 단축하는 AI 검토 시스템 구축" ${ro ? 'disabled' : ''}>${d.goal}</textarea></div>
+      case 'GOALS': return html`<div class="field" data-field="goal"><label>프로젝트 목표</label><textarea class="textarea" data-f="goal" rows="3" maxlength="2000" placeholder="이 프로젝트로 달성하려는 결과를 1~3문장으로 적습니다. 예: 법무팀 계약 검토 리드타임을 50% 단축하는 AI 검토 시스템 구축" ${ro ? 'disabled' : ''}>${d.goal}</textarea></div>
         <div class="field" data-field="success_criteria"><label>성공 기준 <small class="dim">측정 가능한 완료·성공 조건</small></label>${raw(listRows('success_criteria', d.success_criteria, '예: 검토 요청 접수부터 결과 회신까지 평균 2영업일 이내'))}</div>
         <p class="hint">완료 처리하려면 목표 또는 성공 기준을 1개 이상 입력합니다.</p>`;
       case 'SCOPE': return html`<div class="field" data-field="scope_in"><label>수행 범위 <small class="dim">이번 프로젝트에서 하는 것</small></label>${raw(listRows('scope_in', d.scope_in, '예: 계약서 자동 검토 기능(국문 표준계약 5종)'))}</div>
@@ -148,8 +154,16 @@ export async function definitionPage(id) {
       default: return '';
     }
   };
+  /** 프로젝트 기본 특성: same drawer and save flow, but not an activity — no 완료 처리 / 건너뛰기, saving never completes anything. */
+  const profileDrawer = () => html`<aside class="wdrawer ${open.full ? 'wdrawer--full' : ''}" id="wdrawer" role="dialog" aria-labelledby="wdT">
+      <div class="wd__h"><div class="wd__ht"><b id="wdT">프로젝트 기본 특성</b><small>프로젝트 유형과 수행 환경을 정합니다. 모르는 항목은 '미정'으로 둡니다.</small></div>
+        <button type="button" class="wd__ib" id="wd-full" title="${open.full ? '축소' : '확대'}" aria-label="${open.full ? '축소' : '확대'}">${open.full ? '⤡' : '⤢'}</button><button type="button" class="wd__ib" id="wd-close" aria-label="닫기">×</button></div>
+      <div class="wd__b"><div class="wd__form trf2" data-sec="PROFILE">${raw(traitFields(d, { bind: 'data-f', disabled: ro, idPrefix: 'df' }))}</div></div>
+      ${raw(ro ? '' : html`<div class="wd__f"><span></span><span class="wd__btns"><span class="wd__stat" id="wd-stat">${dirty ? '저장되지 않은 변경' : ''}</span><button type="button" class="btn btn--primary btn--sm" data-wact="save">저장</button></span></div>`)}
+    </aside>`;
   const drawer = () => {
     if (!open) return '';
+    if (open.key === 'PROFILE') return profileDrawer();
     const s = sec(open.key); const st = rowState(s);
     const skipped = s.status === 'SKIPPED'; const completed = s.status === 'COMPLETED';
     const body = skipped
@@ -196,13 +210,13 @@ export async function definitionPage(id) {
   const err = (e) => { const msg = e.fields ? Object.values(e.fields)[0] : e.message; toast(msg); const st = $('#wd-stat'); if (st) st.textContent = msg; };
 
   const discardOk = async () => !dirty || confirmDialog({ title: '저장되지 않은 변경이 있습니다.', body: '임시저장하지 않은 내용은 사라집니다. 그대로 닫을까요?', confirm: '닫기' });
-  const openActivity = async (key, { full = false } = {}) => { if (open && open.key === key) return; if (!(await discardOk())) return; d = clone(m.definition); dirty = false; open = { key, full }; setUrl(); draw(); const first = $('#wdrawer .wd__form input, #wdrawer .wd__form textarea, #wdrawer .wd__form select'); if (first) first.focus({ preventScroll: true }); };
+  const openActivity = async (key, { full = false } = {}) => { if (open && open.key === key) return; if (!(await discardOk())) return; d = fresh(); dirty = false; open = { key, full }; setUrl(); draw(); const first = $('#wdrawer .wd__form input, #wdrawer .wd__form textarea, #wdrawer .wd__form select'); if (first) first.focus({ preventScroll: true }); };
   const closeDrawer = async () => { if (!(await discardOk())) return; open = null; dirty = false; setUrl(); draw(); };
 
   /* ---------- actions ---------- */
   const save = async () => {
     collect(); const st = $('#wd-stat'); if (st) st.textContent = '저장 중…';
-    try { m = await api('PUT', wsApi(`/${id}/definition`), sectionBody(open.key)); d = { ...d, ...clone(m.definition) }; dirty = false; await reload(); refreshView(); const s2 = $('#wd-stat'); if (s2) s2.textContent = '임시저장됨'; toast('임시저장했습니다.'); }
+    try { m = await api('PUT', wsApi(`/${id}/definition`), sectionBody(open.key)); d = { ...d, ...fresh() }; dirty = false; await reload(); refreshView(); const prof = open.key === 'PROFILE'; const s2 = $('#wd-stat'); if (s2) s2.textContent = prof ? '저장됨' : '임시저장됨'; toast(prof ? '프로젝트 기본 특성을 저장했습니다.' : '임시저장했습니다.'); }
     catch (e) { err(e); }
   };
   const act = async (action) => {
@@ -217,7 +231,7 @@ export async function definitionPage(id) {
       const r = await api('POST', wsApi(`/${id}/definition/sections/${key}/${action}`), body);
       g = r.guide; delete r.guide; m = r; dirty = false;
       if (action === 'complete' || action === 'confirm' || action === 'skip') { open = null; setUrl(); draw(); toast(action === 'skip' ? '이 업무를 건너뛰었습니다.' : '완료 처리했습니다.'); }
-      else { d = clone(m.definition); draw(); toast(action === 'resume' ? '업무를 다시 시작합니다.' : '완료를 취소했습니다.'); }
+      else { d = fresh(); draw(); toast(action === 'resume' ? '업무를 다시 시작합니다.' : '완료를 취소했습니다.'); }
     } catch (e) { err(e); }
   };
 
@@ -275,7 +289,8 @@ export async function definitionPage(id) {
     $('#wd-close').onclick = closeDrawer;
     $('#wd-full').onclick = () => { open.full = !open.full; el.classList.toggle('wdrawer--full', open.full); $('#wd-full').textContent = open.full ? '⤡' : '⤢'; $('#wd-full').title = open.full ? '축소' : '확대'; };   // same DOM → typed values survive
     el.querySelectorAll('[data-wact]').forEach((b) => b.onclick = () => (b.dataset.wact === 'save' ? save() : act(b.dataset.wact)));
-    el.oninput = () => markDirty();
+    el.oninput = () => markDirty(); el.onchange = () => markDirty();
+    wireTraitFields(el);
     el.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => { collect(); d[b.dataset.add].push({ id: uid(), text: '' }); markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll(`[data-item="${b.dataset.add}"]`)].pop(); if (last) last.focus(); });
     el.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { collect(); d[b.dataset.del] = d[b.dataset.del].filter((x) => x.id !== b.dataset.id); markDirty(); drawDrawer(); });
     const sa = $('#sh-add'); if (sa) sa.onclick = () => { collect(); d.stakeholders.push({ id: uid(), org_type: '', org: '', department: '', name: '', role: '' }); markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll('tr[data-sh] [data-shf="name"]')].pop(); if (last) last.focus(); };

@@ -24,7 +24,7 @@ async function boot(opts = {}) {
   };
   return { db, server, base, client };
 }
-const PROJECT = { name: 'P', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' };
+const PROJECT = { name: 'P', client_name: '테스트 고객사', project_type: 'NEW_BUILD', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' };
 async function signup(client, email, name = '사용자') { const c = client(); const s = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!' }); return { c, w: s.json.workspaces[0].id, uid: s.json.user.id }; }
 
 test('PostgreSQL: pool connects, schema migrated, timestamps/dates/counts come back as ISO strings / YYYY-MM-DD / numbers', async () => {
