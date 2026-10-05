@@ -40,15 +40,13 @@ const guideCard = (g, p, archived, created) => {
 
 /* ---------- current phase activities (Process + Read view) ---------- */
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
-/** CTA only where action is due: the current activity (first open one) and in-progress ones. Done / future / skipped rows carry none. */
+/** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not. */
 const activityRow = (a, archived, isCurrent) => {
   const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED; const cls = stateCls(a);
   const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
-  const href = a.linked_feature_type === 'definition' && a.cta ? a.cta.href : null;   // 착수 activities open their work screen from the row itself → no separate CTA link
-  const showCta = !archived && a.cta && !href && (isCurrent || a.state === 'IN_PROGRESS');
+  const href = !archived && a.cta && (isCurrent || a.state === 'IN_PROGRESS' || a.linked_feature_type === 'definition') ? a.cta.href : null;   // the row itself opens the work screen (same href the server CTA carries) — no separate '… →' link
   const acts = [];
   if (!archived) {
-    if (showCta) acts.push(html`<a class="link np__go" href="${a.cta.href}" data-link>${a.cta.label}</a>`);
     if (skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">업무 다시 시작 →</button>`);
     else if (manualDone && isCurrent) acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
     else if (a.state !== 'COMPLETED' && (isCurrent || a.state === 'IN_PROGRESS')) {
@@ -62,10 +60,9 @@ const activityRow = (a, archived, isCurrent) => {
   return html`<li class="np__row is-${cls} ${isCurrent ? 'is-cur' : ''} ${href ? 'is-link' : ''}" data-act="${a.id}" ${raw(href ? html`data-href="${href}" tabindex="0" role="link"` : '')}>
     <i class="st st--${cls}" aria-hidden="true">${st.icon}</i>
     <div class="np__m">
-      <span class="np__st">${a.title}</span>
+      <span class="np__st"><span class="badge badge--imp ${impCls}">${a.importance_label}</span>${a.title}</span>
       <span class="np__purpose">${a.description}</span>
     </div>
-    <span class="badge ${impCls}">${a.importance_label}</span>
     <span class="badge badge--st is-${cls}">${stLabel}</span>
     <span class="np__acts">${raw(acts.join(''))}</span>
   </li>`;
@@ -78,13 +75,15 @@ const phasePanel = (g, p, archived) => {
   const current = acts.find((a) => a.state !== 'COMPLETED' && a.state !== 'SKIPPED');
   const allDone = !current;
   const remain = s.required_open ? `필수 업무 ${s.required_open}건 남음` : allDone ? '이 단계의 업무를 모두 처리했습니다' : '필수 업무를 모두 마쳤습니다';
+  const rows = acts.map((a) => activityRow(a, archived, current && a.id === current.id)).join('');
+  const hasActs = /class="np__acts">(?!<\/span>)/.test(rows);   // status badges hug the right edge when no row carries an action
   return html`<section class="np" aria-labelledby="npT">
     <div class="np__h">
       <div class="np__t"><span class="np__no mono">${no2(cur.sequence)}</span><h2 id="npT">${cur.name}</h2><span class="np__cur">현재 단계</span></div>
       <span class="np__remain ${s.required_open ? '' : 'is-good'}">${remain}</span>
     </div>
     <p class="np__d">${cur.description}</p>
-    <ol class="np__list">${raw(acts.map((a) => activityRow(a, archived, current && a.id === current.id)).join(''))}</ol>
+    <ol class="np__list ${hasActs ? '' : 'np__list--noacts'}">${raw(rows)}</ol>
     <div class="np__f ${allDone && g.next_phase ? 'np__f--ready' : ''}">
       <span class="np__msg">${raw(g.next_phase ? (allDone ? html`<b>${cur.name} 단계의 필요한 업무가 정리되었습니다.</b> 다음 단계 · ${no2(g.next_phase.sequence)} ${g.next_phase.name}` : html`다음 단계: <b>${no2(g.next_phase.sequence)} ${g.next_phase.name}</b>${s.gate_met ? ' · 남은 권장·선택 업무를 정리하거나 건너뛰면 진행할 수 있습니다.' : ' · 필수 업무를 마치면 진행할 수 있습니다.'}`) : '마지막 단계입니다.')}</span>
       ${raw(!archived && g.next_phase && !movePrimary ? html`<button type="button" class="${allDone ? 'btn btn--primary btn--sm' : 'link linkbtn np__move'}" id="next">${g.next_phase.name}(으)로 진행 →</button>` : '')}
