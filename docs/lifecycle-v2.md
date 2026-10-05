@@ -46,3 +46,6 @@ RELAI의 정보구조는 기능이 아니라 프로젝트 생애주기 순서로
 - 색상: 현재 Activity만 Blue left bar, 완료는 ✓ 아이콘만 Green, Skip 액션은 Amber 텍스트, SKIPPED 결과는 Gray. 라벨·배지는 Neutral 텍스트.
 - 이해관계자: `org_type`(OWN/CLIENT/PARTNER/OTHER = 당사/고객사/협력사/기타) · 조직 · 부서 · 이름 · 역할. 의사결정 권한 제거. Excel: `GET …/definition/stakeholders/template.xlsx`, `POST …/definition/stakeholders/import/preview {data}` → Modal에서 검증 후 목록에 병합 → 임시저장/완료 처리로 저장. 요약은 조직 구분 → 부서 → 사람 계층.
 - What's Next: 착수 Activity 행은 클릭 시 해당 Work Screen(`/definition?activity=KEY`)으로 이동. 행 CTA는 현재 Activity와 진행 중 Activity에만, 완료/미래/건너뜀 행은 CTA 없음. 메모·완료조건 섹션 제거.
+
+## 프로젝트 생성 화면 (2026-10-05)
+`/app/projects/new`는 기본 정보만 받는다: 프로젝트 이름* · 고객사명* · 프로젝트 규모/금액(선택) · 예상 시작일* · 예상 종료일* · 프로젝트 설명(선택). `프로젝트 유형`·`현재 상황`은 폼과 DB(`projects.project_type`, `current_situation`, migration v22에서 drop)에서 제거했고 새 컬럼은 `client_name`, `project_scale`. 모든 프로젝트는 ACTIVE·01 착수로 시작하며(DRAFT 분기 없음), 목표/범위/이해관계자/운영 방식은 생성 후 What's Next → 01 착수 → 프로젝트 정의 Flow에서만 입력한다. CTA는 폼 하단 우측 `[취소] [프로젝트 시작하기 →]`. 프로젝트 목록의 '유형' 컬럼은 '고객사'로 바뀌었다.
