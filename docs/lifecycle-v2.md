@@ -49,3 +49,10 @@ RELAI의 정보구조는 기능이 아니라 프로젝트 생애주기 순서로
 
 ## 프로젝트 생성 화면 (2026-10-05)
 `/app/projects/new`는 기본 정보만 받는다: 프로젝트 이름* · 고객사명* · 프로젝트 규모/금액(선택) · 예상 시작일* · 예상 종료일* · 프로젝트 설명(선택). `프로젝트 유형`·`현재 상황`은 폼과 DB(`projects.project_type`, `current_situation`, migration v22에서 drop)에서 제거했고 새 컬럼은 `client_name`, `project_scale`. 모든 프로젝트는 ACTIVE·01 착수로 시작하며(DRAFT 분기 없음), 목표/범위/이해관계자/운영 방식은 생성 후 What's Next → 01 착수 → 프로젝트 정의 Flow에서만 입력한다. CTA는 폼 하단 우측 `[취소] [프로젝트 시작하기 →]`. 프로젝트 목록의 '유형' 컬럼은 '고객사'로 바뀌었다.
+
+## What's Next 정보 밀도 개선 (2026-10-05)
+* **Header** (`project/guide.js projectHead`): 등록자 아바타·이름 제거(shell.js 하이드레이션 코드 삭제). What's Next 에서는 현재 단계 badge 를 표시하지 않는다(바로 아래 Lifecycle stepper 와 Guide 가 보여줌). 다른 업무 화면에서는 "01 착수" compact badge 만 남기고 "현재 단계" 문구는 뺐다.
+* **RELAI Guide** (`project/next.js guideCard`, `.rg*`): 왼쪽 파란 세로선 제거. 헤더 행에 `현재 NN 단계 → 다음 NN 단계` 흐름을 함께 두고, 제목과 primary CTA 를 한 행(우측 정렬)에, 설명(1~2문장)과 경고를 그 아래 한 줄에 둔다. 높이 약 190px → 105px.
+* **업무 Row** (`activityRow`, `.np__row`, `.badge*`): 상태는 badge(완료 green ✓ · 진행 중 blue · 미시작 gray · 제외 dashed · 확인 필요 red), 중요도는 badge(필수 light red · 권장/선택 gray). 왼쪽 = 제목+중요도, 오른쪽 = 상태 badge │ 액션 링크. 목적·작성 여부는 한 줄(` · `). row 약 70px → 48px.
+* **Guide 문구** (`server/guidance.js`): `description` 을 "왜 지금 이 단계가 중요한지" 설명형 1~2문장으로 재작성(동적 건수 유지). `title·why·rule·CTA·href` 불변. `project_steps.description`(업무 설명)은 저장값이라 손대지 않음.
+* 데이터 모델·API·Next Action 로직·필수/권장 판정·LNB 변경 없음.

@@ -1,5 +1,6 @@
 /* Project workspace header (Lifecycle V2) + phase transition dialog.
- * The header carries the minimum: project name · status · current lifecycle phase · (right) Activity · 보고서 · ⋯ · Help.
+ * The header carries the minimum: project name · status · (work screens only) compact current-phase badge · (right) Activity · 보고서 · ⋯ · Help.
+ * On What’s Next the phase is shown by the Lifecycle stepper and the RELAI Guide right below, so the header does not repeat it.
  * Navigation is the LNB (lnb.js); activity states come from the server payload (g.phases[].steps[].state). */
 import { api, wsApi } from '../core/api.js';
 import { html, no2, raw } from '../core/dom.js';
@@ -25,9 +26,8 @@ export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
       <button type="button" class="wsh__menu" data-ws-menu aria-label="메뉴 열기" title="메뉴">☰</button>
       <a class="wsh__name" href="/app/projects/${p.id}" data-link title="${p.name}">${p.name}</a>
       <span class="chip ${STATUS_CHIP[p.status] || ''}">${STATUS[p.status]}</span>
-      ${raw(cur ? html`<a class="wsh__phase" href="/app/projects/${p.id}" data-link title="현재 단계 · What’s Next"><span class="wsh__phk">현재 단계</span>${no2(cur.sequence)} ${cur.name}</a>` : '')}
+      ${raw(cur && tab !== 'next' ? html`<a class="wsh__phase" href="/app/projects/${p.id}" data-link title="현재 단계 ${no2(cur.sequence)} ${cur.name} · What’s Next">${no2(cur.sequence)} ${cur.name}</a>` : '')}
       ${raw(title ? html`<span class="wsh__sep">/</span><span class="wsh__title">${title}</span>` : '')}
-      <span class="wsh__owner" data-owner-id="${p.created_by || ''}" title="프로젝트 등록자"></span>
       <span class="wsh__sp"></span>
       <button type="button" class="btn btn--secondary btn--sm wsh__ask" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조">RELAI에게 물어보기</button>
       ${raw(headerActions(p))}${raw(helpButton())}
