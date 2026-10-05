@@ -31,8 +31,10 @@ const guideCard = (g, p, archived, created) => {
       ${raw(created ? '<span class="rg__new">프로젝트가 생성되었습니다.</span>' : '')}</header>
     <div class="rg__body">
       <h2 class="rg__title">${q.title}</h2>
-      ${raw(q.description || (q.warnings && q.warnings.length) ? html`<p class="rg__d">${q.description || ''}${raw(q.warnings && q.warnings.length ? q.warnings.map((w) => html`<span class="rg__warn"><i class="st st--warn" aria-hidden="true">!</i>${w}</span>`).join('') : '')}</p>` : '')}
-      ${raw(primary || secondary ? html`<div class="rg__cta">${raw(secondary)}${raw(primary)}</div>` : '')}
+      <div class="rg__row">
+        <p class="rg__d">${q.description || ''}${raw(q.warnings && q.warnings.length ? q.warnings.map((w) => html`<span class="rg__warn"><i class="st st--warn" aria-hidden="true">!</i>${w}</span>`).join('') : '')}</p>
+        ${raw(primary || secondary ? html`<div class="rg__cta">${raw(secondary)}${raw(primary)}</div>` : '')}
+      </div>
     </div></section>`;
 };
 
