@@ -24,7 +24,7 @@ async function boot(opts = {}) {
   };
   return { db, server, base, client };
 }
-const PROJECT = { name: 'P', project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' };
+const PROJECT = { name: 'P', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' };
 async function signup(client, email, name = '사용자') { const c = client(); const s = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!' }); return { c, w: s.json.workspaces[0].id, uid: s.json.user.id }; }
 
 test('PostgreSQL: pool connects, schema migrated, timestamps/dates/counts come back as ISO strings / YYYY-MM-DD / numbers', async () => {
@@ -150,7 +150,7 @@ test('constraint violations become API errors, not crashes: duplicate signup 409
   assert.equal((await A.c('POST', '/api/auth/signup', { name: 'B', email: 'a@x.com', password: 'passw0rd!' })).status, 409);
   const p = (await A.c('POST', `/api/workspaces/${A.w}/projects`, PROJECT)).json.project;
   // raw constraint errors through the service layer map to 400 (RL001 trigger) / 409 (unique) and leave the pool healthy
-  await assert.rejects(() => db.run("INSERT INTO projects (id, workspace_id, name, project_type, current_situation, planned_start_date, planned_end_date, created_by) VALUES ('zz', ?, 'x', 'SI', 'NOT_STARTED', '2026-01-01', '2026-02-01', 'ghost')", [A.w]), /member|foreign key/);
+  await assert.rejects(() => db.run("INSERT INTO projects (id, workspace_id, name, client_name, planned_start_date, planned_end_date, created_by) VALUES ('zz', ?, 'x', 'A사', '2026-01-01', '2026-02-01', 'ghost')", [A.w]), /member|foreign key/);
   await assert.rejects(() => db.run("INSERT INTO requirements (id, project_id, sequence_number, display_id, title, created_by, status) VALUES ('q', ?, 999, 'REQ-999', 't', ?, 'NOPE')", [p.id, A.uid]), /check constraint/);
   await assert.rejects(() => db.run('UPDATE projects SET workspace_id = ? WHERE id = ?', ['other', p.id]), /immutable/);
   // a failed transaction rolls back completely

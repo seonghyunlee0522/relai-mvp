@@ -70,10 +70,8 @@ CREATE TABLE IF NOT EXISTS projects (
   workspace_id       TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name               TEXT NOT NULL,
   description        TEXT NOT NULL DEFAULT '',
-  project_type       TEXT NOT NULL CHECK (project_type IN
-                       ('SI','AI_POC','SAAS_IMPLEMENTATION','MIGRATION','INTERNAL','OTHER')),
-  current_situation  TEXT NOT NULL CHECK (current_situation IN
-                       ('NOT_STARTED','JUST_STARTED','IN_PROGRESS','TROUBLED')),
+  client_name        TEXT NOT NULL DEFAULT '',     -- 고객사명 (프로젝트 생성 화면 2026-10-05: 유형/현재 상황 대신 고객사·규모)
+  project_scale      TEXT NOT NULL DEFAULT '',     -- 프로젝트 규모 / 금액 (자유 입력)
   status             TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN
                        ('DRAFT','ACTIVE','ON_HOLD','COMPLETED','ARCHIVED')),
   planned_start_date date NOT NULL,              -- YYYY-MM-DD
@@ -86,6 +84,8 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 -- GAP-006: remember the status a project had before it was archived so 보관 해제 can restore it.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS status_before_archive TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_scale TEXT NOT NULL DEFAULT '';
 
 /* ---------- Project definition (Phase 12b: 착수 입력 → 프로젝트 정의) ----------
  * One row per project. List-type sections are JSON arrays in TEXT (same convention as other JSON columns here).

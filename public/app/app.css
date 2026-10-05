@@ -178,6 +178,7 @@ dl.info{margin:0;display:grid;grid-template-columns:110px 1fr;gap:12px 16px}
 dl.info dt{color:var(--muted);font-size:14px}
 dl.info dd{margin:0;color:var(--navy);font-weight:500;white-space:pre-wrap}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.actions--end{justify-content:flex-end}
 .dlist{margin:0 0 14px;padding-left:18px;color:var(--navy);font-weight:600}
 .dlist li{margin:4px 0}
 .dialog__b{color:var(--text-2);margin-bottom:24px;line-height:1.65}

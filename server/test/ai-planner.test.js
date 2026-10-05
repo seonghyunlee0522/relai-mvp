@@ -95,7 +95,7 @@ test('planner: answer save / validation, plan resume, workspace + project isolat
   // 18/19. isolation
   const B = await setup(client, 'p2b@x.com');
   assert.equal((await B.c('GET', `${P(B)}/${plan.id}`)).status, 404, 'other workspace cannot read');
-  const p2 = (await A.c('POST', `/api/workspaces/${A.w}/projects`, { name: '다른 프로젝트', project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-01-31' })).json.project;
+  const p2 = (await A.c('POST', `/api/workspaces/${A.w}/projects`, { name: '다른 프로젝트', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-01-31' })).json.project;
   assert.equal((await A.c('GET', `/api/workspaces/${A.w}/projects/${p2.id}/ai/wbs-plans/${plan.id}`)).status, 404, 'other project cannot read');
   assert.equal((await A.c('GET', `/api/workspaces/${A.w}/projects/${p2.id}/ai/wbs-plans`)).json.active, null);
   // cancel

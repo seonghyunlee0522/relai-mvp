@@ -3,7 +3,7 @@ import { $, fmtDate, html, no2, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { navigate } from '../core/router.js';
 import { createGrid } from '../shared/grid.js';
-import { STATUS, STATUS_CHIP, TYPE } from '../shared/constants.js';
+import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
 import { bindChecklist, checklistCard } from '../onboarding/ui.js';
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
@@ -20,7 +20,7 @@ export async function homePage(main = $("#main")) {
     ${raw(active.length ? html`<div class="panel"><div class="panel__h">지금 해야 할 일</div>
       <div class="plist" style="border:0;border-radius:0 0 12px 12px">${raw(active.map((p) => html`
         <a class="prow" style="grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) auto" href="/app/projects/${p.id}" data-link>
-          <div><div class="nm">${p.name}</div><div class="sub">${TYPE[p.project_type]}</div></div>
+          <div><div class="nm">${p.name}</div><div class="sub">${p.client_name || ''}</div></div>
           <div><div class="sub" style="margin:0">${no2(p.current_phase_sequence)} ${p.current_phase_name}</div>
             <div class="lcpos" style="margin-top:8px" aria-label="Lifecycle 위치">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < p.current_phase_sequence ? 'is-done' : i + 1 === p.current_phase_sequence ? 'is-cur' : ''}"></i>`).join(''))}</div></div>
           <span class="link">What’s Next →</span></a>`).join(''))}</div></div>` : projects.length ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>보관된 프로젝트는 Projects에서 볼 수 있습니다.</p></div>' : newWorkspaceHome(o))}
@@ -48,7 +48,7 @@ export async function projectsPage(main = $("#main")) {
     empty: () => (all.length ? '<div class="empty empty--sm"><h2>조건에 맞는 프로젝트가 없습니다.</h2></div>' : emptyState()),
     columns: [
       { key: 'name', label: '프로젝트명', width: 320, min: 160, sticky: true, fixed: true, sort: (r) => r.name, cls: 'ttl', render: (r) => html`<a class="link" href="/app/projects/${r.id}" data-link>${r.name}</a>` },
-      { key: 'type', label: '유형', width: 130, sort: (r) => TYPE[r.project_type], render: (r) => TYPE[r.project_type] },
+      { key: 'client', label: '고객사', width: 150, sort: (r) => r.client_name || '', render: (r) => r.client_name || '-' },
       { key: 'status', label: '상태', width: 90, sort: (r) => STATUS[r.status], render: (r) => html`<span class="chip ${STATUS_CHIP[r.status] || ''}">${STATUS[r.status]}</span>` },
       { key: 'phase', label: '현재 단계', width: 180, sort: (r) => r.current_phase_sequence, render: (r) => html`${no2(r.current_phase_sequence)} ${r.current_phase_name}` },
       { key: 'lifecycle', label: 'Lifecycle', width: 150, sort: (r) => r.current_phase_sequence, render: (r) => html`<div class="lcpos" title="${no2(r.current_phase_sequence)} ${r.current_phase_name}">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < r.current_phase_sequence ? 'is-done' : i + 1 === r.current_phase_sequence ? 'is-cur' : ''}"></i>`).join(''))}</div>` },
@@ -56,7 +56,7 @@ export async function projectsPage(main = $("#main")) {
       { key: 'end', label: '종료', width: 100, sort: (r) => r.planned_end_date, cls: 'mono', render: (r) => fmtDate(r.planned_end_date) },
     ],
   });
-  const filtered = () => all.filter((p) => (!status || p.status === status) && (!q || `${p.name} ${TYPE[p.project_type]}`.toLowerCase().includes(q.toLowerCase())));
+  const filtered = () => all.filter((p) => (!status || p.status === status) && (!q || `${p.name} ${p.client_name || ''}`.toLowerCase().includes(q.toLowerCase())));
   const load = async () => { all = (await api('GET', wsApi(showArchived ? '?include_archived=1' : ''))).projects; };
   const draw = () => {
     grid.setRows(filtered());

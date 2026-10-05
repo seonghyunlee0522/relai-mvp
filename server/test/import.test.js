@@ -248,7 +248,7 @@ test('requirements export: same columns as the template, non-archived data, Kore
   assert.deepEqual(ws.getRow(2).values.slice(1, 12), ['REQ-001', '로그인', '설명', '기능', 'High', '범위 내', '확정', '홍길동', '김', 'A사', '조건1\n조건2']);
   assert.equal(a.display_id, 'REQ-001');
   // sanitised file names
-  await A.c('PATCH', A.purl, { name: 'a/b:c*?"<>|', description: '', project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' });
+  await A.c('PATCH', A.purl, { name: 'a/b:c*?"<>|', description: '', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' });
   const r2 = await A.c('GET', `${A.req}/export.xlsx`);
   assert.ok(decodeURIComponent(r2.headers.get('content-disposition').split("UTF-8''")[1]).startsWith('요구사항_abc_'));
   // error report

@@ -12,24 +12,24 @@ import { KINDS } from '../importspec.js';
 const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const mk = async (A, body) => { const r = await A.c('POST', A.wbs, body); assert.equal(r.status, 201, JSON.stringify(r.json)); return r.json; };
 
-test('BUG-002 / UI-001 / GAP-006: duplicate name 409 unless allowed, NOT_STARTED → DRAFT → ACTIVE on phase move, archive remembers status', async () => {
+test('BUG-002 / UI-001 / GAP-006: duplicate name 409 unless allowed, new project is ACTIVE from 착수, archive remembers status', async () => {
   const { server, client } = await boot();
   const A = await setup(client);
   const base = `/api/workspaces/${A.w}/projects`;
-  // the fixture project is NOT_STARTED → DRAFT
-  assert.equal(A.p.status, 'DRAFT');
+  // every project starts 진행 중 in 01 착수 (no 현재 상황 question at creation)
+  assert.equal(A.p.status, 'ACTIVE');
   // same name (case/space-insensitive) → 409 with a field error
   let r = await A.c('POST', base, project({ name: ' 테스트 프로젝트 ' }));
   assert.equal(r.status, 409); assert.equal(r.json.error.code, 'duplicate_name'); assert.ok(r.json.error.fields.name);
   // explicit allow → created
-  r = await A.c('POST', base, project({ name: '테스트 프로젝트', allow_duplicate: true, current_situation: 'IN_PROGRESS' }));
+  r = await A.c('POST', base, project({ name: '테스트 프로젝트', allow_duplicate: true }));
   assert.equal(r.status, 201); assert.equal(r.json.project.status, 'ACTIVE');
   const dup = r.json.project;
   // rename onto another live name → 409; same name as itself → ok
   assert.equal((await A.c('PATCH', `${base}/${dup.id}`, { name: '테스트 프로젝트' })).status, 200);
   r = await A.c('POST', base, project({ name: '다른 이름' })); assert.equal(r.status, 201);
   assert.equal((await A.c('PATCH', `${base}/${r.json.project.id}`, { name: '테스트 프로젝트' })).status, 409);
-  // DRAFT → ACTIVE when the project leaves 착수
+  // stays ACTIVE when the project leaves 착수
   let g = (await A.c('GET', A.purl)).json;
   g = (await A.c('POST', `${A.purl}/phases/${g.phases[1].id}/activate`, { reason: 'NEXT' })).json;
   assert.equal(g.project.current_phase, 'REQUIREMENTS'); assert.equal(g.project.status, 'ACTIVE');

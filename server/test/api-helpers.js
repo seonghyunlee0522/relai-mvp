@@ -22,7 +22,7 @@ export async function boot() {
   };
   return { db, server, client };
 }
-export const project = (o = {}) => ({ name: '테스트 프로젝트', project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
+export const project = (o = {}) => ({ name: '테스트 프로젝트', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
 
 export async function setup(client, email = 'u@x.com', name = '홍길동') {
   const c = client();

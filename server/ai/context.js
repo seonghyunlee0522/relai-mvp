@@ -16,7 +16,7 @@ const LAST_RESULT = `(SELECT e.result FROM test_executions e WHERE e.test_case_i
 /* ---------- shared pieces ---------- */
 export async function projectBlock(db, project) {
   const ph = await db.get('SELECT name, sequence FROM project_phases WHERE project_id = ? AND phase_key = ?', [project.id, project.current_phase]);
-  return `## 프로젝트\n이름: ${clip(project.name, 100)}\n유형: ${project.project_type}\n설명: ${clip(project.description, 600) || '(없음)'}\n현재 단계: ${ph ? `${ph.sequence}. ${ph.name}` : project.current_phase}\n계획 기간: ${project.planned_start_date || '?'} ~ ${project.planned_end_date || '?'}`;
+  return `## 프로젝트\n이름: ${clip(project.name, 100)}\n고객사: ${clip(project.client_name || '', 100) || '(없음)'}\n규모/금액: ${clip(project.project_scale || '', 200) || '(없음)'}\n설명: ${clip(project.description, 600) || '(없음)'}\n현재 단계: ${ph ? `${ph.sequence}. ${ph.name}` : project.current_phase}\n계획 기간: ${project.planned_start_date || '?'} ~ ${project.planned_end_date || '?'}`;
 }
 export const requirementRows = (db, projectId, { limit = 200, ids = null } = {}) => db.all(`SELECT id, display_id, title, description, type, priority, scope, status FROM requirements
   WHERE project_id = ? AND archived_at IS NULL ${ids ? 'AND id = ANY(?::text[])' : ''} ORDER BY sequence_number LIMIT ?`, ids ? [projectId, ids, limit] : [projectId, limit]);

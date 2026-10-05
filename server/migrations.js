@@ -40,6 +40,9 @@ export const migrations = [
   { version: 21, name: 'Lifecycle V2: 7-phase lifecycle template, activity importance/SKIPPED, wbs_items.lifecycle_phase — phases of every project re-seeded from 착수 (no legacy phase mapping)', async up(db) {
     for (const p of await db.all('SELECT * FROM projects')) await resetPhases(db, p);
   } },
+  { version: 22, name: 'Project creation form: client_name + project_scale replace project_type / current_situation (columns dropped, no legacy mapping)', async up(db) {
+    await db.run('ALTER TABLE projects DROP COLUMN IF EXISTS project_type, DROP COLUMN IF EXISTS current_situation');
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

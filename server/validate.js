@@ -1,5 +1,3 @@
-export const PROJECT_TYPES = ['SI', 'AI_POC', 'SAAS_IMPLEMENTATION', 'MIGRATION', 'INTERNAL', 'OTHER'];
-export const SITUATIONS = ['NOT_STARTED', 'JUST_STARTED', 'IN_PROGRESS', 'TROUBLED'];
 export const STATUSES = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'ARCHIVED'];
 export const PHASES = ['INITIATION', 'REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING', 'TRANSITION_GO_LIVE', 'OPERATIONS'];
 
@@ -33,18 +31,18 @@ export function parseProject(b = {}) {
   const f = {};
   const name = str(b.name);
   const description = str(b.description);
-  const project_type = b.project_type;
-  const current_situation = b.current_situation;
+  const client_name = str(b.client_name);
+  const project_scale = str(b.project_scale);
   const planned_start_date = b.planned_start_date;
   const planned_end_date = b.planned_end_date;
   if (!name || name.length > 100) f.name = '프로젝트 이름을 100자 이내로 입력해 주세요.';
-  if (!PROJECT_TYPES.includes(project_type)) f.project_type = '프로젝트 유형을 선택해 주세요.';
-  if (!SITUATIONS.includes(current_situation)) f.current_situation = '현재 상황을 선택해 주세요.';
+  if (!client_name || client_name.length > 100) f.client_name = '고객사명을 100자 이내로 입력해 주세요.';
+  if (project_scale.length > 200) f.project_scale = '프로젝트 규모 / 금액은 200자 이내로 입력해 주세요.';
   if (!isDate(planned_start_date)) f.planned_start_date = '예상 시작일을 입력해 주세요.';
   if (!isDate(planned_end_date)) f.planned_end_date = '예상 종료일을 입력해 주세요.';
   if (!f.planned_start_date && !f.planned_end_date && planned_end_date < planned_start_date)
     f.planned_end_date = '종료일은 시작일 이후여야 합니다.';
   if (description.length > 2000) f.description = '설명은 2,000자 이내로 입력해 주세요.';
   if (Object.keys(f).length) throw new ValidationError(f);
-  return { name, description, project_type, current_situation, planned_start_date, planned_end_date };
+  return { name, description, client_name, project_scale, planned_start_date, planned_end_date };
 }

@@ -23,7 +23,7 @@ async function boot() {
   };
   return { db, server, client };
 }
-const project = (o = {}) => ({ name: 'A사 AI 상담 시스템 구축', project_type: 'AI_POC', current_situation: 'JUST_STARTED',
+const project = (o = {}) => ({ name: 'A사 AI 상담 시스템 구축', client_name: 'A사', project_scale: '3억 원 · 6개월',
   planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', description: '', ...o });
 
 test('signup creates workspace + OWNER membership, session persists, logout revokes', async () => {
@@ -69,12 +69,12 @@ test('project CRUD defaults, validation, edit, archive (no delete)', async () =>
   const { json } = await c('POST', '/api/auth/signup', { name: 'n', email: 'u@x.com', password: 'passw0rd!' });
   const w = json.workspaces[0].id;
   assert.equal((await c('POST', `/api/workspaces/${w}/projects`, project({ planned_end_date: '2026-01-01' }))).status, 400);
-  assert.equal((await c('POST', `/api/workspaces/${w}/projects`, project({ project_type: 'NOPE' }))).status, 400);
+  assert.equal((await c('POST', `/api/workspaces/${w}/projects`, project({ client_name: '' }))).status, 400);
   const created = await c('POST', `/api/workspaces/${w}/projects`, project());
   assert.equal(created.status, 201);
   const p = created.json.project;
   assert.equal(p.status, 'ACTIVE'); assert.equal(p.current_phase, 'INITIATION');
-  assert.equal(p.current_situation, 'JUST_STARTED');
+  assert.equal(p.client_name, 'A사'); assert.equal(p.project_scale, '3억 원 · 6개월');
   const upd = await c('PATCH', `/api/workspaces/${w}/projects/${p.id}`, project({ name: '수정됨' }));
   assert.equal(upd.json.project.name, '수정됨');
   assert.equal((await c('DELETE', `/api/workspaces/${w}/projects/${p.id}`, {})).status, 404);
@@ -104,8 +104,8 @@ test('tenant isolation: other workspace members cannot read/modify/create', asyn
   assert.equal((await db.get('SELECT name FROM projects WHERE id=?', [p.id])).name, 'A사 AI 상담 시스템 구축');
   // DB-level: non-member creator and workspace move rejected by triggers
   const uidB = B.user.id;
-  await assert.rejects(async () => (await db.run(`INSERT INTO projects (id,workspace_id,name,project_type,current_situation,planned_start_date,planned_end_date,created_by)
-    VALUES ('x',?, 'n','SI','NOT_STARTED','2026-01-01','2026-02-01',?)`, [wa, uidB])), /workspace member/);
+  await assert.rejects(async () => (await db.run(`INSERT INTO projects (id,workspace_id,name,client_name,planned_start_date,planned_end_date,created_by)
+    VALUES ('x',?, 'n','A사','2026-01-01','2026-02-01',?)`, [wa, uidB])), /workspace member/);
   await assert.rejects(async () => (await db.run('UPDATE projects SET workspace_id=? WHERE id=?', [wb, p.id])), /immutable/);
   server.close();
 });

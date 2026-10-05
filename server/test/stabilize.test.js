@@ -23,7 +23,7 @@ async function boot() {
   };
   return { db, server, client };
 }
-const project = (o = {}) => ({ name: 'P', project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
+const project = (o = {}) => ({ name: 'P', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
 async function setup(client, email) {
   const c = client();
   const s = await c('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });

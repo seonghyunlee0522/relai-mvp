@@ -24,7 +24,7 @@ async function boot(db = null) {
   return { db, server, client };
 }
 const STEPS_PER_PROJECT = DEFAULT_PHASES.reduce((n, p) => n + p.steps.length, 0);
-const project = (o = {}) => ({ name: 'P', project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
+const project = (o = {}) => ({ name: 'P', client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
 
 async function userWithProject(client, email = 'u@x.com') {
   const c = client();
@@ -147,8 +147,8 @@ test('migration: database recorded at an older version gets Lifecycle V2 phases 
     await c.query(`INSERT INTO users (id,email,name,password_hash) VALUES ('u1','a@x.com','A','x');
       INSERT INTO workspaces (id,name,owner_id) VALUES ('w1','W','u1');
       INSERT INTO workspace_members (workspace_id,user_id,role) VALUES ('w1','u1','OWNER');
-      INSERT INTO projects (id,workspace_id,name,project_type,current_situation,planned_start_date,planned_end_date,created_by) VALUES ('p1','w1','Old','SI','NOT_STARTED','2026-01-01','2026-06-01','u1');
-      INSERT INTO projects (id,workspace_id,name,project_type,current_situation,planned_start_date,planned_end_date,created_by,status) VALUES ('p2','w1','Old archived','SI','NOT_STARTED','2026-01-01','2026-06-01','u1','ARCHIVED');
+      INSERT INTO projects (id,workspace_id,name,client_name,planned_start_date,planned_end_date,created_by) VALUES ('p1','w1','Old','A사','2026-01-01','2026-06-01','u1');
+      INSERT INTO projects (id,workspace_id,name,client_name,planned_start_date,planned_end_date,created_by,status) VALUES ('p2','w1','Old archived','A사','2026-01-01','2026-06-01','u1','ARCHIVED');
       INSERT INTO schema_migrations (version, name) VALUES (1, 'v1');`);
   } finally { c.release(); }
   const applied = await migrate(db, schemaSql, (client) => bindTx(client, db));

@@ -1,34 +1,30 @@
 import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
-import { SITUATION, TYPE, TYPE_DESC } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
 import { showErrors, toast, confirmDialog } from '../shared/dialogs.js';
 
 export async function projectFormPage(id) {
   const main = $('#main');
   const editing = Boolean(id);
-  let p = { name: '', project_type: '', current_situation: '', planned_start_date: '', planned_end_date: '', description: '' };
+  let p = { name: '', client_name: '', project_scale: '', planned_start_date: '', planned_end_date: '', description: '' };
   if (editing) {
     p = (await api('GET', wsApi(`/${id}`))).project;
     if (p.status === 'ARCHIVED') { navigate(`/app/projects/${id}`, { replace: true }); return; }
   }
   document.title = `${editing ? '프로젝트 정보 수정' : '새 프로젝트'} — RELAI`;
-  const radios = (name, map, cur, desc = null) => Object.entries(map).map(([v, l]) =>
-    html`<label class="choice ${desc ? 'choice--desc' : ''}"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''}><span>${l}${raw(desc && desc[v] ? html`<small>${desc[v]}</small>` : '')}</span></label>`).join('');
   main.innerHTML = html`<div class="page page--form">
     <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : 'Projects'}</a>
     <div class="page__head"><div><h1>${editing ? '프로젝트 정보 수정' : '새 프로젝트 시작하기'}</h1>
-      ${raw(editing ? '' : '<p>몇 가지만 알려주시면 RELAI가 지금 상황에 맞게 안내합니다.</p>')}</div></div>
+      ${raw(editing ? '' : '<p>기본 정보만 입력하면 됩니다. 목표·범위·이해관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
     <form class="panel form-panel pform" id="f" novalidate>
       <div class="form-err full" role="alert" hidden></div>
       <div class="field full"><label for="name">프로젝트 이름 <span class="req">*</span></label>
         <input class="input" id="name" name="name" maxlength="100" placeholder="예: A사 AI 상담 시스템 구축" value="${p.name}"><div class="err" data-for="name"></div></div>
-      <div class="field"><span class="lbl">프로젝트 유형 <span class="req">*</span></span>
-        <div class="choices choices--col" role="radiogroup">${raw(radios('project_type', TYPE, p.project_type, TYPE_DESC))}</div><div class="err" data-for="project_type"></div></div>
-      <div class="field"><span class="lbl">현재 상황 <span class="req">*</span></span>
-        <div class="choices" role="radiogroup">${raw(radios('current_situation', SITUATION, p.current_situation))}</div>
-        <div class="err" data-for="current_situation"></div></div>
+      <div class="field"><label for="client">고객사명 <span class="req">*</span></label>
+        <input class="input" id="client" name="client_name" maxlength="100" placeholder="예: A사" value="${p.client_name}"><div class="err" data-for="client_name"></div></div>
+      <div class="field"><label for="scale">프로젝트 규모 / 금액 <span style="color:var(--muted);font-weight:500">(선택)</span></label>
+        <input class="input" id="scale" name="project_scale" maxlength="200" placeholder="예: 3억 원 · 6개월 · 투입 8명" value="${p.project_scale}"><div class="err" data-for="project_scale"></div></div>
       <div class="pdates full"><div class="row2">
         <div class="field"><label for="s">예상 시작일 <span class="req">*</span></label>
           <input class="input" type="date" id="s" name="planned_start_date" value="${p.planned_start_date}"><div class="err" data-for="planned_start_date"></div></div>
@@ -38,9 +34,9 @@ export async function projectFormPage(id) {
       <div class="field full"><label for="d">프로젝트 설명 <span style="color:var(--muted);font-weight:500">(선택)</span></label>
         <textarea class="textarea" id="d" name="description" maxlength="2000" placeholder="프로젝트의 목적이나 배경을 간단히 적어주세요.">${p.description}</textarea>
         <div class="err" data-for="description"></div></div>
-      <div class="actions full" style="margin-top:4px">
-        <button class="btn btn--primary" type="submit">${editing ? '저장하기' : '프로젝트 시작하기'}</button>
-        <a class="btn btn--secondary" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>취소</a></div>
+      <div class="actions actions--end full" style="margin-top:4px">
+        <a class="btn btn--secondary" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>취소</a>
+        <button class="btn btn--primary" type="submit">${editing ? '저장하기' : '프로젝트 시작하기 →'}</button></div>
     </form></div>`;
   const form = $('#f');
   if (!editing) $('#name').focus();
@@ -50,8 +46,7 @@ export async function projectFormPage(id) {
     const d = Object.fromEntries(new FormData(form));
     const local = {};
     if (!d.name?.trim()) local.name = '프로젝트 이름을 입력해 주세요.';
-    if (!d.project_type) local.project_type = '프로젝트 유형을 선택해 주세요.';
-    if (!d.current_situation) local.current_situation = '현재 상황을 선택해 주세요.';
+    if (!d.client_name?.trim()) local.client_name = '고객사명을 입력해 주세요.';
     if (!d.planned_start_date) local.planned_start_date = '예상 시작일을 입력해 주세요.';
     if (!d.planned_end_date) local.planned_end_date = '예상 종료일을 입력해 주세요.';
     if (d.planned_start_date && d.planned_end_date && d.planned_end_date < d.planned_start_date) local.planned_end_date = '종료일은 시작일 이후여야 합니다.';

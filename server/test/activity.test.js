@@ -50,7 +50,7 @@ test('comments: any member may comment, author/OWNER/ADMIN may delete, validatio
     assert.equal((await X.c('DELETE', `${url}/${c3.json.comment.id}`)).status, 404);
     // unknown entity / entity of another project
     assert.equal((await A.c('POST', `${base}/nope/comments`, { body: 'x' })).status, 404);
-    const p2 = (await A.c('POST', `/api/workspaces/${A.w}/projects`, { name: `P2-${kind}`, project_type: 'SI', current_situation: 'NOT_STARTED', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' })).json.project;
+    const p2 = (await A.c('POST', `/api/workspaces/${A.w}/projects`, { name: `P2-${kind}`, client_name: '테스트 고객사', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' })).json.project;
     assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects/${p2.id}/${kind}/${id}/comments`, { body: 'x' })).status, 404);
   }
   // an archived ENTITY can still be commented; an archived PROJECT cannot (409)
