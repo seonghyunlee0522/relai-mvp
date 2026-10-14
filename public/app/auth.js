@@ -30,7 +30,7 @@ const signupSide = () => html`<aside class="auth__side su-a">
         <span class="su-a__cta">프로젝트 정의 시작 →</span>
       </div>
     </div>
-    <p class="su-a__foot">프로젝트 1개는 무료 · 팀으로 쓰면 Team ₩15,000/인·월(연간)</p>
+    <p class="su-a__foot">프로젝트 1개는 무료 · Team ₩20,000/월(소유자 포함) + 사용자 추가 1명당 ₩5,000 · VAT 별도</p>
   </div></aside>`;
 /** Small screens hide the side panel, so the 7 phases move under the headline. */
 const signupMobile = () => html`<div class="su-mobile su-a-m" aria-label="프로젝트 7단계">${raw(PHASES.map((p, i) => html`<span class="${i === 0 ? 'is-current' : ''}"><i>${i + 1}</i>${p}</span>`).join(''))}</div>`;
