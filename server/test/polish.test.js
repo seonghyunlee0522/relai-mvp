@@ -40,13 +40,14 @@ test('K32 migration 39: legacy hand-✓ 검수/오픈/인수/종료 with no reco
   const c = await statusOf(db, C.p.id);
   for (const k of ['ACCEPTANCE', 'GO_LIVE', 'HANDOVER', 'CLOSE']) { assert.equal(c[k].status, 'COMPLETED', k); assert.equal(c[k].note, '', k); }
   assert.equal(Number((await db.get('SELECT COUNT(*) AS n FROM phase_transitions')).n), trBefore);
-  // A PM note already on the step is kept (the reset note is only added to an empty one)
-  await handMark(db, A.p.id, 'PM 메모'); await m39.up(db);
-  assert.equal((await statusOf(db, A.p.id)).HANDOVER.note, 'PM 메모');
+  // Q17-3: a PM memo already on the step is kept and the reset reason is added on a new line (never silent); a rerun adds nothing
+  await handMark(db, A.p.id, 'PM 메모'); await m39.up(db); await m39.up(db);
+  assert.equal((await statusOf(db, A.p.id)).HANDOVER.note, `PM 메모\n${LEGACY_RESET_NOTE}`);
   // the reset rows now read as not done, so 07 종료 is gated again
   const G = await g(A);
   const close = G.phases.find((p) => p.phase_key === 'OPERATIONS').steps.find((s) => s.step_key === 'CLOSE');
   assert.notEqual(close.state, 'COMPLETED');
+  assert.equal(close.reopen_note, LEGACY_RESET_NOTE);   // Q17-3: the reason shows on the phase screen row
   server.close();
 });
 

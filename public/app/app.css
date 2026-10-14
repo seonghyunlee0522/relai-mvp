@@ -2439,6 +2439,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .req-excl{font-size:var(--fs-sm);color:var(--text-2);background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--r-lg);padding:8px 12px;margin:0 0 10px}
 .req-phint{display:block;margin-top:4px;font-size:var(--fs-xs)}
 .np__hint{display:block;font-size:var(--fs-sm);color:var(--text-3);margin-top:2px}
+.np__reopen{color:var(--warn-fg)}
 .dialog[tabindex="-1"]:focus{outline:none}
 .notice--crit{background:var(--danger-bg);color:var(--danger-fg);border-color:var(--danger-bd)}
 .chx__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}

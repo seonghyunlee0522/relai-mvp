@@ -17,6 +17,7 @@
  *   ctx = { pid, stats, definition: { sections }, overdue_tasks, checklists: { [step_id]: { total, done } } }
  */
 import { IMPORTANCE_LABEL, CHECKLIST_STEP_KEYS } from './templates/default-phases.js';
+import { LEGACY_RESET_NOTE } from './migrations.js';
 
 const n = (v) => Number(v) || 0;
 
@@ -317,7 +318,8 @@ export function activityStates(phaseKey, steps, ctx) {
       cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, row_action: Boolean(r.row_action) && state !== 'COMPLETED' && state !== 'SKIPPED', row_text: Boolean(r.row_text), crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
       // manual = no data signal decides this activity: What's Next offers 완료 처리 for it (checklist ones too — a hand mark wins)
       manual: r0.derived === null || Boolean(r0.manual_close), checklist: list, links: links && links.length ? links : null, go_live: s.step_key === 'GO_LIVE' && phaseKey === 'TRANSITION_GO_LIVE',
-      handover: s.step_key === 'HANDOVER' && phaseKey === 'OPERATIONS', close: s.step_key === 'CLOSE' && phaseKey === 'OPERATIONS' };
+      handover: s.step_key === 'HANDOVER' && phaseKey === 'OPERATIONS', close: s.step_key === 'CLOSE' && phaseKey === 'OPERATIONS',
+      reopen_note: state !== 'COMPLETED' && state !== 'SKIPPED' && (s.note || '').includes(LEGACY_RESET_NOTE) ? LEGACY_RESET_NOTE : null };   // Q17-3: why migration 39 reopened a legacy hand-✓ step
   });
 }
 

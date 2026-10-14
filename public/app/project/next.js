@@ -84,6 +84,7 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
       <span class="np__purpose">${a.description}</span>
       ${raw(a.text && ((GATE_KEYS.has(a.step_key) && a.state !== 'NOT_STARTED') || a.row_text) ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}" data-row-text>${a.text}</span>` : '')}
       ${raw(a.hint ? html`<span class="np__hint">${a.hint}</span>` : '')}
+      ${raw(a.reopen_note ? html`<span class="np__hint np__reopen" data-reopen-note>${a.reopen_note}</span>` : '')}
       ${raw(a.links && !archived ? html`<span class="np__links" data-row-links>${raw(a.links.map((l) => html`<a class="link" href="${l.href}" data-link>${l.label}</a>`).join(''))}</span>` : '')}
       ${raw(a.import_ms && !archived ? html`<span class="np__imp">${a.import_ms.text} <button type="button" class="btn btn--secondary btn--xs" data-import-ms>가져오기</button></span>` : '')}
     </div>

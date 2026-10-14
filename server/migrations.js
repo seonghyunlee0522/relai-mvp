@@ -174,7 +174,7 @@ export const migrations = [
     const pidOf = '(SELECT project_id FROM project_phases WHERE id = project_steps.project_phase_id)';
     const rec = (col) => `(SELECT 1 FROM project_definitions d WHERE d.project_id = ${pidOf} AND COALESCE(NULLIF(d.${col}, ''), '{}')::jsonb ->> 'date' IS NOT NULL)`;
     const reset = (where) => db.run(`UPDATE project_steps SET status = 'TODO', completed_at = NULL, completed_by = NULL,
-      note = CASE WHEN note = '' THEN ? ELSE note END, updated_at = now() WHERE ${where}`, [LEGACY_RESET_NOTE]);
+      note = CASE WHEN COALESCE(note, '') = '' THEN ? ELSE note || E'\n' || ? END, updated_at = now() WHERE ${where}`, [LEGACY_RESET_NOTE, LEGACY_RESET_NOTE]);   // Q17-3: a PM memo is kept, the reason goes on a new line
     await reset(`${steps('TRANSITION_GO_LIVE', 'ACCEPTANCE')}) AND NOT EXISTS (SELECT 1 FROM acceptances a WHERE a.project_id = ${pidOf} AND a.status = 'ACCEPTED' AND a.archived_at IS NULL AND COALESCE(NULLIF(a.customer_approval, ''), '{}') <> '{}')`);
     await reset(`${steps('TRANSITION_GO_LIVE', 'GO_LIVE')}) AND NOT EXISTS ${rec('go_live')}`);
     await reset(`${steps('OPERATIONS', 'HANDOVER')}) AND NOT EXISTS ${rec('handover')}`);
