@@ -7,6 +7,7 @@ import { boot, setup } from './api-helpers.js';
 import { migrations } from '../migrations.js';
 import { phaseDisplayState } from '../guide.js';
 import { todayStr } from '../wbs.js';
+import { teamFor } from '../../public/app/shared/owner-picker.js';   // Q17-4: the real K13 picker filter
 
 const step = (g, phase, key) => g.phases.find((x) => x.phase_key === phase).steps.find((s) => s.step_key === key);
 const shift = (days) => { const d = new Date(`${todayStr()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
@@ -44,8 +45,6 @@ test('J-A1: the WBS skeleton milestones follow the same rule (past key date → 
   server.close();
 });
 
-/** = shared/owner-picker.js teamFor (that module needs the DOM). */
-const teamFor = (team, cur = '') => (team || []).filter((t) => !t.member || `s:${t.id}` === cur);
 test('J-A2: a stakeholder with the same name as a workspace member is not offered again as 팀원 (계정 없음); one already assigned stays', async () => {
   const { server, client } = await boot();
   const A = await setup(client);   // member 홍길동

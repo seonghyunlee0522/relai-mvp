@@ -167,7 +167,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   const rep = (await api('POST', `${A.P}/weekly-reports/generate`, { period_start: WK.start, period_end: WK.end })).json.report;
   await page.goto(`${A.url}/reports/${rep.id}`); await page.waitForSelector('.doc__sec');
   const repTxt = await page.inputValue('[data-sec="status"]');
-  check('US-1 주간보고 \'일정\': "이번 주 일정 변경 N건 (최초 계획 대비 총 +M일)" + 작업명 · +일 · 사유 lines', /- 일정: 이번 주 일정 변경 5건 \(최초 계획 대비 총 [+-]?\d+일\)/.test(repTxt) && /로그인 화면 개발 · \+7일 · 최초 계획 대비 \+\d+일 · 고객 계정 발급 지연 → 버퍼 3일 사용/.test(repTxt), repTxt.split('\n').filter((l) => /일정/.test(l)).join(' | '));
+  check('US-1 주간보고 \'일정\': "이번 주 일정 변경 N건 (최초 계획 대비 총 +M일)" + 작업명 · +일 · 사유 lines', /- 일정: 이번 주 일정 변경 5건 \(최초 계획 대비 총 \+17일\)/.test(repTxt) && /로그인 화면 개발 · \+7일 · 최초 계획 대비 \+12일 · 고객 계정 발급 지연 → 버퍼 3일 사용/.test(repTxt), repTxt.split('\n').filter((l) => /일정/.test(l)).join(' | '));
 
   /* ---------- US-6 Issue 담당자 + US-5 차단됨 → 해결 ---------- */
   await page.goto(`${A.url}/issues?new=1`); await page.waitForSelector('#cf');

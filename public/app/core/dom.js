@@ -11,4 +11,4 @@ export const html = (strings, ...vals) => strings.reduce((out, s, i) => out + s 
 export const raw = (s) => ({ __raw: s });
 export const fmtDate = (d) => (d ? d.replaceAll('-', '.') : '-');
 export const $ = (sel, el = document) => el.querySelector(sel);
-export const root = $('#root');
+export const root = typeof document === 'undefined' ? null : $('#root');   // null under node (unit tests import pure helpers from app modules)
