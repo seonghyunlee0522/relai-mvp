@@ -32,6 +32,8 @@ const TEAM = [
   { id: 'sh-cl', name: '이고객', org_type: 'CLIENT', org: 'ACME', role: '고객 PM' },
 ];
 // English UI words that must not appear on the 04 screens (US-7). ID prefixes (ISS/CR/REQ-), WBS, Excel, Jira, AI, MD, Issue (a Korean-text term) are allowed.
+// Q13-1: RELAI's own Issue entity reads 이슈 everywhere; only the Jira term "Jira Issue" may stay English.
+const EN_ISSUE = /(?<!Jira )\bIssues?\b/;
 const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critical|Updated|Status|Due|Requirements?|Issues|Tests?|Risks?|Overdue|Review|Probability|Impact|Pass|Fail|Lifecycle|Changes)\b/;
 
 (async () => {
@@ -190,6 +192,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   check('US-5 empty 해결 내용 → saved RESOLVED + hint under the field', (await api('GET', `${A.P}/issues/${iss.id}`)).json.issue.status === 'RESOLVED' && Boolean(await page.$('[data-res-hint]')));
   const issueTxt = await mainText();
   check('US-7 Issue screen: no English UI words', !EN.test(issueTxt), (issueTxt.match(EN) || [])[0] || '');
+  check('Q13-1 이슈 screen (help card + list + Drawer): no English "Issue"', !EN_ISSUE.test(issueTxt), (issueTxt.match(EN_ISSUE) || [])[0] || '');
   const rep2 = (await api('POST', `${A.P}/weekly-reports/generate`, { period_start: WK.start, period_end: WK.end })).json.report;
   await api('POST', `${A.P}/issues`, { title: '배포 권한 미발급', severity: 'HIGH', owner: 's:sh-pm' });
   const rep3 = (await api('POST', `${A.P}/weekly-reports/generate`, { period_start: WK.start, period_end: WK.end })).json.report;
@@ -287,6 +290,17 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   await api('POST', `${A.P}/tests`, { title: '로그인 성공' });
   await page.reload(); await page.waitForSelector('main .rtool');
   check('US-8 Q9-2 테스트 1건 → toolbar back (+ 테스트 추가)', /테스트 추가/.test(await page.textContent('main .rtool')));
+
+  /* ---------- Q13-1 / Q13-2: 보고서 + 개요 ---------- */
+  await page.goto(`${A.url}/reports`); await page.waitForSelector('#rp-new');
+  check('Q13-1 보고서 screen: no English "Issue"', !EN_ISSUE.test(await mainText()), ((await mainText()).match(EN_ISSUE) || [])[0] || '');
+  await page.click('#rp-new'); await page.waitForSelector('#pd-s');
+  check('Q13-2 보고서 → 주간보고 생성: default this week Mon–Sun (Korea time)', (await page.inputValue('#pd-s')) === WK.start && (await page.inputValue('#pd-e')) === WK.end && /이번 주 월요일부터 일요일까지/.test(await page.textContent('.dialog')), `${await page.inputValue('#pd-s')} ~ ${await page.inputValue('#pd-e')} vs ${WK.start} ~ ${WK.end}`);
+  await page.click('.dialog [data-v="0"]');
+  check('Q13-2 API default_period = this week Mon–Sun', JSON.stringify((await api('GET', `${A.P}/weekly-reports`)).json.default_period) === JSON.stringify({ period_start: WK.start, period_end: WK.end }));
+  await page.goto(`${A.url}/overview`); await page.waitForSelector('text=미해결', { timeout: 8000 }).catch(() => {});
+  const ovTxt = await mainText();
+  check('Q13-1 개요 screen: no English "Issue" (미해결 이슈)', !EN_ISSUE.test(ovTxt) && /미해결 이슈/.test(ovTxt), (ovTxt.match(EN_ISSUE) || [])[0] || '');
 
   /* ---------- 375px ---------- */
   const m = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'ko-KR', storageState: await ctx.storageState() });

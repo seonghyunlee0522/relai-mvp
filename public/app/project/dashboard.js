@@ -3,6 +3,7 @@ import { api, wsApi } from '../core/api.js';
 import { $, fmtShort, html, raw, todayLocal } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { toast } from '../shared/dialogs.js';
+import { weekKst } from '../shared/kst-date.js';
 
 const H_CLS = { GOOD: 'is-good', WARNING: 'is-warn', CRITICAL: 'is-crit', UNKNOWN: 'is-unknown' };
 
@@ -47,7 +48,9 @@ export function bindReportPanel(p, reports, archived) {
     catch (e) { return e.fields || { period_end: e.message }; }
   });
 }
+/** Default = this week Monday–Sunday, Korea time (Q13-2); every entry point (보고서, header menu, ⋯ menu, 04 CTA) gets the same period. */
 export function periodDialog(def, onSubmit) {
+  if (!def?.period_start) { const wk = weekKst(); def = { period_start: wk.start, period_end: wk.end }; }
   const el = document.createElement('div'); el.className = 'scrim';
   el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pdT"><h3 id="pdT">주간보고 생성</h3>
     <div class="dialog__b">보고 기간을 확인하세요. 기본값은 이번 주 월요일부터 일요일까지입니다. 기간 내 상태 변경, 테스트 실행, 승인·반영 이력을 기준으로 보고서를 만듭니다.</div>

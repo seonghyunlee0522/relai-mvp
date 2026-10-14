@@ -14,7 +14,7 @@ import { loadGuide } from './guide.js';
 import * as M from './metrics.js';
 import { projectHealth, STATUS_LABEL } from './health.js';
 import { LEAF_SQL, OWNER_NAME_SQL } from './wbs.js';
-import { diffDays, todayKst, weekKst } from '../public/app/shared/kst-date.js';
+import { diffDays, weekKst } from '../public/app/shared/kst-date.js';
 
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
@@ -35,14 +35,10 @@ export const SECTIONS = [
 
 /* ---------- period ---------- */
 const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
-const dayOfWeek = (d) => new Date(d + 'T00:00:00Z').getUTCDay();
-const localToday = () => todayKst();   // C1: Korea time, not the server's zone
-/** Week = Mon–Sun; while the week is still running the default period is Mon–today, so weekend activity is never dropped (UX-010). */
-export function defaultPeriod(today = localToday()) {
-  const dow = dayOfWeek(today); // 0 Sun … 6 Sat
-  const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const monday = addDays(today, mondayOffset); const sunday = addDays(monday, 6);
-  return { period_start: monday, period_end: today < sunday ? today : sunday };
+/** Q13-2: the default period is this whole week, Monday–Sunday in Korea time — the same week as the 04 WEEKLY_REPORT task and the dialog copy. */
+export function defaultPeriod(at = new Date()) {
+  const wk = weekKst(at);
+  return { period_start: wk.start, period_end: wk.end };
 }
 /** Phase 4 US-3 — 04 WEEKLY_REPORT state for this week (Mon–Sun, Korea time), computed on every read (never stored):
  *  FINAL report whose period overlaps the week → { state: 'FINAL' }, else a DRAFT → 'DRAFT', else 'NONE'. */

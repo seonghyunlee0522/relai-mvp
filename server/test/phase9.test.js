@@ -163,10 +163,13 @@ test('weekly report: default period, generate (structured + sections + markdown)
   const { server, client } = await boot();
   const A = await setup(client, 'a@x.com'); const B = await setup(client, 'b@x.com');
   // default period rule
-  assert.deepEqual(defaultPeriod('2026-10-02'), { period_start: '2026-09-28', period_end: '2026-10-02' }); // Fri → Mon–Fri (today)
-  assert.deepEqual(defaultPeriod('2026-09-30'), { period_start: '2026-09-28', period_end: '2026-09-30' }); // Wed → Mon–today
-  assert.deepEqual(defaultPeriod('2026-10-03'), { period_start: '2026-09-28', period_end: '2026-10-03' }); // Sat → Mon–Sat (UX-010)
-  assert.deepEqual(defaultPeriod('2026-10-04'), { period_start: '2026-09-28', period_end: '2026-10-04' }); // Sun → Mon–Sun
+  // Q13-2: always this whole week, Monday–Sunday in Korea time (same as the dialog copy and the 04 WEEKLY_REPORT week)
+  const wk = { period_start: '2026-09-28', period_end: '2026-10-04' };
+  assert.deepEqual(defaultPeriod(new Date('2026-09-28T00:00:00+09:00')), wk); // Mon 00:00 KST
+  assert.deepEqual(defaultPeriod(new Date('2026-09-30T12:00:00+09:00')), wk); // Wed → Mon–Sun, not Mon–today
+  assert.deepEqual(defaultPeriod(new Date('2026-10-02T12:00:00+09:00')), wk); // Fri
+  assert.deepEqual(defaultPeriod(new Date('2026-10-04T23:30:00+09:00')), wk); // Sun 23:30 KST
+  assert.deepEqual(defaultPeriod(new Date('2026-10-04T15:30:00Z')), { period_start: '2026-10-05', period_end: '2026-10-11' }); // Sun 15:30 UTC = Mon 00:30 KST → next week
   assert.throws(() => parsePeriod({ period_start: '2026-10-05', period_end: '2026-10-01' }));
   assert.throws(() => parsePeriod({ period_start: 'x', period_end: '2026-10-01' }));
   // data with status changes "this week" (now) and some state
@@ -184,7 +187,7 @@ test('weekly report: default period, generate (structured + sections + markdown)
   const t2 = await A.tc({ title: 'T fail' }); await A.c('POST', `${A.purl}/tests/${t2.id}/executions`, { result: 'FAIL' });
   const a1 = await A.acc({ title: 'Acc accepted', requirements: [r1.id] }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'accept' });
 
-  const list0 = await A.c('GET', `${A.purl}/weekly-reports`); assert.equal(list0.status, 200); assert.deepEqual(list0.json.items, []); assert.ok(list0.json.default_period.period_start);
+  const list0 = await A.c('GET', `${A.purl}/weekly-reports`); assert.equal(list0.status, 200); assert.deepEqual(list0.json.items, []); assert.deepEqual(list0.json.default_period, defaultPeriod()); // Q13-2: API default = this week Mon–Sun (KST)
   const period = { period_start: ymd(-3), period_end: ymd(0) };
   const g = await A.c('POST', `${A.purl}/weekly-reports/generate`, period); assert.equal(g.status, 201, JSON.stringify(g.json));
   const rep = g.json.report; const d = rep.structured_content.data;

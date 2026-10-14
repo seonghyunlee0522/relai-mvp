@@ -83,7 +83,7 @@ export async function testsPage(id) {
         <div class="rtable-wrap">${raw(T === 'coverage' ? coverageTable()
           : rows.length ? (T === 'cases' ? caseTable() : accTable())
           : hasFilter ? emptyFiltered(T === 'cases' ? '테스트' : '검수')
-          : T === 'cases' ? emptyState({ title: '아직 등록된 테스트가 없습니다.', body: '요구사항을 기준으로 테스트를 만들고 실행 결과를 기록하세요. Fail은 바로 Issue로 등록할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 테스트 추가' } })
+          : T === 'cases' ? emptyState({ title: '아직 등록된 테스트가 없습니다.', body: '요구사항을 기준으로 테스트를 만들고 실행 결과를 기록하세요. Fail은 바로 이슈로 등록할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 테스트 추가' } })
           : emptyState({ title: '아직 등록된 검수가 없습니다.', body: '검수 대상 요구사항과 테스트를 묶어 고객에게 검수를 요청하고 결과를 기록하세요.', cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }))}</div>
         <aside class="drawer drawer--cr" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? (isAcc() ? createAcc() : createTest()) : sel ? (isAcc() ? detailAcc() : detailTest()) : '')}</aside>
       </div></div>`;
@@ -157,7 +157,7 @@ export async function testsPage(id) {
       case 'ARCHIVED': return html`보관 처리 <small>${h.changed_by_name || ''}</small>`;
       case 'STATUS_CHANGED': return html`<b>${val('status', h.old_value)}</b> → <b>${val('status', h.new_value)}</b>${raw(h.field_name && h.field_name !== 'status' ? html` <q>${h.field_name}</q>` : '')} <small>${h.changed_by_name || ''}</small>`;
       case 'EXECUTED': return html`실행 <b>#${h.field_name}</b> ${raw(resBadge(h.new_value))} <small>${h.changed_by_name || ''}</small>`;
-      case 'ISSUE_RAISED': return html`실행 <b>${h.field_name}</b> → Issue 등록 <q>${h.new_value}</q>`;
+      case 'ISSUE_RAISED': return html`실행 <b>${h.field_name}</b> → 이슈 등록 <q>${h.new_value}</q>`;
       case 'LINKED': return html`${h.field_name === 'REQUIREMENT' ? '요구사항' : h.field_name === 'TEST' ? '테스트' : 'WBS'} 연결 <q>${h.new_value}</q>`;
       case 'UNLINKED': return html`${h.field_name === 'REQUIREMENT' ? '요구사항' : h.field_name === 'TEST' ? '테스트' : 'WBS'} 연결 해제 <q>${h.old_value}</q>`;
       case 'STEPS_CHANGED': return html`테스트 절차 수정 <small>${h.changed_by_name || ''}</small>`;
@@ -201,9 +201,9 @@ export async function testsPage(id) {
       </section>
       <section data-pane="exec" ${dtab === 'exec' ? '' : 'hidden'}>
       ${raw(x.executions.length ? html`<ol class="exec">${raw(x.executions.map((e) => html`<li class="exec__i exec--${e.result.toLowerCase()}"><details ${e === last ? 'open' : ''}><summary><span class="exec__n">#${e.execution_number}</span>${raw(resBadge(e.result))}<span class="exec__who">${e.executed_by_name || ''}</span><time>${fmtShort(e.executed_at)}</time>
-          ${raw(e.issue_display_id ? html`<a class="chip chip--fail" href="/app/projects/${p.id}/issues?sel=${e.issue_id}" data-link data-stop title="연결된 Issue">${e.issue_display_id} · ${ISSUE_STATUS[e.issue_status] || e.issue_status}</a>` : '')}</summary>
+          ${raw(e.issue_display_id ? html`<a class="chip chip--fail" href="/app/projects/${p.id}/issues?sel=${e.issue_id}" data-link data-stop title="연결된 이슈">${e.issue_display_id} · ${ISSUE_STATUS[e.issue_status] || e.issue_status}</a>` : '')}</summary>
           <div class="exec__b">${raw(e.actual_result ? html`<p><b>실제 결과</b>${e.actual_result}</p>` : '<p class="hint">실제 결과 기록 없음</p>')}${raw(e.note ? html`<p><b>메모</b>${e.note}</p>` : '')}
-            ${raw(e.result === 'FAIL' && !ro ? (e.issue_display_id ? html`<p class="hint">연결된 Issue: <a class="link" href="/app/projects/${p.id}/issues?sel=${e.issue_id}" data-link>${e.issue_display_id}</a></p>` : html`<div class="actions" style="margin-top:4px"><button class="btn btn--secondary btn--sm" data-raise="${e.id}">Issue로 등록</button></div>`) : '')}</div></details></li>`).join(''))}</ol>` : '<p class="hint">아직 실행 기록이 없습니다.</p>')}
+            ${raw(e.result === 'FAIL' && !ro ? (e.issue_display_id ? html`<p class="hint">연결된 이슈: <a class="link" href="/app/projects/${p.id}/issues?sel=${e.issue_id}" data-link>${e.issue_display_id}</a></p>` : html`<div class="actions" style="margin-top:4px"><button class="btn btn--secondary btn--sm" data-raise="${e.id}">이슈로 등록</button></div>`) : '')}</div></details></li>`).join(''))}</ol>` : '<p class="hint">아직 실행 기록이 없습니다.</p>')}
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>
       ${raw(testLinkBlocks(x, ro))}
@@ -234,7 +234,7 @@ export async function testsPage(id) {
       <div class="dsave" id="dsave"></div>
       ${raw(x.decision_note ? html`<div class="decision ${x.status === 'ACCEPTED' ? 'decision--ok' : x.status === 'REJECTED' || x.status === 'REWORK_REQUIRED' ? 'decision--no' : ''}"><p><b>결정 사유</b></p><p><q>${x.decision_note}</q></p></div>` : '')}
       ${raw(actions.length ? html`<div class="decision decision--review">
-        ${raw(x.status === 'DRAFT' ? '<p><b>검수 준비가 끝났나요?</b> 대상 요구사항과 테스트를 연결한 뒤 고객에게 검수를 요청하세요.</p>' : x.status === 'REQUESTED' ? html`<p><b>고객 검수 결과를 기록하세요.</b>${raw(failTests.length || openIssues.length ? html` <span class="warn-inline">Fail 테스트 ${failTests.length}건${openIssues.length ? ` · 처리 중인 Issue ${openIssues.length}건` : ''}이 남아 있습니다.</span>` : ' 연결된 테스트에 남은 Fail이 없습니다.')}</p>` : '<p><b>보완이 끝났나요?</b> 보완 사항을 처리한 뒤 다시 검수를 요청하세요.</p>')}
+        ${raw(x.status === 'DRAFT' ? '<p><b>검수 준비가 끝났나요?</b> 대상 요구사항과 테스트를 연결한 뒤 고객에게 검수를 요청하세요.</p>' : x.status === 'REQUESTED' ? html`<p><b>고객 검수 결과를 기록하세요.</b>${raw(failTests.length || openIssues.length ? html` <span class="warn-inline">Fail 테스트 ${failTests.length}건${openIssues.length ? ` · 처리 중인 이슈 ${openIssues.length}건` : ''}이 남아 있습니다.</span>` : ' 연결된 테스트에 남은 Fail이 없습니다.')}</p>` : '<p><b>보완이 끝났나요?</b> 보완 사항을 처리한 뒤 다시 검수를 요청하세요.</p>')}
         <div class="actions" style="margin-top:0">${raw(actions.map((a) => html`<button class="btn ${a === 'accept' || a === 'submit' || a === 'resubmit' ? 'btn--primary' : a === 'reject' ? 'btn--danger' : 'btn--secondary'} btn--sm" data-act="${a}">${ACC_ACTION_LABEL[a]}</button>`).join(''))}</div></div>` : '')}
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>
@@ -243,7 +243,7 @@ export async function testsPage(id) {
         ${raw(ro || final ? '' : html`<span class="crit__act" style="opacity:1"><button data-unlink="${r.link_id}" title="연결 해제">×</button></span>`)}</li>`).join(''))}</ol>` : '<p class="hint">검수 대상 요구사항이 없습니다.</p>')}
       ${raw(ro || final ? '' : html`<div class="actions" style="margin-top:6px"><button class="btn btn--secondary btn--sm" data-link-add="REQUIREMENT">+ 요구사항 연결</button></div>`)}
       <h4 class="dh">검수 테스트 <em>${liveTests.length}</em><span class="dim" style="margin-left:auto;font-weight:600;text-transform:none;letter-spacing:0">${testSummaryText(x.test_summary)}</span></h4>
-      ${raw(x.tests.length ? html`<ol class="crit links">${raw(x.tests.map((t) => html`<li class="${t.archived_at ? 'is-arch' : ''}"><a class="raidrow" href="/app/projects/${p.id}/tests?sel=${t.id}" data-link><span class="mono">${t.display_id}</span><span class="crit__in" style="padding:6px 4px">${t.title}</span>${raw(t.open_issue ? html`<small class="dim" title="처리 중 Issue">${t.open_issue}</small>` : '')}${raw(resBadge(t.last_result))}</a>
+      ${raw(x.tests.length ? html`<ol class="crit links">${raw(x.tests.map((t) => html`<li class="${t.archived_at ? 'is-arch' : ''}"><a class="raidrow" href="/app/projects/${p.id}/tests?sel=${t.id}" data-link><span class="mono">${t.display_id}</span><span class="crit__in" style="padding:6px 4px">${t.title}</span>${raw(t.open_issue ? html`<small class="dim" title="처리 중 이슈">${t.open_issue}</small>` : '')}${raw(resBadge(t.last_result))}</a>
         ${raw(ro || final ? '' : html`<span class="crit__act" style="opacity:1"><button data-unlink="${t.link_id}" title="연결 해제">×</button></span>`)}</li>`).join(''))}</ol>` : '<p class="hint">연결된 테스트가 없습니다. 검수 근거가 되는 테스트를 연결하세요.</p>')}
       ${raw(ro || final ? '' : html`<div class="actions" style="margin-top:6px"><button class="btn btn--secondary btn--sm" data-link-add="TEST">+ 테스트 연결</button></div>`)}
       </section>
@@ -352,8 +352,8 @@ export async function testsPage(id) {
       try { const d = await api('POST', tApi(`/${x.id}/executions`), r); dtab = 'exec'; await apply(d); toast(`실행 #${d.execution.execution_number} 결과를 기록했습니다.`); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); }
     };
     main.querySelectorAll('[data-raise]').forEach((b) => b.onclick = async () => {
-      if (!(await confirmDialog({ title: 'Fail 결과를 Issue로 등록할까요?', body: `${x.display_id}의 제목·실제 결과·담당자와 연결된 요구사항/WBS를 복사해 새 Issue를 만듭니다. 같은 실행 기록에서는 한 번만 등록됩니다.`, confirm: 'Issue로 등록' }))) return;
-      try { const d = await api('POST', tApi(`/${x.id}/executions/${b.dataset.raise}/issue`), {}); toast(`${d.issue.display_id} Issue를 등록했습니다.`); await apply(d); }
+      if (!(await confirmDialog({ title: 'Fail 결과를 이슈로 등록할까요?', body: `${x.display_id}의 제목·실제 결과·담당자와 연결된 요구사항/WBS를 복사해 새 이슈를 만듭니다. 같은 실행 기록에서는 한 번만 등록됩니다.`, confirm: '이슈로 등록' }))) return;
+      try { const d = await api('POST', tApi(`/${x.id}/executions/${b.dataset.raise}/issue`), {}); toast(`${d.issue.display_id} 이슈를 등록했습니다.`); await apply(d); }
       catch (e) { toast(e.message); if (e.code === 'already_raised') { await loadSel(x.id); draw(); } }
     });
     main.querySelectorAll('[data-link-add]').forEach((b) => b.onclick = async () => {
@@ -393,7 +393,7 @@ export async function testsPage(id) {
       const a = b.dataset.act; let note = '';
       const fails = x.tests.filter((t) => !t.archived_at && t.last_result === 'FAIL').length;
       if (a === 'submit' || a === 'resubmit') { if (!(await confirmDialog({ title: a === 'submit' ? '고객에게 검수를 요청할까요?' : '검수를 다시 요청할까요?', body: `${x.display_id}의 상태가 '검수 요청'으로 바뀌고 요청일이 기록됩니다.${fails ? ` 연결된 테스트 중 Fail ${fails}건이 남아 있습니다.` : ''}`, confirm: ACC_ACTION_LABEL[a] }))) return; }
-      else if (a === 'accept') { if (!(await confirmDialog({ title: '검수를 승인 처리할까요?', body: fails ? `연결된 테스트 중 Fail ${fails}건이 남아 있습니다. 고객이 승인했더라도 남은 결함은 Issue로 관리하세요.` : '고객이 결과물을 확인하고 승인했음을 기록합니다.', confirm: '승인' }))) return; note = await promptDialog({ title: `${x.display_id} 승인`, body: '승인 조건이나 비고가 있으면 적어두세요. (선택)', label: '비고', confirm: '승인 기록' }); if (note === null) return; }
+      else if (a === 'accept') { if (!(await confirmDialog({ title: '검수를 승인 처리할까요?', body: fails ? `연결된 테스트 중 Fail ${fails}건이 남아 있습니다. 고객이 승인했더라도 남은 결함은 이슈로 관리하세요.` : '고객이 결과물을 확인하고 승인했음을 기록합니다.', confirm: '승인' }))) return; note = await promptDialog({ title: `${x.display_id} 승인`, body: '승인 조건이나 비고가 있으면 적어두세요. (선택)', label: '비고', confirm: '승인 기록' }); if (note === null) return; }
       else { note = await promptDialog({ title: a === 'reject' ? `${x.display_id} 반려` : `${x.display_id} 보완 요청`, body: a === 'reject' ? '반려 사유는 필수입니다. 반려된 검수는 다시 진행할 수 없습니다.' : '어떤 항목을 보완해야 하는지 적어두면 다음 요청 때 기준이 됩니다.', label: a === 'reject' ? '반려 사유' : '보완 요청 사유', required: true, confirm: ACC_ACTION_LABEL[a], danger: a === 'reject' }); if (note === null) return; }
       try { await apply(await api('POST', aApi(`/${x.id}/transition`), { action: a, decision_note: note })); toast(`${ACC_ACTION_LABEL[a]} 처리했습니다.`); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); }
     });
