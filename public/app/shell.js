@@ -6,6 +6,7 @@ import { store } from './core/ui.js';
 import { helpButton, wireHelp, maybeWelcome } from './onboarding/ui.js';
 import { tour } from './onboarding/tour.js';
 import { ob } from './onboarding/state.js';
+import { verifyBanner, wireVerifyBanner } from './auth.js';
 
 export const icon = {
   home: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9.5 10 3l7 6.5V17H12v-5H8v5H3z" stroke-linejoin="round"/></svg>',
@@ -61,8 +62,9 @@ export async function shell(path, view, token = null) {
       <header class="topbar"><a class="logo" href="/app" data-link>RELAI</a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
       <aside class="side" id="side"></aside>
       <div class="sidescrim" id="sidescrim" hidden></div>
-      <div class="maincol"><main class="main" id="main"></main>${raw(appFooter())}</div></div>`;
+      <div class="maincol">${raw(verifyBanner())}<main class="main" id="main"></main>${raw(appFooter())}</div></div>`;
     $('#menu').onclick = toggleNav;
+    wireVerifyBanner();
     wireHelp(root);
     $('#sidescrim').onclick = closeNav;
   }

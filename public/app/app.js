@@ -1,7 +1,7 @@
 /* RELAI app entry — wires routes to page modules. All pages are ES modules under /assets/. */
 import { registerRoutes, render } from './core/router.js';
 import { shell } from './shell.js';
-import { authPage } from './auth.js';
+import { authPage, forgotPage, resetPage, verifyPage } from './auth.js';
 import { invitePage } from './invite.js';
 import { homePage } from './project/home.js';   // Workspace Home: project status cards
 import { projectsPage } from './project/list.js';
@@ -62,5 +62,6 @@ registerRoutes([
   [/^\/admin\/email-deliveries\/?$/, adminEmailDeliveriesPage],
   [/^\/admin\/integrations\/?$/, adminIntegrationsPage],
   [/^\/admin\/audit\/?$/, adminAuditPage],
-], { shell: (path, view, token) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view, token)), auth: authPage, invite: invitePage });
+], { shell: (path, view, token) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view, token)), auth: authPage, invite: invitePage,
+  account: { 'forgot-password': forgotPage, 'reset-password': resetPage, 'verify-email': verifyPage } });
 render();

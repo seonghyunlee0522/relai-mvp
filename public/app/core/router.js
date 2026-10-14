@@ -19,12 +19,14 @@ document.addEventListener('click', (e) => {
 });
 window.addEventListener('popstate', render);
 export let routes = [];
-export let shellFn = null; let authFn = null; let inviteFn = null;
-export function registerRoutes(list, { shell, auth, invite = null }) { routes = list; shellFn = shell; authFn = auth; inviteFn = invite; }
+export let shellFn = null; let authFn = null; let inviteFn = null; let accountFns = {};
+export function registerRoutes(list, { shell, auth, invite = null, account = {} }) { routes = list; shellFn = shell; authFn = auth; inviteFn = invite; accountFns = account; }
 export async function render() {
   const token = ++navSeq;
   const path = location.pathname;
   if (/^\/(login|signup)\/?$/.test(path)) return authFn(path.startsWith('/signup') ? 'signup' : 'login');
+  const acct = path.match(/^\/(forgot-password|reset-password|verify-email)\/?$/);   // account-security pages: with or without a session
+  if (acct && accountFns[acct[1]]) return accountFns[acct[1]]();
   const inv = path.match(/^\/invite\/([A-Za-z0-9_-]+)\/?$/);   // public landing: works with or without a session
   if (inv && inviteFn) return inviteFn(inv[1]);
   if (!state.user) {

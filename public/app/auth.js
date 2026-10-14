@@ -45,7 +45,7 @@ export async function authPage(mode) {
           <input class="input" id="email" name="email" type="email" autocomplete="${isSignup ? 'email' : 'username'}" placeholder="${invite && !invite.invalid && isSignup ? `초대받은 이메일 (${invite.email_masked})` : ''}"><div class="err" data-for="email"></div></div>
         <div class="field"><label for="password">비밀번호 <span class="req">*</span></label>
           <input class="input" id="password" name="password" type="password" autocomplete="${isSignup ? 'new-password' : 'current-password'}">
-          ${raw(isSignup ? '<div class="hint">영문과 숫자를 포함해 8자 이상</div>' : '')}<div class="err" data-for="password"></div></div>
+          ${raw(isSignup ? '<div class="hint">영문과 숫자를 포함해 8자 이상</div>' : '<div class="hint"><a class="link" href="/forgot-password">비밀번호를 잊으셨나요?</a></div>')}<div class="err" data-for="password"></div></div>
         <button class="btn btn--primary btn--lg btn--block" type="submit">${isSignup ? (invite && !invite.invalid ? '가입하고 초대 수락하기' : '가입하고 시작하기') : '로그인'}</button>
       </form>
       ${raw(google.enabled ? googleButton(googleHref) : '')}
@@ -81,4 +81,84 @@ export async function authPage(mode) {
       showErrors(form, err.fields, err.message);
     }
   });
+}
+
+/* ---------- account security: forgot / reset password, e-mail verification (work with or without a session) ---------- */
+const authCard = (title, sub, body) => html`<div class="auth"><main class="auth__form">
+    <a class="logo" href="/">RELAI</a><h1>${title}</h1><p class="sub">${sub}</p>${raw(body)}
+    <p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p></main>
+  <aside class="auth__side"><blockquote><h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
+    <p>RELAI가 프로젝트의 시작부터 종료까지 다음에 해야 할 일을 안내합니다.</p></blockquote></aside></div>`;
+const linkToken = () => { const t = new URLSearchParams(location.search).get('token') || ''; history.replaceState(null, '', location.pathname); return t; };   // keep the token out of history
+
+export function forgotPage() {
+  document.title = '비밀번호 찾기 — RELAI';
+  root.innerHTML = authCard('비밀번호 찾기', '가입한 이메일을 입력하면 비밀번호 재설정 링크를 보내 드립니다.', html`<form id="f" novalidate>
+    <div class="form-err" id="ferr" role="alert" hidden></div>
+    <div class="field"><label for="email">이메일 <span class="req">*</span></label><input class="input" id="email" name="email" type="email" autocomplete="username"><div class="err" data-for="email"></div></div>
+    <button class="btn btn--primary btn--lg btn--block" type="submit">재설정 링크 받기</button></form>`);
+  const form = $('#f'); $('#email').focus();
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault(); showErrors(form, {});
+    const email = $('#email').value.trim(); if (!email) return showErrors(form, { email: '이메일을 입력해 주세요.' });
+    const btn = $('button[type=submit]', form); btn.disabled = true;
+    try {
+      await api('POST', '/api/auth/password/forgot', { email });
+      form.outerHTML = html`<div class="notice" role="status">${email} 로 가입된 계정이 있다면 재설정 링크를 보냈습니다. 링크는 30분 동안 한 번만 사용할 수 있습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.</div>`;
+    } catch (err) { btn.disabled = false; showErrors(form, err.fields, err.message); }
+  });
+}
+
+export function resetPage() {
+  document.title = '새 비밀번호 설정 — RELAI';
+  const token = linkToken();
+  if (!token) { root.innerHTML = authCard('링크가 올바르지 않습니다', '메일의 링크를 다시 열거나 재설정 링크를 새로 받아 주세요.', '<a class="btn btn--primary btn--lg btn--block" href="/forgot-password">재설정 링크 다시 받기</a>'); return; }
+  root.innerHTML = authCard('새 비밀번호 설정', '새 비밀번호를 정하면 모든 기기에서 로그아웃되고, 새 비밀번호로 다시 로그인합니다.', html`<form id="f" novalidate>
+    <div class="form-err" id="ferr" role="alert" hidden></div>
+    <div class="field"><label for="password">새 비밀번호 <span class="req">*</span></label><input class="input" id="password" name="password" type="password" autocomplete="new-password"><div class="hint">영문과 숫자를 포함해 8자 이상</div><div class="err" data-for="password"></div></div>
+    <div class="field"><label for="password2">새 비밀번호 확인 <span class="req">*</span></label><input class="input" id="password2" name="password2" type="password" autocomplete="new-password"><div class="err" data-for="password2"></div></div>
+    <button class="btn btn--primary btn--lg btn--block" type="submit">비밀번호 변경</button></form>`);
+  const form = $('#f'); $('#password').focus();
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault(); showErrors(form, {});
+    const pw = $('#password').value; const local = {};
+    if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) local.password = '비밀번호는 영문과 숫자를 포함해 8자 이상이어야 합니다.';
+    if (pw !== $('#password2').value) local.password2 = '비밀번호가 일치하지 않습니다.';
+    if (Object.keys(local).length) return showErrors(form, local);
+    const btn = $('button[type=submit]', form); btn.disabled = true;
+    try {
+      await api('POST', '/api/auth/password/reset', { token, password: pw });
+      state.user = null;
+      form.outerHTML = html`<div class="notice" role="status">비밀번호를 변경했습니다. 새 비밀번호로 로그인해 주세요.</div><a class="btn btn--primary btn--lg btn--block" href="/login">로그인</a>`;
+    } catch (err) {
+      btn.disabled = false;
+      if (err.code === 'token_invalid') form.outerHTML = html`<div class="notice notice--warn" role="alert">${err.message}</div><a class="btn btn--primary btn--lg btn--block" href="/forgot-password">재설정 링크 다시 받기</a>`;
+      else showErrors(form, err.fields, err.message);
+    }
+  });
+}
+
+export async function verifyPage() {
+  document.title = '이메일 인증 — RELAI';
+  const token = linkToken();
+  root.innerHTML = authCard('이메일 인증', '잠시만 기다려 주세요…', '<div class="loading">확인 중…</div>');
+  let ok = false; let msg = '인증 링크가 올바르지 않습니다.';
+  if (token) { try { await api('POST', '/api/auth/email/verify', { token }); ok = true; } catch (err) { msg = err.message; } }
+  if (state.user && ok) state.user.email_verified = true;
+  root.innerHTML = ok
+    ? authCard('이메일이 인증되었습니다', '이제 팀원 초대와 결제를 포함한 모든 기능을 사용할 수 있습니다.', '<a class="btn btn--primary btn--lg btn--block" href="/app">RELAI 시작하기</a>')
+    : authCard('인증하지 못했습니다', msg, '<p class="dim" style="margin-bottom:16px">로그인한 뒤 화면 상단의 안내에서 인증 메일을 다시 받을 수 있습니다.</p><a class="btn btn--primary btn--lg btn--block" href="/app">RELAI로 이동</a>');
+}
+
+/** In-app banner for unverified accounts (shown above every page until verified). */
+export const verifyBanner = () => (state.user && state.user.email_verified === false ? html`<div class="verifybar" id="verifybar" role="status">
+  <span><b>${state.user.email}</b> 주소 인증이 필요합니다. 인증 전에는 팀원 초대와 결제를 할 수 없습니다.</span>
+  <button class="btn btn--secondary btn--sm" id="verify-resend" type="button">인증 메일 다시 받기</button></div>` : '');
+export function wireVerifyBanner() {
+  const b = $('#verify-resend'); if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true;
+    try { const r = await api('POST', '/api/auth/email/resend', {}); b.textContent = r.already_verified ? '이미 인증되었습니다' : '메일을 보냈습니다'; if (r.already_verified) $('#verifybar').remove(); }
+    catch (err) { b.disabled = false; b.textContent = err.code === 'rate_limited' ? '잠시 후 다시 시도해 주세요' : '다시 시도'; }
+  };
 }

@@ -49,6 +49,7 @@ export const migrations = [
     // projects.project_type) loses it again in the same boot, so re-add it here. Existing projects: type NULL, the rest TBD.
     await db.run(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT CHECK (project_type IN ('NEW_BUILD','ENHANCEMENT','TRANSITION','OTHER'))`);
   } },
+  { version: 25, name: 'auth hardening: auth_tokens (password reset / e-mail verification, hashed, single use), rate_limits (shared limiter for serverless)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

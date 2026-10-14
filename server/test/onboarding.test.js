@@ -12,6 +12,8 @@ const google = fakeGoogleProvider(); setGoogleProvider(google);
 
 const linkOf = (msg) => (msg.text.match(/https:\/\/relai\.test\/invite\/([A-Za-z0-9_-]+)/) || [])[1];
 const lastToken = () => linkOf(mail.last());
+// Direct signups start unverified and cannot send invitations (auth hardening) — the inviting owners/admins below verify first.
+const verify = (db, ...uids) => Promise.all(uids.map((id) => db.run('UPDATE users SET email_verified_at = now() WHERE id = ?', [id])));
 async function admin(client, db, email = 'root@relai.test') { const c = client(); const s = await c('POST', '/api/auth/signup', { name: '운영자', email, password: 'passw0rd!' }); await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]); return { c, uid: s.json.user.id }; }
 const signup = async (client, { name, email, invite_token }) => { const c = client(); const r = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!', invite_token }); return { c, r }; };
 const login = async (client, email) => { const c = client(); const r = await c('POST', '/api/auth/login', { email, password: 'passw0rd!' }); return { c, r }; };
@@ -102,6 +104,7 @@ test('platform invitation: admin only, unknown/existing e-mail, duplicate pendin
 test('member invitation: OWNER→MEMBER/ADMIN, ADMIN→MEMBER only, MEMBER forbidden, existing member, duplicate, accept new/existing user, wrong e-mail, no new workspace, role exact, suspended workspace, double accept, isolation', async () => {
   const { server, client, db } = await boot();
   const O = await setup(client, 'owner@acme.co.kr', '홍길동'); const AD = await addMember(client, O, 'admin@acme.co.kr', '관리자', 'ADMIN'); const M = await addMember(client, O, 'member@acme.co.kr', '멤버', 'MEMBER');
+  await verify(db, O.uid, AD.uid, M.uid);
   const W = `/api/workspaces/${O.w}/invitations`;
   assert.equal((await M.c('POST', W, { email: 'x@y.com', role: 'MEMBER' })).status, 403);
   let r = await AD.c('POST', W, { email: 'a1@acme.co.kr', role: 'ADMIN' }); assert.equal(r.status, 403);
@@ -142,7 +145,7 @@ test('member invitation: OWNER→MEMBER/ADMIN, ADMIN→MEMBER only, MEMBER forbi
 
 test('concurrent accept: one membership, one ACCEPTED; concurrent platform accept: one workspace', async () => {
   const { server, client, db } = await boot();
-  const O = await setup(client, 'o@acme.co.kr'); const ad = await admin(client, db);
+  const O = await setup(client, 'o@acme.co.kr'); const ad = await admin(client, db); await verify(db, O.uid);
   await O.c('POST', `/api/workspaces/${O.w}/invitations`, { email: 'c@acme.co.kr', role: 'MEMBER' }); const t = lastToken();
   const C = await signup(client, { name: 'c', email: 'c@acme.co.kr' });
   const rs = await Promise.all([1, 2, 3, 4].map(() => C.c('POST', `/api/invitations/${t}/accept`, {})));
@@ -190,7 +193,7 @@ test('google: new signup (personal workspace), same verified e-mail links to pas
   r = await ic('GET', `/api/invitations/${t}`); assert.equal(r.json.invitation.me.email_matches, true);
   r = await ic('POST', `/api/invitations/${t}/accept`, {}); assert.equal(r.status, 200); const ws = (await ic('GET', '/api/me')).json.workspaces; assert.equal(ws.length, 1); assert.equal(ws[0].name, 'Startup'); assert.equal(ws[0].role, 'OWNER');
   // 43. member invite via Google (new user) → membership only
-  const O = await setup(client, 'o@startup.io'); await O.c('POST', `/api/workspaces/${O.w}/invitations`, { email: 'eng@startup.io', role: 'MEMBER' }); const mt = lastToken();
+  const O = await setup(client, 'o@startup.io'); await verify(db, O.uid); await O.c('POST', `/api/workspaces/${O.w}/invitations`, { email: 'eng@startup.io', role: 'MEMBER' }); const mt = lastToken();
   const ec = client(); r = await googleLogin(ec, { sub: 'g-600', email: 'eng@startup.io' }, { invite: mt }); r = await ec('POST', `/api/invitations/${mt}/accept`, {}); assert.equal(r.status, 200);
   const ews = (await ec('GET', '/api/me')).json.workspaces; assert.equal(ews.length, 1); assert.equal(ews[0].id, O.w); assert.equal(ews[0].role, 'MEMBER');
   // 44. invite e-mail mismatch: Google account differs → accept blocked with masked hint
@@ -231,7 +234,7 @@ test('e-mail: fake provider, platform + member mails, failed delivery keeps the 
   // host header does not influence links
   const base = `http://127.0.0.1:${server.address().port}`;
   const res = await fetch(`${base}/api/admin/invitations`, { method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'evil.example', cookie: '' }, body: '{}' }); assert.equal(res.status, 401);
-  assert.ok(mail.outbox.every((m) => m.text.includes('https://relai.test/invite/') && !m.text.includes('127.0.0.1') && !m.text.includes('evil.example')));
+  assert.ok(mail.outbox.every((m) => m.text.includes('https://relai.test/') && !m.text.includes('127.0.0.1') && !m.text.includes('evil.example')));
   const list = await ad.c('GET', '/api/admin/email-deliveries?status=FAILED'); assert.equal(list.status, 200); assert.ok(list.json.items.some((x) => x.invitation_id === inv.id));
   server.close();
 });

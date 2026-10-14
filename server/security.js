@@ -21,23 +21,30 @@ export async function verifyPassword(pw, stored) {
 export const newToken = () => randomBytes(32).toString('base64url');
 export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
-/** Tiny in-memory limiter for login/signup brute force. Swap for Redis when scaled out. */
-export function rateLimiter({ max, windowMs }) {
-  const hits = new Map();
+/**
+ * Fixed-window rate limiter backed by the `rate_limits` table, so every serverless instance shares one count and a cold
+ * start does not reset it. Keys are stored as sha256(name:key) — no raw IPs or e-mail addresses at rest.
+ *   blocked(key) → true when the current window already holds `max` hits
+ *   hit(key)     → counts one hit (opens a new window when the old one has ended)
+ *   reset(key)   → forgets the key (e.g. after a successful login)
+ * Expired rows are removed by purgeExpired() (server/maintenance.js).
+ */
+export function rateLimiter(db, { name, max, windowMs }) {
+  if (!db || !name) throw new Error('rateLimiter(db, { name, max, windowMs })');
+  const k = (key) => sha256(`${name}:${key}`);
   return {
-    blocked(key) {
-      const now = Date.now();
-      const arr = (hits.get(key) || []).filter((t) => now - t < windowMs);
-      hits.set(key, arr);
-      return arr.length >= max;
+    async blocked(key) {
+      const row = await db.get('SELECT count FROM rate_limits WHERE key = ? AND reset_at > now()', [k(key)]);
+      return Boolean(row) && Number(row.count) >= max;
     },
-    hit(key) {
-      const arr = hits.get(key) || [];
-      arr.push(Date.now());
-      hits.set(key, arr);
+    async hit(key) {
+      await db.run(`INSERT INTO rate_limits (key, count, reset_at) VALUES (?, 1, now() + (?::double precision * interval '1 millisecond'))
+        ON CONFLICT (key) DO UPDATE SET
+          count    = CASE WHEN rate_limits.reset_at <= now() THEN 1 ELSE rate_limits.count + 1 END,
+          reset_at = CASE WHEN rate_limits.reset_at <= now() THEN EXCLUDED.reset_at ELSE rate_limits.reset_at END`, [k(key), windowMs]);
     },
-    reset(key) {
-      hits.delete(key);
+    async reset(key) {
+      await db.run('DELETE FROM rate_limits WHERE key = ?', [k(key)]);
     },
   };
 }

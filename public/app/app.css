@@ -2276,3 +2276,6 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .trf2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
 @media (max-width:640px){.trf2{grid-template-columns:1fr}}
 .chx__kvs--traits{margin-top:4px}
+/* unverified e-mail banner (auth hardening) */
+.verifybar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#FEF6E7;border-bottom:1px solid #F5D08A;color:#8A4B08;padding:10px 24px;font-size:14px}
+.verifybar span{min-width:0;overflow-wrap:anywhere}

@@ -48,13 +48,14 @@ DATABASE_URL=postgres://…/relai node scripts/migrate-sqlite-to-postgres.js --s
 - 서버 메모리에 세션 없음. `sessions(token_hash, user_id, expires_at)` 테이블에 저장되므로 다중 인스턴스에서 공유된다(테스트: 같은 DB의 두 번째 `createApp` 인스턴스가 동일 쿠키를 인증).
 - 토큰은 256-bit 랜덤, DB에는 `sha256(SESSION_SECRET + token)`만 저장 → 테이블 유출만으로 재사용 불가.
 - 쿠키: `HttpOnly; SameSite=Lax; Path=/; Max-Age=30일`, production은 `Secure` + `__Host-relai_sid`. 개발(localhost)은 `relai_sid`.
-- 만료 행 정리: `DELETE FROM sessions WHERE expires_at < now()`를 주기 작업(cron)으로 돌린다. `idx_sessions_expires` 있음.
+- 만료 행 정리: `server/maintenance.js purgeExpired()` — 만료 세션, 하루 지난 auth_tokens, 끝난 rate_limits 창, 만료 OAuth state 삭제. Vercel은 `vercel.json crons` → `GET /api/cron/purge` (매일 18:30 UTC, `Authorization: Bearer $CRON_SECRET`; `CRON_SECRET` 미설정 시 라우트 404). 장기 실행 호스트는 `scripts/integration-cron.js`가 같은 정리를 함께 실행. `idx_sessions_expires` 있음.
 - CSRF: SameSite=Lax + Origin 검사 + 비-GET은 `application/json`만 허용.
 
-## 6. Rate Limit 한계
-- `server/security.js rateLimiter`는 **프로세스 메모리** Map 기반(로그인 8회/15분, 가입 10회/1시간, IP 키).
-- 다중 인스턴스에서는 인스턴스별로 따로 센다 → 실제 한도는 인스턴스 수 배. 로드밸런서 뒤 단일 인스턴스이거나 sticky session이면 문제 없음.
-- 확장 시 선택지: PostgreSQL `rate_limits(key, window_start, count)` 테이블(동시성은 `INSERT … ON CONFLICT DO UPDATE`), 또는 Redis. Phase 10 결제 Webhook 엔드포인트는 Provider IP 기준 별도 정책이 필요하므로 `rateLimiter`를 공유하지 말고 엔드포인트별 인스턴스를 만든다(`app.use('/api/billing/webhook', …)` 전용).
+## 6. Rate Limit
+- `server/security.js rateLimiter(db, { name, max, windowMs })`는 **PostgreSQL `rate_limits(key, count, reset_at)`** 고정 창 카운터(`INSERT … ON CONFLICT DO UPDATE`). 모든 서버리스 인스턴스가 같은 카운트를 보고, 콜드 스타트로 초기화되지 않는다(테스트: 같은 DB의 두 번째 `createApp` 인스턴스가 첫 인스턴스의 로그인 실패로 429).
+- key는 `sha256(name:key)`로 저장 — IP/이메일 원문은 DB에 남지 않는다. 끝난 창은 purge가 지운다.
+- 한도: 로그인 8회/15분(IP+이메일, 성공 시 초기화), 가입 10회/1시간(IP), 비밀번호 찾기 10회/1시간(IP) + 3회/1시간(이메일, 초과 시 조용히 미발송), 재설정 20회/1시간(IP), 인증 링크 30회/1시간(IP), 인증 메일 재발송 3회/1시간(사용자), 초대·Google 시작 한도는 `server/auth/routes.js`.
+- 결제 Webhook 엔드포인트는 Provider IP 기준 별도 정책이 필요하므로 전용 `name`으로 인스턴스를 따로 만든다.
 
 ## 7. Role Policy (`server/authz.js`)
 | 작업 | OWNER | ADMIN | MEMBER |
