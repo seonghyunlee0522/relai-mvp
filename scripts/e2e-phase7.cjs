@@ -184,6 +184,9 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-1 ? 툴팁 완료보고서', /프로젝트 결과·계획 대비 차이·남은 일·교훈/.test(await page.getAttribute('.doc__meta .term', 'data-tip')));
   const enRep = enOf(await textOf('main'));
   check('US-6 완료보고서 화면 영어 UI 없음', !enRep, enRep);
+  await page.waitForSelector('.lnb__i.is-active', { timeout: 5000 }).catch(() => {});
+  const lnbAct = await page.$$eval('.lnb__i.is-active', (e) => e.map((x) => x.textContent.trim()));
+  check('Q16-4 완료보고서 화면: LNB = 07 › 종료 정리 (주간보고 아님)', lnbAct.length === 1 && lnbAct[0] === '종료 정리', JSON.stringify(lnbAct));
   await page.fill('[data-lesson="good"]', '- 요구사항 기준선 승인을 일찍 받아 변경 다툼이 적었다'); await page.dispatchEvent('[data-lesson="good"]', 'change');
   await page.fill('[data-lesson="next"]', '- 이관 리허설을 두 번 한다'); await page.dispatchEvent('[data-lesson="next"]', 'change');
   await page.waitForFunction(() => /저장됨/.test(document.querySelector('#dsave')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
@@ -223,6 +226,10 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   const prim2 = await primaries(page, 'main');
   check('US-2 종료 후 primary 1개 = 완료보고서 보기 (링크 = 이 보고서)', prim2.length === 1 && prim2[0] === '완료보고서 보기' && (await page.getAttribute('[data-closed] .btn--primary', 'href')).endsWith(rid), JSON.stringify(prim2));
   check('US-2 종료 후 빨강·주황 독촉 없음', (await page.$$('main .rg__warn, main .is-crit:not(details *), main .st--warn:not(details *)')).length === 0);
+  const AMBER = /rgb\((180, 83, 9|217, 119, 6|254, 246, 231)\)/;   // --warn-fg · --warn · --warn-bg
+  const nagN = await page.$$eval('.lnb__n, .pstep__n', (e) => e.length);
+  const amberN = await page.$$eval('.lnb__ph.is-gap .lnb__mark, .pstep li.is-gap a, .pstep li.is-gap .st', (els, re) => els.filter((e) => new RegExp(re).test(`${getComputedStyle(e).color} ${getComputedStyle(e).backgroundColor}`)).length, AMBER.source);
+  check('M1 종료 후 LNB·단계 표시줄: 주황 숫자 없음 (회색)', nagN === 0 && amberN === 0, `counts ${nagN} amber ${amberN}`);
   await shot('g-06-closed-whatsnext.png');
   const enClosed = enOf(await textOf('main'));
   check('US-6 종료 화면 영어 UI 없음', !enClosed, enClosed);
@@ -253,6 +260,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   G = (await api('GET', A.P)).json;
   check('US-2 종료 취소 → 진행 중 · closed_on 비움 · 07 안내 다시', G.project.status === 'ACTIVE' && G.project.closed_on === null && /프로젝트를 종료하세요/.test(await page.textContent('.rg__title')), G.guidance.rule);
   check('US-2 나중에 종료: 07 가이드 primary = "프로젝트 종료"', /프로젝트 종료/.test((await primaries(page, '.rg')).join('|')));
+  check('M1 종료 취소 → 남은 필수 업무 숫자 다시 표시', (await page.$$('.lnb__n')).length > 0 && (await page.$$('.pstep__n')).length > 0);
   // 종료 again through the guide CTA → dialog (나중에 = nothing changes)
   await page.click('.rg .btn--primary'); await page.waitForSelector('[data-close-dialog]');
   await page.click('[data-cl-later]');

@@ -905,6 +905,7 @@ h1,h2,h3{letter-spacing:-0.025em}
 .lnb__ph.is-cur{box-shadow:inset 3px 0 0 var(--blue);border-radius:0 var(--r) var(--r) 0}
 .lnb__ph.is-done .lnb__mark{background:var(--ok-bg);color:var(--ok-fg)}
 .lnb__ph.is-gap .lnb__mark{background:var(--warn-bg);color:var(--warn-fg)}
+.lnb__ph.is-quiet.is-gap .lnb__mark{background:var(--border-soft);color:var(--text-3)}   /* Q16-1: closed project — no amber */
 .lnb__ph.is-done .lnb__phh{color:var(--text-2)}
 .lnb__ph.is-todo .lnb__phh{color:var(--text-3)}
 .lnb__pn{min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -1935,6 +1936,7 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .pstep li.is-cur a{color:var(--blue-deep);font-weight:700}.pstep li.is-cur .st{color:var(--blue)}
 .pstep li.is-todo .st{color:var(--border-strong)}
 .pstep li.is-gap a{color:var(--warn-fg)}.pstep li.is-gap .st{color:var(--warn)}
+.pstep li.is-quiet.is-gap a{color:var(--text-2)}.pstep li.is-quiet.is-gap .st{color:var(--muted)}   /* Q16-1 */
 .pstep__n{font-size:var(--fs-2xs);font-weight:700;color:var(--warn-fg);background:var(--warn-bg);border-radius:999px;padding:0 6px;min-width:18px;text-align:center}
 /* RELAI Guide (compact: 완료 · 현재 meta → next action) */
 .rg{background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:10px}
@@ -2075,7 +2077,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 /* lifecycle position dots (project list) */
 .lcpos{display:inline-flex;gap:3px;align-items:center}
 .lcpos i{display:inline-block;width:14px;height:5px;border-radius:var(--r-sm);background:var(--border)}
-.lcpos i.is-done{background:var(--ok)}.lcpos i.is-cur{background:var(--blue)}.lcpos i.is-gap{background:var(--warn)}
+.lcpos i.is-done{background:var(--ok)}.lcpos i.is-cur{background:var(--blue)}.lcpos i.is-gap{background:var(--warn)}.lcpos i.is-quiet{background:var(--muted)}
 /* ---------- badges: status (완료/진행 중/미시작/제외/확인 필요) and importance (필수/권장/선택) — same semantic colors as chips/health ---------- */
 .badge{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:var(--fs-xs);font-weight:700;white-space:nowrap;line-height:1;background:var(--border-soft);color:var(--text-2);flex:none}
 .badge--req{background:var(--danger-bg);color:var(--danger-fg);height:18px;padding:0 6px;font-size:var(--fs-2xs)}

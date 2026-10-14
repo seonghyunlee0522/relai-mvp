@@ -35,17 +35,18 @@ export async function guidanceContext(db, project) {
   const goLive = (await goLiveOf(db, project.id));   // Phase 6 US-3: 오픈 기록 (오픈일 · 운영 이관)
   const later = ['TRANSITION_GO_LIVE', 'OPERATIONS'].includes(project.current_phase);
   const dataReqs = later && project.data_migration === 'YES' ? (await db.all(`SELECT id, display_id, title FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND type = 'DATA' ORDER BY sequence_number LIMIT 5`, [project.id])) : [];   // US-4
-  const carried = later && goLive ? (await carriedStillOpen(db, project.id, goLive)) : { critical_issues_carried: 0, open_issues_carried: 0, approved_crs_carried: 0 };
+  const carried = goLive ? (await carriedStillOpen(db, project.id, goLive)) : { critical_issues_carried: 0, open_issues_carried: 0, blocked_issues_carried: 0, approved_crs_carried: 0 };
+  const gStats = lessCarried(stats, carried);   // Phase 7 M2: 운영 이관 items are recorded, not open work — every activity / guidance count skips them
   // Phase 7: 운영 인수 (HANDOVER) · 완료보고서 (CLOSE) · 이관 뒤 독촉 제외 (US-4)
   const ops = project.current_phase === 'OPERATIONS' || project.status === 'COMPLETED';
   const handover = ops ? (await handoverOf(db, project.id)) : null;
   const completionReport = ops ? (await completionState(db, project.id)) : { state: 'NONE', report_id: null, finalized_at: null };
-  const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections, req_baseline: reqBaseline }, traits, overdue_tasks: overdue, key_dates_pending: keyDatesPending,
+  const guide = (await loadGuide(db, project, { stats: gStats, definition: { sections: def.sections, req_baseline: reqBaseline }, traits, overdue_tasks: overdue, key_dates_pending: keyDatesPending,
     weekly_report: (await weeklyReportState(db, project.id)), go_live: goLive, data_requirements: dataReqs,   // 04 WEEKLY_REPORT (US-3)
-    handover, completion_report: completionReport, carried: { open_issues: carried.open_issues_carried, approved_crs: carried.approved_crs_carried } }));
+    handover, completion_report: completionReport }));
   const scopeOut = (def.definition.scope_out || []).map((x) => x.text).filter(Boolean);   // Charter 제외 범위 → 02 범위 확정 hint
   const goLiveCtx = later && goLive ? { ...goLive, ...carried, owners: ownerCounts(goLive.carryovers) } : null;
-  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats, overdue_tasks: overdue, go_live: goLiveCtx, completion_report: completionReport });
+  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats: gStats, overdue_tasks: overdue, go_live: goLiveCtx, completion_report: completionReport });
   return { stats, def, overdue, guide, guidance, reqBaseline, goLive, handover, completionReport, carriedIds: carriedIdSet(goLive) };
 }
 
@@ -54,12 +55,21 @@ const ATT_TYPE = { ISSUE: 'ISSUE', CHANGE: 'CR', TEST: 'TEST', ACCEPTANCE: 'ACCE
 export const carriedIdSet = (gl) => new Set((gl ? gl.carryovers : []).map((c) => `${c.type}:${c.id}`));
 export const notCarried = (items, ids) => (ids && ids.size ? items.filter((i) => !ids.has(`${ATT_TYPE[i.type] || i.type}:${i.id}`)) : items);
 
+/** stats with the still-open 운영 이관 issues / approved CRs taken out (issues.carried keeps how many). Pure. */
+export function lessCarried(stats, c) {
+  const is = stats.issues || {}; const ch = stats.changes || {}; const sub = (a, b) => Math.max(0, n(a) - n(b));
+  if (!n(c.open_issues_carried) && !n(c.approved_crs_carried)) return stats;
+  return { ...stats, issues: { ...is, active: sub(is.active, c.open_issues_carried), critical: sub(is.critical, c.critical_issues_carried), blocked: sub(is.blocked, c.blocked_issues_carried), carried: n(c.open_issues_carried) },
+    changes: { ...ch, approved_unimplemented: sub(ch.approved_unimplemented, c.approved_crs_carried), carried: n(c.approved_crs_carried) } };
+}
+
 /** Issues / approved CRs carried into 07 at 오픈 that are still open — they are recorded already, not a new warning. */
 async function carriedStillOpen(db, projectId, gl) {
   const ids = (t) => gl.carryovers.filter((c) => c.type === t).map((c) => c.id);
   const cnt = async (sql, list) => (list.length ? n((await db.get(`${sql} AND id IN (${list.map(() => '?').join(',')})`, [projectId, ...list])).n) : 0);
   return { critical_issues_carried: await cnt(`SELECT COUNT(*) n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED') AND severity = 'CRITICAL'`, ids('ISSUE')),
     open_issues_carried: await cnt(`SELECT COUNT(*) n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED')`, ids('ISSUE')),
+    blocked_issues_carried: await cnt(`SELECT COUNT(*) n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status = 'BLOCKED'`, ids('ISSUE')),
     approved_crs_carried: await cnt(`SELECT COUNT(*) n FROM change_requests WHERE project_id = ? AND archived_at IS NULL AND status = 'APPROVED'`, ids('CR')) };
 }
 
@@ -117,7 +127,7 @@ export async function homeCard(db, row, { today } = {}) {
     planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date,
     current_phase: project.current_phase, current_phase_name: project.current_phase_name, current_phase_sequence: project.current_phase_sequence,
     guidance: g ? { rule: g.rule, kind: guidanceKind(g), title: g.title, description: g.description, primary_action: g.primary_action, secondary_action: g.secondary_action, warnings: g.warnings } : null,
-    phase_states: ctx.guide.phases.map((p) => p.display_state),   // B-1: the lifecycle bar uses the same gate-based ✓ as the LNB / stepper
+    phase_states: ctx.guide.phases.map((p) => (project.status === 'COMPLETED' && p.display_state === 'gap' ? 'quiet' : p.display_state)),   // Q16-1: a closed project's bar has no amber   // B-1: the lifecycle bar uses the same gate-based ✓ as the LNB / stepper
     next_phase: ctx.guide.next_phase ? { key: ctx.guide.next_phase.phase_key, name: ctx.guide.next_phase.name, sequence: ctx.guide.next_phase.sequence } : null,
     wbs: { tasks: n(w.tasks), progress: w.progress ?? 0, planned_progress: w.planned_progress ?? null, variance: w.variance ?? null,
       overdue_tasks: n(w.overdue_tasks), overdue_milestones: n(w.overdue_milestones), max_overdue_days: n(w.max_overdue_days), tasks_without_dates: n(w.tasks_without_dates) },

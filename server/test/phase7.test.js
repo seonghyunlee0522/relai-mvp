@@ -330,3 +330,39 @@ test('migration 38: report_type + 1건 index, closed_on / warranty / handover co
   assert.equal((await db.get(`SELECT report_type FROM weekly_reports WHERE project_id = ? LIMIT 1`, [A.p.id])).report_type, 'COMPLETION');
   server.close();
 });
+
+/* ---------- acceptance fixes (M2 · Q16-3) ---------- */
+test('M2 운영 이관: a carried CRITICAL issue + approved CR are not open work — 04 ISSUES met, no 심각한 이슈 in guidance or 완료보고서 6절', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client); const F = await ready07(A);
+  const G = await g(A);
+  const iss = st(G, 'ISSUES', 'DEVELOPMENT');
+  assert.equal(iss.state, 'COMPLETED', JSON.stringify(iss)); assert.match(iss.text, /1건 운영 이관/);
+  assert.doesNotMatch(st(G, 'CHANGES', 'DEVELOPMENT').text, /미반영/);
+  const all = JSON.stringify([G.guidance, G.phases.map((p) => p.steps.map((s) => s.text))]);
+  assert.doesNotMatch(all, /심각한 이슈|심각 \d|미반영 변경/);
+  assert.ok(!G.prior_gaps.some((x) => x.step_key === 'ISSUES'), JSON.stringify(G.prior_gaps));
+  assert.equal((await A.c('POST', `${A.purl}/handover`, handoverBody(G))).status, 200);
+  const rep = (await A.c('POST', `${A.purl}/weekly-reports/completion`, {})).json.report;
+  const six = rep.structured_content.sections.find((s) => s.key === 'carryover').body;
+  assert.match(six, new RegExp(`${F.issue.display_id} 야간 배치 지연`), 'still listed as handed over');
+  assert.doesNotMatch(six, /04 이슈 관리|심각한 이슈/); assert.doesNotMatch(rep.rendered_content, /심각한 이슈/);
+  // the issue screen still counts it (real data, not 독촉)
+  assert.equal(Number((await A.c('GET', `${A.purl}/issues`)).json.issues.critical), 1);
+  server.close();
+});
+
+test('Q16-3 종료일: not before 오픈일 (422, Korean message); 오픈일 itself is fine', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client); await ready07(A);
+  let G = await g(A);
+  assert.equal((await A.c('POST', `${A.purl}/handover`, handoverBody(G))).status, 200);
+  G = await g(A);
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${st(G, 'CLOSE').id}`, { status: 'COMPLETED', reason: '외부 문서' })).status, 200);
+  let r = await A.c('POST', `${A.purl}/close`, { closed_on: addDays(T, -3) });
+  assert.equal(r.status, 422); assert.equal(r.json.error.code, 'invalid_closed_on');
+  assert.match(JSON.stringify(r.json), new RegExp(`종료일은 오픈일\\(${addDays(T, -2)}\\)보다 앞설 수 없습니다`));
+  r = await A.c('POST', `${A.purl}/close`, { closed_on: addDays(T, -2) });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  server.close();
+});

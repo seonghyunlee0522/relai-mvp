@@ -102,12 +102,15 @@ export function closeDialog(pid, g) {
     const today = todayKst(); let closed = today; let warranty = addMonths(today, 12); let wTouched = false;
     const carry = (g.go_live && g.go_live.carryovers) || []; const assigned = carry.filter((c) => c.owner_ref && c.owner_ref !== 'TBD').length;
     const ready = closeReady(g);
+    const start = String((g.project && g.project.planned_start_date) || '').slice(0, 10); const glDate = (g.go_live && g.go_live.date) || '';
+    const floor = glDate ? { date: glDate, label: '오픈일' } : start && start <= today ? { date: start, label: '프로젝트 시작일' } : null;   // Q16-3 (same rule as server closing.js)
+    const dateErr = (d) => (d > today ? '종료일은 오늘 이후 날짜로 정할 수 없습니다.' : floor && d && d < floor.date ? `종료일은 ${floor.label}(${floor.date})보다 앞설 수 없습니다.` : '');
     const el = document.createElement('div'); el.className = 'scrim scrim--sheet';
     el.innerHTML = html`<form class="dialog dialog--form gl cl" role="dialog" aria-modal="true" aria-labelledby="clT" data-close-dialog novalidate>
       <h3 id="clT">프로젝트를 종료할까요?</h3>
       <p class="gl__d">종료하면 홈과 안내가 더 이상 할 일을 독촉하지 않습니다. 기록은 그대로 남고 언제든 종료를 취소할 수 있습니다.</p>
       <div class="gl__b">
-        <div class="field"><label for="cl-d">종료일 <span class="req">*</span></label><input class="input input--sm gl__date" type="date" id="cl-d" value="${closed}" max="${today}" required><div class="err" data-cl-err="closed_on"></div></div>
+        <div class="field"><label for="cl-d">종료일 <span class="req">*</span></label><input class="input input--sm gl__date" type="date" id="cl-d" value="${closed}" ${floor ? raw(`min="${floor.date}"`) : ''} max="${today}" required><div class="err" data-cl-err="closed_on"></div></div>
         <div class="field"><label for="cl-w">하자보수 종료일 ${raw(term('warranty'))}</label><input class="input input--sm gl__date" type="date" id="cl-w" value="${warranty}"><small class="hint">기본: 종료일 + 12개월</small><div class="err" data-cl-err="warranty_end_on"></div></div>
         ${raw(carry.length ? html`<p class="cl__carry">남은 운영 이관 ${carry.length}건 (담당 지정 ${assigned}건)</p>` : '')}
         ${raw(ready ? '' : '<p class="gl__warn"><i class="st st--warn" aria-hidden="true">!</i>07 필수 업무(운영 이관 / 인수인계 · 프로젝트 종료 정리)를 마치면 종료할 수 있습니다.</p>')}
@@ -116,12 +119,13 @@ export function closeDialog(pid, g) {
       <div class="gl__f"><span></span><span class="gl__btns"><button type="button" class="btn btn--ghost btn--sm" data-cl-later>나중에</button><button type="submit" class="btn btn--primary btn--sm" data-cl-ok ${ready ? '' : 'disabled'}>프로젝트 종료</button></span></div>
     </form>`;
     const done = (v) => { el.remove(); resolve(v); };
-    $('#cl-d', el).oninput = (e) => { closed = e.target.value; $('[data-cl-err="closed_on"]', el).textContent = closed > today ? '종료일은 오늘 이후 날짜로 정할 수 없습니다.' : ''; if (!wTouched && /^\d{4}-\d{2}-\d{2}$/.test(closed)) { warranty = addMonths(closed, 12); $('#cl-w', el).value = warranty; } };
+    $('#cl-d', el).oninput = (e) => { closed = e.target.value; $('[data-cl-err="closed_on"]', el).textContent = dateErr(closed); if (!wTouched && /^\d{4}-\d{2}-\d{2}$/.test(closed)) { warranty = addMonths(closed, 12); $('#cl-w', el).value = warranty; } };
     $('#cl-w', el).oninput = (e) => { wTouched = true; warranty = e.target.value; };
     $('[data-cl-later]', el).onclick = () => done(null);
     el.querySelector('form').onsubmit = async (e) => {
       e.preventDefault(); const ok = $('[data-cl-ok]', el); if (ok.disabled) return;
       if (!closed) { $('[data-cl-err="closed_on"]', el).textContent = '종료일을 입력하세요.'; return; }
+      if (dateErr(closed)) { $('[data-cl-err="closed_on"]', el).textContent = dateErr(closed); return; }
       ok.disabled = true;
       try { const r = await api('POST', wsApi(`/${pid}/close`), { closed_on: closed, warranty_end_on: warranty || '' }); toast('프로젝트를 종료했습니다.'); done(r); }
       catch (err) { el.querySelectorAll('[data-cl-err]').forEach((x) => { x.textContent = (err.fields || {})[x.dataset.clErr] || ''; }); if (!err.fields || !Object.keys(err.fields).length) $('[data-cl-err="form"]', el).textContent = err.message; ok.disabled = false; }

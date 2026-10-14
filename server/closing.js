@@ -137,6 +137,10 @@ export async function closeProject(db, project, body = {}, userId, ops) {
   const closed = typeof b.closed_on === 'string' && b.closed_on.trim() ? b.closed_on.trim() : today;
   if (!isDate(closed)) throw err422('invalid_closed_on', '종료일을 입력하세요.', { closed_on: '종료일을 입력하세요.' });
   if (closed > today) throw err422('invalid_closed_on', '종료일은 오늘 이후 날짜로 정할 수 없습니다.', { closed_on: '종료일은 오늘 이후 날짜로 정할 수 없습니다.' });
+  // Q16-3: 종료일 ≥ 오픈일 (06 오픈 기록), else ≥ 프로젝트 시작일
+  const gl = await goLiveOf(db, project.id); const start = project.planned_start_date ? String(project.planned_start_date).slice(0, 10) : '';
+  const floor = gl && gl.date ? { date: gl.date, label: '오픈일' } : start && start <= today ? { date: start, label: '프로젝트 시작일' } : null;   // 오픈일 is the actual fact; a planned start still in the future is not a bound
+  if (floor && closed < floor.date) { const m = `종료일은 ${floor.label}(${floor.date})보다 앞설 수 없습니다.`; throw err422('invalid_closed_on', m, { closed_on: m }); }
   let warranty = typeof b.warranty_end_on === 'string' ? b.warranty_end_on.trim() : '';
   if (b.warranty_end_on === undefined) warranty = addMonths(closed, 12);   // omitted → 종료일 + 12개월; '' / null = 하자보수 없음
   if (warranty && !isDate(warranty)) throw err422('invalid_warranty_end_on', '하자보수 종료일을 확인하세요.', { warranty_end_on: '하자보수 종료일을 확인하세요.' });

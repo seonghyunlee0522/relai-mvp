@@ -143,7 +143,7 @@ function development(key, ctx) {
       if (n(is.total) === 0) return { ...manual('아직 기록된 이슈가 없습니다. 문제가 없었다면 완료 처리하세요.', act('이슈 등록 →', iu('?new=1'))), row_text: true };
       if (n(is.active)) { const parts = [`열린 이슈 ${is.active}건`]; if (n(is.critical)) parts.push(`심각 ${is.critical}건`); if (n(is.blocked)) parts.push(`차단됨 ${is.blocked}건`);
         return prog(parts.join(' · '), act('이슈 처리 →', iu(n(is.critical) ? '?severity=CRITICAL' : n(is.blocked) ? '?status=BLOCKED' : '')), { crit: Boolean(n(is.critical) || n(is.blocked)) }); }
-      return ok(`이슈 ${is.total}건이 모두 해결되었습니다.`, act('이슈 보기 →', iu()));
+      return ok(n(is.carried) ? `이슈 ${is.total}건 중 ${n(is.total) - n(is.carried)}건 해결 · ${is.carried}건 운영 이관` : `이슈 ${is.total}건이 모두 해결되었습니다.`, act('이슈 보기 →', iu()));
     }
     case 'CHANGES': {
       const cu = (qs = '') => `/app/projects/${ctx.pid}/changes${qs}`;
@@ -240,7 +240,7 @@ function transition(key, ctx) {
 
 function operations(key, ctx) {
   const is = ctx.stats.issues || {};
-  const fresh = Math.max(0, n(is.active) - n(ctx.carried && ctx.carried.open_issues));   // Phase 7 US-4: issues handed over at 오픈 are not 독촉 any more
+  const fresh = n(is.active);   // Phase 7 US-4: issues handed over at 오픈 are already out of stats (home.js lessCarried)
   switch (key) {
     case 'HANDOVER': {   // Phase 7 US-3: 완료 = 인수자 · 인수일 (the HANDOVER dialog); the checklist alone never completes it
       const h = ctx.handover;

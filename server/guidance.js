@@ -72,11 +72,11 @@ export function projectGuidance(ctx) {
   if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope) && key !== 'INITIATION' && key !== 'REQUIREMENTS' && key !== 'TESTING') warnings.push(`미확정 요구사항 ${n(req.in_scope) - n(req.in_scope_confirmed)}건`);
   // Phase 5 C1: in 05 the unconfirmed in-scope requirements are named with what confirming does (never blocks)
   if (key === 'TESTING' && n(tst.in_scope_unconfirmed)) warnLink(unconfirmedTestText(tst.in_scope_unconfirmed), u(UNCONFIRMED_HREF));
-  const critical = n(iss.critical) - (key === 'OPERATIONS' ? n(goLive && goLive.critical_issues_carried) : 0);   // Phase 7 US-4: a carried critical issue is recorded, not 독촉
+  const critical = n(iss.critical);   // Phase 7 US-4/M2: stats already skip 운영 이관 issues (home.js lessCarried)
   if (critical > 0 && key !== 'DEVELOPMENT') warnings.push(`심각한 이슈 ${critical}건`);
   // Phase 6 US-7: in 06 the open issues stand next to the unapplied changes on one warn line (never blocks)
   if (key === 'TRANSITION_GO_LIVE') { const w = [n(iss.active) ? `열린 이슈 ${iss.active}건` : '', n(chg.approved_unimplemented) ? `승인 후 미반영 변경 ${chg.approved_unimplemented}건` : ''].filter(Boolean).join(' · '); if (w && !goLiveDone(phase)) warnings.push(w); }
-  else if (n(chg.approved_unimplemented) - n(goLive && goLive.approved_crs_carried) > 0 && key !== 'DEVELOPMENT') warnings.push(`승인 후 미반영 변경 ${n(chg.approved_unimplemented) - n(goLive && goLive.approved_crs_carried)}건`);   // CRs handed over at 오픈 are recorded
+  else if (n(chg.approved_unimplemented) > 0 && key !== 'DEVELOPMENT') warnings.push(`승인 후 미반영 변경 ${chg.approved_unimplemented}건`);   // CRs handed over at 오픈 are already out of stats
 
   switch (key) {
     case 'INITIATION': {
@@ -168,7 +168,7 @@ export function projectGuidance(ctx) {
     case 'OPERATIONS': {
       // Phase 7 US-4: what 오픈 handed over is one warn line with its owner count (never red) — not 독촉 numbers
       if (goLive && goLive.carryovers && goLive.carryovers.length) { const o = goLive.owners || { assigned: 0 }; const t = `운영 이관 ${goLive.carryovers.length}건 · 담당 지정 ${n(o.assigned)}/${goLive.carryovers.length}`; warnings.unshift(t); warningLinks[t] = u('?handover=1'); }   // always the first line
-      const fresh = n(iss.active) - n(goLive && goLive.open_issues_carried);
+      const fresh = n(iss.active);   // carried issues already out of stats
       if (fresh > 0) return out('OPS_ISSUES', '오픈 뒤 열린 이슈를 정리하세요', `${goLive ? '오픈 뒤 새로 열린' : '열린'} 이슈 ${fresh}건이 남아 있습니다. 해결하거나 담당을 정해 두어야 운영 단계에서 책임이 비지 않습니다.`, '남은 이슈는 해결하거나 운영 담당을 정해야 합니다.', act('이슈 처리 →', u('/issues')), act('현황 보기 →', u('/overview')), '운영 이관과 종료 정리를 진행합니다.');
       const stepOf = (k) => (Array.isArray(phase && phase.steps) ? phase.steps.find((a) => a.step_key === k) : null);
       const doneSt = (a) => !a || a.state === 'COMPLETED' || a.state === 'SKIPPED';

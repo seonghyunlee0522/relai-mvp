@@ -41,7 +41,7 @@ export async function reportPage(pid, rid, main = $('#main')) {
   document.title = `${report.title} — RELAI`;
   const draw = () => {
     const ro = report.status === 'FINAL' || archived; const sc = report.structured_content;
-    main.innerHTML = html`${raw(projectHead(proj, g, { tab: 'overview-reports', title: kind }))}<div class="page page--doc">
+    main.innerHTML = html`${raw(projectHead(proj, g, { tab: done ? 'close' : 'overview-reports', title: kind }))}<div class="page page--doc">
       <a class="crumb" href="/app/projects/${pid}" data-link>← ${proj.name}</a>
       ${raw(done ? '' : coachMark('WEEKLY_REPORT_INTRO'))}
       <div class="doc__bar">

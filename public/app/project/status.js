@@ -26,11 +26,11 @@ if (typeof document !== 'undefined' && !document.body?.dataset.pstepBound) {
   document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-pstep-toggle]'); if (!b) return; const w = b.parentElement; const open = !w.classList.contains('is-open'); w.classList.toggle('is-open', open); b.setAttribute('aria-expanded', String(open)); });
   if (document.body) document.body.dataset.pstepBound = '1';
 }
-export const phaseStepper = (g, pid, selKey = null) => { const c = curOf(g); return html`<div class="pstepw">${raw(c ? html`<button type="button" class="pstep__m" data-pstep-toggle aria-expanded="false">${no2(c.sequence)} / ${no2((g.phases || []).length)} · ${c.name} <i aria-hidden="true">▾</i></button>` : '')}<ol class="pstep" aria-label="프로젝트 단계">${raw((g.phases || []).map((ph) => {
+export const phaseStepper = (g, pid, selKey = null) => { const c = curOf(g); const quiet = Boolean(g.project && g.project.status === 'COMPLETED'); return html`<div class="pstepw">${raw(c ? html`<button type="button" class="pstep__m" data-pstep-toggle aria-expanded="false">${no2(c.sequence)} / ${no2((g.phases || []).length)} · ${c.name} <i aria-hidden="true">▾</i></button>` : '')}<ol class="pstep" aria-label="프로젝트 단계">${raw((g.phases || []).map((ph) => {
   const state = phaseState(ph);
   const href = ph.is_current ? `/app/projects/${pid}` : `/app/projects/${pid}?phase=${ph.phase_key}`;
   const sel = selKey && selKey === ph.phase_key && !ph.is_current;
-  return html`<li class="is-${state} ${sel ? 'is-sel' : ''}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기" ${sel ? 'aria-current="page"' : ''}><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : state === 'gap' ? '◐' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span>${raw(state === 'gap' ? html`<span class="pstep__n" title="필수 업무 ${reqOpen(ph)}건 남음">${reqOpen(ph)}</span>` : '')}</a></li>`;
+  return html`<li class="is-${state} ${quiet ? 'is-quiet' : ''} ${sel ? 'is-sel' : ''}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기" ${sel ? 'aria-current="page"' : ''}><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : state === 'gap' ? '◐' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span>${raw(state === 'gap' && !quiet ? html`<span class="pstep__n" title="필수 업무 ${reqOpen(ph)}건 남음">${reqOpen(ph)}</span>` : '')}</a></li>`;
 }).join(''))}</ol></div>`; };
 
 /** Days from today to `date` (negative when past). null when no date. */
