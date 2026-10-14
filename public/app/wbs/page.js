@@ -13,7 +13,7 @@ import { resBadge, sevBadge, verifyChip } from '../shared/badges.js';
 import { ISSUE_STATUS, ISSUE_STATUS_CHIP, LINK_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RISK_STATUS, RISK_STATUS_CHIP, WBS_CSTATUS, WBS_CSTATUS_CHIP, WBS_STATUS, WBS_TYPE } from '../shared/constants.js';
 import { traceStrip } from '../shared/trace-strip.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
-import { appliedFilters, bindFilterClears, bindMoreFilters, moreFilters } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, moreFilters, isPhone, phoneMore } from '../shared/filters.js';
 import { emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { createGrid } from '../shared/grid.js';
@@ -166,7 +166,7 @@ export async function wbsPage(id) {
     return true;
   };
   const grid = createGrid({
-    key: 'wbs.tree', rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched,
+    key: 'wbs.tree', rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
     rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
     canEdit: editable, activeId: () => (sel ? sel.id : null), onOpen: (iid) => { if (iid !== GHOST) openDetail(iid); },
     onSelect: (s) => bulk.update(s.size),
@@ -179,7 +179,7 @@ export async function wbsPage(id) {
     columns: [
       { key: 'code', label: 'WBS', width: 70, sticky: true, fixed: true, cls: 'mono wcode', render: (r) => html`${r.wbs_code}` },
       { key: 'title', label: '업무명', width: 400, min: 200, sticky: true, fixed: true, cls: 'ttl', render: (r) => titleCell(r) },
-      { key: 'start', label: '계획 시작', width: 118, card: false, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
+      { key: 'start', label: '계획 시작', width: 118, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
       { key: 'end', label: '계획 종료', width: 118, edit: { type: 'date', field: 'planned_end_date', cls: (r) => (r.past_end ? 'cell--past' : r.computed_status === 'DELAYED' ? 'cell--late' : ''), title: (r) => (r.past_end ? PAST_END() : ''), prefix: (r) => (r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : ''), value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date), after: shiftLine }, render: (r) => (r._ghost ? '' : (r.item_type === 'MILESTONE' ? dateCell(r.milestone_date, false, r.past_end) : dateCell(r.planned_end, r.rollup, r.past_end)) + shiftLine(r)) },   // US-3: past the project end → warn colour + !, never red
       { key: 'astart', label: '실적 시작', width: 118, hidden: true, edit: { type: 'date', field: 'actual_start_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_start, r.rollup)) },
       { key: 'aend', label: '실적 종료', width: 118, hidden: true, edit: { type: 'date', field: 'actual_end_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_end, r.rollup)) },
@@ -335,6 +335,9 @@ export async function wbsPage(id) {
 
   const draw = () => {
     const rows = visible(); const v = view(); const f = quick(); const q = params();
+    // K18: on phones 담당자 · 상태 move into the 필터 sheet (search + 필터 + one primary stay in the toolbar)
+    const phone = isPhone(); const quickSel = html`<select class="select select--sm" id="f-owner" aria-label="담당자"><option value="">담당자</option><option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>${raw(members.map((m) => html`<option value="${m.id}" ${q.get('owner') === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}${raw(owners.team.some((t) => !t.member) ? html`<optgroup label="팀원 (계정 없음)">${raw(owners.team.filter((t) => !t.member).map((t) => html`<option value="s:${t.id}" ${q.get('owner') === `s:${t.id}` ? 'selected' : ''}>${t.name}</option>`).join(''))}</optgroup>` : '')}</select>
+        <select class="select select--sm" id="f-cst" aria-label="상태"><option value="">상태</option>${raw(Object.entries(WBS_CSTATUS).map(([k, l]) => html`<option value="${k}" ${q.get('cst') === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>`;
     g.wbs = summary;
     // Phase 3 (US-2, J3): 0 items → the empty state only (no toolbar table, no blank row, no 총 N건). 직접 추가 opens one input inside it.
     const body = !items.length ? emptyWbs(v)
@@ -352,17 +355,18 @@ export async function wbsPage(id) {
         <div class="seg" role="tablist"><button class="${v === 'list' ? 'is-on' : ''}" data-view="list" role="tab">WBS</button><button class="${v === 'gantt' ? 'is-on' : ''}" data-view="gantt" role="tab">Gantt</button></div><span class="wterms">${raw(term('wbs'))}${raw(term('gantt'))}</span>
         ${raw(v === 'gantt' ? '<span class="gtools"><button class="btn btn--secondary btn--sm" id="gfit">전체 일정</button><button class="btn btn--secondary btn--sm" id="gtoday">오늘</button></span>' : '')}
         <input class="input input--sm" id="q" type="search" placeholder="WBS명, 번호 검색" value="${q.get('q') || ''}" style="max-width:200px">
-        <select class="select select--sm" id="f-owner" aria-label="담당자"><option value="">담당자</option><option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>${raw(members.map((m) => html`<option value="${m.id}" ${q.get('owner') === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}${raw(owners.team.length ? html`<optgroup label="팀원 (계정 없음)">${raw(owners.team.map((t) => html`<option value="s:${t.id}" ${q.get('owner') === `s:${t.id}` ? 'selected' : ''}>${t.name}</option>`).join(''))}</optgroup>` : '')}</select>
-        <select class="select select--sm" id="f-cst" aria-label="상태"><option value="">상태</option>${raw(Object.entries(WBS_CSTATUS).map(([k, l]) => html`<option value="${k}" ${q.get('cst') === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
-        ${raw(moreFilters(html`<select class="select select--sm" id="quick" aria-label="보기"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
-          <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, [f, q.get('archived')].filter(Boolean).length))}
-        <button class="link linkbtn" id="expall" style="width:auto">모두 펼치기</button><button class="link linkbtn" id="colall" style="width:auto">모두 접기</button>
+        ${raw(phone ? '' : quickSel)}
+        ${raw(moreFilters(html`${raw(phone ? quickSel : '')}<select class="select select--sm" id="quick" aria-label="보기"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
+          <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, [...(phone ? [q.get('owner'), q.get('cst')] : []), f, q.get('archived')].filter(Boolean).length))}
+        ${raw(phoneMore([{ label: '모두 펼치기', sel: '#expall' }, { label: '모두 접기', sel: '#colall' }, ...(archived ? [] : [{ label: '◆ 마일스톤 추가', sel: '#add-ms' }, { label: 'Excel로 가져오기…', sel: '[data-xl="import"]' }]),
+          { label: 'Excel 등록 템플릿', sel: '[data-xl="template"]' }, { label: 'Excel로 내보내기', sel: '[data-xl="export"]' }, ...(archived || !ai.enabled ? [] : [{ label: 'AI로 WBS 만들기', sel: '#ai-wbs' }])]))}
+        <span class="ph-hide"><button class="link linkbtn" id="expall" style="width:auto">모두 펼치기</button><button class="link linkbtn" id="colall" style="width:auto">모두 접기</button></span>
         <span class="rtool__sp"></span>
-        ${raw(v === 'list' && items.length ? grid.toolsHtml() : '')}
-        <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
+        ${raw(v === 'list' && items.length ? html`<span class="ph-hide">${raw(grid.toolsHtml())}</span>` : '')}
+        <span class="gtools ph-hide"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 WBS 내보내기</button></div></span>
-        ${raw(archived ? '' : ai.enabled ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-wbs" title="요구사항과 프로젝트 수행 업무(이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs">AI로 WBS 만들기</button>' : '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-wbs" disabled title="AI 기능이 설정되지 않았습니다.">AI로 WBS 만들기</button>')}
-        ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm" id="add-ms" title="마일스톤 추가 (기간 없이 날짜만)">◆ 마일스톤 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
+        ${raw(archived ? '' : ai.enabled ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ph-hide" id="ai-wbs" title="요구사항과 프로젝트 수행 업무(이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs">AI로 WBS 만들기</button>' : '<button type="button" class="btn btn--secondary btn--sm btn--ai ph-hide" id="ai-wbs" disabled title="AI 기능이 설정되지 않았습니다.">AI로 WBS 만들기</button>')}
+        ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm ph-hide" id="add-ms" title="마일스톤 추가 (기간 없이 날짜만)">◆ 마일스톤 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>` : '')}
       ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : /^s:/.test(v2) ? (owners.team.find((t) => `s:${t.id}` === v2) || {}).name || v2 : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: QUICK_LABEL }, { key: 'phase', label: '단계', map: LIFECYCLE_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}

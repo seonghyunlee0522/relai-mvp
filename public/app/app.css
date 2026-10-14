@@ -2700,3 +2700,64 @@ body:has(.scrim) #main .btn--primary,
   .closed__cta{align-self:stretch}
   .hc__done{grid-template-columns:1fr auto}.hc__done .hc__client{display:none}
 }
+
+/* ===== polish batch: 375px (K18–K22) ===== */
+.pmore,.fsheet__f,.coach__more{display:none}
+.gpop--filters .gpop__t{display:flex;align-items:center;justify-content:space-between}
+.fsheet__x{background:none;border:0;color:var(--text-3);font-size:var(--fs-lg);line-height:1;cursor:pointer;padding:0 2px}
+@media (max-width:640px){
+  /* K18: toolbar = search + 필터 (row 1) · tabs + ⋯ + one primary (row 2); the rest lives behind ⋯ */
+  .rtool .ph-hide,.rhead .ph-hide{display:none!important}
+  .rtool .pmore{display:inline-flex}
+  .rtool .pmore .gpop{left:auto;right:0}
+  .rtool #q{order:1;flex:1 1 calc(100% - 112px);min-width:0;width:auto!important;max-width:none!important}
+  .rtool .fmore{order:2}
+  .rtool .pmore{order:3}
+  .rtool .seg,.rtool .wterms,.rtool .gtools:not(.fmore):not(.pmore):not(.ph-hide){order:4}
+  .rtool .rtool__sp{display:none}
+  .rtool #add{order:5;margin-left:auto}
+  .kstrip{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0;max-width:100%}
+  .kstrip>*{flex:none}
+  .rrow2 .qa{display:none}
+  /* K20: filter sheet = dim backdrop · header ✕ · 적용 · 36px controls */
+  .fmore:has(> .gpop--filters:not([hidden]))::before{content:'';position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:119}
+  .fmore .gpop--filters .gpop__t{font-size:var(--fs-md);font-weight:700;color:var(--navy);margin-bottom:4px}
+  .fmore .gpop--filters .fsheet__x{width:36px;height:36px;font-size:var(--fs-xl)}
+  .fmore .gpop--filters .select,.fmore .gpop--filters .input{height:36px;min-height:36px;font-size:var(--fs-md)}
+  .fmore .gpop--filters .toggle{min-height:36px;display:flex;align-items:center;gap:8px}
+  .fmore .gpop--filters .fsheet__f{display:block;margin-top:6px}
+  .fmore .gpop--filters .fsheet__f .btn{width:100%;height:40px;justify-content:center}
+  /* K21: tips on one line + 자세히 */
+  .coach{align-items:center}
+  .coach:not(.is-open) .coach__b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .coach:not(.is-open) .coach__b .link{display:none}
+  .coach .coach__more{display:inline;flex:none;width:auto;font-size:var(--fs-xs);color:var(--blue-deep);background:none;border:0;padding:0;cursor:pointer}
+  /* K19: WBS card = 1.1 제목 / 담당자 · 시작–종료 · 상태, no tree indent inside the card */
+  .gtable--wbs .wtitle{padding-left:0!important}
+  .gtable--wbs .wdrag{display:none}
+  .gtable--wbs tbody tr td.gc--stick.mono{order:0;width:auto!important;min-width:0!important}
+  .gtable--wbs tbody tr td .cell--date{width:48px;min-width:0;padding:0}
+  .gtable--wbs tbody tr td .av{display:none}
+  .gtable--wbs tbody tr td.ttl{order:1;flex:1 1 calc(100% - 60px)}
+  .gtable--wbs tbody tr td[data-label="담당자"]{order:2}
+  .gtable--wbs tbody tr td[data-label="계획 시작"]{order:3;margin-right:-8px;display:flex!important;align-items:center;white-space:nowrap}
+  .gtable--wbs .wtog--none{display:none}
+  .gtable--wbs tbody tr td[data-label="계획 시작"]::after{content:'–';margin-left:2px;color:var(--text-3)}
+  .gtable--wbs tbody tr td[data-label="계획 종료"]{order:4}
+  .gtable--wbs tbody tr td[data-label="상태"]{order:5}
+  .gtable--wbs tbody tr.is-ms td[data-label="계획 시작"]{display:none}
+  .gtable--wbs tbody tr td[data-label="담당자"]::after{content:'·';margin-left:8px;color:var(--text-3)}
+  .gtable--wbs tbody tr td[data-label="상태"]::before{content:'·';margin-right:8px;color:var(--text-3)}
+  /* K22: coverage rows = REQ-ID + 제목 / 검증 상태 + 할 일; tabs on one line */
+  .rtable--cov thead{display:none}
+  .rtable--cov,.rtable--cov tbody{display:block;width:100%}
+  .rtable--cov tbody tr{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;padding:10px 12px;border-bottom:1px solid var(--border-soft)}
+  .rtable--cov tbody td{display:block;padding:0;border:0;min-width:0;max-width:none;white-space:normal}
+  .rtable--cov tbody td.cov__st,.rtable--cov tbody td.cov__n{display:none}
+  .rtable--cov tbody td.cov__v{grid-column:1;grid-row:2}
+  .rtable--cov tbody td.cov__a{grid-column:2;grid-row:2}
+  .rtable--cov .covacts{flex-wrap:wrap}
+  .rhead .seg--lg{flex-wrap:nowrap;max-width:100%;overflow-x:auto}
+  .rhead .seg--lg button{white-space:nowrap;padding-left:10px;padding-right:10px}
+  .rhead .seg--lg .tag-later{display:none}
+}

@@ -53,9 +53,11 @@ export const COACH = {
 };
 export function coachMark(key, extra = {}) {
   const c = COACH[key]; if (!c || ob.guideSeen(key)) return '';
-  return html`<div class="coach" role="note" data-coach="${key}"><div class="coach__i">i</div><div class="coach__b"><b>${extra.title || c.title}</b><p>${extra.body || c.body}</p>${raw(extra.cta ? html`<a class="link" href="${extra.cta.href}" data-link>${extra.cta.label}</a>` : '')}</div><button type="button" class="coach__x" data-coach-close="${key}" aria-label="닫기">×</button></div>`;
+  return html`<div class="coach" role="note" data-coach="${key}"><div class="coach__i">i</div><div class="coach__b"><b>${extra.title || c.title}</b><p>${extra.body || c.body}</p>${raw(extra.cta ? html`<a class="link" href="${extra.cta.href}" data-link>${extra.cta.label}</a>` : '')}</div><button type="button" class="linkbtn coach__more" data-coach-more>자세히</button><button type="button" class="coach__x" data-coach-close="${key}" aria-label="닫기">×</button></div>`;
 }
 export function bindCoach(root) {
+  // K21: phones show the tip on one line; 자세히 opens the rest
+  root.querySelectorAll('[data-coach-more]').forEach((b) => { b.onclick = () => { const box = b.closest('.coach'); if (box) box.classList.add('is-open'); b.remove(); }; });
   root.querySelectorAll('[data-coach-close]').forEach((b) => { b.onclick = async () => { const box = b.closest('.coach'); if (box) box.remove(); await ob.markGuide(b.dataset.coachClose); }; });
 }
 

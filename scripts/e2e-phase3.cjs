@@ -107,7 +107,8 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   const foot = (await page.textContent('.gfoot')).replace(/\s+/g, ' ');
   const visibleRows = await page.$$eval('main tbody tr', (els) => els.length);
   check('US-2 first group open, others folded', visibleRows === 1 + 3 + 4 + 3, String(visibleRows));
-  check('J3 총 N건 matches the visible rows', new RegExp(`총 ${visibleRows}건`).test(foot), foot);
+  const chipTotal = (await page.textContent('.kchip[data-kf=""] b')).trim();
+  check('K11 총 N건 = the 전체 항목 chip (folded rows counted)', new RegExp(`총 ${chipTotal}건`).test(foot), `${foot} · chip ${chipTotal}`);
   await shot('06-wbs-after-skeleton.png');
   const tree = (await api('GET', `${A.P}/wbs`)).json;
   const tasks = tree.items.filter((i) => i.item_type === 'TASK');

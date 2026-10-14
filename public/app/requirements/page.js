@@ -4,7 +4,7 @@ import { state } from '../core/state.js';
 import { download, keepUi } from '../core/ui.js';
 import { projectHead } from '../project/guide.js';
 import { resBadge, statusChip, subtle, prText, verifyChip } from '../shared/badges.js';
-import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, moreFilters } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, moreFilters, isPhone, phoneMore } from '../shared/filters.js';
 import { emptyFiltered } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
@@ -172,6 +172,8 @@ export async function requirementsPage(id) {
 
   const draw = () => {
     const q = params();
+    // K18: on phones 상태 · 범위 move into the 필터 sheet (search + 필터 + one primary stay in the toolbar)
+    const phone = isPhone(); const quick = html`${raw(filterSelect('status', '상태', REQ_STATUS, q.get('status')))}${raw(filterSelect('scope', '범위', REQ_SCOPE, q.get('scope')))}`;
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED' ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : '')}
@@ -181,19 +183,20 @@ export async function requirementsPage(id) {
       <div class="rtool">
         <div class="seg" role="tablist"><button class="${rview() === 'list' ? 'is-on' : ''}" data-rview="list" role="tab">요구사항 목록</button><button class="${rview() === 'trace' ? 'is-on' : ''}" data-rview="trace" role="tab">연결 추적</button></div>
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
-        ${raw(filterSelect('status', '상태', REQ_STATUS, q.get('status')))}
-        ${raw(filterSelect('scope', '범위', REQ_SCOPE, q.get('scope')))}
-        ${raw(moreFilters(html`${raw(filterSelect('owner', '담당자', ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
+        ${raw(phone ? '' : quick)}
+        ${raw(moreFilters(html`${raw(phone ? quick : '')}${raw(filterSelect('owner', '담당자', ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
           ${raw(filterSelect('type', '유형', REQ_TYPE, q.get('type')))}
           ${raw(filterSelect('priority', '우선순위', REQ_PRIORITY, q.get('priority')))}
           ${raw(filterSelect('link', '연결 상태', LINK_F, q.get('link')))}
-          <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, ['owner', 'type', 'priority', 'link', 'archived'].filter((k) => q.get(k)).length))}
+          <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, [...(phone ? ['status', 'scope'] : []), 'owner', 'type', 'priority', 'link', 'archived'].filter((k) => q.get(k)).length))}
+        ${raw(phoneMore([...(archived ? [] : [{ label: 'Excel로 가져오기…', sel: '[data-xl="import"]' }]), { label: 'Excel 등록 템플릿', sel: '[data-xl="template"]' }, { label: 'Excel로 내보내기', sel: '[data-xl="export"]' },
+          { label: '요구사항 정의서 PDF', sel: '[data-reqdoc="pdf"]' }, { label: '요구사항 정의서 Word', sel: '[data-reqdoc="docx"]' }, ...(ai.enabled && !archived ? [{ label: 'AI로 요구사항 추출', sel: '#ai-extract' }] : [])]))}
         <span class="rtool__sp"></span>
-        ${raw(rview() === 'list' ? listGrid.toolsHtml() : '')}
-        <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
+        ${raw(rview() === 'list' ? html`<span class="ph-hide">${raw(listGrid.toolsHtml())}</span>` : '')}
+        <span class="gtools ph-hide"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>
-        ${raw(reqDocMenu())}
-        ${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-extract" title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}
+        <span class="ph-hide">${raw(reqDocMenu())}</span>
+        ${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ph-hide" id="ai-extract" title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}
         ${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}
       </div>
       <div class="rrow2"><div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>

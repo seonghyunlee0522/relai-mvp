@@ -75,7 +75,7 @@ export async function testsPage(id) {
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객이 결과물을 확인하고 승인하는 검수를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">
         <button class="${T === 'cases' ? 'is-on' : ''}" data-tab="cases" role="tab">테스트 케이스${raw(ts.total ? html`<em>${ts.total}</em>` : '')}</button>
         <button class="${T === 'acceptance' ? 'is-on' : ''}" data-tab="acceptance" role="tab">검수${raw(ac.in_progress ? html`<em>${ac.in_progress}</em>` : '')}${raw(before06 ? '<span class="tag-later">06에서 진행</span>' : '')}</button>
-        <button class="${T === 'coverage' ? 'is-on' : ''}" data-tab="coverage" role="tab">요구사항 커버리지${raw(ts.verify_coverage !== null && ts.verify_coverage !== undefined ? html`<em>${ts.verify_coverage}%</em>` : '')}</button></div>
+        <button class="${T === 'coverage' ? 'is-on' : ''}" data-tab="coverage" role="tab"><span class="ph-hide">요구사항 </span>커버리지${raw(ts.verify_coverage !== null && ts.verify_coverage !== undefined ? html`<em>${ts.verify_coverage}%</em>` : '')}</button></div>
       ${raw(T === 'cases' ? html`<div class="summary summary--inline">
           <div><b>${ts.total}</b><span>전체 <small>(미실행 ${ts.total - ts.executed})</small></span></div><div><b>${ts.ready}</b><span>준비됨</span></div>
           <div class="${ts.last_fail ? 'is-crit' : ''}"><b>${ts.last_fail}</b><span>실패</span></div><div class="${ts.last_blocked ? 'is-warn' : ''}"><b>${ts.last_blocked}</b><span>막힘</span></div></div>`
@@ -148,12 +148,12 @@ export async function testsPage(id) {
       if (r.test_exclusion_reason) return html`<span class="covacts"><span class="covx">테스트 제외 · <q>${r.test_exclusion_reason}</q></span>${raw(archived ? '' : html`<button type="button" class="link linkbtn" data-unexclude="${r.id}" data-stop>제외 취소</button>`)}</span>`;
       return archived ? '<span class="dim">—</span>' : html`<span class="covacts"><span class="dim">—</span><a class="link" href="/app/projects/${p.id}/tests?new=1&requirement=${r.id}" data-link data-stop>테스트 추가</a>${raw(r.status === 'CONFIRMED' ? html`<button type="button" class="link linkbtn" data-exclude="${r.id}" data-stop>테스트 제외</button>` : '')}</span>`;
     };
-    return head + html`<table class="rtable rtable--raid"><thead><tr><th>요구사항</th><th>제목</th><th>상태</th><th>테스트</th><th class="num">통과</th><th class="num">실패</th><th class="num">미실행</th><th>검증 상태</th></tr></thead>
+    return head + html`<table class="rtable rtable--raid rtable--cov"><thead><tr><th>요구사항</th><th>제목</th><th>상태</th><th>테스트</th><th class="num">통과</th><th class="num">실패</th><th class="num">미실행</th><th>검증 상태</th></tr></thead>
     <tbody>${raw(cov.map((r) => html`<tr class="${r.test_exclusion_reason && !r.total ? 'is-excl' : ''}" data-req="${r.id}">
       <td class="mono">${r.display_id}</td><td class="ttl"><span>${r.title}</span></td>
-      <td><span class="chip ${REQ_STATUS_CHIP[r.status] || ''}">${REQ_STATUS[r.status]}</span></td>
-      <td>${raw(cell(r))}</td><td class="num">${r.pass || raw('<span class="dim">0</span>')}</td><td class="num ${r.fail ? 'is-overdue' : ''}">${r.fail || raw('<span class="dim">0</span>')}</td><td class="num">${r.not_run || raw('<span class="dim">0</span>')}</td>
-      <td>${raw(r.test_exclusion_reason && !r.total ? '<span class="dim">제외</span>' : verifyChip(r.verification))}</td></tr>`).join(''))}</tbody></table>`;
+      <td class="cov__st"><span class="chip ${REQ_STATUS_CHIP[r.status] || ''}">${REQ_STATUS[r.status]}</span></td>
+      <td class="cov__a">${raw(cell(r))}</td><td class="num cov__n">${r.pass || raw('<span class="dim">0</span>')}</td><td class="num cov__n ${r.fail ? 'is-overdue' : ''}">${r.fail || raw('<span class="dim">0</span>')}</td><td class="num cov__n">${r.not_run || raw('<span class="dim">0</span>')}</td>
+      <td class="cov__v">${raw(r.test_exclusion_reason && !r.total ? '<span class="dim">제외</span>' : verifyChip(r.verification))}</td></tr>`).join(''))}</tbody></table>`;
   };
 
   /* ----- steps editor (shared by create / detail) ----- */
