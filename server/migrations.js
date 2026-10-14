@@ -51,6 +51,7 @@ export const migrations = [
   } },
   { version: 25, name: 'Billing (Phase 10): subscriptions, payments, billing_events, subscription_events — tables in schema.sql; plan limits enforced by billing/limits.js', up() {} },
   { version: 26, name: 'auth hardening: auth_tokens (password reset / e-mail verification, hashed, single use), rate_limits (shared limiter for serverless)', up() {} },
+  { version: 30, name: 'account lifecycle: users.deleted_at, workspaces.deleted_at/deleted_by/purged_at (soft delete + 30-day purge), login_records (3 months)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

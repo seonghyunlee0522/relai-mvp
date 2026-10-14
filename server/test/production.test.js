@@ -93,8 +93,8 @@ test('roles: OWNER / ADMIN / MEMBER — project management, member management, o
   assert.equal((await Ad.c('DELETE', `${ws}/members/${O.uid}`)).status, 403, 'ADMIN cannot remove OWNER');
   assert.equal((await Ad.c('DELETE', `${ws}/members/${X.uid}`)).status, 200);
   assert.equal((await M.c('DELETE', `${ws}/members/${Ad.uid}`)).status, 403);
-  // billing-ready owner check: owner-only route (workspace delete placeholder) → ADMIN 403, OWNER reaches the handler (501 placeholder)
-  assert.equal((await Ad.c('DELETE', ws)).status, 403); assert.equal((await O.c('DELETE', ws)).status, 501);
+  // owner-only route (workspace delete, account.test.js covers it fully) → ADMIN 403, OWNER reaches the handler (400: confirmation missing)
+  assert.equal((await Ad.c('DELETE', ws)).status, 403); assert.equal((await O.c('DELETE', ws)).status, 400);
   // requireRole middleware unit
   const calls = []; const res = { status(s) { calls.push(s); return this; }, json() { return this; } };
   requireRole('OWNER')({ role: 'ADMIN' }, res, () => calls.push('next')); requireRole('OWNER', 'ADMIN')({ role: 'ADMIN' }, res, () => calls.push('next')); requireRole('OWNER')({}, res, () => calls.push('next'));

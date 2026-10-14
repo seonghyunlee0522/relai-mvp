@@ -80,7 +80,7 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
     catch (e) { if (e instanceof GoogleAuthError) return res.redirect(`/login?error=${encodeURIComponent(e.code)}`); throw e; }
     const user = await db.get('SELECT * FROM users WHERE id = ?', [r.userId]);
     if (!user || user.status !== 'ACTIVE') return res.redirect('/login?suspended=1');
-    await afterLogin(req, res, user);
+    await afterLogin(req, res, user, 'GOOGLE');
     res.redirect(r.returnPath || '/app');
   }));
 

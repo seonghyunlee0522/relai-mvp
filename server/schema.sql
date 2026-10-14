@@ -1187,3 +1187,21 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   reset_at  timestamptz NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at);
+-- Account lifecycle (migration 30): soft-deleted accounts / workspaces and the 3-month login record (통신비밀보호법).
+-- users: status DEACTIVATED + deleted_at = 회원 탈퇴 (row kept as a pseudonymous tombstone; e-mail/name replaced at once).
+-- workspaces: status CLOSED + deleted_at = deleted by its OWNER; purged after 30 days (purged_at), row kept for billing references.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS deleted_by TEXT REFERENCES users(id);
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS purged_at timestamptz;
+CREATE INDEX IF NOT EXISTS idx_workspaces_deleted ON workspaces(deleted_at) WHERE status = 'CLOSED' AND purged_at IS NULL;
+CREATE TABLE IF NOT EXISTS login_records (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+  method      TEXT NOT NULL CHECK (method IN ('PASSWORD','GOOGLE','SIGNUP')),
+  ip          TEXT,                              -- client address as seen behind the proxy (trust proxy 1)
+  user_agent  TEXT,                              -- first 300 characters
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_login_records_created ON login_records(created_at);
+CREATE INDEX IF NOT EXISTS idx_login_records_user ON login_records(user_id, created_at);
