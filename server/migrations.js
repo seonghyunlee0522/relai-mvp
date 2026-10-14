@@ -53,6 +53,7 @@ export const migrations = [
   { version: 26, name: 'auth hardening: auth_tokens (password reset / e-mail verification, hashed, single use), rate_limits (shared limiter for serverless)', up() {} },
   { version: 27, name: 'change_requests.approver_user_id (designated approver; self-approval blocked)', up() {} },
   { version: 28, name: 'Activity checklists (06 전환·오픈 · 07 운영): activity_checklist_items — table in schema.sql; activity state derives from it', up() {} },
+  { version: 29, name: 'NicePay billing: billing_orders (server-side prices) + subscriptions.seats/billing_cycle/auto_renew/renewal_reminded_for/founding_until/billing_key_enc — DDL in schema.sql', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

@@ -15,13 +15,15 @@ const USAGE_SQL = `
     GREATEST(w.created_at,
       COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id), w.created_at),
       COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at,
-    COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key
+    COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key,
+    (SELECT s.seats FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS seats
   FROM workspaces w`;
 
 /** Shape one usage row: { plan, dims: [{key,label,used,limit,pct}], max_pct, tier }. */
 export function shapeUsage(row, planKey = DEFAULT_PLAN) {
   const plan = PLANS[planKey] || PLANS[DEFAULT_PLAN];
-  const dims = USAGE_DIMS.map((d) => { const used = Number(row[d.key] || 0); const limit = plan.limits[d.key]; return { key: d.key, label: d.label, used, limit: limit ?? null, pct: pctOf(used, limit) }; });
+  const seatLimit = plan.per_seat && row.seats ? Number(row.seats) : null;   // per-seat plans: members limited to purchased seats
+  const dims = USAGE_DIMS.map((d) => { const used = Number(row[d.key] || 0); const limit = d.key === 'members' && seatLimit ? seatLimit : plan.limits[d.key]; return { key: d.key, label: d.label, used, limit: limit ?? null, pct: pctOf(used, limit) }; });
   const pcts = dims.map((d) => d.pct).filter((p) => p !== null);
   const max_pct = pcts.length ? Math.max(...pcts) : null;
   return { plan: plan.key, plan_label: plan.label, dims, max_pct, tier: tierOf(max_pct) };

@@ -179,16 +179,16 @@ test('usage: aggregation + limit %, tiers (warn ≥80, attention ≥90), sorts; 
   const u = (await ops.c('GET', '/api/admin/usage?sort=projects')).json;
   assert.equal(u.items[0].workspace_id, A.w); assert.equal(u.items[0].tier, 'attention'); assert.equal(u.items[0].max_pct, 100);
   assert.equal(u.items.find((x) => x.workspace_id === Bw).tier, 'ok');
-  assert.deepEqual(u.plans.FREE.limits, { projects: 1, members: 3, requirements: 10, wbs: 30, weekly_reports: 8 });
+  assert.deepEqual(u.plans.FREE.limits, { projects: 1, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 });
   for (const s of ['requirements', 'wbs', 'activity']) assert.equal((await ops.c('GET', `/api/admin/usage?sort=${s}`)).status, 200);
   assert.equal((await ops.c('GET', '/api/admin/usage?sort=bogus')).json.sort, 'projects');
   // tier thresholds on the shaping function (80 % is not reachable with the small member limit in an integration flow)
-  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 8, wbs: 0, weekly_reports: 0 }).tier, 'warn');
-  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 9, wbs: 0, weekly_reports: 0 }).tier, 'attention');
-  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 7, wbs: 24, weekly_reports: 0 }).tier, 'warn');
+  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 40, wbs: 0, weekly_reports: 0 }).tier, 'warn');
+  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 45, wbs: 0, weekly_reports: 0 }).tier, 'attention');
+  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 35, wbs: 80, weekly_reports: 0 }).tier, 'warn');
   assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 0, wbs: 0, weekly_reports: 0 }, 'TEAM').max_pct, null);
-  // requirements 8/10 inside A's project → still attention (projects 100 %) but the dim itself reports 80 %
-  for (let i = 0; i < 8; i++) await A.c('POST', A.req, { title: `R${i}` });
+  // requirements 40/50 inside A's project → still attention (projects 100 %) but the dim itself reports 80 %
+  for (let i = 0; i < 40; i++) await A.c('POST', A.req, { title: `R${i}` });
   const dA = (await ops.c('GET', `/api/admin/workspaces/${A.w}`)).json.usage;
   assert.equal(dA.dims.find((x) => x.key === 'requirements').pct, 80); assert.equal(dA.tier, 'attention');
   // dashboard
@@ -237,7 +237,7 @@ test('billing admin: absent tables → implemented:false everywhere, 404 details
   assert.equal((await ops.c('GET', '/api/admin/billing')).json.billing.implemented, false);
   // Simulate the Billing phase landing (contract columns + sensitive extras that must stay hidden)
   await db.exec(`CREATE TABLE subscriptions (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, plan TEXT NOT NULL, status TEXT NOT NULL, current_period_start timestamptz, current_period_end timestamptz,
-      next_billing_at timestamptz, cancel_at_period_end boolean DEFAULT false, grace_period_end timestamptz, payment_method_summary TEXT, billing_key TEXT, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+      next_billing_at timestamptz, cancel_at_period_end boolean DEFAULT false, grace_period_end timestamptz, payment_method_summary TEXT, billing_key TEXT, seats INTEGER, billing_cycle TEXT, auto_renew boolean DEFAULT true, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
     CREATE TABLE payments (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, subscription_id TEXT, plan TEXT, amount numeric, currency TEXT, status TEXT, provider TEXT, provider_result_code TEXT,
       provider_tid TEXT, moid TEXT, card_number TEXT, merchant_key TEXT, birth_date TEXT, paid_at timestamptz, failed_at timestamptz, failure_code TEXT, failure_message TEXT, created_at timestamptz DEFAULT now());`);
   await db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, payment_method_summary, billing_key) VALUES ('s1', ?, 'TEAM', 'PAST_DUE', '신한 ****1234', 'BK-SECRET')`, [A.w]);
@@ -255,7 +255,7 @@ test('billing admin: absent tables → implemented:false everywhere, 404 details
   assert.equal(maskTid('ab'), '**'.slice(0, 0) + 'ab');
   assert.equal((await ops.c('GET', '/api/admin/payments?q=ABCD')).json.total, 1);                   // search by masked tail
   const d = (await ops.c('GET', '/api/admin/dashboard')).json;
-  assert.equal(d.billing.implemented, true); assert.deepEqual([d.kpis.team_workspaces, d.kpis.past_due, d.kpis.payment_failed_7d, d.kpis.mrr], [0, 1, 1, null]);   // PAST_DUE is not an active TEAM; MRR null until prices exist
+  assert.equal(d.billing.implemented, true); assert.deepEqual([d.kpis.team_workspaces, d.kpis.past_due, d.kpis.payment_failed_7d, d.kpis.mrr], [0, 1, 1, 0]);   // PAST_DUE is not an active TEAM; MRR counts only plan-granting subscriptions
   assert.equal(d.attention.payment_failed.length, 1); assert.equal(d.attention.past_due.length, 1);
   assert.equal((await ops.c('GET', `/api/admin/workspaces/${A.w}`)).json.subscription.plan, 'TEAM');
   assert.ok(!JSON.stringify(d).includes('BK-SECRET'));

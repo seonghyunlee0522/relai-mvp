@@ -26,11 +26,12 @@ const COUNT_SQL = {
 
 /** 402 Payment Required: the workspace's plan does not allow another row of `dimension`. Rendered by app.js's error handler. */
 export class PlanLimitError extends Error {
-  constructor({ dimension, used, limit, plan, adding = 1 }) {
+  constructor({ dimension, used, limit, plan, adding = 1, seats = false }) {
     const label = USAGE_DIMS.find((d) => d.key === dimension)?.label || dimension;
-    super(`${PLANS[plan]?.label || plan} 플랜의 ${label} 한도(${limit})에 도달했습니다. Team 플랜으로 업그레이드하면 계속 추가할 수 있습니다.`);
+    super(seats ? `구매한 좌석 수(${limit}석)를 모두 사용 중입니다. 좌석을 늘리려면 이용 기간 연장 시 좌석 수를 늘려 구매하거나 운영자에게 문의해 주세요.`
+      : `${PLANS[plan]?.label || plan} 플랜의 ${label} 한도(${limit})에 도달했습니다. Team 플랜으로 업그레이드하면 계속 추가할 수 있습니다.`);
     this.status = 402; this.code = 'plan_limit_reached';
-    this.extra = { limit: { dimension, label, used, limit, plan, adding }, upgrade: { plan: 'TEAM', url: '/app/settings#billing' } };
+    this.extra = { limit: { dimension, label, used, limit, plan, adding, ...(seats ? { seats: true } : {}) }, upgrade: { plan: 'TEAM', url: '/app/settings#billing' } };
   }
 }
 
@@ -38,9 +39,12 @@ export class PlanLimitError extends Error {
 export async function assertWithinLimit(db, workspaceId, dimension, adding = 1) {
   if (!limitsEnforced() || adding <= 0) return;
   const plan = await effectivePlan(db, workspaceId);
-  const limit = PLANS[plan].limits[dimension];
+  let limit = PLANS[plan].limits[dimension];
+  // Per-seat plans: the member limit is the purchased seat count (NULL seats = legacy row, unlimited).
+  const seats = dimension === 'members' && PLANS[plan].per_seat ? (await db.get('SELECT seats FROM subscriptions WHERE workspace_id = ?', [workspaceId]))?.seats : null;
+  if (seats) limit = Number(seats);
   if (limit === null || limit === undefined) return;
   if (db.isTx) await db.get('SELECT id FROM workspaces WHERE id = ? FOR UPDATE', [workspaceId]);
   const used = Number((await db.get(COUNT_SQL[dimension], [workspaceId])).n);
-  if (used + adding > limit) throw new PlanLimitError({ dimension, used, limit, plan, adding });
+  if (used + adding > limit) throw new PlanLimitError({ dimension, used, limit, plan, adding, seats: Boolean(seats) });
 }

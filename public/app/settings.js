@@ -15,27 +15,67 @@ export async function settingsPage(main = $('#main')) {
   const wid = state.workspace.id;
   let integ; const [{ workspace }, { members }, integ0] = await Promise.all([api('GET', `/api/workspaces/${wid}`), api('GET', `/api/workspaces/${wid}/members`), api('GET', `/api/workspaces/${wid}/integrations`).catch(() => null)]);
   integ = integ0; const perm = workspace.permissions; const me = state.user.id;
-  // Plan & billing (Phase 10): plan, usage against limits, OWNER-only upgrade / cancel. Prices stay "확정 예정" until plans.js has them.
+  // Plan & billing (Phase 10): plan, usage against limits, OWNER-only purchase (cycle × seats, server-quoted, VAT excluded) / cancel.
   let billing = null; const loadBilling = async () => { try { billing = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch { billing = null; } };
   await loadBilling();
   const SUB_STATUS = { ACTIVE: ['chip--done', '이용 중'], PAST_DUE: ['chip--fail', '결제 실패'], CANCELED: ['chip--muted', '해지됨'], EXPIRED: ['chip--muted', '만료'] };
   const billingCard = () => {
     if (!billing) return '';
-    const s = billing.subscription; const team = billing.plans.find((p) => p.key === 'TEAM');
-    const price = team?.price_monthly ? `₩${Number(team.price_monthly).toLocaleString('ko-KR')} / 월` : '가격 확정 예정';
+    const s = billing.subscription; const co = billing.checkout || {};
     const st = s && SUB_STATUS[s.status];
     const lines = !s ? '' : html`<dl class="info" style="margin-top:14px"><dt>구독 상태</dt><dd><span class="chip ${st?.[0] || ''}">${st?.[1] || s.status}</span>${raw(s.cancel_at_period_end && s.status === 'ACTIVE' ? ' <small class="dim">해지 예약 — 기간 종료 후 Free로 전환</small>' : '')}</dd>
       ${raw(s.current_period_end ? html`<dt>이용 기간</dt><dd>${fmtDay(s.current_period_end)}까지</dd>` : '')}
       ${raw(s.status === 'PAST_DUE' && s.grace_period_end ? html`<dt>유예 기간</dt><dd>${fmtDay(s.grace_period_end)}까지 결제수단을 확인해 주세요. 이후 Free 한도가 적용됩니다.</dd>` : '')}
+      ${raw(s.seats ? html`<dt>좌석</dt><dd>${s.seats}석${raw(s.billing_cycle ? html` <small class="dim">· ${s.billing_cycle === 'ANNUAL' ? '연간 선결제' : '1개월'}</small>` : '')}</dd>` : '')}
+      ${raw(s.status === 'ACTIVE' && !s.auto_renew ? '<dt>자동 결제</dt><dd>없음 <small class="dim">— 기간 종료 7일 전에 연장 안내 메일을 보내 드립니다</small></dd>' : '')}
       ${raw(s.payment_method_summary ? html`<dt>결제 수단</dt><dd>${s.payment_method_summary}</dd>` : '')}</dl>`;
     const canCancel = billing.can_manage && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && !s.cancel_at_period_end;
     const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 Workspace OWNER만 할 수 있습니다.</p>'
-      : html`<div class="actions" style="margin-top:14px">${raw(billing.plan === 'FREE' ? html`<button class="btn btn--primary btn--sm" id="bill-upgrade" ${billing.provider_available ? '' : 'disabled'}>Team으로 업그레이드 · ${price}</button>` : '')}${raw(canCancel ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
+      : html`${raw(co.can_purchase && billing.provider_available ? buyForm() : '')}<div class="actions" style="margin-top:14px">${raw(canCancel && s.auto_renew ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
         ${raw(billing.provider_available ? '' : '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>')}`;
     return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan_label}</span></div><div class="panel__b">
       ${raw(usageBars(billing.usage))}${raw(lines)}${raw(actions)}</div></div>`;
   };
-  if (qp0().get('checkout')) { toast(qp0().get('checkout') === 'fake' ? '테스트 결제 화면입니다. 결제사 연동 후 실제 결제가 진행됩니다.' : '결제를 처리하고 있습니다. 잠시 후 플랜이 반영됩니다.'); history.replaceState(null, '', '/app/settings#billing'); }
+  /** Purchase form: cycle × seats → server quote (VAT excluded prices, founding discount) → NicePay payment window. */
+  const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
+  const buyForm = () => {
+    const co = billing.checkout; const extend = billing.plan !== 'FREE';
+    return html`<form id="bill-buy" class="panel__sub" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-soft)">
+      <p style="margin:0 0 10px;font-weight:600">${extend ? 'Team 이용 기간 연장' : 'Team 플랜 구매'} ${raw(co.founding_eligible ? html`<span class="chip chip--active">파운딩 고객 ${co.founding.pct}% 할인 · 첫 1년</span>` : '')}</p>
+      <div class="inline-form" style="gap:8px;flex-wrap:wrap"><select class="select select--sm" name="cycle">${raw(co.cycles.map((c) => html`<option value="${c.key}">${c.label} · ${won(c.unit_price)}/석/월</option>`).join(''))}</select>
+        <label class="dim" style="display:flex;align-items:center;gap:6px">좌석 <input class="input input--sm" name="seats" type="number" min="${co.min_seats}" max="1000" step="1" value="${Math.max(co.min_seats, billing.subscription?.seats || 0)}" style="width:84px"></label></div>
+      <p class="hint" id="bill-quote" style="margin-top:8px">금액 계산 중…</p>
+      <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay">결제하기</button></div>
+      <p class="hint">가격은 부가세 별도이며 결제 시 부가세 10%가 더해집니다. 최소 ${co.min_seats}석 · 자동 결제되지 않습니다.${co.sandbox ? ' (테스트 결제 환경)' : ''}</p>
+      ${raw(co.recurring_available && !extend ? html`<details style="margin-top:10px"><summary class="link">카드 등록 후 자동 결제(정기결제)로 구독</summary><div class="inline-form" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+        <input class="input input--sm" name="number" placeholder="카드번호" autocomplete="cc-number" inputmode="numeric"><input class="input input--sm" name="expiry" placeholder="MM/YY" autocomplete="cc-exp" style="width:80px">
+        <input class="input input--sm" name="id_no" placeholder="생년월일 6자리 / 사업자번호" inputmode="numeric"><input class="input input--sm" name="password2" type="password" placeholder="비밀번호 앞 2자리" maxlength="2" style="width:130px">
+        <button class="btn btn--secondary btn--sm" type="button" id="bill-recurring">카드 등록 · 결제</button></div><p class="hint">카드 정보는 결제사(NicePay)로만 전달되고 RELAI에 저장되지 않습니다.</p></details>` : '')}
+    </form>`;
+  };
+  const bindBuy = () => {
+    const f = $('#bill-buy'); if (!f) return;
+    const val = () => ({ plan: 'TEAM', cycle: f.cycle.value, seats: Number(f.seats.value) });
+    const q = $('#bill-quote'); let seq = 0;
+    const refresh = async () => {
+      const my = ++seq; const v = val();
+      try {
+        const { quote: x } = await api('GET', `/api/workspaces/${wid}/billing/quote?cycle=${v.cycle}&seats=${v.seats}`); if (my !== seq) return;
+        q.innerHTML = html`${x.seats}석 × ${won(x.unit_price)} × ${x.months}개월 = ${won(x.list_amount)}${raw(x.discount_amount ? html` − 할인 ${won(x.discount_amount)}` : '')} + 부가세 ${won(x.vat_amount)} → <b>${won(x.amount)}</b>`;
+        $('#bill-pay').disabled = false;
+      } catch (e) { if (my !== seq) return; q.textContent = e.fields?.seats || e.message; $('#bill-pay').disabled = true; }
+    };
+    f.cycle.onchange = refresh; f.seats.oninput = refresh; refresh();
+    f.onsubmit = async (e) => { e.preventDefault(); const b = $('#bill-pay'); b.disabled = true; try { const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, val()); location.href = r.checkout_url; } catch (err) { b.disabled = false; toast(err.message); } };
+    const rb = $('#bill-recurring'); if (rb) rb.onclick = async () => {
+      rb.disabled = true;
+      try { billing = (await api('POST', `/api/workspaces/${wid}/billing/recurring`, { ...val(), card: { number: f.number.value, expiry: f.expiry.value, id_no: f.id_no.value, password2: f.password2.value } })).billing; toast('정기결제를 시작했습니다.'); draw(members0); }
+      catch (err) { rb.disabled = false; toast(Object.values(err.fields || {})[0] || err.message); }
+    };
+  };
+  let members0 = [];
+  const CHECKOUT_MSG = { success: '결제가 완료되었습니다. Team 플랜이 적용되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다. 다시 시도하거나 운영자에게 문의해 주세요.', fake: '테스트 결제 화면입니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
+  if (qp0().get('checkout')) { toast(CHECKOUT_MSG[qp0().get('checkout')] || '결제를 처리하고 있습니다. 잠시 후 플랜이 반영됩니다.'); history.replaceState(null, '', '/app/settings#billing'); }
   // Pending invitations (OWNER/ADMIN only) — Phase 13
   let invites = []; const loadInvites = async () => { if (!perm.member_manage) return; try { invites = (await api('GET', `/api/workspaces/${wid}/invitations`)).all.filter((i) => i.status === 'PENDING' || i.status === 'EXPIRED').slice(0, 50); } catch { invites = []; } };
   await loadInvites();
@@ -80,7 +120,7 @@ export async function settingsPage(main = $('#main')) {
         ${raw(perm.member_manage ? html`<td><button class="link linkbtn" data-remove="${m.id}" style="width:auto;color:#B42318">제거</button></td>` : '')}</tr>`).join(''))}</tbody></table></div>
       ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">Member</option><option value="ADMIN">Admin</option>${raw(perm.owner_grant ? '<option value="OWNER">Owner</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
     </div>${raw(inviteTable())}${raw(jiraCard())}</div>`;
-    const bu = $('#bill-upgrade'); if (bu) bu.onclick = async () => { bu.disabled = true; try { const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, { plan: 'TEAM' }); location.href = r.checkout_url; } catch (e) { bu.disabled = false; toast(e.message); } };
+    members0 = members; bindBuy();
     const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 Free 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });
     const ib = $('#invite-btn'); if (ib) ib.onclick = async () => {

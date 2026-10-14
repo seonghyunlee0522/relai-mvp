@@ -1077,7 +1077,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountAccountSecurityRoutes({ app, db, wrap, fail, requireAuth });                       // password reset + e-mail verification
   mountMaintenanceRoutes({ app, db, wrap, fail });                                        // GET /api/cron/purge (Vercel cron)
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
-  mountBillingRoutes({ app, db, guard, wrap, fail, provider: billingProvider });        // Phase 10 billing: plan summary, checkout, cancel
+  mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };
