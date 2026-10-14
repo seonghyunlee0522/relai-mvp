@@ -72,9 +72,9 @@ p{margin:0}
 .auth__side blockquote{margin:0;max-width:440px}
 .auth__side h2{font-size:30px;line-height:1.3;margin-bottom:20px}
 .auth__side p{color:var(--text-2);font-size:16px;line-height:1.75}
-.flow{display:flex;flex-wrap:wrap;gap:7px;margin-top:28px}
-.flow span{font-size:13px;font-weight:600;color:var(--text-2);background:#fff;border:1px solid var(--border);border-radius:999px;padding:5px 13px}
-.flow span:first-child{border-color:var(--border-blue);background:var(--bg-tint);color:var(--blue-deep)}
+.auth__phases{display:flex;flex-wrap:wrap;gap:7px;margin-top:28px}
+.auth__phases span{font-size:13px;font-weight:600;color:var(--text-2);background:#fff;border:1px solid var(--border);border-radius:999px;padding:5px 13px}
+.auth__phases span:first-child{border-color:var(--border-blue);background:var(--bg-tint);color:var(--blue-deep)}
 
 /* app shell */
 .shell{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100vh}

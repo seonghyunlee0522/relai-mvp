@@ -4,6 +4,9 @@ import { navigate } from './core/router.js';
 import { state } from './core/state.js';
 import { showErrors } from './shared/dialogs.js';
 
+/** The 7 lifecycle phases (docs/lifecycle-v2.md); the auth side panels list these, never the retired 일정/실행/검수 names. */
+export const PHASES = ['착수', '요구사항 정의', '분석·설계', '구현', '시험', '전환 및 오픈', '운영 및 유지보수'];
+
 const ERRORS = { google_denied: 'Google 로그인이 취소되었습니다.', oauth_state_invalid: 'Google 로그인 세션이 유효하지 않습니다. 다시 시도해 주세요.', oauth_state_expired: 'Google 로그인 세션이 만료되었습니다. 다시 시도해 주세요.',
   google_not_configured: 'Google 로그인이 아직 설정되지 않았습니다.', google_email_unverified: 'Google 계정의 이메일이 인증되지 않아 로그인할 수 없습니다.', google_id_token_invalid: 'Google 인증에 실패했습니다. 다시 시도해 주세요.', google_nonce_mismatch: 'Google 인증에 실패했습니다. 다시 시도해 주세요.',
   google_exchange_failed: 'Google 인증에 실패했습니다. 다시 시도해 주세요.', google_unavailable: 'Google에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.', google_profile_incomplete: 'Google 계정 정보(이메일)를 가져올 수 없습니다.', account_suspended: '정지된 계정입니다. 운영자에게 문의해 주세요.', invite_invalid: '초대 링크가 유효하지 않습니다. 초대한 분에게 새 링크를 요청해 주세요.', rate_limited: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.' };
@@ -56,7 +59,7 @@ export async function authPage(mode) {
     <aside class="auth__side"><blockquote>
       <h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
       <p>RELAI가 프로젝트의 시작부터 종료까지 다음에 해야 할 일을 안내합니다.</p>
-      <div class="flow"><span>착수</span><span>요구사항</span><span>일정</span><span>실행</span><span>테스트</span><span>검수</span><span>오픈</span></div>
+      <div class="auth__phases">${raw(PHASES.map((p) => html`<span>${p}</span>`).join(''))}</div>
     </blockquote></aside></div>`;
   const form = $('#f');
   $(isSignup ? '#name' : '#email').focus();
