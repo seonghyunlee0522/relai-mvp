@@ -17,5 +17,11 @@
   ],
   "regions": [
     "sin1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/integrations",
+      "schedule": "0 19 * * *"
+    }
   ]
 }

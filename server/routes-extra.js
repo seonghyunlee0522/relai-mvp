@@ -9,6 +9,7 @@ import { APP_TIMEZONE } from './db.js';
 import { ValidationError } from './validate.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
+import * as Q from './testing.js';
 import { KINDS } from './importspec.js';
 import { XLSX_MIME, MAX_IMPORT_ROWS, ImportFileError, buildTemplate, buildExport, buildErrorReport } from './xlsx.js';
 import { previewImport, runImport, inspectWbsWorkbook } from './importer.js';
@@ -17,6 +18,8 @@ import { bulkRequirements, bulkWbs } from './bulk.js';
 import { parseComment, listComments, addComment, getComment, deleteComment } from './comments.js';
 import { can } from './authz.js';
 import { projectDashboard, projectActivity } from './dashboard.js';
+import * as WR from './reports.js';
+import { PDF_MIME, DOCX_MIME, renderReportPdf, renderReportDocx } from './report-export.js';
 
 /** JSON bodies of the import endpoints may carry a base64 xlsx (≤5 MB file → ≈6.7 MB); everything else keeps the 64 KB limit. */
 export const BIG_BODY_LIMIT = '8mb';
@@ -28,9 +31,9 @@ const pct = (s) => encodeURIComponent(s).replace(/['()*]/g, (c) => `%${c.charCod
 const safeName = (s, fallback) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, '_').replace(/^\.+/, '').slice(0, 60) || fallback;
 const ymd = () => new Intl.DateTimeFormat('en-CA', { timeZone: APP_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()).replace(/-/g, '');
 
-function sendXlsx(res, buffer, asciiName, koreanName) {
+function sendXlsx(res, buffer, asciiName, koreanName, type = XLSX_MIME) {
   res.set({
-    'Content-Type': XLSX_MIME,
+    'Content-Type': type,
     'Content-Disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${pct(koreanName)}`,
     'Content-Length': buffer.length,
     'Cache-Control': 'no-store',
@@ -65,7 +68,23 @@ async function wbsRows(db, project, wid) {
     status: lab('status', i.status), progress: i.item_type === 'TASK' && !i.is_group ? i.progress : '', predecessors: i.predecessors.map((p) => byId.get(p.predecessor_id)?.wbs_code).filter(Boolean).join(', ') }));
 }
 
-/* ---------- shared route set for both kinds ---------- */
+async function testRows(db, project, wid) {
+  const label = await memberLabels(db, wid);
+  const tests = await Q.listTests(db, project, {});
+  const links = await db.all(`SELECT l.test_case_id, l.target_type, COALESCE(r.display_id, w.wbs_code) AS code FROM test_links l
+    LEFT JOIN requirements r ON l.target_type = 'REQUIREMENT' AND r.id = l.target_id AND r.archived_at IS NULL
+    LEFT JOIN wbs_items w ON l.target_type = 'WBS' AND w.id = l.target_id AND w.archived_at IS NULL
+    WHERE l.project_id = ? ORDER BY l.target_type, code`, [project.id]);
+  const by = new Map(); for (const l of links) { if (!l.code) continue; const k = `${l.test_case_id}:${l.target_type}`; if (!by.has(k)) by.set(k, []); by.get(k).push(l.code); }
+  const L = KINDS.tests.columns; const lab = (key, v) => L.find((c) => c.key === key).options.find((o) => o.value === v)?.label ?? v;
+  return [...tests].reverse().map((t) => ({ display_id: t.display_id, title: t.title, description: t.description, precondition: t.precondition,
+    steps: t.steps.map((s, i) => `${i + 1}. ${s.instruction}${s.expected ? ` => ${s.expected}` : ''}`).join('\n'), expected_result: t.expected_result,
+    priority: lab('priority', t.priority), status: lab('status', t.status), owner: t.owner_user_id ? label(t.owner_user_id) : '',
+    requirements: (by.get(`${t.id}:REQUIREMENT`) || []).join(', '), wbs: (by.get(`${t.id}:WBS`) || []).join(', ') }));
+}
+const exportRows = { requirements: requirementRows, wbs: wbsRows, tests: testRows };
+
+/* ---------- shared route set for every kind ---------- */
 function mountExcelRoutes({ app, db, guard, wrap, fail, loadProject, mutable }, kind, segBase) {
   const spec = KINDS[kind];
   const loadOnly = async (req, res) => loadProject(req, res);
@@ -76,7 +95,7 @@ function mountExcelRoutes({ app, db, guard, wrap, fail, loadProject, mutable }, 
   }));
   app.get(`${segBase}/export.xlsx`, guard, wrap(async (req, res) => {
     const project = await loadOnly(req, res); if (!project) return;
-    const rows = kind === 'requirements' ? await requirementRows(db, project, req.params.wid) : await wbsRows(db, project, req.params.wid);
+    const rows = await exportRows[kind](db, project, req.params.wid);
     sendXlsx(res, await buildExport(kind, rows), `${spec.names.ascii}-export.xlsx`, `${spec.names.export}_${safeName(project.name, 'project')}_${ymd()}.xlsx`);
   }));
   if (kind === 'wbs') app.post(`${segBase}/import/inspect`, guard, bigJson, wrap(async (req, res) => {   // headers + sample + suggested column mapping
@@ -149,6 +168,11 @@ export function mountWbsRoutes(ctx) {
   mountComments(ctx, 'WBS', wbase, 'iid', 'wbs_items', 'WBS 항목을 찾을 수 없습니다.');
 }
 
+/** Test cases: Excel template / export / import (mounted before the `/:tid` routes). */
+export function mountTestRoutes(ctx) {
+  mountExcelRoutes(ctx, 'tests', ctx.tbase);
+}
+
 export function mountDashboardRoute({ app, db, guard, wrap, loadProject, base }) {
   app.get(`${base}/:pid/dashboard`, guard, wrap(async (req, res) => {
     const project = await loadProject(req, res); if (!project) return;
@@ -159,4 +183,18 @@ export function mountDashboardRoute({ app, db, guard, wrap, loadProject, base })
     const project = await loadProject(req, res); if (!project) return;
     res.json(await projectActivity(db, project.id, { limit: req.query.limit }));
   }));
+}
+
+/** Weekly report download (PDF / Word). Read-only, so archived projects can still export. */
+export function mountReportExportRoutes({ app, db, guard, wrap, fail, loadProject, wrbase }) {
+  const formats = { pdf: { mime: PDF_MIME, render: renderReportPdf }, docx: { mime: DOCX_MIME, render: renderReportDocx } };
+  for (const [ext, f] of Object.entries(formats)) {
+    app.get(`${wrbase}/:rid/export.${ext}`, guard, wrap(async (req, res) => {
+      const project = await loadProject(req, res); if (!project) return;
+      const report = await WR.getReport(db, project.id, req.params.rid);
+      if (!report) return fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.');
+      const name = `${safeName(project.name, 'project')}_주간보고_${report.period_start}_${report.period_end}`;
+      sendXlsx(res, await f.render(report), `weekly-report-${report.period_start}.${ext}`, `${name}.${ext}`, f.mime);
+    }));
+  }
 }

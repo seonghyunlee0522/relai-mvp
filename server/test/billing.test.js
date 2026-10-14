@@ -44,7 +44,7 @@ test('provider interface: fake implements createCheckout/handleWebhook/cancel; r
   assert.equal(providerFromEnv({ NODE_ENV: 'production' }), null);
   assert.equal(providerFromEnv({ NODE_ENV: 'production', BILLING_PROVIDER: 'fake' }), null);
   assert.throws(() => providerFromEnv({ BILLING_PROVIDER: 'nope' }), /unknown BILLING_PROVIDER/);
-  assert.equal(LATEST_VERSION, 25);
+  assert.ok(LATEST_VERSION >= 25);   // later features add migrations on top of billing (25)
 });
 
 test('FREE limits: projects / requirements / WBS / weekly reports / members answer 402 plan_limit_reached with the limit payload', async () => {

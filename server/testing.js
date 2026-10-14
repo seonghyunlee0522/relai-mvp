@@ -4,7 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
-import { nextDisplayId, resolveLinkTarget, ensureNoDuplicate, linkLabel } from './common.js';
+import { nextDisplayId, formatDisplayId, reserveProjectSequence, resolveLinkTarget, ensureNoDuplicate, linkLabel } from './common.js';
 import { createIssue } from './raid.js';
 
 export const TC_STATUSES = ['DRAFT', 'READY', 'BLOCKED', 'COMPLETED'];
@@ -139,8 +139,13 @@ export async function getTest(db, project, id) {
 }
 
 /* ---------- test cases: writes (caller wraps in tx) ---------- */
-export async function createTest(db, project, input, userId) {
-  const { sequence: seq, display_id } = (await nextDisplayId(db, project.id, 'TEST')); const id = randomUUID(); const ts = now();
+/** input.display_id (optional, `TC-nnn`, Excel import): claims that number. `reservedSequences`: numbers other rows of the same batch claim. */
+export async function createTest(db, project, input, userId, { reservedSequences = null } = {}) {
+  let seq; let display_id;
+  const explicit = input.display_id && /^TC-(\d{1,6})$/.exec(input.display_id);
+  if (explicit) { seq = Number(explicit[1]); display_id = formatDisplayId('TEST', seq); await reserveProjectSequence(db, project.id, 'TEST', seq); }
+  else do { ({ sequence: seq, display_id } = (await nextDisplayId(db, project.id, 'TEST'))); } while (reservedSequences && reservedSequences.has(seq));
+  const id = randomUUID(); const ts = now();
   (await db.run(`INSERT INTO test_cases (id, project_id, sequence_number, display_id, title, description, precondition, steps, expected_result, status, priority, owner_user_id, created_by, created_at, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, seq, display_id, input.title, input.description ?? '', input.precondition ?? '', input.steps ?? '[]', input.expected_result ?? '', input.status ?? 'DRAFT', input.priority ?? 'MEDIUM', input.owner_user_id ?? null, userId, ts, ts]));
   (await addHistory(db, 'TEST', id, 'CREATED', {}, userId, ts));

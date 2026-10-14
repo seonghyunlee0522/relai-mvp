@@ -19,7 +19,8 @@ import * as Q from './testing.js';
 import * as M from './metrics.js';
 import * as H from './health.js';
 import * as WR from './reports.js';
-import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, BIG_JSON_PATH } from './routes-extra.js';
+import { mountCronRoutes } from './cron-routes.js';
+import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, mountReportExportRoutes, mountTestRoutes, BIG_JSON_PATH } from './routes-extra.js';
 import { ImportFileError } from './xlsx.js';
 import { requireAction, requireOwner, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
@@ -734,7 +735,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- change requests ---------- */
   const cbase = `${base}/:pid/changes`;
-  const crResponse = async (project, id) => ({ change: (await C.getChange(db, project, id)), summary: (await C.changeStats(db, project.id)) });
+  const memberCount = async (wid) => Number((await db.get('SELECT COUNT(*) AS n FROM workspace_members WHERE workspace_id = ?', [wid])).n);
+  const withReview = async (req, c) => (c ? { ...c, review: C.reviewPermission(c, { userId: req.user.id, role: req.role, memberCount: await memberCount(req.params.wid) }) } : c);
+  const crResponse = async (project, id, req) => ({ change: (await withReview(req, await C.getChange(db, project, id))), summary: (await C.changeStats(db, project.id)) });
   const loadCr = async (req, res, project) => {
     const c = (await C.getChange(db, project, req.params.cid));
     if (!c) fail(res, 404, 'not_found', '변경 요청을 찾을 수 없습니다.');
@@ -768,55 +771,65 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       }
       return cid;
     }));
-    res.status(201).json((await crResponse(project, id)));
+    res.status(201).json((await crResponse(project, id, req)));
   }));
   app.get(`${cbase}/:cid`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
     const c = (await loadCr(req, res, project));
-    if (c) res.json({ change: c });
+    if (c) res.json({ change: await withReview(req, c) });
   }));
   app.patch(`${cbase}/:cid`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     const input = C.parseChange(req.body, { partial: true });
+    if (input.approver_user_id) {
+      if (!(await R.isWorkspaceMember(db, req.params.wid, input.approver_user_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { approver_user_id: '승인자는 현재 Workspace 멤버만 지정할 수 있습니다.' } });
+      if (input.approver_user_id === ctx.c.created_by) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { approver_user_id: '변경 요청 작성자는 승인자로 지정할 수 없습니다.' } });
+    }
     const changed = (await tx(db, async (db) => (await C.updateChange(db, ctx.c, input, req.user.id))));
-    res.json({ ...(await crResponse(ctx.project, ctx.c.id)), changed });
+    res.json({ ...(await crResponse(ctx.project, ctx.c.id, req)), changed });
   }));
   app.post(`${cbase}/:cid/transition`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
+    const action = String(req.body?.action || '');
+    if (action === 'approve' || action === 'reject') {
+      const perm = C.reviewPermission(ctx.c, { userId: req.user.id, role: req.role, memberCount: await memberCount(req.params.wid) });
+      if (perm.reason === 'author') return fail(res, 403, 'self_approval', '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. 다른 승인자에게 요청하세요.');
+      if (!perm.allowed) return fail(res, 403, 'forbidden', '변경 요청은 Owner·Admin 또는 지정된 승인자만 승인하거나 반려할 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
+    }
     const r = (await tx(db, async (db) => (await C.transition(db, ctx.c, String(req.body?.action || ''), { note: req.body?.decision_note }, req.user.id))));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
     if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${ctx.c.status})에서는 이 작업을 할 수 없습니다.`);
-    res.json((await crResponse(ctx.project, ctx.c.id)));
+    res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.post(`${cbase}/:cid/archive`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     (await tx(db, async (db) => (await C.archiveChange(db, ctx.c, req.user.id))));
-    res.json((await crResponse(ctx.project, ctx.c.id)));
+    res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.post(`${cbase}/:cid/requirements`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     const out = (await tx(db, async (db) => (await C.linkRequirement(db, ctx.project, ctx.c, String(req.body?.requirement_id || ''), C.parseRelationType(req.body?.relation_type), req.user.id))));
     if (out.error) return fail(res, 404, 'not_found', '요구사항을 찾을 수 없습니다.');
-    res.status(201).json((await crResponse(ctx.project, ctx.c.id)));
+    res.status(201).json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.patch(`${cbase}/:cid/requirements/:lid`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     const ok = (await tx(db, async (db) => (await C.updateRequirementLink(db, ctx.c, req.params.lid, C.parseRelationType(req.body?.relation_type), req.user.id))));
     if (!ok) return fail(res, 404, 'not_found', '연결을 찾을 수 없습니다.');
-    res.json((await crResponse(ctx.project, ctx.c.id)));
+    res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.delete(`${cbase}/:cid/requirements/:lid`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     const ok = (await tx(db, async (db) => (await C.unlinkRequirement(db, ctx.c, req.params.lid, req.user.id))));
     if (!ok) return fail(res, 404, 'not_found', '연결을 찾을 수 없습니다.');
-    res.json((await crResponse(ctx.project, ctx.c.id)));
+    res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.post(`${cbase}/:cid/impacts`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     const out = (await tx(db, async (db) => (await C.addImpact(db, ctx.project, ctx.c, String(req.body?.wbs_item_id || ''), C.parseImpactType(req.body?.impact_type), req.body?.impact_note || '', req.user.id))));
     if (out.error) return fail(res, 404, 'not_found', 'WBS 항목을 찾을 수 없습니다.');
-    res.status(201).json((await crResponse(ctx.project, ctx.c.id)));
+    res.status(201).json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.patch(`${cbase}/:cid/impacts/:iid`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
@@ -825,13 +838,13 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (req.body?.impact_note !== undefined) patch.impact_note = String(req.body.impact_note);
     const ok = (await tx(db, async (db) => (await C.updateImpact(db, ctx.c, req.params.iid, patch, req.user.id))));
     if (!ok) return fail(res, 404, 'not_found', '영향 항목을 찾을 수 없습니다.');
-    res.json((await crResponse(ctx.project, ctx.c.id)));
+    res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.delete(`${cbase}/:cid/impacts/:iid`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     const ok = (await tx(db, async (db) => (await C.removeImpact(db, ctx.c, req.params.iid, req.user.id))));
     if (!ok) return fail(res, 404, 'not_found', '영향 항목을 찾을 수 없습니다.');
-    res.json((await crResponse(ctx.project, ctx.c.id)));
+    res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
 
 
@@ -912,6 +925,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (t.archived_at) { fail(res, 409, 'archived', '보관된 테스트는 수정할 수 없습니다.'); return null; }
     return { project, t };
   };
+  mountTestRoutes({ app, db, guard, wrap, fail, loadProject, mutable, tbase });   // Excel template / export / import (before the /:tid routes)
   app.get(tbase, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; res.json({ items: (await Q.listTests(db, project, req.query)), tests: (await Q.testStats(db, project.id)) }); }));
   app.get(`${tbase}/coverage`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; res.json({ coverage: (await Q.coverage(db, project.id)), tests: (await Q.testStats(db, project.id)) }); }));
   app.post(tbase, guard, wrap(async (req, res) => {
@@ -1006,6 +1020,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountDashboardRoute({ app, db, guard, wrap, loadProject, base });
   mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base });   // Phase 11 AI (draft/candidate endpoints + approval commits)
   mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base });   // Phase 12 integrations (Jira)
+  mountCronRoutes({ app, db, wrap, fail });                                             // GET /api/cron/integrations (Vercel cron, CRON_SECRET)
   mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin });   // Phase 13 Google sign-in + invitations
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
   mountBillingRoutes({ app, db, guard, wrap, fail, provider: billingProvider });        // Phase 10 billing: plan summary, checkout, cancel
@@ -1019,6 +1034,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const id = (await tx(db, async (db) => (await WR.generateReport(db, project, period, req.user.id))));
     res.status(201).json((await rResp(project, id)));
   }));
+  mountReportExportRoutes({ app, db, guard, wrap, fail, loadProject, wrbase });   // PDF / Word download
   app.get(`${wrbase}/:rid`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const r = (await loadReport(req, res, project)); if (r) res.json((await rResp(project, r.id))); }));
   app.patch(`${wrbase}/:rid`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return; const r = (await loadReport(req, res, project)); if (!r) return;
