@@ -34,7 +34,7 @@ const CHARTER_TEXT = {
   ],
   OPERATIONS: [
     ['change_management', '변경관리 방식', '범위·일정 변경 요청의 검토·승인 절차', '예: 일정 또는 범위 영향이 있는 변경은 PM 검토 후 고객 승인', 2],
-    ['acceptance', '검수 / 완료 기준', '검수와 프로젝트 완료로 보는 조건', '예: UAT 완료 및 Critical Issue 0건 / 운영 이관 완료 후 최종 검수', 2],
+    ['acceptance', '검수 / 완료 기준', '검수와 프로젝트 완료로 보는 조건', '예: UAT 완료 및 Critical 이슈 0건 / 운영 이관 완료 후 최종 검수', 2],
   ],
 };
 const textField = ([f, label, hint, ph, rows]) => ({ f, label, hint, ph, rows });

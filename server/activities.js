@@ -140,10 +140,10 @@ function development(key, ctx) {
       : ok('종료 예정일이 지난 미완료 작업이 없습니다.', act('WBS 보기 →', u('?ctx=monitor')));
     case 'ISSUES': {
       // US-5: no issue at all → the manual 완료 처리 button (a project without problems must still be able to close this required activity)
-      if (n(is.total) === 0) return { ...manual('아직 기록된 Issue가 없습니다. 문제가 없었다면 완료 처리하세요.', act('Issue 등록 →', iu('?new=1'))), row_text: true };
-      if (n(is.active)) { const parts = [`열린 Issue ${is.active}건`]; if (n(is.critical)) parts.push(`심각 ${is.critical}건`); if (n(is.blocked)) parts.push(`차단됨 ${is.blocked}건`);
+      if (n(is.total) === 0) return { ...manual('아직 기록된 이슈가 없습니다. 문제가 없었다면 완료 처리하세요.', act('이슈 등록 →', iu('?new=1'))), row_text: true };
+      if (n(is.active)) { const parts = [`열린 이슈 ${is.active}건`]; if (n(is.critical)) parts.push(`심각 ${is.critical}건`); if (n(is.blocked)) parts.push(`차단됨 ${is.blocked}건`);
         return prog(parts.join(' · '), act('이슈 처리 →', iu(n(is.critical) ? '?severity=CRITICAL' : n(is.blocked) ? '?status=BLOCKED' : '')), { crit: Boolean(n(is.critical) || n(is.blocked)) }); }
-      return ok(`Issue ${is.total}건이 모두 해결되었습니다.`, act('Issue 보기 →', iu()));
+      return ok(`이슈 ${is.total}건이 모두 해결되었습니다.`, act('이슈 보기 →', iu()));
     }
     case 'CHANGES': {
       const cu = (qs = '') => `/app/projects/${ctx.pid}/changes${qs}`;

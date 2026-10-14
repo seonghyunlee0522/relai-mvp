@@ -32,7 +32,7 @@ const VALUE_MAP = { type: { UNSPECIFIED: '미지정', FUNCTIONAL: '기능', NON_
   priority: { UNSPECIFIED: '미지정', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' }, scope: { UNDECIDED: '미결정', IN_SCOPE: '범위 내', OUT_OF_SCOPE: '범위 외' },
   item_type: { SUMMARY: '상위 항목', TASK: '작업', MILESTONE: '마일스톤' } };
 const SIMPLE = {
-  CREATED: '새로 등록했습니다.', ARCHIVED: '보관했습니다.', CONVERTED: '다른 항목으로 전환했습니다.', EXECUTED: '테스트를 실행했습니다.', ISSUE_RAISED: 'Issue를 등록했습니다.',
+  CREATED: '새로 등록했습니다.', ARCHIVED: '보관했습니다.', CONVERTED: '다른 항목으로 전환했습니다.', EXECUTED: '테스트를 실행했습니다.', ISSUE_RAISED: '이슈를 등록했습니다.',
   CRITERION_ADDED: '완료 조건을 추가했습니다.', CRITERION_UPDATED: '완료 조건을 수정했습니다.', CRITERION_REMOVED: '완료 조건을 삭제했습니다.',
   LINKED_WBS: 'WBS 항목을 연결했습니다.', UNLINKED_WBS: 'WBS 연결을 해제했습니다.', LINKED_REQ: '요구사항을 연결했습니다.', UNLINKED_REQ: '요구사항 연결을 해제했습니다.',
   LINK_TYPE_CHANGED: '연결 유형을 변경했습니다.', MOVED: '위치를 이동했습니다.', DEP_ADDED: '선행 작업을 추가했습니다.', DEP_REMOVED: '선행 작업을 삭제했습니다.',

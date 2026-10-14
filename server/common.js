@@ -43,7 +43,7 @@ export const LINK_TARGETS = {
   REQUIREMENT: { table: 'requirements', code: 'display_id', label: '요구사항' },
   WBS: { table: 'wbs_items', code: 'wbs_code', label: 'WBS' },
   CHANGE: { table: 'change_requests', code: 'display_id', label: '변경 요청' },
-  ISSUE: { table: 'issues', code: 'display_id', label: 'Issue' },
+  ISSUE: { table: 'issues', code: 'display_id', label: '이슈' },
   RISK: { table: 'risks', code: 'display_id', label: 'Risk' },
   TEST: { table: 'test_cases', code: 'display_id', label: '테스트' },
   ACCEPTANCE: { table: 'acceptances', code: 'display_id', label: '검수' },

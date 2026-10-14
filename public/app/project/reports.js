@@ -24,11 +24,11 @@ export async function reportsPage(pid, main = $('#main')) {
   main.innerHTML = html`<div class="page page--wide page--flow">
     ${raw(projectHead(p, g, { tab: 'overview-reports', title: '주간보고' }))}
     <section class="ovsec rpl" aria-labelledby="rplT">
-      <div class="ovsec__h"><h2 id="rplT">주간보고</h2><small class="ovsec__ctx">보고 기간의 WBS · 변경 · Issue · 테스트 이력을 모아 초안을 만들고, 편집 후 확정합니다.</small>
+      <div class="ovsec__h"><h2 id="rplT">주간보고</h2><small class="ovsec__ctx">보고 기간의 WBS · 변경 · 이슈 · 테스트 이력을 모아 초안을 만들고, 편집 후 확정합니다.</small>
         ${raw(archived ? '' : '<button type="button" class="btn btn--primary btn--sm rpl__new" id="rp-new">주간보고 생성</button>')}</div>
       ${raw(items.length ? html`<div class="rpl__wrap"><table class="rtable rpl__t"><thead><tr><th>보고 기간</th><th>제목</th><th>상태</th><th>생성</th><th>확정</th></tr></thead><tbody>
         ${raw(items.map((r) => html`<tr><td class="mono rpl__p"><a class="link" href="/app/projects/${pid}/reports/${r.id}" data-link>${r.period_start} ~ ${r.period_end}</a></td><td class="rpl__ti"><a href="/app/projects/${pid}/reports/${r.id}" data-link>${r.title}</a></td><td class="rpl__s"><span class="chip ${RS[r.status][1]}">${RS[r.status][0]}</span></td><td class="dim rpl__d" data-label="생성">${fmtDT(r.generated_at)}</td><td class="dim rpl__d" data-label="확정">${r.finalized_at ? fmtDT(r.finalized_at) : '-'}</td></tr>`).join(''))}
-      </tbody></table></div>` : emptyState({ title: '아직 생성된 주간보고가 없습니다.', body: '보고 기간을 정하면 그 기간의 진행사항·완료 Task·Issue·Risk·변경 요청을 모아 편집 가능한 초안을 만듭니다.', cta: archived ? null : { id: 'rp-new2', label: '주간보고 생성' }, small: true }))}
+      </tbody></table></div>` : emptyState({ title: '아직 생성된 주간보고가 없습니다.', body: '보고 기간을 정하면 그 기간의 진행사항·완료 Task·이슈·Risk·변경 요청을 모아 편집 가능한 초안을 만듭니다.', cta: archived ? null : { id: 'rp-new2', label: '주간보고 생성' }, small: true }))}
     </section>
   </div>`;
   const b1 = $('#rp-new'); if (b1) b1.onclick = () => generate();

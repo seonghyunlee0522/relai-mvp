@@ -11,7 +11,7 @@ import { daysUntil, exceptions, scheduleState, varianceText, varianceTone } from
 import { relTime } from '../shared/jira.js';
 import { toast } from '../shared/dialogs.js';
 
-const ATT_TYPE = { ISSUE: 'Issue', RISK: 'Risk', TEST: 'Test', CHANGE: 'Change', WBS: 'WBS', ACCEPTANCE: 'Acceptance', REQUIREMENT: 'Requirement' };
+const ATT_TYPE = { ISSUE: '이슈', RISK: 'Risk', TEST: 'Test', CHANGE: 'Change', WBS: 'WBS', ACCEPTANCE: 'Acceptance', REQUIREMENT: 'Requirement' };
 const H_CLS = { GOOD: 'is-good', WARNING: 'is-warn', CRITICAL: 'is-crit', UNKNOWN: 'is-unknown' };
 const pv = (v) => (v === null || v === undefined ? '-' : `${v}%`);
 const n = (v) => Number(v) || 0;
@@ -86,7 +86,7 @@ const qualityCol = (g, p) => {
   return html`<div class="ovcol"><h3>품질</h3>
     ${raw(kv('Test Coverage', pv(k.test_coverage), { href: `${u}/tests?tab=coverage`, sub: n(t.total) ? `테스트 ${t.total}건` : '등록된 테스트 없음' }))}
     ${raw(kv('테스트 통과율', pv(passRate), { href: `${u}/tests?last_result=PASS`, tone: passRate === null ? '' : n(t.last_fail) ? 'crit' : 'good', sub: n(t.executed) ? `Pass ${n(t.last_pass)} · Fail ${n(t.last_fail)} / 실행 ${t.executed}` : '' }))}
-    ${raw(kv('미해결 Issue', `${n(is.active)}건`, { href: `${u}/issues`, tone: n(is.active) ? 'crit' : '', sub: n(is.critical) ? `Critical ${is.critical}건` : '' }))}
+    ${raw(kv('미해결 이슈', `${n(is.active)}건`, { href: `${u}/issues`, tone: n(is.active) ? 'crit' : '', sub: n(is.critical) ? `Critical ${is.critical}건` : '' }))}
     ${raw(kv('Risk', `${risks}건`, { href: `${u}/issues?tab=risks`, tone: n(rs.high_or_critical) ? 'crit' : '', sub: n(rs.high_or_critical) ? `High 이상 ${rs.high_or_critical}건` : '' }))}
     ${raw(kv('Acceptance', n(a.total) ? `${n(a.accepted)} / ${a.total} 승인` : '-', { href: `${u}/tests?tab=acceptance`, tone: n(a.rework) ? 'warn' : n(a.total) && n(a.accepted) === n(a.total) ? 'good' : '', sub: [n(a.requested) ? `요청 ${a.requested}` : '', n(a.rework) ? `보완 필요 ${a.rework}` : ''].filter(Boolean).join(' · ') }))}
   </div>`;

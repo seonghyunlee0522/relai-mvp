@@ -14,7 +14,7 @@ export async function openImpactDialog({ pid, change, onDone }) {
   const d = aiDialog({ title: `AI 영향 분석 — ${change.display_id}`, subtitle: `${change.title} · 연결된 요구사항, 연결 추적, 테스트, 리스크를 바탕으로 영향 후보를 찾습니다. 선택한 항목만 영향으로 기록됩니다.`, feature: 'CHANGE_IMPACT', status: st });
   let res = null;
   const start = () => {
-    d.body.innerHTML = html`<div class="aid__intro"><p>변경 요청의 제목·설명·사유와 현재 프로젝트의 요구사항 ↔ WBS 연결, 테스트, Open Risk/Issue를 AI에게 전달합니다.</p>${raw(aiNotice(st))}</div>`;
+    d.body.innerHTML = html`<div class="aid__intro"><p>변경 요청의 제목·설명·사유와 현재 프로젝트의 요구사항 ↔ WBS 연결, 테스트, 미해결 리스크·이슈를 AI에게 전달합니다.</p>${raw(aiNotice(st))}</div>`;
     d.foot.innerHTML = html`<span></span><span class="aid__btns"><button type="button" class="btn btn--secondary btn--sm" data-close>취소</button><button type="button" class="btn btn--primary btn--sm" id="ai-run" ${canRun(st, 'CHANGE_IMPACT') ? '' : 'disabled'}>영향 분석 시작</button></span>`;
     $('#ai-run', d.el).onclick = run;
   };

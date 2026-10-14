@@ -1019,7 +1019,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   ]) {
     const xbase = `${base}/:pid/${seg}`;
     const resp = async (project, id) => ({ [type === 'ISSUE' ? 'issue' : 'risk']: await getOne(db, project, id), issues: (await X.issueStats(db, project.id)), risks: (await X.riskStats(db, project.id)) });
-    const loadX = async (req, res, project) => { const x = await getOne(db, project, req.params.xid); if (!x) fail(res, 404, 'not_found', type === 'ISSUE' ? 'Issue를 찾을 수 없습니다.' : 'Risk를 찾을 수 없습니다.'); return x; };
+    const loadX = async (req, res, project) => { const x = await getOne(db, project, req.params.xid); if (!x) fail(res, 404, 'not_found', type === 'ISSUE' ? '이슈를 찾을 수 없습니다.' : 'Risk를 찾을 수 없습니다.'); return x; };
     const xMutable = async (req, res) => {
       const project = (await loadProject(req, res));
       if (!project || !mutable(res, project)) return null;
@@ -1073,7 +1073,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         const ctx = (await xMutable(req, res)); if (!ctx) return;
         const r = (await tx(db, async (db) => (await X.convertRiskToIssue(db, ctx.project, ctx.x, req.user.id))));
         if (r.error === 'already_converted') return fail(res, 409, 'already_converted', `이미 ${r.display_id}(으)로 전환된 Risk입니다.`);
-        if (r.error) return fail(res, 409, 'invalid_state', '종료된 Risk는 Issue로 전환할 수 없습니다.');
+        if (r.error) return fail(res, 409, 'invalid_state', '종료된 리스크는 이슈로 전환할 수 없습니다.');
         res.status(201).json({ ...(await resp(ctx.project, ctx.x.id)), issue: (await X.getIssue(db, ctx.project, r.issueId)) });
       }));
     }
@@ -1130,7 +1130,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const ex = ctx.t.executions.find((e) => e.id === req.params.eid);
     if (!ex) return fail(res, 404, 'not_found', '실행 기록을 찾을 수 없습니다.');
     const r = (await tx(db, async (db) => (await Q.raiseIssueFromExecution(db, ctx.project, ctx.t, ex, req.user.id))));
-    if (r.error === 'not_failed') return fail(res, 409, 'not_failed', 'FAIL 결과에서만 Issue를 등록할 수 있습니다.');
+    if (r.error === 'not_failed') return fail(res, 409, 'not_failed', 'FAIL 결과에서만 이슈를 등록할 수 있습니다.');
     if (r.error === 'already_raised') return fail(res, 409, 'already_raised', `이미 ${r.issue.display_id}(으)로 등록된 실행입니다.`, { issue_id: r.issue.id });
     res.status(201).json({ ...(await tResp(ctx.project, ctx.t.id)), issue: (await X.getIssue(db, ctx.project, r.issueId)) });
   }));
