@@ -36,6 +36,7 @@ export async function authPage(mode) {
       <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : '가입하면 나만의 Workspace가 바로 만들어집니다.') : '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.'}</p>
       <form id="f" novalidate>
         <div class="form-err" id="ferr" role="alert" hidden></div>
+        ${raw(!isSignup && qp.get('deleted') ? '<div class="notice" style="margin-bottom:14px">계정이 삭제되었습니다. 그동안 RELAI를 이용해 주셔서 감사합니다.</div>' : '')}
         ${raw(!isSignup && qp.get('suspended') ? '<div class="notice notice--warn" style="margin-bottom:14px">정지된 계정입니다. 운영자에게 문의해 주세요.</div>' : '')}
         ${raw(errCode ? html`<div class="notice notice--warn" style="margin-bottom:14px">${ERRORS[errCode] || '로그인에 실패했습니다. 다시 시도해 주세요.'}</div>` : '')}
         ${raw(isSignup ? inviteBanner : '')}

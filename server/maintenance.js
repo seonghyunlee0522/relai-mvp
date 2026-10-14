@@ -5,8 +5,10 @@
  *   auth_tokens       expired or used more than a day ago (kept briefly so a double-click on a used link reads "already used")
  *   rate_limits       window ended
  *   auth_oauth_states expired more than a day ago
+ *   login_records     older than 3 months (통신비밀보호법), and workspaces deleted more than 30 days ago (server/auth/account.js)
  */
 import { timingSafeEqual } from 'node:crypto';
+import { purgeAccountData } from './auth/account.js';
 
 export async function purgeExpired(db) {
   const count = async (sql) => Number((await db.get(`WITH d AS (${sql} RETURNING 1) SELECT COUNT(*) AS n FROM d`)).n);
@@ -15,6 +17,7 @@ export async function purgeExpired(db) {
     auth_tokens: await count(`DELETE FROM auth_tokens WHERE expires_at < now() - interval '1 day' OR used_at < now() - interval '1 day'`),
     rate_limits: await count('DELETE FROM rate_limits WHERE reset_at < now()'),
     oauth_states: await count(`DELETE FROM auth_oauth_states WHERE expires_at < now() - interval '1 day'`),
+    ...(await purgeAccountData(db)),
   };
 }
 

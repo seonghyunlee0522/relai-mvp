@@ -23,7 +23,7 @@ import * as WR from './reports.js';
 import { mountCronRoutes } from './cron-routes.js';
 import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, mountReportExportRoutes, mountTestRoutes, BIG_JSON_PATH } from './routes-extra.js';
 import { ImportFileError } from './xlsx.js';
-import { requireAction, requireOwner, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
+import { requireAction, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
@@ -31,6 +31,7 @@ import { mountIntegrationRoutes } from './integrations/routes.js';
 import { mountAuthRoutes } from './auth/routes.js';
 import { mountAccountSecurityRoutes, sendVerificationEmail } from './auth/account-security.js';
 import { mountMaintenanceRoutes } from './maintenance.js';
+import { mountAccountRoutes, recordLogin } from './auth/account.js';
 import { createDirectSignupUser, createUser, touchIdentity, normEmail } from './accounts.js';
 import * as I from './invitations.js';
 import { writeAudit } from './admin.js';
@@ -87,8 +88,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     insSession: { run: (h, uid, exp) => db.run('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?,?,?)', [h, uid, exp]) },
     delSession: { run: (h) => db.run('DELETE FROM sessions WHERE token_hash = ?', [h]) },
     memberships: { all: (uid) => db.all(`SELECT w.id, w.name, w.status, m.role FROM workspace_members m
-      JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? ORDER BY w.created_at`, [uid]) },
-    role: { get: (wid, uid) => db.get('SELECT m.role, w.status AS workspace_status FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = ? AND m.user_id = ?', [wid, uid]) },
+      JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND w.status <> 'CLOSED' ORDER BY w.created_at`, [uid]) },
+    // A deleted (CLOSED) workspace answers 404 like any workspace the caller is not a member of.
+    role: { get: (wid, uid) => db.get(`SELECT m.role, w.status AS workspace_status FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = ? AND m.user_id = ? AND w.status <> 'CLOSED'`, [wid, uid]) },
     delUserSessions: { run: (uid) => db.run('DELETE FROM sessions WHERE user_id = ?', [uid]) },
   };
 
@@ -165,10 +167,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
 
   /* ---------- auth ---------- */
-  /** Shared post-authentication step (password login, Google callback): rotate session, stamp last login. */
-  const afterLogin = async (req, res, user) => {
+  /** Shared post-authentication step (password login, Google callback): rotate session, stamp last login, keep the login record. */
+  const afterLogin = async (req, res, user, method = 'PASSWORD') => {
     if (req.sessionToken) await q.delSession.run(tokenHash(req.sessionToken));
     await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [user.id]);
+    await recordLogin(db, { userId: user.id, method, req });
     await startSession(res, user.id);
   };
   afterLogin.memberships = (uid) => q.memberships.all(uid);
@@ -204,6 +207,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       throw e;
     }
     await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [userId]);
+    await recordLogin(db, { userId, method: 'SIGNUP', req });
     await startSession(res, userId);
     // Direct signup: the address is unproven until the link is clicked (invite signups are verified above). A failed send is
     // recorded in email_deliveries and the user can resend from the app banner — signup itself still succeeds.
@@ -503,10 +507,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     await db.run('UPDATE workspaces SET name = ? WHERE id = ?', [name, req.params.wid]);
     res.json({ workspace: await db.get('SELECT id, name, owner_id, created_at FROM workspaces WHERE id = ?', [req.params.wid]) });
   }));
-  app.delete(ws, guard, requireOwner(), wrap(async (req, res) => {
-    // Owner-only by policy; actual deletion is deliberately not implemented yet (billing-era data retention rules first).
-    fail(res, 501, 'not_implemented', 'Workspace 삭제는 아직 지원하지 않습니다.');
-  }));
+  // DELETE /api/workspaces/:wid (OWNER, soft delete + 30-day purge) lives in auth/account.js.
   const MEMBER_ERR = { bad_role: [400, '역할이 올바르지 않습니다.'], owner_only: [403, 'OWNER 역할은 OWNER만 부여하거나 회수할 수 있습니다.'], user_not_found: [404, '해당 이메일로 가입된 사용자가 없습니다.'],
     already_member: [409, '이미 Workspace 멤버입니다.'], not_member: [404, '멤버를 찾을 수 없습니다.'], last_owner: [409, 'Workspace에는 최소 한 명의 OWNER가 있어야 합니다.'] };
   const memberFail = (res, out) => fail(res, MEMBER_ERR[out.error][0], out.error, MEMBER_ERR[out.error][1]);
@@ -1075,6 +1076,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountCronRoutes({ app, db, wrap, fail });                                             // GET /api/cron/integrations (Vercel cron, CRON_SECRET)
   mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin });   // Phase 13 Google sign-in + invitations
   mountAccountSecurityRoutes({ app, db, wrap, fail, requireAuth });                       // password reset + e-mail verification
+  mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, toPublicUser, clearSessionCookie,
+    sessionHash: (req) => (req.sessionToken ? tokenHash(req.sessionToken) : null) });   // profile, password change, 회원 탈퇴, workspace delete
   mountMaintenanceRoutes({ app, db, wrap, fail });                                        // GET /api/cron/purge (Vercel cron)
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
   mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron

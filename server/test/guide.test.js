@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { testDb, TEST_DATABASE_URL } from './helpers.js';
 import { openDb, schemaSql, bindTx } from '../db.js';
-import { migrate, LATEST_VERSION } from '../migrations.js';
+import { migrate, LATEST_VERSION, migrations } from '../migrations.js';
 import { createApp } from '../app.js';
 
 async function boot(db = null) {
@@ -152,7 +152,7 @@ test('migration: database recorded at an older version gets Lifecycle V2 phases 
       INSERT INTO schema_migrations (version, name) VALUES (1, 'v1');`);
   } finally { c.release(); }
   const applied = await migrate(db, schemaSql, (client) => bindTx(client, db));
-  assert.equal(applied.length, LATEST_VERSION - 1); // everything after v1
+  assert.equal(applied.length, migrations.filter((m) => m.version > 1).length); // everything after v1 (version numbers may have gaps: 27–29 are reserved by parallel branches)
   assert.equal((await db.get('SELECT MAX(version) AS v FROM schema_migrations')).v, LATEST_VERSION);
   assert.equal((await db.get('SELECT COUNT(*) n FROM project_phases')).n, 14);
   assert.equal((await db.get('SELECT COUNT(*) n FROM project_steps')).n, 2 * STEPS_PER_PROJECT);

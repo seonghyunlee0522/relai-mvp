@@ -152,6 +152,6 @@ test('purge: expired sessions / old tokens / ended rate windows are deleted; cro
   } finally { if (prev === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prev; }
   assert.equal((await U.c('GET', '/api/me')).status, 200);   // live session untouched
   assert.ok(!(await db.get(`SELECT 1 FROM sessions WHERE token_hash = 'old-session'`)));
-  assert.deepEqual(await purgeExpired(db), { sessions: 0, auth_tokens: 0, rate_limits: 0, oauth_states: 0 });
+  assert.deepEqual(await purgeExpired(db), { sessions: 0, auth_tokens: 0, rate_limits: 0, oauth_states: 0, login_records: 0, workspaces_purged: 0 });
   server.close();
 });

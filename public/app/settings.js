@@ -18,6 +18,9 @@ export async function settingsPage(main = $('#main')) {
   // Plan & billing (Phase 10): plan, usage against limits, OWNER-only purchase (cycle × seats, server-quoted, VAT excluded) / cancel.
   let billing = null; const loadBilling = async () => { try { billing = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch { billing = null; } };
   await loadBilling();
+  // Account lifecycle: login methods, password state, what would block 회원 탈퇴.
+  let account = null; const loadAccount = async () => { try { account = (await api('GET', '/api/me/account')).account; } catch { account = null; } };
+  await loadAccount();
   const SUB_STATUS = { ACTIVE: ['chip--done', '이용 중'], PAST_DUE: ['chip--fail', '결제 실패'], CANCELED: ['chip--muted', '해지됨'], EXPIRED: ['chip--muted', '만료'] };
   const billingCard = () => {
     if (!billing) return '';
@@ -105,11 +108,17 @@ export async function settingsPage(main = $('#main')) {
   const draw = (members) => {
     resetMembers();
     main.innerHTML = html`<div class="page page--narrow"><div class="page__head"><h1>Settings</h1></div>
-    <div class="panel"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
-      <dt>이름</dt><dd>${state.user.name}</dd><dt>이메일</dt><dd>${state.user.email}</dd></dl></div></div>
+    <div class="panel" id="profile"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
+      <dt>이름</dt><dd><form id="mef" class="inline-form"><input class="input input--sm" name="name" value="${state.user.name}" maxlength="50" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form></dd>
+      <dt>이메일</dt><dd>${state.user.email}</dd>
+      ${raw(account ? html`<dt>로그인 방법</dt><dd>${account.login_methods.map((m) => (m.provider === 'GOOGLE' ? 'Google' : '비밀번호')).join(' · ') || '-'}</dd>` : '')}</dl>
+      ${raw(account ? html`<div class="actions" style="margin-top:14px">${raw(account.has_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 변경</button>'
+        : account.can_set_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 설정</button>' : '<small class="dim">이메일 인증 후 비밀번호를 설정할 수 있습니다.</small>')}
+        <span class="panel__sp"></span><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}</div></div>
     <div class="panel" style="margin-top:20px" data-tour-id="workspace-settings"><div class="panel__h">Workspace</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
-      <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl></div></div>
+      <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
+      ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">Workspace 삭제</button></div>' : '')}</div></div>
     ${raw(billingCard())}
     <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
       <div class="rtable-wrap--in"><table class="rtable rtable--raid" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
@@ -138,6 +147,33 @@ export async function settingsPage(main = $('#main')) {
     const jc = $('#jira-connect'); if (jc) jc.onclick = connect;
     const jr = $('#jira-reconnect'); if (jr) jr.onclick = connect;
     const jd = $('#jira-disconnect'); if (jd) jd.onclick = async () => { if (!(await confirmDialog({ title: 'Jira 연결을 해제할까요?', body: '저장된 Jira 인증 정보가 삭제되고 모든 프로젝트의 동기화가 중단됩니다. 프로젝트·WBS·요구사항 데이터와 기존 Jira 연결 기록은 삭제되지 않습니다.', confirm: '연결 해제', danger: true }))) return; try { integ = await api('POST', `/api/workspaces/${wid}/integrations/jira/disconnect`, {}); toast('Jira 연결을 해제했습니다.'); draw(members); } catch (e) { toast(e.message); } };
+    const mef = $('#mef'); if (mef) mef.onsubmit = async (e) => { e.preventDefault(); try { const r = await api('PATCH', '/api/me', { name: mef.name.value.trim() }); state.user.name = r.user.name; toast('이름을 저장했습니다.'); } catch (err) { toast(err.fields?.name || err.message); } };
+    const reauthField = () => (account?.has_password ? [{ name: 'password', label: '비밀번호', type: 'password', required: true, hint: '본인 확인을 위해 비밀번호를 입력해 주세요.' }] : []);
+    const reauthNote = () => (account?.has_password ? '' : html`<p class="hint">Google 계정 사용자는 보안을 위해 최근 ${account?.reauth_minutes || 10}분 안에 다시 로그인한 경우에만 진행할 수 있습니다.</p>`);
+    const pw = $('#pw-change'); if (pw) pw.onclick = async () => {
+      const set = !account.has_password;
+      const r = await formDialog({ title: set ? '비밀번호 설정' : '비밀번호 변경', body: '변경하면 이 기기를 제외한 모든 기기에서 로그아웃됩니다.', confirm: set ? '설정' : '변경',
+        fields: [...(set ? [] : [{ name: 'current_password', label: '현재 비밀번호', type: 'password', required: true }]), { name: 'new_password', label: '새 비밀번호', type: 'password', required: true, hint: '영문과 숫자를 포함해 8자 이상' }],
+        submit: (v) => api('POST', '/api/me/password', { current_password: v.current_password, new_password: v.new_password }) });
+      if (!r) return; toast(set ? '비밀번호를 설정했습니다. 이제 이메일과 비밀번호로도 로그인할 수 있습니다.' : '비밀번호를 변경했습니다.'); await loadAccount(); draw(members);
+    };
+    const ad = $('#acct-delete'); if (ad) ad.onclick = async () => {
+      await loadAccount(); const d = account.deletion;
+      if (d.blockers.length) return confirmDialog({ title: '지금은 계정을 삭제할 수 없습니다', body: d.blockers.map((b) => b.message).join(' '), confirm: '확인' });
+      const r = await formDialog({ title: '계정을 삭제할까요?', confirm: '계정 삭제',
+        body: html`<p>이름·이메일·비밀번호 등 계정 정보가 즉시 삭제되고 다시 복구할 수 없습니다. 다른 Workspace에서 작성한 업무 기록은 '탈퇴한 사용자'로 남습니다.</p>
+          ${raw(d.workspaces_deleted.length ? html`<p>혼자 쓰는 Workspace <b>${d.workspaces_deleted.map((w) => w.name).join(', ')}</b>도 함께 삭제되며 30일 후 데이터가 완전히 파기됩니다.</p>` : '')}
+          <p class="hint">로그인 기록은 통신비밀보호법에 따라 3개월, 결제 기록은 전자상거래법에 따라 5년 동안 보관 후 파기합니다.</p>${raw(reauthNote())}`,
+        fields: reauthField(), submit: (v) => api('DELETE', '/api/me', { password: v.password }) });
+      if (r) location.href = '/login?deleted=1';
+    };
+    const wd = $('#ws-delete'); if (wd) wd.onclick = async () => {
+      const r = await formDialog({ title: 'Workspace를 삭제할까요?', confirm: 'Workspace 삭제',
+        body: html`<p><b>${workspace.name}</b>의 모든 프로젝트와 데이터에 모든 멤버가 즉시 접근할 수 없게 되고, 30일 후 완전히 파기됩니다. 유료 구독은 먼저 해지해야 합니다.</p>${raw(reauthNote())}`,
+        fields: [{ name: 'confirm_name', label: '확인을 위해 Workspace 이름을 입력하세요', required: true, placeholder: workspace.name }, ...reauthField()],
+        submit: (v) => api('DELETE', `/api/workspaces/${wid}`, { confirm_name: v.confirm_name, password: v.password }) });
+      if (r) { toast('Workspace를 삭제했습니다.'); location.href = '/app'; }
+    };
     const wsf = $('#wsf'); if (wsf) wsf.onsubmit = async (e) => { e.preventDefault(); try { const r = await api('PATCH', `/api/workspaces/${wid}`, { name: wsf.name.value.trim() }); state.workspace.name = r.workspace.name; toast('Workspace 이름을 저장했습니다.'); } catch (err) { toast(err.fields?.name || err.message); } };
     const addm = $('#addm'); if (addm) addm.onsubmit = async (e) => { e.preventDefault(); $('#adderr').textContent = ''; try { const r = await api('POST', `/api/workspaces/${wid}/members`, { email: addm.email.value, role: addm.role.value }); toast('멤버를 추가했습니다.'); draw(r.members); } catch (err) { $('#adderr').textContent = err.message; } };
     main.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = async () => { try { const r = await api('PATCH', `/api/workspaces/${wid}/members/${sel.dataset.role}`, { role: sel.value }); toast('역할을 변경했습니다.'); draw(r.members); } catch (err) { toast(err.message); draw(members); } });

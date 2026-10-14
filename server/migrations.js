@@ -54,6 +54,7 @@ export const migrations = [
   { version: 27, name: 'change_requests.approver_user_id (designated approver; self-approval blocked)', up() {} },
   { version: 28, name: 'Activity checklists (06 전환·오픈 · 07 운영): activity_checklist_items — table in schema.sql; activity state derives from it', up() {} },
   { version: 29, name: 'NicePay billing: billing_orders (server-side prices) + subscriptions.seats/billing_cycle/auto_renew/renewal_reminded_for/founding_until/billing_key_enc — DDL in schema.sql', up() {} },
+  { version: 30, name: 'account lifecycle: users.deleted_at, workspaces.deleted_at/deleted_by/purged_at (soft delete + 30-day purge), login_records (3 months)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;
