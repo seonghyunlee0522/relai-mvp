@@ -71,7 +71,7 @@ GET  /api/admin/audit?q&action&admin&target_type&target_id&page&size
 **완료 (billing-foundation)**: 위 테이블이 migration v25로 생성되어 콘솔이 켜진다. Plan 한도 제품 API 강제, Usage·Workspace 상세·사용자 상세의 유효 플랜 반영(PAST_DUE 유예 종료 시 FREE).
 
 **추가 작업이 필요한 것**:
-- `plans.js`의 `price_monthly` 확정(MRR은 가격이 있을 때만 계산), 랜딩 `#pricing`의 Team 가격 교체.
+- (완료) 가격 확정: `plans.js` TEAM `base_monthly`/`extra_user_monthly`(pricing v2). MRR = 구독별 월 요금(기본 + 추가 사용자) 합계, 할인·VAT 제외.
 - 실제 Payment Provider 어댑터(`server/billing/provider.js` 레지스트리에 추가).
 - "Subscription 재동기화", "결제 재시도" 같은 안전한 Action과 그 Audit Action 추가. Plan 강제 변경은 만들지 않는다.
 - Payment Provider별 status/provider 값 사전과 Payments 필터 옵션 정렬.

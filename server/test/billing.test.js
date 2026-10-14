@@ -205,7 +205,7 @@ test('orders through the fake provider: server-priced checkout, paid event verif
   const A = await setup(client, 'a@x.com', '김가나');
   await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3 });
-  assert.equal(co.status, 201); assert.equal(co.json.order.amount, Math.round(57000 * 0.6) + Math.round(57000 * 0.6 * 0.1));
+  assert.equal(co.status, 201); assert.equal(co.json.order.amount, Math.round(30000 * 0.6) + Math.round(30000 * 0.6 * 0.1));   // (₩20,000 + 2 × ₩5,000) founding 40% off + VAT
   const orderId = co.json.order.id;
   const paid = (amount, tid) => provider.signedEvent('subscription.activated', { order_id: orderId, payment: { amount, status: 'PAID', provider_tid: tid, moid: orderId } });
   assert.equal((await deliver(paid(1000, 'tid_low'))).json.reason, 'amount_mismatch');
