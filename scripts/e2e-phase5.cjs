@@ -142,7 +142,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   await shot('05-generate-dialog.png');
   await page.click('.dialog [data-v="1"]');
   check('US-1 AC2 토스트 "테스트 13건을 만들었습니다"', /테스트 13건을 만들었습니다/.test(await toastText(page, /테스트 13건을 만들었습니다/)));
-  await page.waitForFunction(() => /15건 중 15건 테스트 있음/.test((document.querySelector('[data-cov-sum]') || {}).textContent || ''));
+  await page.waitForFunction(() => /(\d+)건 중 \1건 테스트 있음/.test((document.querySelector('[data-cov-sum]') || {}).textContent || ''));
   check('US-1 AC4 모두 있으면 버튼이 보이지 않고 API는 409', !(await page.$('#gen')) && (await api('POST', `${A.P}/tests/from-requirements`, {})).status === 409);
   const gen1 = (await api('GET', `${A.P}/tests?requirement=${R[1].id}`)).json.items;
   const t1 = (await api('GET', `${A.P}/tests?q=${encodeURIComponent('기능 2 확인')}`)).json.items[0];

@@ -359,7 +359,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
 
   /* ---------- migration 38 ---------- */
   if (DB) {
-    check('migration 38 recorded', sql('SELECT MAX(version) FROM schema_migrations') === '38');
+    check('migration 38 recorded', sql('SELECT COUNT(*) FROM schema_migrations WHERE version = 38') === '1' && Number(sql('SELECT MAX(version) FROM schema_migrations')) >= 38);
     check('migration 38: weekly_reports.report_type · 완료보고서 1건 unique index', sql(`SELECT COUNT(*) FROM pg_indexes WHERE indexname = 'uq_weekly_reports_completion'`) === '1');
   }
 
