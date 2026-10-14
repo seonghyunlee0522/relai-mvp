@@ -26,7 +26,7 @@ export class OnboardingError extends Error { constructor(status, code, message) 
 export const TOUR_STEPS = {
   OWNER: [
     { key: 'HOME', route: '/app', target: 'nav-home', title: 'Home — 지금 해야 할 일', body: 'Home에서는 참여 중인 프로젝트와 각 프로젝트의 다음 할 일을 한눈에 봅니다.', placement: 'right', fallback: 'center' },
-    { key: 'CREATE_PROJECT', route: '/app', target: 'create-project', title: '첫 프로젝트 만들기', body: '프로젝트를 시작하려면 먼저 새 프로젝트를 만들어 주세요. 이름, 유형, 기간만 입력하면 됩니다.', placement: 'bottom', cta: { label: '프로젝트 만들기', href: '/app/projects/new' }, pauseUntilProject: true },
+    { key: 'CREATE_PROJECT', route: '/app', target: 'create-project', title: '첫 프로젝트 만들기', body: '프로젝트를 시작하려면 먼저 새 프로젝트를 만들어 주세요. 이름, 고객사, 기간만 입력하면 됩니다.', placement: 'bottom', cta: { label: '프로젝트 만들기', href: '/app/projects/new' }, pauseUntilProject: true },
     { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: 'What’s Next? — 지금 할 일', body: 'RELAI Guide가 현재 단계와 지금 가장 먼저 해야 할 일을 안내하고 실제 업무 화면으로 보냅니다. 막히면 여기로 돌아오세요. 전체 현황은 Overview에서 봅니다.', placement: 'bottom', needsProject: true },
     { key: 'LIFECYCLE', route: '/app/projects/:pid', target: 'lnb-lifecycle', title: 'Project Lifecycle', body: '착수 → 요구사항 정의 → 분석·설계 → 구현 → 시험 → 전환 및 오픈 → 운영 및 유지보수. 왼쪽 메뉴가 프로젝트 생애주기를 따라 업무 화면으로 안내합니다. 현재 단계는 파란색, 완료 단계는 초록색입니다.', placement: 'right', needsProject: true },
     { key: 'DEFINITION', route: '/app/projects/:pid', target: 'lnb-definition', title: '01 착수 — 프로젝트 정의', body: '착수 단계에서는 목표·범위·이해관계자·상위 일정·운영 방식을 정리합니다. 이것이 이후 모든 판단의 기준입니다.', placement: 'right', needsProject: true },
@@ -49,7 +49,7 @@ export async function workspaceFacts(db, workspaceId) {
       (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED') AS projects,
       (SELECT p.id FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' ORDER BY p.created_at LIMIT 1) AS first_project_id,
       (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND NOT EXISTS (
-          SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.status <> 'COMPLETED')) AS defined_projects,
+          SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.step_key NOT IN ('KICKOFF','APPROVAL') AND s.status <> 'COMPLETED')) AS defined_projects,
       (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)) AS projects_with_requirements,
       (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM wbs_items x WHERE x.project_id = p.id AND x.archived_at IS NULL AND x.item_type = 'TASK'
           AND NOT EXISTS (SELECT 1 FROM wbs_items c WHERE c.parent_id = x.id AND c.archived_at IS NULL))) AS projects_with_wbs,

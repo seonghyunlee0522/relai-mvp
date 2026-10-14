@@ -40,7 +40,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/edit\/?$/, projectFormPage],
   [/^\/app\/projects\/([\w-]+)\/definition\/?$/, definitionPage],
   [/^\/app\/projects\/([\w-]+)\/charter\/?$/, charterPage],
-  [/^\/app\/projects\/([\w-]+)\/checklist\/?$/, checklistPage],      // 06 전환·오픈 · 07 운영 activity checklists         // Overview › Project Chater (read-only view of 프로젝트 정의)
+  [/^\/app\/projects\/([\w-]+)\/checklist\/?$/, checklistPage],      // 06 전환·오픈 · 07 운영 activity checklists         // Overview › Project Charter (read-only view of 프로젝트 정의)
   [/^\/app\/projects\/([\w-]+)\/phases(?:\/[A-Z_]+)?\/?$/, phasePage],   // legacy deep links → What’s Next
   [/^\/app\/projects\/([\w-]+)\/reports\/?$/, reportsPage],
   [/^\/app\/projects\/([\w-]+)\/reports\/([\w-]+)\/?$/, reportPage],

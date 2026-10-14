@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS project_definitions (
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
-/* Project Chater (2026-10-05): free-text fields the Charter needs that the definition did not have yet. Deliberately
+/* Project Charter (2026-10-05): free-text fields the Charter needs that the definition did not have yet. Deliberately
  * unstructured (no tables, rows or workflow) — structure comes later in a separate design. Edited only in 프로젝트 정의. */
 ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS project_type      TEXT NOT NULL DEFAULT '';   -- 프로젝트 유형 (신규 구축 / 고도화 / …, free text)
 ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS deliverables      TEXT NOT NULL DEFAULT '';   -- 주요 산출물
@@ -124,6 +124,9 @@ ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS constraints_text  TEXT 
 ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS initial_risks     TEXT NOT NULL DEFAULT '';   -- 초기 리스크
 ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS change_management TEXT NOT NULL DEFAULT '';   -- 변경관리 방식
 ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS acceptance        TEXT NOT NULL DEFAULT '';   -- 검수 / 완료 기준
+/* Phase 1 v2 (migration 31): 착수 gate activities edited on the 프로젝트 정의 screen. JSON as TEXT like the other definition lists. */
+ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS kickoff           TEXT NOT NULL DEFAULT '{}';  -- 착수보고회 {datetime, place, attendees[], prep[], agenda, minutes, decisions[], followups[]}
+ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS approval          TEXT NOT NULL DEFAULT '{}';  -- 착수 결과 승인 {approver_id|approver_name/title, date, method, evidence, conditions, baseline}
 
 /* ---------- Project Lifecycle (V2): Project → Phase → Activities ----------
  * phase_key ∈ INITIATION · REQUIREMENTS · ANALYSIS_DESIGN · DEVELOPMENT · TESTING · TRANSITION_GO_LIVE · OPERATIONS.

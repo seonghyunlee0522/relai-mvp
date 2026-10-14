@@ -11,6 +11,9 @@ import { ensurePhases, loadGuide, updateStep, transitionTo } from './guide.js';
 import * as CL from './checklists.js';
 import * as D from './definition.js';
 import { buildProjectCharter } from './charter.js';
+import { buildPlanMarkdown, PLAN_TITLE } from './charter-export.js';
+import { PDF_MIME, DOCX_MIME, renderReportPdf, renderReportDocx } from './report-export.js';
+const safeFileName = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, '_').replace(/^\.+/, '').slice(0, 60) || 'project';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import * as T from './trace.js';
@@ -303,7 +306,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const guideResponse = async (project, pre = null) => {
     const { stats, def, guide, guidance } = pre || (await guideContext(project));
     return { project, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
-      definition: { progress: def.progress, needs_review: def.needs_review, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
+      definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
   };
@@ -440,15 +443,28 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '섹션을 찾을 수 없습니다.');
     res.json({ ...(await D.loadDefinition(db, project)), guide: (await guideResponse(project)) });
   }));
-  /* ---------- Project Chater (read-only view of 프로젝트 정의; the same object feeds every AI request — server/charter.js) ---------- */
+  /* ---------- Project Charter (read-only view of 프로젝트 정의; the same object feeds every AI request — server/charter.js) ---------- */
   app.get(`${base}/:pid/charter`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project) return;
     res.json({ charter: (await buildProjectCharter(db, project)) });
   }));
+  // 사업수행계획서 download (PDF / Word) — every member who can see the project; read-only, so not plan-limited and archived projects can export
+  app.get(`${base}/:pid/charter/export`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    const fmt = req.query.format === 'docx' ? 'docx' : req.query.format === 'pdf' || req.query.format === undefined ? 'pdf' : null;
+    if (!fmt) return fail(res, 400, 'validation_error', '형식은 pdf 또는 docx만 지원합니다.', { fields: { format: 'pdf 또는 docx' } });
+    const ws = await db.get('SELECT name FROM workspaces WHERE id = ?', [project.workspace_id]);
+    const today = D.localToday();
+    const doc = buildPlanMarkdown(await buildProjectCharter(db, project), { workspaceName: ws ? ws.name : '', author: req.user.name || req.user.email || '', today });
+    const buf = await (fmt === 'pdf' ? renderReportPdf : renderReportDocx)({ title: doc.title, rendered_content: doc.markdown, footer: doc.footer });
+    const name = `${safeFileName(project.name)}_${PLAN_TITLE}_${doc.fileVersion}_${today.replace(/-/g, '')}.${fmt}`;
+    res.set({ 'Content-Type': fmt === 'pdf' ? PDF_MIME : DOCX_MIME, 'Content-Disposition': `attachment; filename="project-plan.${fmt}"; filename*=UTF-8''${encodeURIComponent(name)}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+    res.end(buf);
+  }));
   // 이해관계자 Excel: template + preview (rows are committed through PUT /definition by the client after review; no nested import flow)
   app.get(`${base}/:pid/definition/stakeholders/template.xlsx`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project) return;
-    const buf = await XL.buildSimpleTemplate('이해관계자', D.STAKEHOLDER_COLUMNS, ['이해관계자 등록 템플릿', '• 조직 구분: 당사 · 고객사 · 협력사 · 기타 중 하나 (필수)', '• 이름: 필수', '• 조직(회사) · 부서 · 역할 · 담당 영역 · 비고: 선택', '• 1행(열 제목)은 수정하지 말고 2행부터 입력하세요.']);
+    const buf = await XL.buildSimpleTemplate('이해관계자', D.STAKEHOLDER_COLUMNS, ['이해관계자 등록 템플릿', '• 조직 구분: 당사 · 고객사 · 협력사 · 기타 중 하나 (필수)', '• 이름: 필수', '• 조직(회사) · 부서 · 역할 · 주요 책임 · 비고: 선택', '• 1행(열 제목)은 수정하지 말고 2행부터 입력하세요.']);
     res.set({ 'Content-Type': XL.XLSX_MIME, 'Content-Disposition': `attachment; filename="stakeholders-template.xlsx"; filename*=UTF-8''${encodeURIComponent('이해관계자 등록 템플릿.xlsx')}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
     res.end(buf);
   }));

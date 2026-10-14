@@ -16,9 +16,12 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { navigate } from '../core/router.js';
 import { bindCoach } from '../onboarding/ui.js';
 import { ob } from '../onboarding/state.js';
+import { josa } from '../shared/josa.js';
+import { noApprovalLine, bindPlanMenu } from './initiation.js';
 
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
-const ctaLink = (a, cls) => (a ? html`<a class="${cls}" href="${a.href}" data-link>${a.label}</a>` : '');
+/** /api/… hrefs (사업수행계획서 내려받기) are downloads, not SPA routes. */
+const ctaLink = (a, cls) => (!a ? '' : /^\/api\//.test(a.href) ? html`<button type="button" class="${cls} linkbtn" data-dl="${a.href}">${a.label}</button>` : html`<a class="${cls}" href="${a.href}" data-link>${a.label}</a>`);
 
 /* ---------- RELAI Guide: one compact card — title, 1–2 lines of "why", CTA bottom-right. The phase position is the stepper's job. ---------- */
 const guideCard = (g, p, archived, created) => {
@@ -41,6 +44,7 @@ const guideCard = (g, p, archived, created) => {
 };
 
 /* ---------- current phase activities (Process + Read view) ---------- */
+const GATE_KEYS = new Set(['KICKOFF', 'APPROVAL']);   // 01 착수 gate rows show their one-line status (준비 중 3/4 · 승인 전 진행 · 사유 있음 …)
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
 /** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not.
  * State is shown once, by the badge on the right (no leading icon). `markable` = rows whose phase is current or already reached
@@ -69,6 +73,7 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
     <div class="np__m">
       <span class="np__st"><span class="badge badge--imp ${impCls}">${a.importance_label}</span>${a.title}</span>
       <span class="np__purpose">${a.description}</span>
+      ${raw(GATE_KEYS.has(a.step_key) && a.text && a.state !== 'NOT_STARTED' ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}">${a.text}</span>` : '')}
     </div>
     <span class="badge badge--st is-${cls}">${stLabel}</span>
     <span class="np__acts">${raw(acts.join(''))}</span>
@@ -89,8 +94,10 @@ const otherPhasePanel = (g, ph, archived) => {
       <span class="np__remain ${st === 'done' && !s.required_open ? 'is-good' : ''}">${remain}</span>
     </div>
     <p class="np__d">${ph.description}</p>
+    ${raw(ph.phase_key === 'INITIATION' ? noApprovalLine(g) : '')}
     <ol class="np__list ${hasActs ? '' : 'np__list--noacts'}">${raw(rows)}</ol>
     <div class="np__f"><span class="np__msg">${raw(cur ? html`현재 단계는 <b>${no2(cur.sequence)} ${cur.name}</b>입니다.` : '')}</span>
+      ${raw(!archived ? html`<button type="button" class="link linkbtn np__setcur" data-set-phase="${ph.id}">이 단계를 현재 단계로 변경</button>` : '')}
       <a class="link np__back" href="/app/projects/${g.project.id}" data-link>현재 단계 업무 보기 →</a></div>
   </section>`;
 };
@@ -113,7 +120,7 @@ const phasePanel = (g, p, archived) => {
     <ol class="np__list ${hasActs ? '' : 'np__list--noacts'}">${raw(rows)}</ol>
     <div class="np__f ${allDone && g.next_phase ? 'np__f--ready' : ''}">
       <span class="np__msg">${raw(g.next_phase ? (allDone ? html`<b>${cur.name} 단계의 필요한 업무가 정리되었습니다.</b> 다음 단계 · ${no2(g.next_phase.sequence)} ${g.next_phase.name}` : html`다음 단계: <b>${no2(g.next_phase.sequence)} ${g.next_phase.name}</b>${s.gate_met ? ' · 남은 권장·선택 업무를 정리하거나 건너뛰면 진행할 수 있습니다.' : ' · 필수 업무를 마치면 진행할 수 있습니다.'}`) : '마지막 단계입니다.')}</span>
-      ${raw(!archived && g.next_phase && !movePrimary ? html`<button type="button" class="${allDone ? 'btn btn--primary btn--sm' : 'link linkbtn np__move'}" id="next">${g.next_phase.name}(으)로 진행 →</button>` : '')}
+      ${raw(!archived && g.next_phase && !movePrimary ? html`<button type="button" class="${allDone ? 'btn btn--primary btn--sm' : 'link linkbtn np__move'}" id="next">${josa(g.next_phase.name, '으로')} 진행 →</button>` : '')}
     </div>
   </section>`;
 };
@@ -140,6 +147,10 @@ export async function nextPage(id, main = $('#main')) {
     </div>`;
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { g = await api('GET', wsApi(`/${id}`)); draw(); } };
     const nb = $('#next'); if (nb) nb.onclick = move;
+    // 단계 선택: another phase's list → make it the current phase (same dialogs, incl. the 착수 승인 gate)
+    main.querySelectorAll('[data-set-phase]').forEach((b) => { b.onclick = async () => { const t = (g.phases || []).find((x) => x.id === b.dataset.setPhase); if (t && await moveToPhase(p.id, g, t)) navigate(`/app/projects/${p.id}`); }; });
+    main.querySelectorAll('[data-dl]').forEach((b) => { b.onclick = async () => { try { const { download } = await import('../core/ui.js'); await download(b.dataset.dl); toast('사업수행계획서를 내려받았습니다.'); } catch (e) { toast(e.message); } }; });
+    bindPlanMenu(main, p.id);
     main.querySelectorAll('[data-move-next]').forEach((b) => { b.onclick = g.next_phase ? move : null; });
     main.querySelectorAll('.np__row[data-href]').forEach((row) => { const go = () => navigate(row.dataset.href); row.onclick = (e) => { if (!e.target.closest('a,button')) go(); }; row.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a,button')) { e.preventDefault(); go(); } }; });
     main.querySelectorAll('[data-step]').forEach((b) => b.onclick = async () => {

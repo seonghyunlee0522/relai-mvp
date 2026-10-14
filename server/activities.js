@@ -31,6 +31,8 @@ const act = (label, href) => ({ label, href });
 /** 06/07 checklist screen for one activity (public/app/project/checklist.js). */
 const cl = (ctx, key, label = '체크리스트 작성 →') => act(label, `/app/projects/${ctx.pid}/checklist?activity=${key}`);
 
+export const REAPPROVAL_TEXT = '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.';
+
 /* ---------- per-phase rules ---------- */
 function initiation(key, ctx) {
   const u = `/app/projects/${ctx.pid}/definition?activity=${key}`;
@@ -38,6 +40,7 @@ function initiation(key, ctx) {
   const go = (label) => act(label, u);
   if (!sec) return none('프로젝트 정의에서 작성합니다.', go('입력하기 →'));
   if (sec.status === 'SKIPPED') return { derived: 'SKIPPED', text: '이번 프로젝트에서는 수행하지 않음', cta: null };
+  if (sec.status === 'COMPLETED' && sec.reapproval) return prog(REAPPROVAL_TEXT, go('다시 승인받기 →'), { crit: true, reopen: true });   // red 확인 필요 (spec US-2)
   if (sec.status === 'COMPLETED' && sec.changed_after_completion) return prog(`${sec.summary || '작성됨'} · 완료 후 수정되어 다시 확인이 필요합니다.`, go('다시 확인 →'));
   if (sec.status === 'COMPLETED') return ok(sec.summary || '작성 완료', null);
   if (sec.has_data || sec.ready) return prog(sec.summary || '작성 중', go('계속 작성 →'));
@@ -228,7 +231,7 @@ export function activityStates(phaseKey, steps, ctx) {
     const hasList = CHECKLIST_STEP_KEYS.has(s.step_key);
     const list = hasList && ctx.checklists ? ctx.checklists[s.id] || { total: 0, done: 0 } : null;
     const r = hasList ? checklistDerived(r0, list) : r0;
-    const state = resolveState(s, r.derived);
+    const state = r.reopen ? 'IN_PROGRESS' : resolveState(s, r.derived);   // reopen: stored 완료 no longer holds (승인 후 변경 → 다시 승인 필요)
     return { ...s, importance: s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL'), importance_label: IMPORTANCE_LABEL[s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL')],
       state, derived: r.derived, text: state === 'COMPLETED' && s.status === 'COMPLETED' && r.derived !== 'COMPLETED' ? (r.text ? `완료 처리됨 · ${r.text}` : '완료 처리됨') : (r.text || s.completion_criteria),
       cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,

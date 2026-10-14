@@ -14,6 +14,8 @@ export const DEFAULT_TEMPLATE_KEY = 'LIFECYCLE_V2';
 
 export const IMPORTANCE = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
 export const IMPORTANCE_LABEL = { REQUIRED: '필수', RECOMMENDED: '권장', OPTIONAL: '선택' };
+/** 착수보고회(KICKOFF) importance — one constant so it can flip to REQUIRED (spec Phase 1 D1/Q1). Migration 31 copies it into existing projects. */
+export const KICKOFF_IMPORTANCE = 'RECOMMENDED';
 
 const A = (key, title, description, criteria, importance = 'REQUIRED', feature = null) =>
   ({ key, title, description, completion_criteria: criteria, importance, is_required: importance === 'REQUIRED' ? 1 : 0, linked_feature_type: feature });
@@ -28,6 +30,8 @@ export const DEFAULT_PHASES = [
       A('STAKEHOLDERS', '이해관계자 / 조직 확인', '고객사, 수행사, 협력사의 주요 담당자와 역할을 정리합니다.', '이해관계자가 1명 이상 등록되어 있습니다.', 'REQUIRED', 'definition'),
       A('MILESTONES', '상위 일정 / 마일스톤 확인', '프로젝트 시작일·종료 예정일과 반드시 지켜야 하는 주요 시점을 정리합니다. WBS의 세부 일정과는 구분되는 프로젝트 수준의 개략 일정입니다.', '주요 일정 또는 마일스톤이 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
       A('OPERATIONS', '프로젝트 운영 방식 확인', '회의, 보고, 의사결정, 커뮤니케이션 방식을 정합니다.', '운영 방식 항목이 작성되어 있습니다.', 'RECOMMENDED', 'definition'),
+      A('KICKOFF', '착수보고회(킥오프) 준비·개최', '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고 결과를 기록합니다.', '착수보고회가 열렸고 회의록 요약 또는 결정사항이 기록되어 있습니다.', KICKOFF_IMPORTANCE, 'definition'),
+      A('APPROVAL', '착수 결과 승인(고객·스폰서)', '정리한 목표·범위·일정·추진 조직을 고객이나 스폰서에게 승인받고 그 근거를 남깁니다.', '승인자·승인일·승인 방법·근거가 기록되어 있습니다.', 'REQUIRED', 'definition'),
     ],
   },
   {

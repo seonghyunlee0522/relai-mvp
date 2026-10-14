@@ -171,7 +171,7 @@ test('guidance via API: embedded in project GET, standalone endpoint, follows re
   let g = (await A.c('GET', A.purl)).json;
   assert.equal(g.guidance.rule, 'INIT_DEFINE'); assert.equal(g.guidance.current_phase.key, 'INITIATION');
   await completeDefinition(A);
-  g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'INIT_DONE');
+  g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'INIT_KICKOFF');   // Phase 1 v2: 정의 → 착수보고회 → 승인
   const ph = (await A.c('GET', A.purl)).json.phases.find((x) => x.phase_key === 'REQUIREMENTS');
   await A.c('POST', `${A.purl}/phases/${ph.id}/activate`, { reason: 'NEXT' });
   g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'REQ_EMPTY');

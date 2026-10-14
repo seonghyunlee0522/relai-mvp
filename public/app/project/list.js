@@ -6,14 +6,15 @@ import { createGrid } from '../shared/grid.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
 import { checklistCard } from '../onboarding/ui.js';
+import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 
 /** Project-0 home: one clear CTA + how RELAI guides a project (product UI, not a landing page). Members see the join message instead. */
 export const newWorkspaceHome = (o = null) => (canManage()
   ? html`<section class="hero" data-tour-id="hero">
-      <div class="hero__t"><h2>첫 프로젝트를 만들어 시작하세요.</h2><p>RELAI가 착수부터 검수까지 필요한 단계를 순서대로 안내합니다. 이름, 유형, 기간만 입력하면 됩니다.</p>
+      <div class="hero__t"><h2>첫 프로젝트를 만들어 시작하세요.</h2><p>RELAI가 <b>착수부터 운영까지 7단계</b>를 순서대로 안내합니다. 이름, 고객사, 기간만 입력하면 됩니다.</p>
         <a class="btn btn--primary btn--lg" href="/app/projects/new" data-link data-tour-id="create-project">프로젝트 만들기</a></div>
-      <ol class="hero__steps"><li><i>1</i><b>프로젝트 정의</b><span>목표·범위·이해관계자·일정을 정리합니다.</span></li><li><i>2</i><b>요구사항 → WBS</b><span>요구사항을 등록하고 실행 작업으로 나눕니다.</span></li><li><i>3</i><b>실행 → 테스트 → 검수</b><span>진행 현황, 테스트 결과, 고객 검수를 기록합니다.</span></li></ol>
+      <ol class="hero__flow" aria-label="프로젝트 7단계">${raw(LIFECYCLE_PHASES.map((ph, i) => html`<li><i>${no2(i + 1)}</i>${ph.label}</li>`).join(''))}</ol>
     </section>${raw(checklistCard(o))}`
   : html`<section class="hero hero--member"><div class="hero__t"><h2>${state.workspace.name} Workspace에 참여했습니다.</h2><p>아직 프로젝트가 없습니다. Workspace 관리자(OWNER/ADMIN)가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.</p></div></section>`);
 export const emptyState = () => newWorkspaceHome(ob.peek());

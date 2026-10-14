@@ -1798,8 +1798,11 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .welcome h3{font-size:22px;margin-bottom:10px}.welcome p{color:var(--text-2);line-height:1.65;margin-bottom:24px}
 .welcome .actions{justify-content:center}
 /* tour */
-.tour{position:fixed;inset:0;z-index:110}
-.tour::before{content:"";position:absolute;inset:0}   /* click shield: the page stays visible but not clickable while the guide is open */
+.tour{position:fixed;inset:0;z-index:110;pointer-events:none;--hl:0px;--ht:0px;--hr:0px;--hb:0px}
+/* click shield: the page stays visible but not clickable while the guide is open — except the highlighted target (hole = spot rect, set by tour.js) */
+.tour::before{content:"";position:absolute;inset:0;pointer-events:auto;clip-path:polygon(evenodd,0 0,100% 0,100% 100%,0 100%,0 0,var(--hl) var(--ht),var(--hr) var(--ht),var(--hr) var(--hb),var(--hl) var(--hb),var(--hl) var(--ht))}
+.tour--center::before{clip-path:none}
+.tour__pop{pointer-events:auto}
 .tour__spot{position:fixed;border-radius:10px;box-shadow:0 0 0 9999px rgba(16,24,40,.55),0 0 0 3px rgba(var(--blue-rgb),.9);pointer-events:none;transition:left .18s,top .18s,width .18s,height .18s}
 .tour__spot[hidden]{display:none}
 .tour--center::before,.tour .tour__spot[hidden]~.tour__pop{}
@@ -2138,7 +2141,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 @media (max-width:1100px){.hgrid{grid-template-columns:1fr}}
 @media (max-width:640px){.hc__next{grid-template-columns:auto minmax(0,1fr)}.hc__next .btn,.hc__next .hc__go{grid-column:2}.hc__h{flex-wrap:wrap}.hc__h .chip{margin-left:0}}
 
-/* ---- Overview › Project Chater (read-only reference document; sections over cards, only the AI strip is emphasised) ---- */
+/* ---- Overview › Project Charter (read-only reference document; sections over cards, only the AI strip is emphasised) ---- */
 .chl{display:grid;grid-template-columns:minmax(0,920px) clamp(272px,22vw,320px);gap:0 40px;align-items:start;justify-content:start}
 .chx{max-width:none;margin:6px 0 0;padding:0 4px;min-width:0}
 /* right rail */
@@ -2248,7 +2251,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .chtl__today span{position:absolute;left:0;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:800;letter-spacing:.04em;color:#fff;background:var(--danger);border-radius:4px;padding:0 6px;top:-14px;font-variant-numeric:tabular-nums}
 @media (max-width:760px){.chx__two{grid-template-columns:1fr}.chai{grid-template-columns:auto minmax(0,1fr)}.chai__side{grid-column:1/3;align-items:flex-start}
   .chx__sec>:not(.chx__sh):not(.chx__ai),.chx__ai{margin-left:0}.chtl__ms span{display:none}}
-/* 프로젝트 정의: Project Chater sub-heading + deep-link target flash */
+/* 프로젝트 정의: Project Charter sub-heading + deep-link target flash */
 .def__sub{margin:22px 0 12px;padding-top:14px;border-top:1px solid var(--border-soft)}
 .def__sub b{display:block;font-size:13.5px;color:var(--navy)}.def__sub small{font-size:12px;color:var(--muted)}
 .field.is-target,.def__dates.is-target{animation:defTarget 2.2s ease-out}
@@ -2344,3 +2347,51 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
   .su-a-m span.is-current{background:var(--bg-tint);border-color:var(--border-blue);color:var(--blue-deep)}
   .su-a-m span.is-current i{color:var(--blue)}
 }
+
+/* ---- Phase 1 v2 (01 착수): 사업수행계획서 메뉴 · 용어 설명 · 착수보고회 · 착수 결과 승인 · Home 7단계 ---- */
+.pmenu{position:relative;display:inline-block}
+.pmenu>summary{list-style:none;cursor:pointer;white-space:nowrap}.pmenu>summary::-webkit-details-marker{display:none}
+.pmenu__list{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:160px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh-lift);padding:6px;display:flex;flex-direction:column}
+.pmenu__list button{border:0;background:none;text-align:left;padding:8px 10px;border-radius:6px;font-size:13.5px;cursor:pointer;color:var(--text)}
+.pmenu__list button:hover,.pmenu__list button:focus-visible{background:var(--bg-tint)}
+.term{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#EEF2F6;color:var(--text-2);font-size:11px;font-weight:700;cursor:help;vertical-align:1px;margin-left:2px;font-style:normal;letter-spacing:0}
+.term::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:260px;white-space:normal;background:var(--navy);color:#fff;font-size:12px;font-weight:500;line-height:1.5;padding:7px 10px;border-radius:8px;box-shadow:var(--sh-lift);opacity:0;pointer-events:none;transition:opacity .12s;z-index:40;text-align:left}
+.term:hover::after,.term:focus::after{opacity:1}
+.pv__h{display:flex;align-items:center;gap:10px}.pv__sp{flex:1}
+.pv__terms{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);margin:-4px 0 12px}.pv__terms span{white-space:nowrap}
+.np__noapv{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text-2);background:#FFFAEB;border:1px solid #FEDF89;border-radius:8px;padding:8px 12px;margin:0 0 12px}
+.np__sum{display:block;font-size:12.5px;color:var(--blue-deep);margin-top:2px}.np__sum.is-crit{color:var(--danger)}
+.np__setcur{font-size:13px;margin-left:auto;margin-right:12px}
+.def__schint{display:block;flex-basis:100%;font-size:12px;color:var(--muted);margin:2px 0 0 2px}.def__schint:empty{display:none}
+.def__list li:has(.def__schint:not(:empty)){flex-wrap:wrap}
+.def__warn{flex-basis:100%;font-size:12px;color:#B54708;margin:2px 0 0}
+.def__list--dates li{flex-wrap:wrap}
+.def__shhelp{margin:0 0 8px}
+.def__grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+@media (max-width:720px){.def__grid2{grid-template-columns:1fr}}
+.wd__tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.kchk{display:flex;flex-wrap:wrap;gap:6px 14px}
+.kchk__i{display:inline-flex;align-items:center;gap:6px;font-size:13.5px}.kchk__i small{color:var(--muted);font-size:12px}
+.kl li{display:flex;align-items:center;gap:8px}.kl li .input{flex:1}
+.kl .kl__owner{flex:0 0 110px}.kl .kl__due{flex:0 0 140px}
+.apv__what{background:#F7F9FC;border:1px solid var(--border-soft);border-radius:10px;padding:12px 14px;margin-bottom:16px}
+.apv__wh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.apv__what dl{margin:0;display:grid;gap:4px}.apv__what dl div{display:grid;grid-template-columns:72px 1fr;gap:8px;font-size:13px}
+.apv__what dt{color:var(--muted)}.apv__what dd{margin:0;color:var(--text)}
+.apv__direct{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:6px;align-items:center}.apv__direct .input{flex:1 1 120px}
+.apv__methods{display:flex;flex-wrap:wrap;gap:6px 16px}
+.notice--crit{background:#FEF3F2;color:#B42318;border-color:#FECDCA}
+.chx__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.chx__badge{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;background:#F2F4F7;color:var(--text-2);margin-left:6px;vertical-align:2px}
+.chx__badge.is-ok{background:#ECFDF3;color:#067647}.chx__badge.is-crit{background:#FEF3F2;color:#B42318}
+.chx__bypass{color:#B42318}
+.chtl__after{position:absolute;top:50%;right:0;height:22px;margin-top:-11px;background:repeating-linear-gradient(135deg,#F2F4F7 0 6px,#E4E7EC 6px 8px);border-radius:4px}
+.chtl__after span{position:absolute;left:50%;top:-18px;transform:translateX(-50%);font-size:10.5px;font-weight:700;color:var(--muted);white-space:nowrap}
+.chtl__ms.is-late i{border-color:#98A2B3}.chtl__ms.is-late.is-past i{background:#98A2B3}
+.chtl__ms.is-crowd span{display:none}
+.chtl__ms.is-crowd:hover span,.chtl__ms.is-crowd:focus span{display:flex;z-index:5;background:#fff;padding:2px 6px;border-radius:6px;box-shadow:var(--sh-lift)}
+.hero__flow{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hero__flow li{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--navy);background:var(--bg-alt);border-radius:999px;padding:6px 12px 6px 6px}
+.hero__flow li i{font-style:normal;font-size:11px;font-weight:700;color:#fff;background:var(--navy);border-radius:999px;padding:2px 6px}
+.hero__flow li:first-child{background:var(--bg-tint);color:var(--blue-deep)}.hero__flow li:first-child i{background:var(--blue)}
+.wd__form [data-af="evidence"],.wd__form [data-kf="place"]{width:100%}

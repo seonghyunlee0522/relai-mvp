@@ -1,6 +1,6 @@
 /* Project LNB (Lifecycle V2) — the primary navigation inside a project.
  *
- *   PROJECT HOME        What's Next · Overview ▾ (프로젝트 현황 · Project Chater · WBS · 주간보고 · 일정/마일스톤 · Project Health)
+ *   PROJECT HOME        What's Next · Overview ▾ (프로젝트 현황 · Project Charter · WBS · 주간보고 · 일정/마일스톤 · Project Health)
  *   PROJECT LIFECYCLE   01…07 as an accordion: current phase open + blue bar, completed phases ✓ green, future gray
  *   PROJECT MANAGEMENT  Changes · Issues & Risks · Activity · Reports
  *
