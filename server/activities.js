@@ -53,7 +53,7 @@ function requirements(key, ctx) {
   const empty = none('아직 등록된 요구사항이 없습니다.', act('요구사항 입력 시작 →', u('?new=1')));
   const dep = none('먼저 요구사항을 등록하세요.', null);   // prerequisite unmet: the first activity already carries the CTA
   switch (key) {
-    case 'COLLECT': return n(r.total) === 0 ? empty : ok(`요구사항 ${r.total}건이 등록되어 있습니다.`, act('요구사항 추가 →', u('?new=1')));
+    case 'COLLECT': return n(r.total) === 0 ? empty : ok(`요구사항 ${r.total}건이 등록되어 있습니다.`, act('요구사항 추가 →', u('?new=1')), { hint: COLLECT_HINT });
     case 'CLASSIFY': return n(r.total) === 0 ? dep
       : n(r.type_unspecified) ? prog(`${r.total}건 중 ${r.type_unspecified}건의 유형이 지정되지 않았습니다.`, act('요구사항 분류 →', u('?type=UNSPECIFIED')))
       : ok('모든 요구사항에 유형이 지정되었습니다.', act('요구사항 보기 →', u()));
@@ -66,8 +66,17 @@ function requirements(key, ctx) {
     case 'CONFIRM': {
       if (n(r.total) === 0) return dep;
       if (n(r.in_scope) === 0) return none('범위 내 요구사항이 아직 없습니다.', act('범위 결정 →', u('?scope=UNDECIDED')));
-      if (n(r.in_scope_confirmed) < n(r.in_scope)) return prog(`범위 내 ${r.in_scope}건 중 ${r.in_scope_confirmed}건이 확정되었습니다.`, act('요구사항 확정 →', u('?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED')));
+      // Phase 2 US-4(7): no separate bulk-confirm — 승인 기록 confirms the rest in the same save (BASELINE_APPROVAL Drawer)
+      if (n(r.in_scope_confirmed) < n(r.in_scope)) return prog(`범위 내 ${r.in_scope}건 중 ${r.in_scope_confirmed}건이 확정되었습니다.`, act('승인 기록 →', u('?approval=1')));
       return ok('범위 내 요구사항이 모두 확정되었습니다.', act('확정 요구사항 보기 →', u('?scope=IN_SCOPE&status=CONFIRMED')));
+    }
+    case 'BASELINE_APPROVAL': {   // 요구사항 기준선 승인 (Phase 2 US-1): completes only from the Drawer (승인 기록), never by hand on What's Next
+      const b = ctx.definition && ctx.definition.req_baseline; const go = act('승인 기록 →', u('?approval=1'));
+      if (n(r.total) === 0) return dep;
+      if (b && b.status === 'COMPLETED') return ok(b.summary || '고객 승인이 기록되었습니다.', null);
+      if (b && b.bypass) return prog('승인 전 진행 · 사유 있음', go);
+      if (b && b.summary) return prog(`작성 중 · ${b.summary}`, go);
+      return none('확정한 요구사항을 고객에게 보내 승인받고 기록합니다.', go);
     }
     case 'INTERFACE': return n(r.total) === 0 ? dep
       : n(r.non_functional) ? ok(`인터페이스·데이터·보안 유형 요구사항 ${r.non_functional}건이 정리되어 있습니다.`, act('비기능 요구사항 보기 →', u('?type=INTERFACE,DATA,SECURITY')))
@@ -207,6 +216,14 @@ function operations(key, ctx) {
   }
 }
 
+export const COLLECT_HINT = '계약서·제안요청서(RFP)·인터뷰 등 출처를 빠짐없이 확인했나요?';
+/** 02 INTERFACE: shown as 권장 when 데이터 이관 / 외부 시스템 연계 is '있음' (display only — stored importance and the gate never change). */
+export function interfaceEmphasis(traits) {
+  const t = traits || {}; const parts = [];
+  if (t.data_migration === 'YES') parts.push('데이터 이관'); if (t.has_external_integration === 'YES') parts.push('외부 연계');
+  return parts.length ? `(프로젝트 특성: ${parts.join('·')} 있음)` : null;
+}
+
 const RULES = { INITIATION: initiation, REQUIREMENTS: requirements, ANALYSIS_DESIGN: analysisDesign, DEVELOPMENT: development, TESTING: testing, TRANSITION_GO_LIVE: transition, OPERATIONS: operations };
 
 /** Live state of one stored step: a manual mark wins; otherwise the derived state; a note on a manual activity means it is in progress. */
@@ -232,8 +249,12 @@ export function activityStates(phaseKey, steps, ctx) {
     const list = hasList && ctx.checklists ? ctx.checklists[s.id] || { total: 0, done: 0 } : null;
     const r = hasList ? checklistDerived(r0, list) : r0;
     const state = r.reopen ? 'IN_PROGRESS' : resolveState(s, r.derived);   // reopen: stored 완료 no longer holds (승인 후 변경 → 다시 승인 필요)
-    return { ...s, importance: s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL'), importance_label: IMPORTANCE_LABEL[s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL')],
+    let importance = s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL'); let description = s.description;
+    const emph = phaseKey === 'REQUIREMENTS' && s.step_key === 'INTERFACE' && importance === 'OPTIONAL' ? interfaceEmphasis(ctx.traits) : null;
+    if (emph) { importance = 'RECOMMENDED'; description = `${description} ${emph}`; }
+    return { ...s, description, importance, importance_label: IMPORTANCE_LABEL[importance],
       state, derived: r.derived, text: state === 'COMPLETED' && s.status === 'COMPLETED' && r.derived !== 'COMPLETED' ? (r.text ? `완료 처리됨 · ${r.text}` : '완료 처리됨') : (r.text || s.completion_criteria),
+      hint: state === 'COMPLETED' && r.hint ? r.hint : null,
       cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
       // manual = no data signal decides this activity: What's Next offers 완료 처리 for it (checklist ones too — a hand mark wins)
       manual: r0.derived === null, checklist: list };

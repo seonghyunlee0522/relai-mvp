@@ -17,6 +17,11 @@ export const TERMS = {
   stakeholder: ['이해관계자', '프로젝트에 영향을 주거나 받는 사람(고객·수행사·협력사 담당자)'],
   sponsor: ['스폰서', '비용·결정 권한을 가진 고객 측 책임자'],
   baseline: ['승인 / 기준선', '승인된 목표·범위·일정이 이후 변경관리·검수의 기준이 됩니다'],
+  // 02 요구사항 정의 only (Phase 2 US-5)
+  req_baseline: ['기준선', '고객이 승인한 요구사항 목록. 이후 바뀌는 것은 변경 요청으로 관리합니다'],
+  nonfunctional: ['비기능 요구사항', '기능이 아니라 성능·보안·가용성·운영처럼 시스템이 갖춰야 할 품질 조건에 대한 요구사항'],
+  criteria: ['완료 조건', '이 요구사항이 다 됐다고 판단하는 기준. 검수 기준이 됩니다'],
+  scope: ['범위 내 / 범위 외', '범위 내는 이번 계약에서 만드는 것, 범위 외는 이번에는 하지 않기로 한 것'],
 };
 /** Small "?" with a tooltip (hover / focus). */
 export const term = (key) => { const t = TERMS[key]; return t ? html`<span class="term" tabindex="0" role="note" aria-label="${t[0]}: ${t[1]}" data-tip="${t[1]}">?</span>` : ''; };
@@ -31,17 +36,40 @@ export function bindPlanMenu(root, pid) {
   }; });
 }
 
+/** "요구사항 정의서 ▾" (PDF / Word) — GET …/requirements/export-doc?format=pdf|docx (Phase 2 US-2). */
+export const reqDocUrl = (pid, fmt) => wsApi(`/${pid}/requirements/export-doc?format=${fmt}`);
+export const reqDocMenu = (label = '요구사항 정의서') => html`<details class="pmenu" data-reqdoc-menu><summary class="btn btn--secondary btn--sm">${label} ▾</summary>
+  <div class="pmenu__list" role="menu"><button type="button" role="menuitem" data-reqdoc="pdf">PDF (.pdf)</button><button type="button" role="menuitem" data-reqdoc="docx">Word (.docx)</button></div></details>`;
+export function bindReqDocMenu(root, pid) {
+  root.querySelectorAll('[data-reqdoc]').forEach((b) => { b.onclick = async () => {
+    const d = b.closest('details'); if (d) d.open = false;
+    try { await download(reqDocUrl(pid, b.dataset.reqdoc)); toast('요구사항 정의서를 내려받았습니다.'); } catch (e) { toast(e.message); }
+  }; });
+}
+
 export { isMeasurable } from '../shared/criteria.js';
 
 /**
- * The 01→02 soft gate (spec US-2). Resolves 'record' (go to 승인 기록), { reason } (proceed, reason required) or null (cancel).
- * The caller writes the reason to the APPROVAL step note as "[승인 전 진행] 사유 · 날짜 · 이름".
+ * Approval gates (soft, never a server block): leaving a phase whose customer approval is not recorded asks to record it first,
+ * or to leave a reason. 01→02 (착수 결과 승인, Phase 1 US-2) and 02→03 (요구사항 기준선 승인, Phase 2 US-1) share the dialog.
  */
-export function approvalGateDialog() {
+export const APPROVAL_GATES = {
+  INITIATION: { step: 'APPROVAL', record: (pid) => `/app/projects/${pid}/definition?activity=APPROVAL`,
+    title: '고객 승인 없이 요구사항 단계로 넘어가려 합니다',
+    body: '착수 결과(목표·범위·일정)를 고객이나 스폰서가 승인하지 않은 채 진행하면, 이후 요구사항과 검수 기준을 두고 다툼이 생기기 쉽습니다. 가능하면 사업수행계획서를 보내 승인을 먼저 받으세요.' },
+  REQUIREMENTS: { step: 'BASELINE_APPROVAL', record: (pid) => `/app/projects/${pid}/requirements?approval=1`,
+    title: '고객 승인 없이 분석·설계 단계로 넘어가려 합니다',
+    body: "요구사항 기준선을 고객이 승인하지 않은 채 진행하면, 설계·개발 중 '이건 요청한 적 없다/빠졌다'는 다툼이 생기기 쉽습니다. 요구사항 정의서를 보내 승인을 먼저 받으세요." },
+};
+/**
+ * The phase-leaving soft gate dialog. Resolves 'record' (go to 승인 기록), { reason } (proceed, reason required) or null (cancel).
+ * The caller writes the reason to the gate step note as "[승인 전 진행] 사유 · 날짜 · 이름".
+ */
+export function approvalGateDialog(gate = APPROVAL_GATES.INITIATION) {
   return new Promise((resolve) => {
     const el = document.createElement('div'); el.className = 'scrim';
-    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="agT" data-dialog="approval-gate"><h3 id="agT">고객 승인 없이 요구사항 단계로 넘어가려 합니다</h3>
-      <div class="dialog__b">착수 결과(목표·범위·일정)를 고객이나 스폰서가 승인하지 않은 채 진행하면, 이후 요구사항과 검수 기준을 두고 다툼이 생기기 쉽습니다. 가능하면 사업수행계획서를 보내 승인을 먼저 받으세요.</div>
+    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="agT" data-dialog="approval-gate"><h3 id="agT">${gate.title}</h3>
+      <div class="dialog__b">${gate.body}</div>
       <div class="field"><label for="ag-in">승인 없이 진행하는 이유 <span class="req">*</span></label><input class="input" id="ag-in" maxlength="200" placeholder="예: 고객 PM 휴가로 승인 회신이 다음 주 예정"><div class="err" id="ag-err"></div></div>
       <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="proceed">이유 남기고 진행</button><button class="btn btn--primary" data-v="record">승인 기록하러 가기</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };
@@ -63,11 +91,14 @@ export const bypassNote = (prev, reason) => {
   const line = `[승인 전 진행] ${reason.replace(/\s*·\s*/g, ', ')} · ${ymd} · ${(state.user && state.user.name) || ''}`;
   return prev ? `${prev}\n${line}` : line;
 };
-export const approvalStep = (g) => { const ini = (g.phases || []).find((x) => x.phase_key === 'INITIATION'); return ini ? (ini.steps || []).find((s) => s.step_key === 'APPROVAL') || null : null; };
+export const gateStep = (g, phaseKey, stepKey) => { const ph = (g.phases || []).find((x) => x.phase_key === phaseKey); return ph ? (ph.steps || []).find((s) => s.step_key === stepKey) || null : null; };
+export const approvalStep = (g) => gateStep(g, 'INITIATION', 'APPROVAL');
 /** Pre-31 / already-advanced projects: "착수 승인 기록 없음" once, on the 01 screen and the 01 area of What's Next only (spec D3). */
-export const noApprovalLine = (g) => {
-  const ini = (g.phases || []).find((x) => x.phase_key === 'INITIATION'); const st = approvalStep(g);
-  if (!ini || ini.is_current || !st || st.state === 'COMPLETED' || /\[승인 전 진행\]/.test(st.note || '')) return '';
-  return '<p class="np__noapv"><i class="st st--warn" aria-hidden="true">!</i>착수 승인 기록 없음 — 고객 승인을 받았다면 착수 결과 승인에 기록해 두세요.</p>';
+const NO_APPROVAL = { INITIATION: '착수 승인 기록 없음 — 고객 승인을 받았다면 착수 결과 승인에 기록해 두세요.', REQUIREMENTS: '기준선 승인 기록 없음 — 고객 승인을 받았다면 요구사항 기준선 승인에 기록해 두세요.' };
+/** 02 (Phase 2): the same line once, in the 02 area of What's Next, for projects already past 02 without a baseline approval. */
+export const noApprovalLine = (g, phaseKey = 'INITIATION') => {
+  const ph = (g.phases || []).find((x) => x.phase_key === phaseKey); const cfg = APPROVAL_GATES[phaseKey]; const st = cfg ? gateStep(g, phaseKey, cfg.step) : null;
+  if (!ph || ph.is_current || !ph.is_passed || !st || st.state === 'COMPLETED' || /\[승인 전 진행\]/.test(st.note || '')) return '';
+  return `<p class="np__noapv"><i class="st st--warn" aria-hidden="true">!</i>${NO_APPROVAL[phaseKey]}</p>`;
 };
 export { raw };

@@ -15,6 +15,8 @@ import * as M from './metrics.js';
 import * as H from './health.js';
 import { LEAF_SQL, todayStr } from './wbs.js';
 import { projectGuidance } from './guidance.js';
+import { loadBaseline } from './req-baseline.js';
+import { PHASE_BY_KEY } from './templates/default-phases.js';
 
 const n = (v) => Number(v) || 0;
 
@@ -23,9 +25,12 @@ export async function guidanceContext(db, project) {
   const stats = (await M.projectStats(db, project));
   const def = (await D.loadDefinition(db, project));
   const overdue = n((await db.get(`SELECT COUNT(*) n FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status <> 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE`, [project.id])).n);
-  const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections }, overdue_tasks: overdue }));
-  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate }, stats, overdue_tasks: overdue });
-  return { stats, def, overdue, guide, guidance };
+  const reqBaseline = (await loadBaseline(db, project, { stats: stats.requirements }));   // 02 요구사항 기준선 승인 (Phase 2)
+  const traits = { data_migration: project.data_migration, has_external_integration: project.has_external_integration };
+  const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections, req_baseline: reqBaseline }, traits, overdue_tasks: overdue }));
+  const scopeOut = (def.definition.scope_out || []).map((x) => x.text).filter(Boolean);   // Charter 제외 범위 → 02 범위 확정 hint
+  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats, overdue_tasks: overdue });
+  return { stats, def, overdue, guide, guidance, reqBaseline };
 }
 
 /**
@@ -56,13 +61,20 @@ export const comparePriority = (a, b) => (PRIORITY[a.priority] - PRIORITY[b.prio
 
 const daysFromToday = (date, today) => Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
 
+/** 01·02 (before 분석·설계): requirement↔WBS links are not expected yet, so 'WBS 미연결' is neither a 확인 필요 row nor a Blocker (Phase 2 US-4). */
+export const wbsExpected = (phaseKey) => (PHASE_BY_KEY[phaseKey] ? !['INITIATION', 'REQUIREMENTS'].includes(phaseKey) : true);
+
 /** One card payload. `row` is the project-list row (with current_phase_name / sequence); nothing in the project is modified. */
 export async function homeCard(db, row, { today } = {}) {
   const project = row;
-  const [ctx, health, attentionAll, upcomingAll] = await Promise.all([
-    guidanceContext(db, project), H.projectHealth(db, project), M.attentionAll(db, project.id),
+  const early = !wbsExpected(project.current_phase);
+  const [ctx, health, attentionRaw, upcomingAll] = await Promise.all([
+    guidanceContext(db, project),
+    early ? H.healthFacts(db, project).then((f) => H.evaluateHealth({ ...f, req: { ...f.req, confirmed_unlinked: 0 } })) : H.projectHealth(db, project),
+    M.attentionAll(db, project.id),
     M.upcomingDates(db, project.id, { days: 120, limit: 30 }),
   ]);
+  const attentionAll = early ? attentionRaw.filter((i) => i.kind !== 'CONFIRMED_UNLINKED_REQUIREMENT') : attentionRaw;
   const w = ctx.stats.wbs || {}; const iss = ctx.stats.issues || {};
   const attention = { total: attentionAll.length, crit: attentionAll.filter((i) => i.severity === 'crit').length,
     items: attentionAll.slice(0, 3).map(({ kind, type, severity, display_id, title, meta, href }) => ({ kind, type, severity, display_id, title, meta, href })) };

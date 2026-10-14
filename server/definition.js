@@ -26,6 +26,8 @@ export const SECTIONS = [...CORE_SECTIONS, ...GATE_SECTIONS];
 export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '이해관계자', MILESTONES: '주요 일정과 마일스톤', OPERATIONS: '운영 방식', KICKOFF: '착수보고회(킥오프)', APPROVAL: '착수 결과 승인' };
 /** 승인 방법. KICKOFF ("착수보고회에서 승인") is hidden in the UI when the 착수보고회 activity was skipped. */
 export const APPROVAL_METHODS = { SIGNED: '서명본 수령', EMAIL: '이메일 회신', KICKOFF: '착수보고회에서 승인', OTHER: '기타' };
+/** 요구사항 기준선 승인 (02, Phase 2) — the same approval record, its own method list. */
+export const REQ_APPROVAL_METHODS = { SIGNED: '서명본 수령', EMAIL: '이메일 회신', REVIEW: '검토 회의에서 승인', OTHER: '기타' };
 export const KICKOFF_PREP_DEFAULT = ['안건 확정', '발표자료(사업수행계획서) 준비', '참석자 초대 발송', '회의실·화상회의 준비'];
 export const KICKOFF_AGENDA_DEFAULT = '1. 프로젝트 개요·목표\n2. 범위\n3. 추진 조직\n4. 일정\n5. 운영 방식\n6. 질의응답';
 /** "[승인 전 진행] 사유 · 날짜 · 이름" lines in the APPROVAL step note (written by the 01→02 dialog through the step note API). */
@@ -69,7 +71,7 @@ const kickoffOf = (raw) => {
     agenda: k.agenda !== undefined ? k.agenda : KICKOFF_AGENDA_DEFAULT, minutes: k.minutes || '',
     decisions: Array.isArray(k.decisions) ? k.decisions : [], followups: Array.isArray(k.followups) ? k.followups : [] };
 };
-const approvalOf = (raw) => {
+export const approvalOf = (raw) => {
   const a = raw && typeof raw === 'object' ? raw : {};
   return { approver_id: a.approver_id || '', approver_name: a.approver_name || '', approver_title: a.approver_title || '', date: a.date || '', method: a.method || '',
     evidence: a.evidence || '', conditions: a.conditions || '', baseline: a.baseline || null };
@@ -158,27 +160,53 @@ export function cleanSection(key, body = {}) {
       if (Object.keys(f).length) throw new ValidationError(f);
       return out;
     }
-    case 'APPROVAL': {
-      if (b.approval === undefined) return out;
-      const a = b.approval; if (typeof a !== 'object' || a === null) throw new ValidationError({ approval: '형식이 올바르지 않습니다.' });
-      const f = {};
-      const date = str(a.date); const method = str(a.method);
-      if (date && !isDate(date)) f['approval.date'] = '날짜 형식(YYYY-MM-DD)을 확인해 주세요.';
-      else if (date && date > localToday()) f['approval.date'] = '승인일은 오늘 이후일 수 없습니다.';
-      if (method && !APPROVAL_METHODS[method]) f['approval.method'] = '승인 방법을 목록에서 선택하세요.';
-      if (Object.keys(f).length) throw new ValidationError(f);
-      out.approval = { approver_id: str(a.approver_id, 64), approver_name: str(a.approver_name, 100), approver_title: str(a.approver_title, 100), date, method,
-        evidence: str(a.evidence, 300), conditions: str(a.conditions, 2000), add_to_stakeholders: a.add_to_stakeholders !== false };
+    case 'APPROVAL':
+      if (b.approval !== undefined) out.approval = cleanApproval(b.approval, APPROVAL_METHODS);
       return out;
-    }
     default: throw new ValidationError({ section: '알 수 없는 섹션입니다.' });
   }
 }
 
+/* ---------- approval record (shared: 01 착수 결과 승인 · 02 요구사항 기준선 승인) ---------- */
+/** Validate one approval record (partial: empty fields are allowed while drafting; approvalMissing decides completion). */
+export function cleanApproval(a, methods, field = 'approval') {
+  if (typeof a !== 'object' || a === null) throw new ValidationError({ [field]: '형식이 올바르지 않습니다.' });
+  const f = {};
+  const date = str(a.date); const method = str(a.method);
+  if (date && !isDate(date)) f[`${field}.date`] = '날짜 형식(YYYY-MM-DD)을 확인해 주세요.';
+  else if (date && date > localToday()) f[`${field}.date`] = '승인일은 오늘 이후일 수 없습니다.';
+  if (method && !methods[method]) f[`${field}.method`] = '승인 방법을 목록에서 선택하세요.';
+  if (Object.keys(f).length) throw new ValidationError(f);
+  return { approver_id: str(a.approver_id, 64), approver_name: str(a.approver_name, 100), approver_title: str(a.approver_title, 100), date, method,
+    evidence: str(a.evidence, 300), conditions: str(a.conditions, 2000), add_to_stakeholders: a.add_to_stakeholders !== false };
+}
+/** What still blocks 완료 처리 of an approval record: 승인자 · 승인일 (≤ today) · 방법 · 근거. */
+export function approvalMissing(a, who) {
+  const out = [];
+  if (!who) out.push(a.approver_id ? '선택한 승인자가 이해관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.');
+  if (!a.date) out.push('승인일을 입력하세요.'); else if (a.date > localToday()) out.push('승인일은 오늘 이후일 수 없습니다.');
+  if (!a.method) out.push('승인 방법을 선택하세요.');
+  if (!a.evidence) out.push('승인 근거(문서번호·메일 제목·보관 위치 등)를 입력하세요.');
+  return out;
+}
+/** A directly entered approver added to 이해관계자 (CLIENT). Not an edit of the 이해관계자 activity, so its section stamp is left alone. */
+export function approverStakeholder(project, a, area) {
+  return { id: randomUUID(), org_type: 'CLIENT', org: project.client_name || '', department: '', name: a.approver_name, role: a.approver_title, area, note: '' };
+}
+/** Append one stakeholder row without touching section_updated (creates the definition row when missing). */
+export async function appendStakeholder(db, project, sh, userId = null) {
+  await ensureRow(db, project.id, userId);
+  const existing = await row(db, project.id);
+  await db.run('UPDATE project_definitions SET stakeholders = ?, updated_at = ? WHERE project_id = ?', [JSON.stringify([...parse(existing.stakeholders, []), sh]), new Date().toISOString(), project.id]);
+}
+/** The definition row with every column at its default (no section stamped). */
+export async function ensureRow(db, projectId, userId = null) {
+  await db.run('INSERT INTO project_definitions (project_id, updated_by) VALUES (?, ?) ON CONFLICT (project_id) DO NOTHING', [projectId, userId]);
+}
+
 /* ---------- 착수 결과 승인: approver + re-approval baseline ---------- */
 /** The approver as shown everywhere (stakeholder row when linked, otherwise the directly entered name/title). */
-export function approverOf(d) {
-  const a = d.approval || {};
+export function approverOf(d, a = d.approval || {}) {
   const sh = a.approver_id ? (d.stakeholders || []).find((s) => s.id === a.approver_id) : null;
   if (sh) return { id: sh.id, name: sh.name, title: sh.role || '', org: [sh.org, sh.department].filter(Boolean).join(' '), linked: true };
   if (a.approver_name) return { id: null, name: a.approver_name, title: a.approver_title || '', org: '', linked: false };
@@ -211,14 +239,7 @@ export function missingFor(key, d, ctx = {}) {
       if (!(k.minutes || (k.decisions || []).length)) out.push('회의록 요약 또는 결정사항을 1개 이상 입력하세요.');
       return out;
     }
-    case 'APPROVAL': {
-      const a = d.approval || {}; const out = [];
-      if (!approverOf(d)) out.push(a.approver_id ? '선택한 승인자가 이해관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.');
-      if (!a.date) out.push('승인일을 입력하세요.'); else if (a.date > localToday()) out.push('승인일은 오늘 이후일 수 없습니다.');
-      if (!a.method) out.push('승인 방법을 선택하세요.');
-      if (!a.evidence) out.push('승인 근거(문서번호·메일 제목·보관 위치 등)를 입력하세요.');
-      return out;
-    }
+    case 'APPROVAL': return approvalMissing(d.approval || {}, approverOf(d));
     default: return ['알 수 없는 섹션입니다.'];
   }
 }
@@ -328,7 +349,7 @@ export async function saveDefinition(db, project, body = {}, userId = null) {
     // 직접 입력 승인자 → 이해관계자에도 추가 (기본 체크, spec C6). Not an edit of the 이해관계자 activity, so its section stamp is left alone.
     if (!a.approver_id && a.approver_name && addSh) {
       const list = patch.stakeholders || (existing ? parse(existing.stakeholders, []) : []);
-      const sh = { id: randomUUID(), org_type: 'CLIENT', org: project.client_name || '', department: '', name: a.approver_name, role: a.approver_title, area: '착수 결과 승인', note: '' };
+      const sh = approverStakeholder(project, a, '착수 결과 승인');
       patch.stakeholders = [...list, sh]; a.approver_id = sh.id;
     }
     if (a.approver_id) { a.approver_name = ''; a.approver_title = ''; }

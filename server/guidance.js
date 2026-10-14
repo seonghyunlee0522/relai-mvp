@@ -21,6 +21,9 @@ const n = (v) => Number(v) || 0;
 /** One line per phase shown the first time a user enters it ("이 단계에서 하는 일"). */
 export const PHASE_INTRO = Object.fromEntries(DEFAULT_PHASES.map((p) => [p.key, { what: p.description, outputs: p.steps.filter((s) => s.importance === 'REQUIRED').map((s) => s.title) }]));
 
+/** "착수 때 제외하기로 한 것: A, B. 여기에 해당하는 요구사항은 '범위 외'로 두세요." (Charter 제외 범위; hidden when empty) */
+export const scopeOutHint = (list) => (list && list.length ? `착수 때 제외하기로 한 것: ${list.join(', ')}. 여기에 해당하는 요구사항은 '범위 외'로 두세요.` : '');
+
 export function projectGuidance(ctx) {
   const { project, phase, next_phase: nextPhase, definition, stats = {}, overdue_tasks = 0 } = ctx;
   const u = (p = '') => `/app/projects/${project.id}${p}`;
@@ -65,9 +68,15 @@ export function projectGuidance(ctx) {
     case 'REQUIREMENTS': {
       if (n(req.total) === 0) return out('REQ_EMPTY', '요구사항을 수집하고 정리하세요', '요구사항을 초기에 명확히 정리하면 설계·개발 단계의 범위 변경과 재작업을 크게 줄일 수 있습니다. 직접 입력, Excel 가져오기, AI 추출(사용 가능 시)을 Requirements 화면에서 선택할 수 있습니다.', '요구사항은 프로젝트 범위와 검수 기준이 되며 WBS·테스트와 연결됩니다.', act('요구사항 입력 시작 →', u('/requirements?new=1')), null, '요구사항이 준비되면 분류와 범위를 정리합니다.');
       if (n(req.type_unspecified)) return out('REQ_CLASSIFY', '요구사항을 분류하세요', `유형이 지정되지 않은 요구사항 ${req.type_unspecified}건이 있습니다. 기능·비기능·인터페이스·데이터 구분이 있어야 설계와 테스트 범위를 빠짐없이 잡을 수 있습니다.`, '기능·비기능·인터페이스·데이터 구분이 있어야 설계와 테스트 범위를 정할 수 있습니다.', act('요구사항 분류 →', u('/requirements?type=UNSPECIFIED')), n(req.priority_unspecified) ? act('우선순위 설정 →', u('/requirements?priority=UNSPECIFIED')) : null, '분류가 끝나면 범위를 확정합니다.');
-      if (n(req.scope_undecided)) return out('REQ_SCOPE', '요구사항의 범위를 확정하세요', `범위가 결정되지 않은 요구사항 ${req.scope_undecided}건이 있습니다. 범위를 먼저 정해야 WBS와 테스트 범위를 흔들림 없이 세울 수 있습니다.`, '범위가 정해져야 실행 계획(WBS)과 테스트 범위를 정할 수 있습니다.', act('범위 결정 →', u('/requirements?scope=UNDECIDED')), n(req.priority_unspecified) ? act('우선순위 설정 →', u('/requirements?priority=UNSPECIFIED')) : null, '범위가 정해지면 요구사항을 확정합니다.');
-      if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope)) return out('REQ_CONFIRM', '요구사항을 검토하고 확정하세요', `범위 내 요구사항 ${req.in_scope}건 중 ${req.in_scope_confirmed}건이 확정되었습니다. 확정된 기준선이 있어야 이후 변경을 변경 요청으로 통제할 수 있습니다.${n(req.priority_unspecified) ? ` 우선순위 미지정 ${req.priority_unspecified}건.` : ''}`, '확정된 요구사항이 기준선이 되어 이후 변경은 변경 요청으로 관리됩니다.', act('요구사항 확정 →', u('/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED')), n(req.priority_unspecified) ? act('우선순위 설정 →', u('/requirements?priority=UNSPECIFIED')) : null, '확정 후 분석·설계 단계에서 WBS를 작성합니다.');
+      // Phase 2: 범위 확정 shows the Charter 제외 범위 (no auto matching); 확정 and 승인 both lead to the 승인 기록 Drawer
+      const excl = (definition?.scope_out || []).length ? ` ${scopeOutHint(definition.scope_out)}` : '';
+      const rb = definition?.req_baseline || null;
+      const docLink = act('요구사항 정의서 내려받기', `/api/workspaces/${project.workspace_id}/projects/${project.id}/requirements/export-doc?format=pdf`);
+      if (n(req.scope_undecided)) return out('REQ_SCOPE', '요구사항의 범위를 확정하세요', `범위가 결정되지 않은 요구사항 ${req.scope_undecided}건이 있습니다. 범위를 먼저 정해야 WBS와 테스트 범위를 흔들림 없이 세울 수 있습니다.${excl}`, '범위가 정해져야 실행 계획(WBS)과 테스트 범위를 정할 수 있습니다.', act('범위 결정 →', u('/requirements?scope=UNDECIDED')), n(req.priority_unspecified) ? act('우선순위 설정 →', u('/requirements?priority=UNSPECIFIED')) : null, '범위가 정해지면 요구사항을 확정합니다.');
+      if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope)) return out('REQ_CONFIRM', '요구사항을 검토하고 확정하세요', `범위 내 요구사항 ${req.in_scope}건 중 ${req.in_scope_confirmed}건이 확정되었습니다. 요구사항 정의서를 고객에게 보내 검토받으세요. 승인 회신을 받으면 승인 기록에서 한 번에 확정됩니다.${n(req.priority_unspecified) ? ` 우선순위 미지정 ${req.priority_unspecified}건.` : ''}`, '확정된 요구사항이 기준선이 되어 이후 변경은 변경 요청으로 관리됩니다.', act('승인 기록 →', u('/requirements?approval=1')), docLink, '고객 승인을 기록하면 분석·설계 단계에서 WBS를 작성합니다.');
       if (n(req.priority_unspecified)) warnings.push(`우선순위 미지정 요구사항 ${req.priority_unspecified}건`);
+      if (rb && rb.step_id && rb.status !== 'COMPLETED' && !rb.bypass) return out('REQ_APPROVE', '요구사항 기준선을 고객에게 승인받으세요', '고객이 승인한 요구사항이 설계·개발·테스트·검수의 기준(기준선)이 됩니다. 요구사항 정의서를 보내고, 승인 회신을 받으면 기록하세요.', '고객이 승인한 요구사항이 이후 설계·개발·검수의 기준선이 됩니다.', act('승인 기록 →', u('/requirements?approval=1')), docLink, '승인을 기록하면 분석·설계 단계에서 WBS를 작성합니다.');
+      if (rb && rb.status !== 'COMPLETED' && rb.bypass) warnings.push('요구사항 기준선 미승인 · 승인 전 진행 사유 기록됨');
       return out('REQ_DONE', '요구사항 정의가 마무리되었습니다', '요구사항 기준선이 잡혔습니다. 요구사항을 실행 가능한 작업 단위로 구체화하면 일정과 책임을 명확하게 관리할 수 있습니다.', 'WBS는 요구사항을 실제 작업 단위로 나눈 실행 계획입니다.', move || act('WBS 작성 시작 →', u('/wbs?new=1')), move ? act('요구사항 보기 →', u('/requirements')) : null, nextPhaseText);
     }
     case 'ANALYSIS_DESIGN': {

@@ -11,29 +11,17 @@
  *   승인 후 변경 (확인 필요)  v1.0 → 변경됨 (재승인 필요)      footer "승인 후 변경된 초안"
  */
 import { ORG_TYPE_LABEL } from './definition.js';
+import { NONE, table, kv, textBlock, docVersion, coverLines, revisionRows, revisionTable, approvalLines } from './doc-export.js';
 
 export const PLAN_TITLE = '사업수행계획서';
-const NONE = '작성되지 않음';
 const CAT_ORDER = ['CLIENT', 'OWN', 'PARTNER', 'OTHER'];
-
-/** Table cell: escape pipes, keep line breaks as <br>. null = a deliberately blank cell (빈 개정 행 · 서명 칸); '' = "-". */
-const cellText = (v) => (v === null ? '' : String(v ?? '').trim().replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>') || '-');
-const row = (cells) => `| ${cells.map(cellText).join(' | ')} |`;
-const table = (header, rows) => [row(header), `|${header.map(() => '---').join('|')}|`, ...rows.map(row)].join('\n');
-/** Free text → bullets when it has several lines, a paragraph otherwise; NONE when empty. */
-const textBlock = (text) => {
-  const lines = String(text || '').split(/\r?\n/).map((x) => x.replace(/^\s*(?:[-•*·]|\d+[.)])\s*/, '').trim()).filter(Boolean);
-  if (!lines.length) return NONE;
-  return lines.length === 1 ? lines[0] : lines.map((l) => `- ${l}`).join('\n');
-};
 const fmtDT = (v) => (!v ? '' : v.length > 10 ? `${v.slice(0, 10)} ${v.slice(11, 16)}` : v);
 
 /** Version label + footer for the approval state (TODO · COMPLETED · REAPPROVAL). */
 export function planVersion(approval) {
   const st = approval ? approval.status : 'TODO';
-  if (st === 'COMPLETED') return { version: 'v1.0', file: 'v1.0', footer: '' };
   if (st === 'REAPPROVAL') return { version: 'v1.0 → 변경됨 (재승인 필요)', file: 'v1.0_변경됨', footer: '승인 후 변경된 초안' };
-  return { version: 'v0.9 (초안)', file: 'v0.9', footer: '승인 전 초안' };
+  return docVersion(st);
 }
 
 /**
@@ -44,21 +32,17 @@ export function buildPlanMarkdown(c, { workspaceName = '', author = '', today })
   const pf = c.profile; const v = planVersion(c.approval);
   const L = [];
   const h2 = (t) => L.push('', `## ${t}`);
-  const kv = (pairs) => table(['항목', '내용'], pairs.map(([k, val]) => [k, val || NONE]));
 
   /* 1. 표지 */
-  L.push(`# ${PLAN_TITLE}`, '', `**${pf.name}**`, '');
-  L.push(kv([['프로젝트명', pf.name], ['고객사', pf.client], ['수행사', workspaceName], ['버전', v.version], ['작성일', today], ['작성자', author]]));
-  if (v.footer) L.push('', `**${v.footer}** — 고객 승인 전에는 내용이 바뀔 수 있습니다.`);
-  L.push('', '<!-- pagebreak -->');
+  L.push(...coverLines(PLAN_TITLE, pf.name, [['프로젝트명', pf.name], ['고객사', pf.client], ['수행사', workspaceName], ['버전', v.version], ['작성일', today], ['작성자', author]], v.footer));
 
   /* 2. 개정 이력 */
   h2('개정 이력');
   // One auto row that matches the document's state; no blank rows (no document versioning yet).
   const st = c.approval ? c.approval.status : 'TODO'; const approvedOn = (c.approval && c.approval.date) || today;
-  const revs = st === 'TODO' ? [['v0.9', today, '초안', author]] : [['v1.0', approvedOn, '승인', author]];
+  const revs = revisionRows(st, { today, approvedOn, author });
   if (st === 'REAPPROVAL') revs.push(['v1.0 → 변경됨', today, '승인 후 변경 (재승인 필요)', author]);
-  L.push(table(['버전', '일자', '내용', '작성자'], revs));
+  L.push(revisionTable(revs));
 
   /* 3. 사업 개요 */
   h2('1. 사업 개요');
@@ -107,17 +91,7 @@ export function buildPlanMarkdown(c, { workspaceName = '', author = '', today })
 
   /* 11. 승인란 */
   h2(`${!k || !k.skipped ? '9' : '8'}. 승인`);
-  const a = c.approval || {}; const who = a.approver;
-  const done = a.status === 'COMPLETED' || a.status === 'REAPPROVAL';
-  const pm = (c.stakeholders || []).find((s) => s.category === 'OWN' && /PM|PL|책임/i.test(s.role || '')) || (c.stakeholders || []).find((s) => s.category === 'OWN');
-  L.push(table(['구분', '성명', '직위', '서명', '일자'], [
-    ['고객사', who ? who.name : null, who ? who.title : null, null, done ? a.date : null],
-    ['수행사', pm ? pm.name : author, pm ? pm.role : 'PM', null, null],
-  ]));
-  if (done) L.push('', `승인 방법: ${a.method_label || '-'} · 근거: ${a.evidence || '-'}`);
-  if (a.status === 'REAPPROVAL') L.push('', '**승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.**');
-  if (a.conditions) L.push('', '**조건 / 보완 요청**', textBlock(a.conditions));
-  if (!done && a.bypass) L.push('', `**미승인 — 사유: ${a.bypass.reason}** (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})`);
+  L.push(...approvalLines(c.approval || {}, { stakeholders: c.stakeholders || [], author }));
 
   return { title: `${pf.name} ${PLAN_TITLE}`, markdown: L.join('\n'), version: v.version, footer: v.footer, fileVersion: v.file };
 }

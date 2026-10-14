@@ -17,11 +17,17 @@ import { ACC_STATUS, LINK_TYPE, REQ_FIELD_LABEL, REQ_PRIORITY, REQ_SCOPE, REQ_ST
 import { confirmDialog, pickerDialog, showErrors, toast } from '../shared/dialogs.js';
 import { aiStatus } from '../shared/ai.js';
 import { openExtractDialog } from '../ai/extract.js';
+import { guardEdit, needsPrompt, needsAddPrompt, changePromptDialog, createChangeDraft, proposalLine } from './change-guard.js';
+import { approvalFields, collectApproval, approvalBody } from '../shared/approval.js';
+import { term, reqDocMenu, bindReqDocMenu } from '../project/initiation.js';
+import { josa } from '../shared/josa.js';
 
 export async function requirementsPage(id) {
   const main = $('#main');
-  const [g, members, ai] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers(), aiStatus(id)]);
+  let [g, members, ai, baseline] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers(), aiStatus(id), api('GET', wsApi(`/${id}/requirements/baseline`)).then((x) => x.baseline).catch(() => null)]);
   const p = g.project;
+  // WBS guidance (이동 배너 · Delivery Trace) belongs to 03 분석·설계 onward (Phase 2 US-4)
+  const wbsPhase = () => Boolean(g.current_phase && g.current_phase.sequence >= 3);
   const archived = p.status === 'ARCHIVED';
   document.title = `Requirements — ${p.name} — RELAI`;
   const rApi = (s = '') => wsApi(`/${id}/requirements${s}`);
@@ -34,6 +40,7 @@ export async function requirementsPage(id) {
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
   let rows = []; let summary = g.requirements; let sel = null; let creating = params().get('new') === '1';
+  let apvOpen = params().get('approval') === '1' && Boolean(baseline && baseline.step_id); let bw = null; let confirmAll = true;   // 요구사항 기준선 승인 Drawer (Phase 2 US-1)
   let dtab = 'info'; let actFilter = 'ALL';
   // Arrived from an approved Change Request → edits are recorded with that CR as the history source.
   let ctxCr = null;
@@ -51,6 +58,8 @@ export async function requirementsPage(id) {
   const FILTER_DEFS = [{ key: 'q', label: '검색' }, { key: 'status', label: 'Status', map: REQ_STATUS }, { key: 'scope', label: 'Scope', map: REQ_SCOPE }, { key: 'owner', label: 'Owner', map: { ...ownerMap, none: '미지정' } },
     { key: 'type', label: '유형', map: REQ_TYPE }, { key: 'priority', label: 'Priority', map: REQ_PRIORITY }, { key: 'link', label: '연결 상태', map: LINK_F }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const dim = (t = '-') => html`<span class="dim">${t}</span>`;
+  const scopeOut = () => ((g.definition && g.definition.scope_out) || []);
+  const PRIORITY_HINT = 'High = 없으면 오픈할 수 없는 것';
 
   /* ---------- grids ---------- */
   const ro = (r) => archived || Boolean(r.archived_at);
@@ -60,6 +69,8 @@ export async function requirementsPage(id) {
     activeId: () => (sel ? sel.id : null),
     onOpen: (rid) => openDetail(rid),
     onEdit: async (rid, field, value) => {
+      const row0 = rows.find((x) => x.id === rid);
+      if (row0 && needsPrompt(row0, field) && !(await guardEdit(id, { r: row0, field, before: row0[field], after: value }, async () => {}))) return;   // CR draft or 취소 → the grid redraws the old value
       try { const d = await api('PATCH', rApi(`/${rid}`), { [field]: value, ...crBody() }); summary = d.summary; if (sel && sel.id === rid) sel = d.requirement; await load(); paintKpi(); if (sel && sel.id === rid) drawDetail(); toast(`${d.requirement?.display_id || ''} 저장됨`.trim()); }
       catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); throw e; }
     },
@@ -124,12 +135,28 @@ export async function requirementsPage(id) {
         const f = bulkFields.find((x) => x.key === field);
         const shown = value === NONE ? '미지정' : (Array.isArray(f.options) ? f.options : Object.entries(f.options)).find(([v]) => v === value)?.[1] || value;
         if (n >= 20 && !(await confirmDialog({ title: `${n.toLocaleString('ko-KR')}건의 ${f.label}을(를) '${shown}'(으)로 변경할까요?`, body: '선택한 모든 요구사항에 적용되며 각각 변경 이력이 남습니다.', confirm: '일괄 변경' }))) return;
-        try { reportBulk(await bulkRun(rApi('/bulk'), listGrid.selectedIds(), { action: 'update', patch: { [field]: value === NONE ? '' : value }, ...crBody() }), '변경'); await bulkAfter(); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); }
+        let ids = listGrid.selectedIds();
+        const guarded = field === 'scope' ? rows.filter((r) => ids.includes(r.id) && needsPrompt(r, 'scope') && r.scope !== value) : [];
+        if (guarded.length) {   // 확정 요구사항의 범위 변경 → one prompt; 변경 요청 = one CR linking all of them, they stay unchanged
+          const v = await changePromptDialog(); if (!v) return;
+          if (v === 'cr') {
+            try { await createChangeDraft(id, { title: `${guarded.map((r) => r.display_id).join(', ')} 범위 변경`.slice(0, 200), lines: guarded.map((r) => `${r.display_id} ${r.title}\n  ${proposalLine('scope', r.scope, value)}`), requirementIds: guarded.map((r) => r.id) }); } catch (e) { toast(e.message); return; }
+            ids = ids.filter((x) => !guarded.some((r) => r.id === x)); if (!ids.length) { await bulkAfter(); return; }
+          }
+        }
+        try { reportBulk(await bulkRun(rApi('/bulk'), ids, { action: 'update', patch: { [field]: value === NONE ? '' : value }, ...crBody() }), '변경'); await bulkAfter(); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); }
       },
       onArchive: async () => {
-        const n = listGrid.selected.size;
-        if (!(await confirmDialog({ title: `${n.toLocaleString('ko-KR')}건을 보관할까요?`, body: '보관된 요구사항은 기본 목록에서 숨겨지고 수정할 수 없습니다. 번호는 재사용되지 않습니다.', confirm: '보관하기', danger: true }))) return;
-        try { reportBulk(await bulkRun(rApi('/bulk'), listGrid.selectedIds(), { action: 'archive', ...crBody() }), '보관'); await bulkAfter(); } catch (e) { toast(e.message); }
+        const n = listGrid.selected.size; let ids = listGrid.selectedIds();
+        const guarded = rows.filter((r) => ids.includes(r.id) && needsPrompt(r, 'archive'));
+        if (guarded.length) {   // 확정된 범위 내 요구사항 보관 → prompt; 변경 요청 = CR only, those are not archived
+          const v = await changePromptDialog(); if (!v) return;
+          if (v === 'cr') {
+            try { await createChangeDraft(id, { title: `${guarded.map((r) => r.display_id).join(', ')} 범위 제외(보관)`.slice(0, 200), lines: guarded.map((r) => `- 보관(범위에서 제외): ${r.display_id} ${r.title}`), requirementIds: guarded.map((r) => r.id), relation: 'REMOVES' }); } catch (e) { toast(e.message); return; }
+            ids = ids.filter((x) => !guarded.some((r) => r.id === x)); if (!ids.length) { await bulkAfter(); return; }
+          }
+        } else if (!(await confirmDialog({ title: `${n.toLocaleString('ko-KR')}건을 보관할까요?`, body: '보관된 요구사항은 기본 목록에서 숨겨지고 수정할 수 없습니다. 번호는 재사용되지 않습니다.', confirm: '보관하기', danger: true }))) return;
+        try { reportBulk(await bulkRun(rApi('/bulk'), ids, { action: 'archive', ...crBody() }), '보관'); await bulkAfter(); } catch (e) { toast(e.message); }
       },
       onClear: () => listGrid.clearSelection(),
     });
@@ -148,7 +175,7 @@ export async function requirementsPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED' ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : '')}
-      ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
+      ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived && wbsPhase() ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
       ${raw(summary.total ? coachMark('REQ_TRACE_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 History에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
       <div class="rtool">
@@ -165,22 +192,24 @@ export async function requirementsPage(id) {
         ${raw(rview() === 'list' ? listGrid.toolsHtml() : '')}
         <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>
+        ${raw(reqDocMenu())}
         ${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-extract" title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}
         ${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}
       </div>
       <div class="rrow2"><div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
       ${raw(archived || rview() === 'trace' ? '' : html`<form class="qa" id="qa"><input class="input input--sm" id="qa-t" maxlength="200" placeholder="제목 입력 후 Enter — 요구사항 연속 추가" title="상세 항목은 목록에서 바로 수정하거나 행을 클릭해 입력하세요" autocomplete="off"></form>`)}</div>
       ${raw(appliedFilters(q, FILTER_DEFS))}
+      ${raw(q.get('scope') === 'UNDECIDED' && scopeOut().length ? html`<p class="req-excl" data-scope-excl>착수 때 제외하기로 한 것: <b>${scopeOut().join(', ')}</b>. 여기에 해당하는 요구사항은 '범위 외'로 두세요.</p>` : '')}
       <div id="bulkslot"></div>
-      <div class="rlayout ${sel || creating ? 'has-drawer' : ''}">
+      <div class="rlayout ${sel || creating || apvOpen ? 'has-drawer' : ''}">
         ${raw(curGrid().html())}
-        <aside class="drawer ${creating ? 'drawer--form' : 'drawer--lg'}" id="drawer" ${sel || creating ? '' : 'hidden'}></aside>
+        <aside class="drawer ${creating ? 'drawer--form' : 'drawer--lg'}" id="drawer" ${sel || creating || apvOpen ? '' : 'hidden'}></aside>
       </div>
     </div>`;
     bind();
     mountBulkBar();
     bulk.update(listGrid.selected.size);
-    if (creating) drawCreate(); else if (sel) drawDetail();
+    if (apvOpen) drawApproval(); else if (creating) drawCreate(); else if (sel) drawDetail();
   };
 
   const bind = () => {
@@ -192,7 +221,7 @@ export async function requirementsPage(id) {
     const ar = $('#arch'); if (ar) ar.onchange = async () => { setParam('archived', ar.checked ? '1' : ''); await load(); draw(); };
     bindFilterClears(main, { setParam, keys: ['q', ...filterKeys, 'archived'], reload: async () => { await load(); draw(); } });
     const cx = $('#ctx-off'); if (cx) cx.onclick = () => { ctxCr = null; setParam('cr', ''); draw(); };
-    for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; setParam('sel', ''); setParam('new', '1'); showDrawer(); drawCreate(); }; }
+    for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; apvOpen = false; setParam('approval', ''); setParam('sel', ''); setParam('new', '1'); showDrawer(); drawCreate(); }; }
     for (const ida of ['ai-extract', 'ai-extract2']) { const ax = $('#' + ida); if (ax) ax.onclick = () => openExtractDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
     const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = () => openImport({ kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } });
     bindCoach(main);
@@ -218,19 +247,20 @@ export async function requirementsPage(id) {
       catch (err) { toast(err.fields ? Object.values(err.fields)[0] : err.message); }
       inp.disabled = false; inp.focus();
     };
+    bindReqDocMenu(main, id);
     curGrid().bind(main);
-    bindEscape(() => { if (sel || creating) closeDrawer(); });
+    bindEscape(() => { if (sel || creating || apvOpen) closeDrawer(); });
   };
 
   /* ---------- detail / create modal ---------- */
   const showDrawer = () => { const d = $('#drawer'); d.hidden = false; d.className = `drawer ${creating ? 'drawer--form' : 'drawer--lg'}`; $('.rlayout').classList.add('has-drawer'); };
-  const closeDrawer = () => { creating = false; sel = null; setParam('sel', ''); setParam('new', ''); const d = $('#drawer'); d.hidden = true; d.innerHTML = ''; $('.rlayout').classList.remove('has-drawer'); curGrid().refresh(); };
+  const closeDrawer = () => { creating = false; sel = null; apvOpen = false; setParam('sel', ''); setParam('new', ''); setParam('approval', ''); const d = $('#drawer'); d.hidden = true; d.innerHTML = ''; $('.rlayout').classList.remove('has-drawer'); curGrid().refresh(); };
   const openDetail = async (rid) => {
-    try { creating = false; setParam('new', ''); dtab = 'info'; actFilter = 'ALL'; await loadSel(rid); showDrawer(); drawDetail(); curGrid().refresh(); }
+    try { creating = false; apvOpen = false; setParam('new', ''); setParam('approval', ''); dtab = 'info'; actFilter = 'ALL'; await loadSel(rid); showDrawer(); drawDetail(); curGrid().refresh(); }
     catch (e) { toast(e.message); }
   };
 
-  const fieldRow = (label, inner) => html`<div class="dfield"><span>${label}</span><div>${raw(inner)}</div></div>`;
+  const fieldRow = (label, inner) => html`<div class="dfield"><span>${raw(label)}</span><div>${raw(inner)}</div></div>`;
   
   const drawCreate = () => {
     const d = $('#drawer');
@@ -242,8 +272,8 @@ export async function requirementsPage(id) {
           <div class="field"><label for="c-title">제목 <span class="req">*</span></label><input class="input" id="c-title" name="title" maxlength="200" placeholder="예: SSO 로그인"><div class="err" data-for="title"></div></div>
           <div class="cols2">
             <div class="field"><label>유형</label><select class="select" name="type">${raw(opt(REQ_TYPE, 'UNSPECIFIED'))}</select></div>
-            <div class="field"><label>Priority</label><select class="select" name="priority">${raw(opt(REQ_PRIORITY, 'UNSPECIFIED'))}</select></div>
-            <div class="field"><label>Scope</label><select class="select" name="scope">${raw(opt(REQ_SCOPE, 'UNDECIDED'))}</select></div>
+            <div class="field"><label>Priority</label><select class="select" name="priority">${raw(opt(REQ_PRIORITY, 'UNSPECIFIED'))}</select><small class="hint req-phint">${PRIORITY_HINT}</small></div>
+            <div class="field"><label>Scope ${raw(term('scope'))}</label><select class="select" name="scope">${raw(opt(REQ_SCOPE, 'UNDECIDED'))}</select></div>
             <div class="field"><label>Status</label><select class="select" name="status">${raw(opt(REQ_STATUS, 'DRAFT'))}</select></div>
             <div class="field"><label>Owner</label><select class="select" name="owner_user_id">${raw(ownerOpts(''))}</select><div class="err" data-for="owner_user_id"></div></div>
             <div class="field"></div>
@@ -252,7 +282,7 @@ export async function requirementsPage(id) {
           </div>
           <div class="field" style="margin-bottom:0"><label for="c-desc">설명</label><textarea class="textarea" id="c-desc" name="description" maxlength="5000" placeholder="요구사항의 배경과 내용을 적어주세요." style="min-height:96px"></textarea></div>
         </div>
-        <div class="fsec"><h4>완료 조건</h4><div id="c-crit"></div>
+        <div class="fsec"><h4>완료 조건 ${raw(term('criteria'))}</h4><div id="c-crit"></div>
           <div class="crit-add"><input class="input input--sm" id="c-crit-in" maxlength="1000" placeholder="완료 조건을 입력하고 Enter"><button type="button" class="btn btn--secondary btn--sm" id="c-crit-add">추가</button></div></div>
       </div>
       <div class="drawer__f"><span class="hint">Ctrl+Enter로 저장</span><span style="display:flex;gap:8px;margin-left:auto"><button class="btn btn--secondary" type="button" id="dcancel">취소</button><button class="btn btn--secondary" type="submit" data-more="1">저장 후 계속 추가</button><button class="btn btn--primary" type="submit">저장</button></span></div></form>`;
@@ -273,6 +303,13 @@ export async function requirementsPage(id) {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(form));
       if (!d.title.trim()) return showErrors(form, { title: '제목을 입력해 주세요.' });
+      if (needsAddPrompt(baseline, d.scope)) {   // 승인된 기준선에 범위 내 추가 → 변경 요청 권유 (US-3)
+        const v = await changePromptDialog({ adding: true }); if (!v) return;
+        if (v === 'cr') {
+          try { await createChangeDraft(id, { title: `요구사항 추가: ${d.title.trim()}`, lines: [`- 신규 요구사항(범위 내): ${d.title.trim()}`, ...(d.description.trim() ? [`- 설명: ${d.description.trim()}`] : []), ...crit.map((c) => `- 완료 조건: ${c}`)], relation: 'ADDS' }); closeDrawer(); } catch (err) { toast(err.message); }
+          return;
+        }
+      }
       const btns = form.querySelectorAll('[type=submit]'); btns.forEach((b) => { b.disabled = true; });
       try {
         const { requirement } = await api('POST', rApi(), { ...d, criteria: crit });
@@ -282,6 +319,61 @@ export async function requirementsPage(id) {
         creating = false; setParam('new', ''); dtab = 'info'; actFilter = 'ALL'; sel = requirement; setParam('sel', requirement.id); showDrawer(); drawDetail(); curGrid().refresh();
       } catch (err) { btns.forEach((b) => { b.disabled = false; }); showErrors(form, err.fields, err.message); }
     };
+  };
+
+  /* ---------- 요구사항 기준선 승인 Drawer (?approval=1, Phase 2 US-1) — the 01 approval form, plus "미확정 함께 확정" ---------- */
+  const UNCONF_QS = '?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED';
+  const drawApproval = () => {
+    const b = baseline; const d = $('#drawer'); if (!b || !d) return;
+    if (!bw) bw = { add_to_stakeholders: true, ...b.approval };
+    const done = b.status === 'COMPLETED'; const lock = archived || done; const c = b.counts; const unconf = c.in_scope_unconfirmed;
+    const methods = Object.entries(b.methods);
+    d.className = 'drawer drawer--lg'; d.dataset.mode = 'approval';
+    d.innerHTML = html`<div class="drawer__h"><b>요구사항 기준선 승인(고객)</b>${raw(done ? '<span class="chip chip--done">승인 기록됨</span>' : '')}<button class="drawer__x" id="dclose" aria-label="닫기" style="margin-left:auto">×</button></div>
+      <div class="drawer__b apv" data-approval-drawer>
+        <p class="hint" style="margin-top:0">확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 기준선 ${raw(term('req_baseline'))}이 됩니다.</p>
+        ${raw(!done && b.bypass ? html`<div class="notice notice--soft">승인 전 진행 — 사유: ${b.bypass.reason} (${[b.bypass.date, b.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
+        ${raw(done ? html`<div class="notice">고객 승인이 기록되었습니다 · ${b.summary}</div>` : '')}
+        <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(reqDocMenu('요구사항 정의서 내려받기'))}</div>
+          <dl><div><dt>범위 내</dt><dd data-apv-in>${c.in_scope}건 (확정 ${c.in_scope_confirmed}건)</dd></div><div><dt>범위 외</dt><dd>${c.out_of_scope}건</dd></div></dl></div>
+        <div class="wd__form">${raw(approvalFields(bw, { people: b.stakeholders, methods, disabled: lock, approverHint: '<small class="dim">고객 PM 또는 요구사항 승인 권한자</small>', evidencePh: "예: 2026-11-20 이수진 차장 회신 메일 '요구사항 정의서 v1.0 승인'" }))}</div>
+        ${raw(!lock && unconf ? html`<label class="toggle apv__confirm"><input type="checkbox" id="apv-confirm" ${confirmAll ? 'checked' : ''}> 범위 내 미확정 ${unconf}건을 함께 확정합니다</label>` : '')}
+        <div class="apv__block" id="apv-block" role="alert" hidden></div>
+        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 완료 처리할 수 있습니다. 승인 이후 확정된 요구사항을 바꾸면 변경 요청으로 처리하도록 안내합니다.</p>
+      </div>
+      ${raw(archived ? '' : html`<div class="drawer__f"><span class="wd__stat hint" id="apv-stat"></span><span style="display:flex;gap:8px;margin-left:auto">${raw(done ? '<button type="button" class="btn btn--ghost btn--sm" data-apv="reopen">완료 취소</button>' : '<button type="button" class="btn btn--secondary btn--sm" data-apv="save">임시저장</button><button type="button" class="btn btn--primary btn--sm" data-apv="complete">완료 처리</button>')}</span></div>`)}`;
+    bindApproval();
+  };
+  const bindApproval = () => {
+    const d = $('#drawer'); const stat = $('#apv-stat');
+    $('#dclose').onclick = closeDrawer;
+    bindReqDocMenu(d, id);
+    const collect = () => { const f = d.querySelector('.wd__form'); if (f) bw = collectApproval(f, bw); const cb = $('#apv-confirm'); if (cb) confirmAll = cb.checked; };
+    const asel = d.querySelector('[data-af="approver_id"]'); if (asel) asel.onchange = () => { collect(); drawApproval(); };
+    const cb = $('#apv-confirm'); if (cb) cb.onchange = () => { confirmAll = cb.checked; const bl = $('#apv-block'); bl.hidden = true; };
+    const fail = (e) => { const msg = e.fields ? (e.fields.section || Object.values(e.fields)[0]) : e.message; toast(msg); if (stat) stat.textContent = msg; };
+    const after = async (res) => { baseline = res.baseline; if (res.summary) summary = res.summary; if (res.guide) g = res.guide; };
+    d.querySelectorAll('[data-apv]').forEach((btn) => { btn.onclick = async () => {
+      const act = btn.dataset.apv; collect(); if (stat) stat.textContent = '';
+      try {
+        if (act === 'save') { await after(await api('PUT', rApi('/baseline'), { approval: approvalBody(bw) })); bw = null; drawApproval(); toast('임시저장했습니다.'); const s2 = $('#apv-stat'); if (s2) s2.textContent = '임시저장됨'; return; }
+        if (act === 'reopen') {
+          if (!(await confirmDialog({ title: '완료를 취소할까요?', body: '승인 기록은 그대로 남고, 이 업무만 다시 "진행 중"으로 바뀝니다.', confirm: '완료 취소' }))) return;
+          await after(await api('POST', rApi('/baseline/reopen'), {})); bw = null; drawApproval(); toast('완료를 취소했습니다.'); return;
+        }
+        const unconf = baseline.counts.in_scope_unconfirmed;
+        if (unconf && !confirmAll) {   // 체크 OFF + 미확정 남음 → 막힘, nothing saved
+          const bl = $('#apv-block'); bl.hidden = false;
+          bl.innerHTML = html`범위 내 미확정 ${unconf}건이 있습니다. 먼저 확정하세요. <a class="link" href="${location.pathname}${UNCONF_QS}" data-unconf>미확정 보기 →</a>`;
+          bl.querySelector('[data-unconf]').onclick = async (e) => { e.preventDefault(); closeDrawer(); for (const k of filterKeys) setParam(k, ''); setParam('scope', 'IN_SCOPE'); setParam('status', 'DRAFT,REVIEWING,ON_HOLD,REJECTED'); await load(); draw(); };
+          return;
+        }
+        const res = await api('POST', rApi('/baseline/complete'), { approval: approvalBody(bw), confirm_unconfirmed: Boolean(unconf && confirmAll) });
+        await after(res); bw = null;
+        toast(res.confirmed ? `승인을 기록하고 범위 내 미확정 ${res.confirmed}건을 확정했습니다.` : '승인을 기록했습니다.');
+        closeDrawer(); await load(); paintKpi(); draw();
+      } catch (e) { fail(e); }
+    }; });
   };
 
   const drawDetail = () => keepUi(() => {
@@ -298,7 +390,7 @@ export async function requirementsPage(id) {
           <div class="dlayout"><div>
             <input class="dtitle" data-field="title" value="${r.title}" maxlength="200" ${readOnly ? 'disabled' : ''} aria-label="제목">
             <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${readOnly ? 'disabled' : ''}>${r.description}</textarea>
-            <h4 class="dh">완료 조건 <em>${r.criteria.length}</em></h4>
+            <h4 class="dh">완료 조건 ${raw(term('criteria'))} <em>${r.criteria.length}</em></h4>
             <ol class="crit">${raw(r.criteria.map((c, i) => html`<li data-crit="${c.id}">
               <span class="crit__n">${i + 1}</span>
               <input class="crit__in" value="${c.content}" maxlength="1000" ${readOnly ? 'disabled' : ''} data-crit-in="${c.id}">
@@ -307,9 +399,9 @@ export async function requirementsPage(id) {
           </div>
           <div class="dside">
             ${raw(fieldRow('Status', html`<select class="select select--sm" data-field="status" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_STATUS, r.status))}</select>`))}
-            ${raw(fieldRow('Scope', html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
-            ${raw(fieldRow('Priority', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_PRIORITY, r.priority))}</select>`))}
-            ${raw(fieldRow('유형', html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_TYPE, r.type))}</select>`))}
+            ${raw(fieldRow(html`Scope ${raw(term('scope'))}`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
+            ${raw(fieldRow('Priority', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_PRIORITY, r.priority))}</select><small class="hint req-phint">${PRIORITY_HINT}</small>`))}
+            ${raw(fieldRow(html`유형 ${raw(term('nonfunctional'))}`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_TYPE, r.type))}</select>`))}
             ${raw(fieldRow('Owner', html`<select class="select select--sm" data-field="owner_user_id" ${readOnly ? 'disabled' : ''}>${raw(ownerOpts(r.owner_user_id || ''))}</select>`))}
             ${raw(fieldRow('요청자', html`<input class="input input--sm" data-field="requester_name" value="${r.requester_name}" maxlength="100" placeholder="이름" ${readOnly ? 'disabled' : ''}>`))}
             ${raw(fieldRow('요청자 소속', html`<input class="input input--sm" data-field="requester_organization" value="${r.requester_organization}" maxlength="100" placeholder="소속" ${readOnly ? 'disabled' : ''}>`))}
@@ -317,7 +409,7 @@ export async function requirementsPage(id) {
           </div></div>
         </section>
         <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>
-          ${raw(deliveryTrace(r))}
+          ${raw(wbsPhase() ? deliveryTrace(r) : '')}
           ${raw(linkSection(r, readOnly))}
           <h4 class="dh">관련 테스트 <em>${r.testing ? r.testing.tests.length : 0}</em>${raw(r.testing && r.testing.tests.length ? html`<span style="margin-left:auto">${raw(verifyChip(r.testing.summary.verification))}</span>` : '')}</h4>
           ${raw(r.testing && r.testing.tests.length ? html`<p class="hint" style="margin:-4px 0 8px">${testSummaryText(r.testing.summary)}</p><ol class="crit links">${raw(r.testing.tests.map((t) => html`<li><a class="raidrow" href="/app/projects/${p.id}/tests?sel=${t.id}" data-link><span class="mono">${t.display_id}</span><span class="crit__in" style="padding:6px 4px">${t.title}</span><span class="chip ${TC_STATUS_CHIP[t.status] || ''}">${TC_STATUS[t.status]}</span>${raw(resBadge(t.last_result))}</a></li>`).join(''))}</ol>`
@@ -393,25 +485,30 @@ export async function requirementsPage(id) {
         const s = $('#dsave'); if (s) s.textContent = res.changed.length ? '저장됨' : '변경 없음';
       } catch (e) { status.textContent = e.message; toast(e.fields ? Object.values(e.fields)[0] : e.message); }
     };
+    // 확정 요구사항의 제목·설명·범위 → 변경 요청 prompt first (US-3); 취소 / 변경 요청 → the field shows the saved value again
+    const guarded = async (el, field, value) => { if (!(await guardEdit(id, { r, field, before: r[field], after: value }, () => save(field, value)))) { el.value = r[field] || ''; drawDetail(); } };
     d.querySelectorAll('[data-field]').forEach((el) => {
       const field = el.dataset.field;
-      if (el.tagName === 'SELECT') el.onchange = () => save(field, el.value);
+      if (el.tagName === 'SELECT') el.onchange = () => (field === 'scope' ? guarded(el, field, el.value) : save(field, el.value));
       else {
-        el.onblur = () => { if (el.value.trim() !== (r[field] || '')) save(field, el.value); };
+        el.onblur = () => { if (el.value.trim() !== (r[field] || '')) { if (field === 'title' || field === 'description') guarded(el, field, el.value); else save(field, el.value); } };
         if (el.tagName === 'INPUT') el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); };
       }
     });
     const critApi = async (method, path, body) => { try { await refreshAll(await api(method, rApi(`/${r.id}${path}`), body)); } catch (e) { toast(e.message); } };
     const addIn = $('#crit-in');
-    const add = () => { const v = addIn.value.trim(); if (!v) return; critApi('POST', '/criteria', { content: v }); };
+    const critGuard = (before, after, run) => guardEdit(id, { r, field: 'criteria', before, after }, run);
+    const add = () => { const v = addIn.value.trim(); if (!v) return; critGuard('', v, () => critApi('POST', '/criteria', { content: v })).then((ok) => { if (!ok) addIn.value = ''; }); };
     if (addIn) { addIn.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }; $('#crit-add').onclick = add; }
     d.querySelectorAll('[data-crit-in]').forEach((inp) => {
       const c = r.criteria.find((x) => x.id === inp.dataset.critIn);
-      inp.onblur = () => { const v = inp.value.trim(); if (v && v !== c.content) critApi('PATCH', `/criteria/${c.id}`, { content: v }); else inp.value = c.content; };
+      inp.onblur = () => { const v = inp.value.trim(); if (v && v !== c.content) critGuard(c.content, v, () => critApi('PATCH', `/criteria/${c.id}`, { content: v })).then((ok) => { if (!ok) inp.value = c.content; }); else inp.value = c.content; };
       inp.onkeydown = (e) => { if (e.key === 'Enter') inp.blur(); };
     });
     d.querySelectorAll('[data-crit-move]').forEach((b) => b.onclick = () => { const c = r.criteria.find((x) => x.id === b.dataset.critMove); critApi('PATCH', `/criteria/${c.id}`, { sequence: c.sequence + Number(b.dataset.dir) }); });
     d.querySelectorAll('[data-crit-del]').forEach((b) => b.onclick = async () => {
+      const c = r.criteria.find((x) => x.id === b.dataset.critDel);
+      if (needsPrompt(r, 'criteria')) { await critGuard(c.content, '(삭제)', () => critApi('DELETE', `/criteria/${c.id}`)); return; }
       if (!(await confirmDialog({ title: '완료 조건을 삭제할까요?', body: '삭제한 완료 조건은 History에만 남습니다.', confirm: '삭제', danger: true }))) return;
       critApi('DELETE', `/criteria/${b.dataset.critDel}`);
     });
@@ -444,11 +541,13 @@ export async function requirementsPage(id) {
     });
     const ab = $('#rarchive');
     if (ab) ab.onclick = async () => {
-      if (!(await confirmDialog({ title: `${r.display_id}을 보관할까요?`, body: '보관된 요구사항은 기본 목록에서 숨겨지고 수정할 수 없습니다. 번호는 재사용되지 않습니다.', confirm: '보관하기', danger: true }))) return;
+      if (needsPrompt(r, 'archive')) { if (!(await guardEdit(id, { r, field: 'archive' }, async () => {}))) return; }   // 확정된 범위 내 → prompt; 변경 요청 = CR only, not archived
+      else if (!(await confirmDialog({ title: `${josa(r.display_id, '을')} 보관할까요?`, body: '보관된 요구사항은 기본 목록에서 숨겨지고 수정할 수 없습니다. 번호는 재사용되지 않습니다.', confirm: '보관하기', danger: true }))) return;
       try { const res = await api('POST', rApi(`/${r.id}/archive`), {}); sel = res.requirement; toast(`${r.display_id}을 보관했습니다.`); await load(); paintKpi(); curGrid().refresh(); drawDetail(); } catch (e) { toast(e.message); }
     };
   };
 
+  if (params().get('approval') === '1' && !apvOpen) setParam('approval', '');
   await load();
   const initSel = params().get('sel');
   if (initSel && !creating) { try { await loadSel(initSel); } catch { setParam('sel', ''); } }

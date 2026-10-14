@@ -24,7 +24,7 @@ test('REQUIREMENTS: states follow the data (empty → in progress → completed)
   assert.equal(by.PRIORITIZE.state, 'COMPLETED'); assert.equal(by.SCOPE_CHECK.state, 'IN_PROGRESS'); assert.equal(by.CONFIRM.state, 'IN_PROGRESS'); assert.equal(by.INTERFACE.state, 'NOT_STARTED');
   for (const x of a) if (x.cta) { assert.ok(x.cta.label.endsWith('→')); assert.ok(!/로 이동/.test(x.cta.label)); }
   const s = activitySummary(a);
-  assert.deepEqual(s, { total: 6, completed: 2, skipped: 0, required_total: 4, required_done: 1, required_open: 3, gate_met: false });
+  assert.deepEqual(s, { total: 7, completed: 2, skipped: 0, required_total: 5, required_done: 1, required_open: 4, gate_met: false });   // Phase 2: + BASELINE_APPROVAL (필수)
 });
 
 test('manual marks: COMPLETED/SKIPPED win over derived state; SKIPPED counts toward the gate; a note means in progress', () => {

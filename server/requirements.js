@@ -69,7 +69,9 @@ export async function resolveSourceChange(db, project, sourceId) {
 const REQ_COLS = `r.*, u.name AS owner_name, u.email AS owner_email,
   (SELECT COUNT(*) FROM requirement_criteria c WHERE c.requirement_id = r.id) AS criteria_count,
   (SELECT COUNT(*) FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id
-     WHERE l.requirement_id = r.id AND w.archived_at IS NULL) AS linked_wbs_count`;
+     WHERE l.requirement_id = r.id AND w.archived_at IS NULL) AS linked_wbs_count,
+  (SELECT COUNT(*) FROM change_request_requirements x JOIN change_requests c ON c.id = x.change_request_id
+     WHERE x.requirement_id = r.id AND c.status = 'APPROVED' AND c.archived_at IS NULL) AS approved_cr_count`;   // Phase 2 US-3: an approved CR → edits skip the CR prompt
 
 /* ---------- reads ---------- */
 export async function listRequirements(db, project, q = {}) {

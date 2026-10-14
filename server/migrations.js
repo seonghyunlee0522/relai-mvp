@@ -68,6 +68,18 @@ export const migrations = [
       for (const st of tpl) if (!have.has(st.key)) await db.run(ins, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, ++seq, st.is_required ? 1 : 0, st.importance, st.linked_feature_type]);
     }
   } },
+  { version: 32, name: 'Phase 2 요구사항 정의: project_definitions.req_approval (schema.sql) + BASELINE_APPROVAL (요구사항 기준선 승인) added to every project\'s 02 right after CONFIRM as TODO', async up(db) {
+    // Existing projects are never blocked (already past 02 → the activity just shows as open there). Idempotent per phase.
+    const st = PHASE_BY_KEY.REQUIREMENTS.steps.find((x) => x.key === 'BASELINE_APPROVAL');
+    for (const ph of await db.all(`SELECT id FROM project_phases WHERE phase_key = 'REQUIREMENTS'`)) {
+      if (await db.get(`SELECT 1 FROM project_steps WHERE project_phase_id = ? AND step_key = 'BASELINE_APPROVAL'`, [ph.id])) continue;
+      const conf = await db.get(`SELECT sequence FROM project_steps WHERE project_phase_id = ? AND step_key = 'CONFIRM'`, [ph.id]);
+      const seq = conf ? Number(conf.sequence) + 1 : Number((await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM project_steps WHERE project_phase_id = ?', [ph.id])).n);
+      await db.run('UPDATE project_steps SET sequence = sequence + 1 WHERE project_phase_id = ? AND sequence >= ?', [ph.id, seq]);
+      await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 1, st.importance, st.linked_feature_type]);
+    }
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

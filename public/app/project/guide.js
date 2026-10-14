@@ -12,7 +12,7 @@ import { helpButton } from '../onboarding/ui.js';
 import { mountLnb } from './lnb.js';
 import { josa } from '../shared/josa.js';
 import { navigate } from '../core/router.js';
-import { approvalGateDialog, approvalStep, bypassNote } from './initiation.js';
+import { approvalGateDialog, APPROVAL_GATES, gateStep, bypassNote } from './initiation.js';
 
 /**
  * Project Workspace header (sticky) — also mounts the project LNB into the shell sidebar.
@@ -39,23 +39,24 @@ export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
 
 /**
  * Dialogs for changing the current phase. Resolves true when the transition went through.
- * Every way out of 01 착수 (What's Next button, ?move=next from the guide / 정의 footer) passes here, so the
- * 착수 승인 soft gate lives here: APPROVAL not complete → record it first, or leave a reason (stored in the APPROVAL
- * step note as "[승인 전 진행] 사유 · 날짜 · 이름"). The server never blocks (확인 후 허용). */
+ * Every way out of 01 착수 / 02 요구사항 정의 (What's Next button, ?move=next from the guide) passes here, so the
+ * approval soft gates live here (APPROVAL_GATES): 착수 결과 승인 / 요구사항 기준선 승인 not complete → record it first, or leave
+ * a reason (stored in the gate step note as "[승인 전 진행] 사유 · 날짜 · 이름"). The server never blocks (확인 후 허용). */
 export async function moveToPhase(pid, g, target, { next = false } = {}) {
   const cur = g.current_phase;
   const acts = cur ? cur.steps || [] : [];
-  const apv = cur && cur.phase_key === 'INITIATION' && target.sequence > cur.sequence ? approvalStep(g) : null;
+  const cfg = cur && target.sequence > cur.sequence ? APPROVAL_GATES[cur.phase_key] : null;
+  const apv = cfg ? gateStep(g, cur.phase_key, cfg.step) : null;
   const gate = apv && apv.state !== 'COMPLETED';
   if (gate) {
-    const r = await approvalGateDialog();
+    const r = await approvalGateDialog(cfg);
     if (!r) return false;
-    if (r === 'record') { navigate(`/app/projects/${pid}/definition?activity=APPROVAL`); return false; }
+    if (r === 'record') { navigate(cfg.record(pid)); return false; }
     try { await api('PATCH', wsApi(`/${pid}/steps/${apv.id}`), { note: bypassNote(apv.note, r.reason) }); }
     catch (e) { toast(e.message); return false; }
   }
-  // the general dialog lists the other open REQUIRED activities (APPROVAL already handled above)
-  const openReq = acts.filter((s) => s.importance === 'REQUIRED' && s.state !== 'COMPLETED' && s.state !== 'SKIPPED' && !(gate && s.step_key === 'APPROVAL'));
+  // the general dialog lists the other open REQUIRED activities (the approval gate step already handled above)
+  const openReq = acts.filter((s) => s.importance === 'REQUIRED' && s.state !== 'COMPLETED' && s.state !== 'SKIPPED' && !(gate && s.step_key === cfg.step));
   let ok;
   if (gate && !openReq.length) ok = true;   // the approval dialog was the confirmation
   else if (next && !openReq.length) {

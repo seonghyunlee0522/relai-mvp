@@ -2385,6 +2385,13 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .apv__what dt{color:var(--muted)}.apv__what dd{margin:0;color:var(--text)}
 .apv__direct{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:6px;align-items:center}.apv__direct .input{flex:1 1 120px}
 .apv__methods{display:flex;flex-wrap:wrap;gap:6px 16px}
+/* Phase 2 (02 요구사항 정의): 기준선 승인 Drawer · 범위 확정 hint · 우선순위 hint · What's Next row hint */
+.apv__confirm{display:flex;margin:4px 0 8px;font-weight:600}
+.apv__block{background:#FEF3F2;border:1px solid #FECDCA;color:var(--danger);border-radius:8px;padding:8px 12px;font-size:13px;margin:4px 0 8px}
+.req-excl{font-size:13px;color:var(--text-2);background:#FFFAEB;border:1px solid #FEDF89;border-radius:8px;padding:8px 12px;margin:0 0 10px}
+.req-phint{display:block;margin-top:4px;font-size:12px}
+.np__hint{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+.dialog[tabindex="-1"]:focus{outline:none}
 .notice--crit{background:#FEF3F2;color:#B42318;border-color:#FECDCA}
 .chx__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
 .chx__badge{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;background:#F2F4F7;color:var(--text-2);margin-left:6px;vertical-align:2px}

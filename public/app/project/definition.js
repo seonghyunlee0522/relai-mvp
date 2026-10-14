@@ -19,6 +19,7 @@ import { TRAIT_FIELDS } from '../shared/project-traits.js';
 import { traitFields, traitGrid, wireTraitFields } from '../shared/trait-fields.js';
 import { josa } from '../shared/josa.js';
 import { planMenu, bindPlanMenu, term, isMeasurable, noApprovalLine } from './initiation.js';
+import { approvalFields, collectApproval, approvalBody } from '../shared/approval.js';
 
 const ORG_TYPE = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 킥오프/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 Steering Committee 승인']];
@@ -206,13 +207,9 @@ export async function definitionPage(id) {
   /* ---------- 착수 결과 승인 (US-2) ---------- */
   const approvalForm = () => {
     const a = d.approval; const s = sec('APPROVAL'); const kick = sec('KICKOFF');
-    const order = { CLIENT: 0, OTHER: 1, PARTNER: 2, OWN: 3 };
-    const people = [...(d.stakeholders || [])].filter((x) => x.name).sort((x, y) => (order[x.org_type] ?? 9) - (order[y.org_type] ?? 9));
-    const direct = !a.approver_id || a.approver_id === '__direct';
     const methods = METHODS.filter(([k]) => k !== 'KICKOFF' || !kick || kick.status !== 'SKIPPED');
     const pd = m.project_dates;
     const nOrg = (t) => (d.stakeholders || []).filter((x) => x.org_type === t).length;
-    const today = new Date(); const max = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     return html`${raw(s && s.reapproval ? '<div class="notice notice--crit">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 다시 승인받은 뒤 <b>다시 확인 완료</b>를 누릅니다.</div>' : '')}
       ${raw(s && s.bypass ? html`<div class="notice notice--soft">승인 전 진행 — 사유: ${s.bypass.reason} (${[s.bypass.date, s.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
       <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(planMenu())}</div>
@@ -220,16 +217,7 @@ export async function definitionPage(id) {
         <div><dt>범위</dt><dd>${d.scope_in.length ? `수행 ${d.scope_in.length}건 (${d.scope_in.slice(0, 2).map((x) => x.text).join(', ')}${d.scope_in.length > 2 ? ' …' : ''})${d.scope_out.length ? ` · 제외 ${d.scope_out.length}건` : ''}` : '작성되지 않음'}</dd></div>
         <div><dt>일정</dt><dd>${pd.planned_start_date ? `${fmtShort(pd.planned_start_date)} ~ ${fmtShort(pd.planned_end_date)}` : '기간 미정'}${d.key_dates.length ? ` · 마일스톤 ${d.key_dates.length}건` : ''}</dd></div>
         <div><dt>추진 조직</dt><dd>${(d.stakeholders || []).length ? ['CLIENT', 'OWN', 'PARTNER', 'OTHER'].filter((t) => nOrg(t)).map((t) => `${ORG_TYPE[t]} ${nOrg(t)}명`).join(' · ') : '작성되지 않음'}</dd></div></dl></div>
-      <div class="def__grid2">
-        <div class="field" data-field="approval.approver"><label>승인자 <span class="req">*</span> <small class="dim">스폰서 ${raw(term('sponsor'))} 또는 고객 PM</small></label>
-          <select class="select select--sm" data-af="approver_id" ${dis}><option value="">선택</option>${raw(people.map((x) => html`<option value="${x.id}" ${a.approver_id === x.id ? 'selected' : ''}>${ORG_TYPE[x.org_type] || '기타'} · ${x.name}${x.role ? ` (${x.role})` : ''}</option>`).join(''))}<option value="__direct" ${a.approver_id === '__direct' || (!a.approver_id && a.approver_name) ? 'selected' : ''}>직접 입력</option></select>
-          ${raw(direct && (a.approver_id === '__direct' || a.approver_name) ? html`<div class="apv__direct"><input class="input input--sm" data-af="approver_name" value="${a.approver_name}" maxlength="100" placeholder="이름" ${dis}><input class="input input--sm" data-af="approver_title" value="${a.approver_title}" maxlength="100" placeholder="직위 (예: 상무)" ${dis}>
-            <label class="toggle"><input type="checkbox" data-af="add_to_stakeholders" ${a.add_to_stakeholders !== false ? 'checked' : ''} ${dis}> 이해관계자에도 추가</label></div>` : '')}</div>
-        <div class="field" data-field="approval.date"><label>승인일 <span class="req">*</span></label><input class="input input--sm" type="date" data-af="date" value="${a.date}" max="${max}" ${dis}></div>
-      </div>
-      <div class="field" data-field="approval.method"><label>승인 방법 <span class="req">*</span></label><div class="apv__methods">${raw(methods.map(([k, l]) => html`<label class="toggle"><input type="radio" name="apv-method" data-af="method" value="${k}" ${a.method === k ? 'checked' : ''} ${dis}> ${l}</label>`).join(''))}</div></div>
-      <div class="field" data-field="approval.evidence"><label>근거 <span class="req">*</span> <small class="dim">문서번호·메일 제목·보관 위치 등</small></label><input class="input input--sm" data-af="evidence" value="${a.evidence}" maxlength="300" placeholder="예: 2026-11-03 이수진 차장 회신 메일 '사업수행계획서 v1.0 승인'" ${dis}></div>
-      <div class="field" data-field="approval.conditions"><label>조건 / 보완 요청 <small class="dim">선택</small></label><textarea class="textarea" data-af="conditions" rows="2" maxlength="2000" placeholder="예: 3주차까지 화면 목록 보완 후 재확인" ${dis}>${a.conditions}</textarea></div>
+      ${raw(approvalFields(a, { people: d.stakeholders || [], methods, disabled: ro, approverHint: html`<small class="dim">스폰서 ${raw(term('sponsor'))} 또는 고객 PM</small>`, evidencePh: "예: 2026-11-03 이수진 차장 회신 메일 '사업수행계획서 v1.0 승인'" }))}
       <p class="hint">승인자·승인일·승인 방법·근거가 있어야 완료 처리할 수 있습니다. 승인 후 목표·범위·일정이나 승인자 정보가 바뀌면 '확인 필요'로 표시됩니다. ${raw(term('baseline'))}</p>`;
   };
   /** 프로젝트 기본 특성: same drawer and save flow, but not an activity — no 완료 처리 / 건너뛰기, saving never completes anything. */
@@ -288,14 +276,12 @@ export async function definitionPage(id) {
       d.kickoff = k;
     }
     if (open.key === 'APPROVAL') {
-      const a = { ...d.approval };
-      el.querySelectorAll('[data-af]').forEach((x) => { if (x.type === 'radio') { if (x.checked) a.method = x.value; } else if (x.type === 'checkbox') a[x.dataset.af] = x.checked; else a[x.dataset.af] = x.value; });
-      d.approval = a;
+      d.approval = collectApproval(el, d.approval);
     }
   };
   const sectionBody = (key) => {
     const body = {}; for (const f of SECTION_FIELDS[key]) body[f] = d[f];
-    if (key === 'APPROVAL') { const a = { ...body.approval }; if (a.approver_id === '__direct') a.approver_id = ''; delete a.baseline; body.approval = a; }
+    if (key === 'APPROVAL') body.approval = approvalBody(body.approval);
     if (key === 'KICKOFF') { const k = { ...body.kickoff }; delete k._prefilled; body.kickoff = k; }
     return body;
   };

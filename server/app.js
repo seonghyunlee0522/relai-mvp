@@ -12,6 +12,8 @@ import * as CL from './checklists.js';
 import * as D from './definition.js';
 import { buildProjectCharter } from './charter.js';
 import { buildPlanMarkdown, PLAN_TITLE } from './charter-export.js';
+import { buildReqDocMarkdown, REQ_DOC_TITLE } from './req-export.js';
+import * as RB from './req-baseline.js';
 import { PDF_MIME, DOCX_MIME, renderReportPdf, renderReportDocx } from './report-export.js';
 const safeFileName = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, '_').replace(/^\.+/, '').slice(0, 60) || 'project';
 import * as R from './requirements.js';
@@ -307,7 +309,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const guideResponse = async (project, pre = null) => {
     const { stats, def, guide, guidance } = pre || (await guideContext(project));
     return { project, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
-      definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
+      definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, scope_out: (def.definition.scope_out || []).map((x) => x.text).filter(Boolean), sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
   };
@@ -561,6 +563,41 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   };
 
   mountRequirementRoutes({ app, db, guard, wrap, fail, loadProject, mutable, rbase });   // Excel / bulk / comments (before the /:rid routes)
+
+  /* 요구사항 기준선 승인 (02 BASELINE_APPROVAL, Phase 2 US-1; server/req-baseline.js) — registered before /:rid */
+  app.get(`${rbase}/baseline`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json({ baseline: await RB.loadBaseline(db, project) });
+  }));
+  app.put(`${rbase}/baseline`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    await tx(db, (d) => RB.saveBaseline(d, project, req.body, req.user.id));
+    res.json({ baseline: await RB.loadBaseline(db, project) });
+  }));
+  // complete = 승인 기록 + (confirm_unconfirmed) 범위 내 미확정 일괄 확정 + 완료, all or nothing; reopen = 완료 취소
+  app.post(`${rbase}/baseline/:action(complete|reopen)`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const body = req.params.action === 'complete' && req.body && typeof req.body === 'object' ? req.body : null;
+    const r = await tx(db, (d) => RB.setBaselineStatus(d, project, req.params.action, req.user.id, body));
+    if (r.error === 'not_found') return fail(res, 404, 'not_found', '요구사항 기준선 승인 업무를 찾을 수 없습니다.');
+    res.json({ baseline: await RB.loadBaseline(db, project), confirmed: r.confirmed || 0, summary: await R.requirementStats(db, project.id), guide: await guideResponse(project) });
+  }));
+  // 요구사항 정의서 download (PDF / Word) — read-only like the 사업수행계획서 export
+  app.get(`${rbase}/export-doc`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    const fmt = req.query.format === 'docx' ? 'docx' : req.query.format === 'pdf' || req.query.format === undefined ? 'pdf' : null;
+    if (!fmt) return fail(res, 400, 'validation_error', '형식은 pdf 또는 docx만 지원합니다.', { fields: { format: 'pdf 또는 docx' } });
+    const ws = await db.get('SELECT name FROM workspaces WHERE id = ?', [project.workspace_id]);
+    const reqs = await db.all(`SELECT id, display_id, sequence_number, title, type, priority, scope, archived_at FROM requirements WHERE project_id = ? AND archived_at IS NULL ORDER BY sequence_number`, [project.id]);
+    const crit = reqs.length ? await db.all('SELECT requirement_id, content FROM requirement_criteria WHERE requirement_id = ANY(?) ORDER BY sequence', [reqs.map((r) => r.id)]) : [];
+    for (const r of reqs) r.criteria = crit.filter((c) => c.requirement_id === r.id);
+    const today = D.localToday();
+    const doc = buildReqDocMarkdown(await buildProjectCharter(db, project), reqs, await RB.loadBaseline(db, project), { workspaceName: ws ? ws.name : '', author: req.user.name || req.user.email || '', today });
+    const buf = await (fmt === 'pdf' ? renderReportPdf : renderReportDocx)({ title: doc.title, rendered_content: doc.markdown, footer: doc.footer });
+    const name = `${safeFileName(project.name)}_${REQ_DOC_TITLE.replace(/\s+/g, '')}_${doc.fileVersion}_${today.replace(/-/g, '')}.${fmt}`;
+    res.set({ 'Content-Type': fmt === 'pdf' ? PDF_MIME : DOCX_MIME, 'Content-Disposition': `attachment; filename="requirements-spec.${fmt}"; filename*=UTF-8''${encodeURIComponent(name)}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+    res.end(buf);
+  }));
 
   app.get(rbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
