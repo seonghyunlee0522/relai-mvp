@@ -48,8 +48,18 @@ export function projectGuidance(ctx) {
   switch (key) {
     case 'INITIATION': {
       const d = definition?.progress || { done: 0, total: 5 };
-      if (definition?.needs_review?.length) return out('INIT_REVIEW', '수정된 정의 항목을 다시 확인하세요', `완료 후 내용이 바뀐 항목 ${definition.needs_review.length}개가 있습니다. 정의는 요구사항·일정·검수의 기준이므로 바뀐 내용을 다시 확인해야 이후 판단이 어긋나지 않습니다.`, '프로젝트 정의는 요구사항·일정의 기준이 되므로 변경 후 다시 확인해야 합니다.', act('프로젝트 정의 확인 →', u('/definition')), null, '정의가 확정되면 요구사항을 정리합니다.');
+      const gate = definition?.initiation_gate || {}; const apv = gate.approval; const kick = gate.kickoff;
+      const review = (definition?.needs_review || []).filter((k) => k !== 'APPROVAL');
+      if (review.length) return out('INIT_REVIEW', '수정된 정의 항목을 다시 확인하세요', `완료 후 내용이 바뀐 항목 ${review.length}개가 있습니다. 정의는 요구사항·일정·검수의 기준이므로 바뀐 내용을 다시 확인해야 이후 판단이 어긋나지 않습니다.`, '프로젝트 정의는 요구사항·일정의 기준이 되므로 변경 후 다시 확인해야 합니다.', act('프로젝트 정의 확인 →', u('/definition')), null, '정의가 확정되면 요구사항을 정리합니다.');
       if (d.done < d.total) return out('INIT_DEFINE', d.done === 0 ? '프로젝트의 목표와 범위를 정의하세요' : `프로젝트 정의를 마저 완료하세요 (${d.done}/${d.total})`, '초기에 목표·성공 기준, 수행·제외 범위, 이해관계자, 주요 일정과 운영 방식을 확정해야 이후 단계에서 방향성이 흔들리지 않습니다.', '착수 단계에서 정한 기준이 이후 요구사항, 일정, 검수의 판단 기준이 됩니다.', act(d.done === 0 ? '프로젝트 정의 시작 →' : '프로젝트 정의 이어서 작성 →', u('/definition')), null, '정의가 완료되면 요구사항을 등록합니다.');
+      // 착수 gate (Phase 1 v2): 정의 5개 → 착수보고회 → 승인. INIT_DONE only after 승인 (or a recorded 승인 전 진행 사유).
+      const plan = act('사업수행계획서 내려받기', `/api/workspaces/${project.workspace_id}/projects/${project.id}/charter/export?format=pdf`);
+      if (apv && apv.status === 'REAPPROVAL') return out('INIT_REAPPROVE', '바뀐 착수 내용을 고객에게 다시 확인받으세요', '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 승인된 기준이 이후 요구사항·변경·검수의 판단 기준입니다.', '승인 후 바뀐 기준은 다시 합의해야 이후 분쟁을 막을 수 있습니다.', act('승인 다시 기록 →', u('/definition?activity=APPROVAL')), plan, '다시 승인받으면 요구사항을 정리합니다.');
+      if (apv && apv.status === 'TODO' && !apv.bypass) {
+        if (kick && kick.status === 'TODO') return out('INIT_KICKOFF', '착수보고회를 준비하고 진행하세요', '착수보고회는 고객과 수행팀이 같은 목표·범위·일정을 처음 공식적으로 확인하는 자리입니다. 순서: 사업수행계획서 초안을 내려받아 착수보고회 전에 고객에게 보내고 → 착수보고회에서 발표 → 승인을 받습니다.', '착수보고회에서 목표·범위·일정을 공식적으로 확인해야 이후 단계의 기준이 생깁니다.', act('착수보고회 준비 →', u('/definition?activity=KICKOFF')), plan, '착수보고회 후 착수 결과를 승인받습니다.');
+        return out('INIT_APPROVE', '착수 결과를 고객에게 승인받으세요', '승인된 목표·범위가 이후 요구사항·변경·검수의 기준이 됩니다. 사업수행계획서를 보내고, 승인 회신을 받으면 기록하세요.', '고객이 승인한 착수 결과가 이후 요구사항·변경·검수의 기준이 됩니다.', act('승인 기록 →', u('/definition?activity=APPROVAL')), plan, '승인을 받으면 요구사항을 정리합니다.');
+      }
+      if (apv && apv.status === 'TODO' && apv.bypass) warnings.push('착수 결과 미승인 · 승인 전 진행 사유 기록됨');
       return out('INIT_DONE', '프로젝트 정의가 완료되었습니다', '출발 기준이 정리되었습니다. 요구사항을 초기에 명확히 정리하면 설계·개발 단계의 범위 변경과 재작업을 크게 줄일 수 있습니다.', '요구사항은 WBS, 테스트, 검수와 연결되는 프로젝트의 기준입니다.', move || act('요구사항 입력 시작 →', u('/requirements?new=1')), move ? act('요구사항 입력 시작 →', u('/requirements?new=1')) : null, nextPhaseText);
     }
     case 'REQUIREMENTS': {

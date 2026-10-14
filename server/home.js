@@ -24,7 +24,7 @@ export async function guidanceContext(db, project) {
   const def = (await D.loadDefinition(db, project));
   const overdue = n((await db.get(`SELECT COUNT(*) n FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status <> 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE`, [project.id])).n);
   const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections }, overdue_tasks: overdue }));
-  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review }, stats, overdue_tasks: overdue });
+  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate }, stats, overdue_tasks: overdue });
   return { stats, def, overdue, guide, guidance };
 }
 

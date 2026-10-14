@@ -61,7 +61,7 @@ async function plannerContext(db, project, requirementIds) {
   const wbs = await wbsRows(db, project.id, { limit: 200 });
   const links = wbs.length ? await db.all(`SELECT l.wbs_item_id, r.display_id FROM requirement_wbs_links l JOIN requirements r ON r.id = l.requirement_id WHERE l.project_id = ? AND r.archived_at IS NULL`, [project.id]) : [];
   const linkBy = new Map(); for (const l of links) linkBy.set(l.wbs_item_id, [...(linkBy.get(l.wbs_item_id) || []), l.display_id]);
-  // 프로젝트 정의 is sent once, as the [PROJECT CHATER] block inside projectBlock(); the same text drives "이미 확인된 정보".
+  // 프로젝트 정의 is sent once, as the [PROJECT CHARTER] block inside projectBlock(); the same text drives "이미 확인된 정보".
   const head = await projectBlock(db, project);
   // "이미 확인된 정보" is matched against what the user actually wrote, never the block's own labels.
   const flat = (o) => (o === null || o === undefined ? '' : typeof o === 'object' ? Object.values(o).map(flat).join('\n') : String(o));

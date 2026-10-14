@@ -7,6 +7,8 @@
  * migrated from SQLite (scripts/migrate-sqlite-to-postgres.js) and a fresh PostgreSQL database end up identical.
  */
 import { ensurePhases, resetPhases } from './guide.js';
+import { randomUUID } from 'node:crypto';
+import { PHASE_BY_KEY } from './templates/default-phases.js';
 
 export const migrations = [
   { version: 1, name: 'projects.current_phase template-based (SQLite era)', up() {} },
@@ -43,7 +45,7 @@ export const migrations = [
   { version: 22, name: 'Project creation form: client_name + project_scale replace project_type / current_situation (columns dropped, no legacy mapping)', async up(db) {
     await db.run('ALTER TABLE projects DROP COLUMN IF EXISTS project_type, DROP COLUMN IF EXISTS current_situation');
   } },
-  { version: 23, name: 'Project Chater: free-text definition fields (project_type, deliverables, assumptions, constraints_text, initial_risks, change_management, acceptance)', up() {} },
+  { version: 23, name: 'Project Charter: free-text definition fields (project_type, deliverables, assumptions, constraints_text, initial_risks, change_management, acceptance)', up() {} },
   { version: 24, name: 'project traits on projects: project_type (enum, NULL = 미설정) + data_migration / deployment_environment / delivery_model / has_existing_system / has_external_integration (TBD)', async up(db) {
     // schema.sql adds these columns before versioned steps run; a database upgraded across v22 (which drops the legacy free-text
     // projects.project_type) loses it again in the same boot, so re-add it here. Existing projects: type NULL, the rest TBD.
@@ -55,6 +57,17 @@ export const migrations = [
   { version: 28, name: 'Activity checklists (06 전환·오픈 · 07 운영): activity_checklist_items — table in schema.sql; activity state derives from it', up() {} },
   { version: 29, name: 'NicePay billing: billing_orders (server-side prices) + subscriptions.seats/billing_cycle/auto_renew/renewal_reminded_for/founding_until/billing_key_enc — DDL in schema.sql', up() {} },
   { version: 30, name: 'account lifecycle: users.deleted_at, workspaces.deleted_at/deleted_by/purged_at (soft delete + 30-day purge), login_records (3 months)', up() {} },
+  { version: 31, name: 'Phase 1 착수: project_definitions.kickoff/approval (schema.sql) + KICKOFF (착수보고회) and APPROVAL (착수 결과 승인) activities added to every project\'s 01 착수 as TODO', async up(db) {
+    // Existing projects are never blocked: the two activities simply appear as open in 01 (spec §4, D3). Idempotent per phase.
+    const ins = `INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`;
+    const tpl = PHASE_BY_KEY.INITIATION.steps.filter((st) => st.key === 'KICKOFF' || st.key === 'APPROVAL');
+    for (const ph of await db.all(`SELECT id FROM project_phases WHERE phase_key = 'INITIATION'`)) {
+      const have = new Set((await db.all('SELECT step_key FROM project_steps WHERE project_phase_id = ?', [ph.id])).map((r) => r.step_key));
+      let seq = Number((await db.get('SELECT COALESCE(MAX(sequence), 0) AS n FROM project_steps WHERE project_phase_id = ?', [ph.id])).n);
+      for (const st of tpl) if (!have.has(st.key)) await db.run(ins, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, ++seq, st.is_required ? 1 : 0, st.importance, st.linked_feature_type]);
+    }
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

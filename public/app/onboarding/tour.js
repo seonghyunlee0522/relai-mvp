@@ -73,6 +73,9 @@ const T = {
       else if (e.key === 'Tab') trap(e, el.querySelector('.tour__pop'));
     };
     document.addEventListener('keydown', this.onKey);
+    // A click on the highlighted target does what the target does and moves the guide on (a CTA step pauses until its page appears).
+    this.onTargetClick = (e) => { if (!this.target || !this.target.contains(e.target)) return; if (step.cta || step.pauseUntilProject) this.pause(); else this.next(); };
+    document.addEventListener('click', this.onTargetClick, true);
     this.onMove = () => this.place(); window.addEventListener('resize', this.onMove); window.addEventListener('scroll', this.onMove, true);
     this.place();
     const first = el.querySelector('[data-t="next"],[data-t="cta"]') || el.querySelector('.tour__pop'); first.focus({ preventScroll: true });
@@ -95,7 +98,7 @@ const T = {
     left = Math.min(Math.max(8, left), window.innerWidth - pw - 8); top = Math.min(Math.max(8, top), window.innerHeight - ph - 8);
     pop.style.cssText = `position:fixed;left:${left}px;top:${top}px`;
   },
-  hide() { if (this.el) { this.el.remove(); this.el = null; } if (this.onKey) { document.removeEventListener('keydown', this.onKey); this.onKey = null; } if (this.onMove) { window.removeEventListener('resize', this.onMove); window.removeEventListener('scroll', this.onMove, true); this.onMove = null; } },
+  hide() { if (this.el) { this.el.remove(); this.el = null; } if (this.onKey) { document.removeEventListener('keydown', this.onKey); this.onKey = null; } if (this.onTargetClick) { document.removeEventListener('click', this.onTargetClick, true); this.onTargetClick = null; } if (this.onMove) { window.removeEventListener('resize', this.onMove); window.removeEventListener('scroll', this.onMove, true); this.onMove = null; } },
   pause() { this.hide(); this.paused = true; },
   async next() { if (this.idx >= this.steps.length - 1) return this.finish(); await this.show(this.idx + 1); },
   async prev() { if (this.idx > 0) await this.show(this.idx - 1); },
@@ -122,7 +125,12 @@ async function findTarget(id) {
   }
   return null;   // caller falls back to a centered guide
 }
-function spotAt(spot, r) { const pad = 6; spot.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`; }
+/** Spotlight + the hole in the click shield (CSS vars → .tour::before clip-path): the highlighted target stays clickable (QA B1). */
+function spotAt(spot, r) {
+  const pad = 6; spot.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
+  const tour = spot.parentElement; if (!tour) return;
+  for (const [k, v] of [['--hl', r.left - pad], ['--ht', r.top - pad], ['--hr', r.right + pad], ['--hb', r.bottom + pad]]) tour.style.setProperty(k, `${Math.round(v)}px`);
+}
 function trap(e, box) {
   const f = [...box.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])')]; if (!f.length) return;
   const first = f[0]; const last = f[f.length - 1];

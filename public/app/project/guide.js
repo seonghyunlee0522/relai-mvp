@@ -10,6 +10,9 @@ import { revealAskButton, wireAssistant } from '../ai/assistant.js';
 import { headerActions, wireProjectActions } from './actions.js';
 import { helpButton } from '../onboarding/ui.js';
 import { mountLnb } from './lnb.js';
+import { josa } from '../shared/josa.js';
+import { navigate } from '../core/router.js';
+import { approvalGateDialog, approvalStep, bypassNote } from './initiation.js';
 
 /**
  * Project Workspace header (sticky) — also mounts the project LNB into the shell sidebar.
@@ -34,14 +37,29 @@ export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
     </div></header>`;
 };
 
-/** Dialogs for changing the current phase. Resolves true when the transition went through. */
+/**
+ * Dialogs for changing the current phase. Resolves true when the transition went through.
+ * Every way out of 01 착수 (What's Next button, this dialog, the phase list's "현재 단계로 변경") passes here, so the
+ * 착수 승인 soft gate lives here: APPROVAL not complete → record it first, or leave a reason (stored in the APPROVAL
+ * step note as "[승인 전 진행] 사유 · 날짜 · 이름"). The server never blocks (확인 후 허용). */
 export async function moveToPhase(pid, g, target, { next = false } = {}) {
   const cur = g.current_phase;
   const acts = cur ? cur.steps || [] : [];
-  const openReq = acts.filter((s) => s.importance === 'REQUIRED' && s.state !== 'COMPLETED' && s.state !== 'SKIPPED');
+  const apv = cur && cur.phase_key === 'INITIATION' && target.sequence > cur.sequence ? approvalStep(g) : null;
+  const gate = apv && apv.state !== 'COMPLETED';
+  if (gate) {
+    const r = await approvalGateDialog();
+    if (!r) return false;
+    if (r === 'record') { navigate(`/app/projects/${pid}/definition?activity=APPROVAL`); return false; }
+    try { await api('PATCH', wsApi(`/${pid}/steps/${apv.id}`), { note: bypassNote(apv.note, r.reason) }); }
+    catch (e) { toast(e.message); return false; }
+  }
+  // the general dialog lists the other open REQUIRED activities (APPROVAL already handled above)
+  const openReq = acts.filter((s) => s.importance === 'REQUIRED' && s.state !== 'COMPLETED' && s.state !== 'SKIPPED' && !(gate && s.step_key === 'APPROVAL'));
   let ok;
-  if (next && !openReq.length) {
-    ok = await confirmDialog({ title: `${cur.name} 단계의 필수 업무를 모두 마쳤습니다.`, body: `다음 단계 ${no2(target.sequence)} ${target.name}을(를) 시작하시겠습니까?`, confirm: '다음 단계 시작' });
+  if (gate && !openReq.length) ok = true;   // the approval dialog was the confirmation
+  else if (next && !openReq.length) {
+    ok = await confirmDialog({ title: `${cur.name} 단계의 필수 업무를 모두 마쳤습니다.`, body: `다음 단계 ${no2(target.sequence)} ${josa(target.name, '을')} 시작하시겠습니까?`, confirm: '다음 단계 시작' });
   } else if (next) {
     const warns = (g.guidance && g.guidance.warnings) || [];
     ok = await confirmDialog({ title: '아직 완료되지 않은 필수 업무가 있습니다.',
@@ -49,9 +67,9 @@ export async function moveToPhase(pid, g, target, { next = false } = {}) {
       confirm: '계속 진행' });
   } else {
     ok = await confirmDialog({ title: `${target.name} 단계를 현재 단계로 변경할까요?`,
-      body: `현재 단계가 ${cur ? cur.name : '-'}에서 ${target.name}(으)로 바뀝니다. 각 단계의 업무 상태와 메모는 그대로 유지됩니다.`, confirm: '현재 단계로 변경' });
+      body: `현재 단계가 ${cur ? cur.name : '-'}에서 ${josa(target.name, '으로')} 바뀝니다. 각 단계의 업무 상태와 메모는 그대로 유지됩니다.`, confirm: '현재 단계로 변경' });
   }
   if (!ok) return false;
-  try { await api('POST', wsApi(`/${pid}/phases/${target.id}/activate`), { reason: next ? 'NEXT' : 'MANUAL' }); toast(`현재 단계가 ${target.name}(으)로 변경되었습니다.`); return true; }
+  try { await api('POST', wsApi(`/${pid}/phases/${target.id}/activate`), { reason: next ? 'NEXT' : 'MANUAL' }); toast(`현재 단계가 ${josa(target.name, '으로')} 변경되었습니다.`); return true; }
   catch (e) { toast(e.message); return false; }
 }

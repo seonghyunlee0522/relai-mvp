@@ -15,11 +15,11 @@ const lines = (title, rows, fn, empty = '(없음)') => `## ${title}\n${rows.leng
 const LAST_RESULT = `(SELECT e.result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
 
 /* ---------- shared pieces ---------- */
-/** Project Chater block — the project's reference information, the same object the Project Chater screen shows (server/charter.js). */
+/** Project Charter block — the project's reference information, the same object the Project Charter screen shows (server/charter.js). */
 export async function charterBlock(db, project) { return charterPromptBlock(await buildProjectCharter(db, project), clip); }
 
 /**
- * Header of every AI request: Project Chater (기준정보) + live position (current phase, scale).
+ * Header of every AI request: Project Charter (기준정보) + live position (current phase, scale).
  * Every feature (요구사항 추출 · WBS 초안 · WBS Planner · 변경 영향 · Assistant) builds its context from this, so the charter is always sent.
  */
 export async function projectBlock(db, project) {

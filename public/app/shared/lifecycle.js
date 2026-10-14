@@ -1,12 +1,19 @@
 /* Lifecycle V2 information architecture — the one place that says which work screen each lifecycle activity lives in.
  *
- *   PROJECT HOME        What's Next · Overview (+ sub views: 프로젝트 현황 · Project Chater · WBS · 주간보고 · 일정/마일스톤 · Project Health)
+ *   PROJECT HOME        What's Next · Overview (+ sub views: 프로젝트 현황 · Project Charter · WBS · 주간보고 · 일정/마일스톤 · Project Health)
  *   PROJECT LIFECYCLE   01 착수 … 07 운영 및 유지보수, each with its work screens
  *   PROJECT MANAGEMENT  Changes · Issues & Risks · Activity · Reports (cross-cutting, not phase-bound)
  *
  * Phase names/order come from the server (project_phases rows = templates/default-phases.js); this file only maps keys to
  * screens. Items with `enabled: false` are part of the IA but have no working screen yet — they are never rendered
  * (no Coming Soon, no dead links). `match(path, qs)` decides the active state; the first match wins. */
+
+/** The 7 lifecycle phases in order, for screens that have no project yet (Home empty state). Same keys/order as
+ * server/templates/default-phases.js — server/test/phase1.test.js keeps the two in sync. `label` = the one-line flow wording. */
+export const LIFECYCLE_PHASES = [
+  { key: 'INITIATION', label: '착수' }, { key: 'REQUIREMENTS', label: '요구사항 정의' }, { key: 'ANALYSIS_DESIGN', label: '분석·설계' }, { key: 'DEVELOPMENT', label: '구현' },
+  { key: 'TESTING', label: '시험' }, { key: 'TRANSITION_GO_LIVE', label: '전환·오픈' }, { key: 'OPERATIONS', label: '운영' },
+];
 
 const P = (pid, s = '') => `/app/projects/${pid}${s}`;
 const q = (qs, k, v) => (v === undefined ? qs.has(k) : qs.get(k) === v);
@@ -19,7 +26,7 @@ export const HOME_ITEMS = (pid) => [
   { key: 'overview', label: 'Overview', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !qs.get('ctx'),
     children: [
       { key: 'overview-main', label: '프로젝트 현황', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !location.hash.includes('health') },
-      { key: 'overview-charter', label: 'Project Chater', href: P(pid, '/charter'), match: (path) => isPath(path, pid, '/charter') },
+      { key: 'overview-charter', label: 'Project Charter', href: P(pid, '/charter'), match: (path) => isPath(path, pid, '/charter') },
       { key: 'overview-wbs', label: 'WBS', href: P(pid, '/wbs?ctx=monitor'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && !q(qs, 'view', 'gantt') },
       { key: 'overview-reports', label: '주간보고', href: P(pid, '/reports'), match: (path) => path.startsWith(P(pid, '/reports')) },
       { key: 'overview-schedule', label: '일정 / 마일스톤', href: P(pid, '/wbs?ctx=monitor&view=gantt'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && q(qs, 'view', 'gantt') },
@@ -30,10 +37,12 @@ export const HOME_ITEMS = (pid) => [
 /** Work screens per lifecycle phase. `enabled:false` = defined in the IA, no screen yet → not rendered. */
 export const PHASE_ITEMS = {
   INITIATION: (pid) => [
-    { key: 'definition', label: '프로젝트 정의', href: P(pid, '/definition'), match: (path, qs) => isPath(path, pid, '/definition') && !['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'].includes(qs.get('activity')) },
+    { key: 'definition', label: '프로젝트 정의', href: P(pid, '/definition'), match: (path, qs) => isPath(path, pid, '/definition') && !['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL'].includes(qs.get('activity')) },
     { key: 'stakeholders', label: '이해관계자 / 조직', href: P(pid, '/definition?activity=STAKEHOLDERS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'STAKEHOLDERS') },
     { key: 'milestones', label: '상위 일정 / 마일스톤', href: P(pid, '/definition?activity=MILESTONES'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'MILESTONES') },
     { key: 'operations', label: '프로젝트 운영 방식', href: P(pid, '/definition?activity=OPERATIONS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'OPERATIONS') },
+    { key: 'kickoff', label: '착수보고회', href: P(pid, '/definition?activity=KICKOFF'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'KICKOFF') },
+    { key: 'approval', label: '착수 결과 승인', href: P(pid, '/definition?activity=APPROVAL'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'APPROVAL') },
   ],
   REQUIREMENTS: (pid) => [
     { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') && !(qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED') },

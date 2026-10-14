@@ -1,10 +1,10 @@
 /**
- * Project Chater — the project's reference information, assembled from 프로젝트 정의 (+ project basics).
+ * Project Charter — the project's reference information, assembled from 프로젝트 정의 (+ project basics).
  *
  * Nothing is stored here: the single source of truth is project_definitions / projects / wbs_items. This module only
  * reshapes it, once, for two readers:
- *   - the read-only Project Chater screen          GET …/:pid/charter → { charter, today }
- *   - every AI request that needs project context  charterPromptBlock() → "[PROJECT CHATER] …" (ai/context.js projectBlock)
+ *   - the read-only Project Charter screen          GET …/:pid/charter → { charter, today }
+ *   - every AI request that needs project context  charterPromptBlock() → "[PROJECT CHARTER] …" (ai/context.js projectBlock)
  * So what the screen says "AI 가 참고합니다" is exactly what the AI receives.
  */
 import { loadDefinition, ORG_TYPE_LABEL } from './definition.js';
@@ -15,7 +15,7 @@ const texts = (list) => (Array.isArray(list) ? list.map((x) => (typeof x === 'st
 const dateStr = (v) => (!v ? null : typeof v === 'string' ? v.slice(0, 10) : new Date(v).toISOString().slice(0, 10));
 
 /**
- * Common Project Context (shape agreed in the Project Chater spec §27). Free-text fields stay free text.
+ * Common Project Context (shape agreed in the Project Charter spec §27). Free-text fields stay free text.
  * `definition` may be passed when the caller already loaded it (avoids a second read).
  */
 export async function buildProjectCharter(db, project, { definition = null } = {}) {
@@ -31,7 +31,7 @@ export async function buildProjectCharter(db, project, { definition = null } = {
   ].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   return {
     profile: {
-      name: project.name, description: project.description || '', client: project.client_name || '',
+      name: project.name, description: project.description || '', client: project.client_name || '', scale: project.project_scale || '',
       performer: own.join(', ') || (ws ? ws.name : ''), performer_source: own.length ? 'STAKEHOLDERS' : 'WORKSPACE',
       start_date: dateStr(project.planned_start_date), end_date: dateStr(project.planned_end_date),
       // 유형 = the structured project_type (label); the older free-text definition field is only a fallback for projects not yet set
@@ -51,7 +51,24 @@ export async function buildProjectCharter(db, project, { definition = null } = {
     constraints: d.constraints || '',
     risks: d.initial_risks || '',
     operatingModel: { communication, changeManagement: d.change_management || '', acceptance: d.acceptance || '' },
+    // 착수보고회 · 착수 결과 승인 (Phase 1 v2) — shown on the Charter and in the 사업수행계획서 export
+    kickoff: kickoffBlock(model, d),
+    approval: approvalBlock(model, d),
   };
+}
+
+function kickoffBlock(model, d) {
+  const sec = model.sections.find((x) => x.key === 'KICKOFF'); if (!sec) return null;
+  const k = d.kickoff || {}; const byId = new Map((d.stakeholders || []).map((x) => [x.id, x]));
+  return { status: sec.status, skipped: sec.status === 'SKIPPED', datetime: k.datetime || '', place: k.place || '',
+    attendees: (k.attendees || []).map((id) => byId.get(id)).filter(Boolean).map((x) => ({ name: x.name, org: x.org || '', role: x.role || '' })),
+    minutes: k.minutes || '', decisions: texts(k.decisions),
+    followups: (k.followups || []).map((x) => ({ text: x.text, owner: x.owner || '', due: x.due || '', done: Boolean(x.done) })) };
+}
+function approvalBlock(model, d) {
+  const g = model.initiation_gate && model.initiation_gate.approval; if (!g) return null;
+  const a = d.approval || {};
+  return { status: g.status, approver: g.approver, date: a.date || '', method: a.method || '', method_label: g.method_label, evidence: a.evidence || '', conditions: a.conditions || '', bypass: g.bypass };
 }
 
 /* ---------- AI prompt block ---------- */
@@ -59,7 +76,7 @@ const NONE = '(작성되지 않음)';
 const v = (s, clip) => { const t = clip(s); return t || NONE; };
 
 /**
- * "[PROJECT CHATER] …" — the project's reference information for every AI request, labelled section by section (spec §29).
+ * "[PROJECT CHARTER] …" — the project's reference information for every AI request, labelled section by section (spec §29).
  * `clip(text, max)` is the caller's neutralizing clipper (prompt-injection safe, length capped).
  */
 export function charterPromptBlock(c, clip) {
@@ -67,8 +84,8 @@ export function charterPromptBlock(c, clip) {
   const p = c.profile;
   const sh = c.stakeholders.slice(0, 30).map((s) => `- ${clip(s.name, 40)} | ${clip([s.org, s.department].filter(Boolean).join(' '), 60) || '-'} | ${s.category_label} | ${clip(s.role, 60) || '-'}${s.responsibility ? ` | ${clip(s.responsibility, 120)}` : ''}`).join('\n');
   const ms = c.timeline.milestones.slice(0, 30).map((m) => `- ${m.date || '날짜 미정'} ${clip(m.title, 100)}${m.source === 'WBS' ? ` (WBS ${m.wbs_code})` : ''}`).join('\n');
-  return `[PROJECT CHATER]
-아래는 이 프로젝트의 공식 기준정보(Project Chater)입니다. 일반 참고자료가 아니라 요구사항 검토·WBS 구성·변경 영향 판단·다음 작업 제안의 기준으로 사용하세요. "${NONE}" 항목은 아직 정의되지 않은 것이므로 추정해서 채우지 마세요.
+  return `[PROJECT CHARTER]
+아래는 이 프로젝트의 공식 기준정보(Project Charter)입니다. 일반 참고자료가 아니라 요구사항 검토·WBS 구성·변경 영향 판단·다음 작업 제안의 기준으로 사용하세요. "${NONE}" 항목은 아직 정의되지 않은 것이므로 추정해서 채우지 마세요.
 
 Project Profile:
 프로젝트명: ${v(p.name, (x) => clip(x, 100))}

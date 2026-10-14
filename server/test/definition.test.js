@@ -9,7 +9,8 @@ test('definition: save partial, complete needs content, step status is the singl
   const A = await setup(client);
   const D = `${A.purl}/definition`;
   let r = await A.c('GET', D); assert.equal(r.status, 200);
-  assert.deepEqual(r.json.sections.map((s) => s.key), ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS']);
+  assert.deepEqual(r.json.sections.map((s) => s.key), ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL']);
+  r.json.sections = r.json.sections.slice(0, 5);   // the five definition sections (KICKOFF / APPROVAL: phase1.test.js)
   assert.ok(r.json.sections.every((s) => s.status === 'TODO' && !s.ready && s.missing.length === 1 && s.step_id));
   assert.deepEqual(r.json.progress, { done: 0, total: 5, percent: 0 });
   // completing an empty section is refused
@@ -35,7 +36,7 @@ test('definition: save partial, complete needs content, step status is the singl
   assert.deepEqual(r.json.definition.key_dates.map((x) => x.title), ['킥오프', '최종 검수']);
   r = await A.c('PUT', D, { operations: { meetings: '주간 정례 월 10시', reporting: '', communication: 'Slack', decisions: '' }, memo: '참고' });
   assert.equal(r.json.definition.operations.meetings, '주간 정례 월 10시'); assert.equal(r.json.definition.memo, '참고');
-  assert.ok(r.json.sections.every((s) => s.ready), JSON.stringify(r.json.sections.map((s) => [s.key, s.missing])));
+  assert.ok(r.json.sections.slice(0, 5).every((s) => s.ready), JSON.stringify(r.json.sections.map((s) => [s.key, s.missing])));
   assert.equal((await A.c('PUT', D, {})).status, 400);
   // complete GOALS → INITIATION step COMPLETED (guide reads it)
   r = await A.c('POST', `${D}/sections/GOALS/complete`, {}); assert.equal(r.status, 200);

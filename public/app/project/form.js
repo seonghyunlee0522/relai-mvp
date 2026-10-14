@@ -46,7 +46,7 @@ export async function projectFormPage(id) {
   wireTraitFields(form);
   if (!editing) $('#name').focus();
   if (editing) { /* description is a textarea: set via value to avoid whitespace artefacts */ $('#d').value = p.description; }
-  // Deep link from Project Chater (…/edit?focus=description): land on the field that is missing.
+  // Deep link from Project Charter (…/edit?focus=description): land on the field that is missing.
   const focus = editing && form.elements[new URLSearchParams(location.search).get('focus') || ''];
   if (focus && focus.focus) { focus.scrollIntoView({ block: 'center' }); focus.focus({ preventScroll: true }); }
   form.addEventListener('submit', async (e) => {

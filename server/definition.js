@@ -12,16 +12,37 @@
  * - editing a completed section keeps it completed but flags `changed_after_completion` (section_updated > completed_at);
  *   confirm (POST …/confirm) re-stamps completed_at; reopen (POST …/reopen) sets the step back to TODO.
  */
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { ValidationError } from './validate.js';
 import { updateStep } from './guide.js';
 import { parseTraits } from './validate.js';
 import { TRAIT_FIELDS } from '../public/app/shared/project-traits.js';
 
-export const SECTIONS = ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'];
-export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '이해관계자', MILESTONES: '주요 일정과 마일스톤', OPERATIONS: '운영 방식' };
+/** Definition sections (counted in progress d.done/d.total) + the two 착수 gate activities (Phase 1 v2): 착수보고회 and 착수 결과 승인.
+ * All seven are INITIATION steps edited on the 프로젝트 정의 screen; KICKOFF/APPROVAL drive their own guidance (guidance.js), not progress. */
+export const CORE_SECTIONS = ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'];
+export const GATE_SECTIONS = ['KICKOFF', 'APPROVAL'];
+export const SECTIONS = [...CORE_SECTIONS, ...GATE_SECTIONS];
+export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '이해관계자', MILESTONES: '주요 일정과 마일스톤', OPERATIONS: '운영 방식', KICKOFF: '착수보고회(킥오프)', APPROVAL: '착수 결과 승인' };
+/** 승인 방법. KICKOFF ("착수보고회에서 승인") is hidden in the UI when the 착수보고회 activity was skipped. */
+export const APPROVAL_METHODS = { SIGNED: '서명본 수령', EMAIL: '이메일 회신', KICKOFF: '착수보고회에서 승인', OTHER: '기타' };
+export const KICKOFF_PREP_DEFAULT = ['안건 확정', '발표자료(사업수행계획서) 준비', '참석자 초대 발송', '회의실·화상회의 준비'];
+export const KICKOFF_AGENDA_DEFAULT = '1. 프로젝트 개요·목표\n2. 범위\n3. 추진 조직\n4. 일정\n5. 운영 방식\n6. 질의응답';
+/** "[승인 전 진행] 사유 · 날짜 · 이름" lines in the APPROVAL step note (written by the 01→02 dialog through the step note API). */
+export const BYPASS_TAG = '[승인 전 진행]';
+export function parseBypass(note) {
+  const lines = String(note || '').split(/\r?\n/).map((x) => x.trim()).filter((x) => x.startsWith(BYPASS_TAG));
+  if (!lines.length) return null;
+  const parts = lines[lines.length - 1].slice(BYPASS_TAG.length).trim().split(' · ');
+  const name = parts.length >= 3 ? parts.pop() : ''; const date = parts.length >= 2 ? parts.pop() : '';
+  return { reason: parts.join(' · '), date, name, count: lines.length };
+}
+const APP_TZ = () => process.env.APP_TIMEZONE || 'Asia/Seoul';
+/** Today (YYYY-MM-DD) and now (YYYY-MM-DDTHH:MM) in the app's time zone — the 승인일 / 착수보고회 일시 checks use local dates. */
+export const localToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+export const localNow = () => { const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ(), year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date()).map((x) => [x.type, x.value])); return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; };
 const OPS_KEYS = ['meetings', 'reporting', 'communication', 'decisions'];
-/** Project Chater free-text fields (2026-10-05). Stored as plain text columns; the owning section decides which work screen edits them.
+/** Project Charter free-text fields (2026-10-05). Stored as plain text columns; the owning section decides which work screen edits them.
  * They never gate completion — readiness (missingFor) is unchanged. API name → column. */
 export const TEXT_FIELDS = { deliverables: 'deliverables', assumptions: 'assumptions', constraints: 'constraints_text', initial_risks: 'initial_risks', change_management: 'change_management', acceptance: 'acceptance' };
 const TEXT_SECTION = { deliverables: 'SCOPE', assumptions: 'SCOPE', constraints: 'SCOPE', initial_risks: 'SCOPE', change_management: 'OPERATIONS', acceptance: 'OPERATIONS' };
@@ -39,10 +60,25 @@ const str = (v, max) => { const s = typeof v === 'string' ? v.trim() : ''; retur
 const parse = (s, fb) => { try { const v = JSON.parse(s); return v ?? fb; } catch { return fb; } };
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 
-const EMPTY = { goal: '', success_criteria: [], scope_in: [], scope_out: [], stakeholders: [], key_dates: [], operations: {}, memo: '', section_updated: {}, ...textOf(null) };
+/** A 착수보고회 never saved starts with the default 준비 체크 and 안건 example (spec US-1). */
+const kickoffOf = (raw) => {
+  const k = raw && typeof raw === 'object' ? raw : {};
+  const fresh = !Object.keys(k).length;
+  return { datetime: k.datetime || '', place: k.place || '', attendees: Array.isArray(k.attendees) ? k.attendees : [],
+    prep: Array.isArray(k.prep) ? k.prep : fresh ? KICKOFF_PREP_DEFAULT.map((text, i) => ({ id: `prep-${i + 1}`, text, done: false })) : [],
+    agenda: k.agenda !== undefined ? k.agenda : KICKOFF_AGENDA_DEFAULT, minutes: k.minutes || '',
+    decisions: Array.isArray(k.decisions) ? k.decisions : [], followups: Array.isArray(k.followups) ? k.followups : [] };
+};
+const approvalOf = (raw) => {
+  const a = raw && typeof raw === 'object' ? raw : {};
+  return { approver_id: a.approver_id || '', approver_name: a.approver_name || '', approver_title: a.approver_title || '', date: a.date || '', method: a.method || '',
+    evidence: a.evidence || '', conditions: a.conditions || '', baseline: a.baseline || null };
+};
+const EMPTY = { goal: '', success_criteria: [], scope_in: [], scope_out: [], stakeholders: [], key_dates: [], operations: {}, memo: '', section_updated: {}, kickoff: kickoffOf(null), approval: approvalOf(null), ...textOf(null) };
 const hydrate = (row) => (row ? {
   goal: row.goal, success_criteria: parse(row.success_criteria, []), scope_in: parse(row.scope_in, []), scope_out: parse(row.scope_out, []),
   stakeholders: parse(row.stakeholders, []), key_dates: parse(row.key_dates, []), operations: parse(row.operations, {}), memo: row.memo, ...textOf(row),
+  kickoff: kickoffOf(parse(row.kickoff, {})), approval: approvalOf(parse(row.approval, {})),
   section_updated: parse(row.section_updated, {}), updated_at: row.updated_at, updated_by: row.updated_by, created_at: row.created_at,
 } : { ...EMPTY, updated_at: null, updated_by: null, created_at: null });
 
@@ -104,8 +140,60 @@ export function cleanSection(key, body = {}) {
       out.operations = {}; for (const k of OPS_KEYS) out.operations[k] = str(b.operations[k], 2000);
       return out;
     }
+    case 'KICKOFF': {
+      if (b.kickoff === undefined) return out;
+      const k = b.kickoff; if (typeof k !== 'object' || k === null) throw new ValidationError({ kickoff: '형식이 올바르지 않습니다.' });
+      const f = {};
+      const dt = str(k.datetime);
+      if (dt && (!/^\d{4}-\d{2}-\d{2}(T([01]\d|2[0-3]):[0-5]\d)?$/.test(dt) || !isDate(dt.slice(0, 10)))) f['kickoff.datetime'] = '일시 형식(YYYY-MM-DD HH:MM)을 확인해 주세요.';
+      const list = (arr, field, limit) => { if (arr === undefined) return []; if (!Array.isArray(arr)) { f[`kickoff.${field}`] = '목록 형식이 올바르지 않습니다.'; return []; } if (arr.length > limit) f[`kickoff.${field}`] = `최대 ${limit}개까지 등록할 수 있습니다.`; return arr.slice(0, limit); };
+      const followups = list(k.followups, 'followups', 50).map((x) => ({ id: str(x?.id) || randomUUID(), text: str(x?.text, 300), owner: str(x?.owner, 100), due: str(x?.due), done: Boolean(x?.done) })).filter((x) => x.text);
+      for (const x of followups) if (x.due && !isDate(x.due)) { f['kickoff.followups'] = '후속 조치 기한 형식(YYYY-MM-DD)을 확인해 주세요.'; break; }
+      out.kickoff = { datetime: dt, place: str(k.place, 200),
+        attendees: [...new Set(list(k.attendees, 'attendees', 300).map((x) => str(x, 64)).filter(Boolean))],
+        prep: list(k.prep, 'prep', 20).map((x) => ({ id: str(x?.id) || randomUUID(), text: str(typeof x === 'string' ? x : x?.text, 200), done: Boolean(x?.done) })).filter((x) => x.text),
+        agenda: str(k.agenda, 2000), minutes: str(k.minutes, 4000),
+        decisions: list(k.decisions, 'decisions', 50).map((x) => ({ id: str(x?.id) || randomUUID(), text: str(typeof x === 'string' ? x : x?.text, 500) })).filter((x) => x.text),
+        followups };
+      if (Object.keys(f).length) throw new ValidationError(f);
+      return out;
+    }
+    case 'APPROVAL': {
+      if (b.approval === undefined) return out;
+      const a = b.approval; if (typeof a !== 'object' || a === null) throw new ValidationError({ approval: '형식이 올바르지 않습니다.' });
+      const f = {};
+      const date = str(a.date); const method = str(a.method);
+      if (date && !isDate(date)) f['approval.date'] = '날짜 형식(YYYY-MM-DD)을 확인해 주세요.';
+      else if (date && date > localToday()) f['approval.date'] = '승인일은 오늘 이후일 수 없습니다.';
+      if (method && !APPROVAL_METHODS[method]) f['approval.method'] = '승인 방법을 목록에서 선택하세요.';
+      if (Object.keys(f).length) throw new ValidationError(f);
+      out.approval = { approver_id: str(a.approver_id, 64), approver_name: str(a.approver_name, 100), approver_title: str(a.approver_title, 100), date, method,
+        evidence: str(a.evidence, 300), conditions: str(a.conditions, 2000), add_to_stakeholders: a.add_to_stakeholders !== false };
+      return out;
+    }
     default: throw new ValidationError({ section: '알 수 없는 섹션입니다.' });
   }
+}
+
+/* ---------- 착수 결과 승인: approver + re-approval baseline ---------- */
+/** The approver as shown everywhere (stakeholder row when linked, otherwise the directly entered name/title). */
+export function approverOf(d) {
+  const a = d.approval || {};
+  const sh = a.approver_id ? (d.stakeholders || []).find((s) => s.id === a.approver_id) : null;
+  if (sh) return { id: sh.id, name: sh.name, title: sh.role || '', org: [sh.org, sh.department].filter(Boolean).join(' '), linked: true };
+  if (a.approver_name) return { id: null, name: a.approver_name, title: a.approver_title || '', org: '', linked: false };
+  return null;
+}
+/** What the customer approved: 목표·성공 기준 · 수행/제외 범위·산출물 · 상위 일정 · 승인자 행. Any change after approval → 다시 확인 필요.
+ * (Other stakeholder rows, 전제·제약·리스크 and 운영 방식 are deliberately not part of it — spec C1.) */
+export function approvalFingerprint(d) {
+  const t = (l) => (l || []).map((x) => (typeof x === 'string' ? x : x.text || '')).filter(Boolean);
+  const a = d.approval || {};
+  const sh = a.approver_id ? (d.stakeholders || []).find((s) => s.id === a.approver_id) : null;
+  const basis = { goal: d.goal || '', success: t(d.success_criteria), in: t(d.scope_in), out: t(d.scope_out), deliverables: d.deliverables || '',
+    dates: (d.key_dates || []).map((k) => [k.title || '', k.date || '']),
+    approver: a.approver_id ? (sh ? [sh.org_type, sh.org, sh.department, sh.name, sh.role, sh.area || ''] : 'deleted') : [a.approver_name || '', a.approver_title || ''] };
+  return createHash('sha256').update(JSON.stringify(basis)).digest('hex').slice(0, 24);
 }
 
 /** Minimum content needed before a section can be marked complete. Returns [] when ready. */
@@ -116,6 +204,21 @@ export function missingFor(key, d, ctx = {}) {
     case 'STAKEHOLDERS': return d.stakeholders.length ? [] : ['이해관계자를 1명 이상 등록하세요.'];
     case 'MILESTONES': return d.key_dates.length || (ctx.wbs_milestones || []).length ? [] : ['주요 일정을 1개 이상 입력하거나 WBS에 마일스톤을 등록하세요.'];
     case 'OPERATIONS': return OPS_KEYS.some((k) => d.operations[k]) ? [] : ['회의·보고·소통·의사결정 중 1개 이상의 운영 방식을 입력하세요.'];
+    case 'KICKOFF': {
+      const k = d.kickoff || {}; const out = [];
+      if (!k.datetime) out.push('착수보고회 일시를 입력하세요.');
+      else if (k.datetime.slice(0, 16) > localNow()) out.push('착수보고회가 아직 열리지 않았습니다. 개최한 뒤 완료 처리하세요.');
+      if (!(k.minutes || (k.decisions || []).length)) out.push('회의록 요약 또는 결정사항을 1개 이상 입력하세요.');
+      return out;
+    }
+    case 'APPROVAL': {
+      const a = d.approval || {}; const out = [];
+      if (!approverOf(d)) out.push(a.approver_id ? '선택한 승인자가 이해관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.');
+      if (!a.date) out.push('승인일을 입력하세요.'); else if (a.date > localToday()) out.push('승인일은 오늘 이후일 수 없습니다.');
+      if (!a.method) out.push('승인 방법을 선택하세요.');
+      if (!a.evidence) out.push('승인 근거(문서번호·메일 제목·보관 위치 등)를 입력하세요.');
+      return out;
+    }
     default: return ['알 수 없는 섹션입니다.'];
   }
 }
@@ -128,6 +231,18 @@ export function sectionSummary(key, d, ctx = {}) {
     case 'STAKEHOLDERS': { if (!d.stakeholders.length) return ''; const by = {}; for (const x of d.stakeholders) by[x.org_type || 'OTHER'] = (by[x.org_type || 'OTHER'] || 0) + 1; return ORG_TYPES.filter((k) => by[k]).map((k) => `${ORG_TYPE_LABEL[k]} ${by[k]}명`).join(' · ') + ' 등록'; }
     case 'MILESTONES': { const parts = []; if (d.key_dates.length) parts.push(`주요 일정 ${d.key_dates.length}건`); if ((ctx.wbs_milestones || []).length) parts.push(`WBS 마일스톤 ${ctx.wbs_milestones.length}건`); return parts.join(' · '); }
     case 'OPERATIONS': { const n = OPS_KEYS.filter((k) => d.operations[k]).length + ['change_management', 'acceptance'].filter((k) => d[k]).length; return n ? `운영 방식 ${n}개 항목 작성됨` : ''; }
+    case 'KICKOFF': {
+      const k = d.kickoff || {}; const when = k.datetime ? `${k.datetime.slice(5, 7)}/${k.datetime.slice(8, 10)}${k.datetime.length > 10 ? ` ${k.datetime.slice(11, 16)}` : ''}` : '';
+      if (!when) return (k.prep || []).some((x) => x.done) || k.minutes || (k.decisions || []).length ? '일시 미정' : '';
+      if (k.datetime.slice(0, 16) > localNow()) { const p = k.prep || []; return `준비 중 · ${p.filter((x) => x.done).length}/${p.length} · ${when}`; }
+      const parts = [`개최 ${when}`]; if ((k.attendees || []).length) parts.push(`참석 ${k.attendees.length}명`); if ((k.decisions || []).length) parts.push(`결정사항 ${k.decisions.length}건`);
+      return parts.join(' · ');
+    }
+    case 'APPROVAL': {
+      const a = d.approval || {}; const who = approverOf(d);
+      const parts = []; if (who) parts.push(`${who.name}${who.title ? ` ${who.title}` : ''}`); if (a.date) parts.push(a.date); if (a.method) parts.push(APPROVAL_METHODS[a.method]);
+      return parts.join(' · ');
+    }
     default: return '';
   }
 }
@@ -152,24 +267,40 @@ export async function loadDefinition(db, project) {
     const missing = missingFor(key, d, { wbs_milestones: ms });
     const completed = st?.status === 'COMPLETED'; const skipped = st?.status === 'SKIPPED';
     const upd = d.section_updated[key] || null;
-    const summary = sectionSummary(key, d, { wbs_milestones: ms });
+    let summary = sectionSummary(key, d, { wbs_milestones: ms });
+    let changed = Boolean(completed && upd && st.completed_at && new Date(upd) > new Date(st.completed_at));
+    let reapproval = false; let bypass = null;
+    if (key === 'APPROVAL') {
+      // 승인 후 변경 감지: the approved content (fingerprint at 완료 처리) no longer matches → 다시 확인 필요 (spec US-2, C1)
+      reapproval = Boolean(completed && d.approval.baseline && d.approval.baseline !== approvalFingerprint(d));
+      changed = changed || reapproval;
+      bypass = completed ? null : parseBypass(st?.note);
+      if (bypass) summary = summary ? `승인 전 진행 · 사유 있음 · ${summary}` : '승인 전 진행 · 사유 있음';
+    }
+    if (key === 'KICKOFF' && completed) { const open = (d.kickoff.followups || []).filter((x) => !x.done).length; if (open) summary = `${summary} · 후속 조치 ${open}건 남음`; }
     return { key, label: SECTION_LABEL[key], step_id: st?.id || null, title: st?.title || SECTION_LABEL[key], description: st?.description || '',
-      importance: st?.importance || 'REQUIRED', skippable: (st?.importance || 'REQUIRED') !== 'REQUIRED',
+      importance: st?.importance || 'REQUIRED', skippable: (st?.importance || 'REQUIRED') !== 'REQUIRED', gate: GATE_SECTIONS.includes(key),
       status: completed ? 'COMPLETED' : skipped ? 'SKIPPED' : 'TODO', completed_at: st?.completed_at || null, completed_by_name: st?.completed_by_name || null,
-      updated_at: upd, changed_after_completion: Boolean(completed && upd && st.completed_at && new Date(upd) > new Date(st.completed_at)),
+      updated_at: upd, changed_after_completion: changed, reapproval, bypass,
       ready: missing.length === 0, missing, summary, has_data: Boolean(summary), legacy_note: st?.note || '' };
-  });
-  const done = sections.filter((s) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
-  return { definition: d, sections, progress: { done, total: sections.length, percent: Math.round((done / sections.length) * 100) },
+  }).filter((s) => !GATE_SECTIONS.includes(s.key) || s.step_id);   // a project whose 01 has no gate steps yet (before migration 31) shows the five
+  // progress counts the five definition sections only; 착수보고회 / 승인 have their own guidance state (spec §4)
+  const core = sections.filter((s) => CORE_SECTIONS.includes(s.key));
+  const done = core.filter((s) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
+  const apv = sections.find((s) => s.key === 'APPROVAL') || null; const kick = sections.find((s) => s.key === 'KICKOFF') || null;
+  return { definition: d, sections, progress: { done, total: core.length, percent: Math.round((done / core.length) * 100) },
     needs_review: sections.filter((s) => s.changed_after_completion).map((s) => s.key),
+    // 착수 gate state for guidance / Charter / export: approval status (TODO · COMPLETED · REAPPROVAL), approver, bypass reason
+    initiation_gate: { approval: apv ? { status: apv.status === 'COMPLETED' ? (apv.reapproval ? 'REAPPROVAL' : 'COMPLETED') : 'TODO', step_id: apv.step_id, bypass: apv.bypass, approver: approverOf(d), method_label: APPROVAL_METHODS[d.approval.method] || '' } : null,
+      kickoff: kick ? { status: kick.status, step_id: kick.step_id } : null },
     project_dates: { planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date }, wbs_milestones: ms,
     // 프로젝트 기본 특성 live on projects (same values as the create form); shown and edited here, never part of a step's completion
     project_traits: Object.fromEntries(TRAIT_FIELDS.map((k) => [k, project[k] ?? (k === 'project_type' ? null : 'TBD')])) };
 }
 
 /* ---------- writes ---------- */
-const COLS = { goal: 'goal', success_criteria: 'success_criteria', scope_in: 'scope_in', scope_out: 'scope_out', stakeholders: 'stakeholders', key_dates: 'key_dates', operations: 'operations', memo: 'memo', ...TEXT_FIELDS };
-const SECTION_OF = { goal: 'GOALS', success_criteria: 'GOALS', scope_in: 'SCOPE', scope_out: 'SCOPE', stakeholders: 'STAKEHOLDERS', key_dates: 'MILESTONES', operations: 'OPERATIONS', ...TEXT_SECTION };
+const COLS = { goal: 'goal', success_criteria: 'success_criteria', scope_in: 'scope_in', scope_out: 'scope_out', stakeholders: 'stakeholders', key_dates: 'key_dates', operations: 'operations', memo: 'memo', kickoff: 'kickoff', approval: 'approval', ...TEXT_FIELDS };
+const SECTION_OF = { goal: 'GOALS', success_criteria: 'GOALS', scope_in: 'SCOPE', scope_out: 'SCOPE', stakeholders: 'STAKEHOLDERS', key_dates: 'MILESTONES', operations: 'OPERATIONS', kickoff: 'KICKOFF', approval: 'APPROVAL', ...TEXT_SECTION };
 
 /** Partial save. Body may carry any subset of the fields; untouched fields stay. Returns the full read model. */
 export async function saveDefinition(db, project, body = {}, userId = null) {
@@ -191,10 +322,22 @@ export async function saveDefinition(db, project, body = {}, userId = null) {
   const existing = await row(db, project.id);
   const ts = new Date().toISOString();
   const touched = new Set(Object.keys(patch).map((k) => SECTION_OF[k]).filter(Boolean));
+  if (patch.approval) {
+    const prev = existing ? approvalOf(parse(existing.approval, {})) : approvalOf(null);
+    const { add_to_stakeholders: addSh, ...a } = patch.approval;
+    // 직접 입력 승인자 → 이해관계자에도 추가 (기본 체크, spec C6). Not an edit of the 이해관계자 activity, so its section stamp is left alone.
+    if (!a.approver_id && a.approver_name && addSh) {
+      const list = patch.stakeholders || (existing ? parse(existing.stakeholders, []) : []);
+      const sh = { id: randomUUID(), org_type: 'CLIENT', org: project.client_name || '', department: '', name: a.approver_name, role: a.approver_title, area: '착수 결과 승인', note: '' };
+      patch.stakeholders = [...list, sh]; a.approver_id = sh.id;
+    }
+    if (a.approver_id) { a.approver_name = ''; a.approver_title = ''; }
+    patch.approval = { ...a, baseline: prev.baseline };   // the baseline is written only by 완료 처리 / 다시 확인 완료
+  }
   const su = { ...(existing ? parse(existing.section_updated, {}) : {}) }; for (const k of touched) su[k] = ts;
   const vals = (k) => (typeof patch[k] === 'string' ? patch[k] : JSON.stringify(patch[k]));
   if (!existing) {
-    const base = { goal: '', success_criteria: '[]', scope_in: '[]', scope_out: '[]', stakeholders: '[]', key_dates: '[]', operations: '{}', memo: '', ...Object.fromEntries(Object.keys(TEXT_FIELDS).map((k) => [k, ''])) };
+    const base = { goal: '', success_criteria: '[]', scope_in: '[]', scope_out: '[]', stakeholders: '[]', key_dates: '[]', operations: '{}', memo: '', kickoff: '{}', approval: '{}', ...Object.fromEntries(Object.keys(TEXT_FIELDS).map((k) => [k, ''])) };
     for (const k of Object.keys(patch)) base[k] = vals(k);
     const keys = Object.keys(base);
     await db.run(`INSERT INTO project_definitions (project_id, ${keys.map((k) => COLS[k]).join(', ')}, section_updated, updated_by, created_at, updated_at)
@@ -223,7 +366,11 @@ export async function setSectionStatus(db, project, key, action, userId, body = 
     if (!sec.skippable) throw new ValidationError({ section: '필수 업무는 건너뛸 수 없습니다.' });
     await updateStep(db, project, sec.step_id, { status: 'SKIPPED' }, userId); return { ok: true };
   }
-  if (!sec.ready) throw new ValidationError({ section: sec.missing[0] });
+  if (!sec.ready) throw new ValidationError({ section: sec.missing[0], missing: sec.missing.join('\n') });
+  if (key === 'APPROVAL') {   // remember what was approved → later edits to 목표·범위·일정·승인자 flag 다시 확인 필요
+    const d = model.definition;
+    await db.run('UPDATE project_definitions SET approval = ? WHERE project_id = ?', [JSON.stringify({ ...d.approval, baseline: approvalFingerprint(d) }), project.id]);
+  }
   await updateStep(db, project, sec.step_id, { status: 'COMPLETED' }, userId);   // confirm == complete again: completed_at moves past section_updated
   return { ok: true };
 }
@@ -232,12 +379,12 @@ export async function setSectionStatus(db, project, key, action, userId, body = 
 export const STAKEHOLDER_COLUMNS = [
   { key: 'org_type', label: '조직 구분 *', required: true, width: 12, options: ORG_TYPES.map((k) => ORG_TYPE_LABEL[k]) },
   { key: 'org', label: '조직(회사)', width: 20 }, { key: 'department', label: '부서', width: 18 }, { key: 'name', label: '이름 *', required: true, width: 14 },
-  { key: 'role', label: '역할', width: 18 }, { key: 'area', label: '담당 영역', width: 24 }, { key: 'note', label: '비고', width: 24 },
+  { key: 'role', label: '역할', width: 18 }, { key: 'area', label: '주요 책임', alias: ['담당 영역'], width: 24 }, { key: 'note', label: '비고', width: 24 },
 ];
 /** Map raw workbook rows (header text → cell) to stakeholder rows with per-row validation. */
 export function previewStakeholderRows({ headers, rows }) {
   const norm = (t) => String(t || '').replace(/\s+/g, '').replace(/\*+$/, '').toLowerCase();
-  const colOf = {}; for (const c of STAKEHOLDER_COLUMNS) { const h = headers.find((x) => norm(x.text) === norm(c.label)); if (h) colOf[c.key] = h.n; }
+  const colOf = {}; for (const c of STAKEHOLDER_COLUMNS) { const h = headers.find((x) => [c.label, ...(c.alias || [])].some((l) => norm(x.text) === norm(l))); if (h) colOf[c.key] = h.n; }
   if (!colOf.name) throw new ValidationError({ file: "'이름' 열을 찾을 수 없습니다. 템플릿의 열 제목을 사용해 주세요." });
   const out = rows.map((r) => {
     const v = (k) => (colOf[k] ? String(r.cells[colOf[k]] || '').trim() : '');

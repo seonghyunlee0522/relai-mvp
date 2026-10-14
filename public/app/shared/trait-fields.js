@@ -30,7 +30,7 @@ export function wireTraitFields(root) {
   if (sel && help) sel.addEventListener('change', () => { help.textContent = typeHelp(sel.value); });
 }
 
-/** Read-only grid (프로젝트 정의 상단 · Project Chater): label / value pairs, "미설정" / "미정" muted. */
+/** Read-only grid (프로젝트 정의 상단 · Project Charter): label / value pairs, "미설정" / "미정" muted. */
 export const traitGrid = (values = {}) => html`<dl class="trg">${raw(PROJECT_TRAITS.map((t) => {
   const v = values[t.field]; const unset = !v || v === 'TBD';
   return html`<div class="trg__i"><dt>${t.label}</dt><dd class="${unset ? 'is-unset' : ''}">${traitLabel(t.field, v)}</dd></div>`;

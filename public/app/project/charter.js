@@ -1,14 +1,15 @@
-/* Overview › Project Chater — read-only view of the project's reference information.
+/* Overview › Project Charter — read-only view of the project's reference information.
  *
  *   Source of truth   착수 › 프로젝트 정의 (+ 프로젝트 정보: 이름·설명·고객사·기간). Nothing here is editable; every gap has a CTA
  *                     that deep-links to the exact input (definition?activity=KEY&field=FIELD → drawer opens and focuses it).
- *   AI                GET …/charter returns the same object server/charter.js turns into the [PROJECT CHATER] block of every
+ *   AI                GET …/charter returns the same object server/charter.js turns into the [PROJECT CHARTER] block of every
  *                     AI request, so "AI 활용" below describes what is really sent.
  *   Not here          execution status, KPI, Health (that is 프로젝트 현황). No percentage of elapsed time.
  * Document layout: section title · divider · whitespace. Only the AI Project Context strip is emphasised. */
 import { api, wsApi } from '../core/api.js';
 import { $, html, raw, todayLocal, fmtDate } from '../core/dom.js';
 import { projectHead } from './guide.js';
+import { planMenu, bindPlanMenu, term } from './initiation.js';
 
 const SPARK = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg>';
 const CAT_ORDER = ['CLIENT', 'OWN', 'PARTNER', 'OTHER'];
@@ -26,7 +27,7 @@ export async function charterPage(id) {
   const main = $('#main');
   const [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/charter`))]);
   const p = g.project; const c = r.charter; const ro = p.status === 'ARCHIVED';
-  document.title = `Project Chater — ${p.name} — RELAI`;
+  document.title = `Project Charter — ${p.name} — RELAI`;
   const u = `/app/projects/${p.id}`;
   const def = (activity, field) => `${u}/definition?activity=${activity}${field ? `&field=${field}` : ''}`;
   const info = (field) => `${u}/edit?focus=${field}`;
@@ -57,7 +58,7 @@ export async function charterPage(id) {
     <span class="chai__mark">${raw(SPARK)}</span>
     <div class="chai__b">
       <div class="chai__k" id="chaiT">RELAI AI Project Context</div>
-      <p class="chai__lead">RELAI AI는 Project Chater를 기준으로 이 프로젝트를 이해합니다.</p>
+      <p class="chai__lead">RELAI AI는 Project Charter를 기준으로 이 프로젝트를 이해합니다.</p>
       <p class="chai__d">프로젝트의 목표, 범위, 성공 기준, 일정, 이해관계자와 수행 조건을 바탕으로 요구사항을 검토하고, WBS를 구성하며, 변경 영향을 분석하고 다음 작업을 제안합니다.</p>
       <p class="chai__em">정보를 구체적으로 입력할수록 AI가 프로젝트 상황을 더 정확하게 판단할 수 있습니다.</p>
     </div>
@@ -99,7 +100,7 @@ export async function charterPage(id) {
   const shTable = sh.length ? html`<div class="chx__tblw"><table class="chx__tbl"><thead><tr><th>이름</th><th>소속</th><th>구분</th><th>역할</th><th>주요 책임</th></tr></thead><tbody>
       ${raw(sh.map((s) => html`<tr><td class="chx__nm">${s.name}</td><td>${[s.org, s.department].filter(Boolean).join(' · ') || '-'}</td><td><span class="chx__cat chx__cat--${s.category.toLowerCase()}">${s.category_label}</span></td><td>${s.role || '-'}</td><td>${s.responsibility || '-'}</td></tr>`).join(''))}</tbody></table></div>`
     : empty('이해관계자가 아직 등록되지 않았습니다.', '고객사·당사·협력사의 담당자와 역할을 등록하면 AI가 업무 담당자와 의사결정 상대를 이해할 수 있습니다.', def('STAKEHOLDERS'), '이해관계자 입력 →');
-  const stake = section('4', 'stakeholders', 'Stakeholders & Governance', '프로젝트 참여자, 업무 담당자 및 의사결정 구조를 이해하는 데 활용합니다.', html`
+  const stake = section('4', 'stakeholders', raw(html`Stakeholders &amp; Governance ${raw(term('stakeholder'))}`), '프로젝트 참여자, 업무 담당자 및 의사결정 구조를 이해하는 데 활용합니다.', html`
     <div class="chx__blk"><h3 class="chx__lbl">Stakeholders${raw(sh.length ? html` <small>${sh.length}명</small>` : '')}</h3>${raw(shTable)}</div>
     ${raw(block('의사결정 / 승인 체계', c.governance, ['의사결정 / 승인 체계가 정의되지 않았습니다.', '범위·일정 변경을 누가 어떤 절차로 승인하는지 작성하면 AI가 변경 요청의 다음 절차를 정확하게 안내할 수 있습니다.', def('OPERATIONS', 'decisions'), '의사결정 체계 입력 →']))}`);
 
@@ -108,29 +109,36 @@ export async function charterPage(id) {
   const timeline = () => {
     if (!tl.startDate || !tl.endDate) return '';
     const s = dnum(tl.startDate); const e = dnum(tl.endDate); const span = Math.max(e - s, DAY);
-    const pos = (d) => Math.min(100, Math.max(0, ((dnum(d) - s) / span) * 100));
+    // milestones after END sit in a gray "종료 후" zone right of END (안정화·하자보수) instead of piling up on the END marker
+    const late = tl.milestones.filter((m) => m.date && m.date > tl.endDate);
+    const lateMax = late.length ? Math.max(...late.map((m) => dnum(m.date))) : e;
+    const MAIN = late.length ? 86 : 100;
+    const pos = (d) => { const t = dnum(d); if (t > e && late.length) return MAIN + 2 + ((t - e) / Math.max(lateMax - e, DAY)) * (100 - MAIN - 4); return Math.min(MAIN, Math.max(0, ((t - s) / span) * MAIN)); };
     const t = dnum(today);
     const phase = t < s ? 'before' : t > e ? 'after' : 'during';
     const dated = tl.milestones.filter((m) => m.date);
+    const lastX = { up: -100, dn: -100 };
     const marks = dated.map((m, i) => {
       const x = pos(m.date); const past = m.date < today || m.status === 'COMPLETED';
       const out = m.date < tl.startDate || m.date > tl.endDate;
       const edge = x > 82 ? 'is-r' : x < 18 ? 'is-l' : '';
-      return html`<li class="chtl__ms ${past ? 'is-past' : ''} ${i % 2 ? 'is-dn' : 'is-up'} ${edge}" style="left:${x.toFixed(2)}%" title="${m.title} · ${fmtDate(m.date)}${out ? ' (프로젝트 기간 밖)' : ''}">
+      const side = i % 2 ? 'dn' : 'up';
+      const crowd = x - lastX[side] < 11; if (!crowd) lastX[side] = x;   // a label that would overlap the previous one on its side → tooltip only
+      return html`<li class="chtl__ms ${past ? 'is-past' : ''} ${out && m.date > tl.endDate ? 'is-late' : ''} ${crowd ? 'is-crowd' : ''} is-${side} ${edge}" style="left:${x.toFixed(2)}%" tabindex="0" title="${m.title} · ${fmtDate(m.date)}${out ? (m.date > tl.endDate ? ' (종료 후)' : ' (프로젝트 기간 밖)') : ''}">
         <i aria-hidden="true"></i><span><b>${m.title}</b><time>${fmtDate(m.date)}</time></span></li>`;
     }).join('');
     const now = phase === 'during' ? html`<div class="chtl__today" style="left:${pos(today).toFixed(2)}%"><span>TODAY · ${fmtDate(today)}</span></div>` : '';
     const state = phase === 'before' ? '프로젝트 시작 전' : phase === 'after' ? '프로젝트 기간 종료' : '';
     return html`<div class="chtl ${dated.length ? '' : 'chtl--bare'}" role="img" aria-label="프로젝트 기간 ${fmtDate(tl.startDate)} ~ ${fmtDate(tl.endDate)}, 오늘 ${fmtDate(today)}${state ? ` (${state})` : ''}, 마일스톤 ${dated.length}개">
       <div class="chtl__ends"><span><small>START</small>${fmtDate(tl.startDate)}</span>${raw(state ? html`<em class="chtl__state is-${phase}">${state} · 오늘 ${fmtDate(today)}</em>` : '')}<span><small>END</small>${fmtDate(tl.endDate)}</span></div>
-      <div class="chtl__track"><div class="chtl__line"><i class="chtl__done" style="width:${phase === 'before' ? 0 : phase === 'after' ? 100 : pos(today).toFixed(2)}%"></i></div>
-        <span class="chtl__end chtl__end--s" aria-hidden="true"></span><span class="chtl__end chtl__end--e" aria-hidden="true"></span>
+      <div class="chtl__track">${raw(late.length ? `<div class="chtl__after" style="left:${MAIN}%"><span>종료 후</span></div>` : '')}<div class="chtl__line" style="right:${100 - MAIN}%"><i class="chtl__done" style="width:${phase === 'before' ? 0 : phase === 'after' ? 100 : pos(today).toFixed(2)}%"></i></div>
+        <span class="chtl__end chtl__end--s" aria-hidden="true"></span><span class="chtl__end chtl__end--e" aria-hidden="true" style="left:${MAIN}%"></span>
         <ol class="chtl__mss">${raw(marks)}</ol>${raw(now)}</div>
     </div>`;
   };
   const msList = tl.milestones.length ? html`<ol class="chx__ml">${raw(tl.milestones.map((m) => html`<li class="${m.date && m.date < today ? 'is-past' : ''}"><time>${m.date ? fmtDate(m.date) : '날짜 미정'}</time><span>${m.title}</span>${raw(m.source === 'WBS' ? html`<small>WBS ${m.wbs_code}</small>` : '')}</li>`).join(''))}</ol>`
     : empty('주요 마일스톤이 아직 등록되지 않았습니다.', '주요 의사결정 및 완료 시점을 작성하면 AI가 현재 프로젝트의 일정 위치와 남은 주요 작업을 더 정확하게 판단할 수 있습니다.', def('MILESTONES', 'key_dates'), '마일스톤 입력 →');
-  const time = section('5', 'timeline', 'Timeline & Milestones', '현재 프로젝트 진행 위치와 남은 주요 일정을 기준으로 일정 위험과 다음 작업을 판단합니다.', html`${raw(timeline())}${raw(msList)}`);
+  const time = section('5', 'timeline', raw(html`Timeline &amp; Milestones ${raw(term('milestone'))}`), '현재 프로젝트 진행 위치와 남은 주요 일정을 기준으로 일정 위험과 다음 작업을 판단합니다.', html`${raw(timeline())}${raw(msList)}`);
 
   /* ---------- 6. Assumptions, Constraints & Risks ---------- */
   const acr = section('6', 'conditions', 'Assumptions, Constraints & Risks', 'WBS 생성, 요구사항 검토 및 변경 영향 분석 시 프로젝트의 전제조건과 제약, 위험요소를 함께 고려합니다.', html`
@@ -145,15 +153,29 @@ export async function charterPage(id) {
     ${raw(block('Change Management', om.changeManagement, ['변경관리 방식이 작성되지 않았습니다.', '변경 요청을 어떻게 검토·승인하는지 작성하면 AI가 변경 영향 분석 후 필요한 승인 절차를 안내할 수 있습니다.', def('OPERATIONS', 'change_management'), '변경관리 방식 입력 →']))}
     ${raw(block('Acceptance / Completion', om.acceptance, ['검수 / 완료 기준이 작성되지 않았습니다.', '무엇이 충족되면 검수·완료로 보는지 작성하면 AI가 테스트와 검수 준비 상태를 판단하는 데 활용합니다.', def('OPERATIONS', 'acceptance'), '검수 / 완료 기준 입력 →']))}`);
 
+  /* ---------- 8. 착수보고회 · 착수 결과 승인 (Phase 1 v2) ---------- */
+  const k = c.kickoff; const a = c.approval;
+  const fmtDT = (v) => (!v ? '' : `${fmtDate(v.slice(0, 10))}${v.length > 10 ? ` ${v.slice(11, 16)}` : ''}`);
+  const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">승인됨</span>' : a.status === 'REAPPROVAL' ? '<span class="chx__badge is-crit">확인 필요 · 재승인 필요</span>' : '<span class="chx__badge">미승인</span>';
+  const approvalInner = !a ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수 결과 승인 ${raw(apvState)}</h3>
+    ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — 사유: ${a.bypass.reason} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
+      : html`<dl class="chx__kvs">${raw(kv('승인자', a.approver ? `${a.approver.name}${a.approver.title ? ` ${a.approver.title}` : ''}` : ''))}${raw(kv('승인일', a.date ? fmtDate(a.date) : ''))}${raw(kv('승인 방법', a.method_label))}${raw(kv('근거', a.evidence))}</dl>
+        ${raw(a.status === 'REAPPROVAL' ? '<p class="chx__p chx__bypass">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.</p>' : '')}${raw(a.conditions ? html`<h3 class="chx__lbl">조건 / 보완 요청</h3>${raw(body(a.conditions))}` : '')}`)}</div>`;
+  const kickInner = !k || k.skipped ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수보고회 ${raw(term('kickoff'))}</h3>
+    ${raw(k.status === 'COMPLETED' ? html`<dl class="chx__kvs">${raw(kv('일시', fmtDT(k.datetime)))}${raw(kv('장소/방식', k.place))}${raw(kv('참석자', k.attendees.map((x) => x.name).join(', ')))}</dl>${raw(k.decisions.length ? html`<h3 class="chx__lbl">결정사항</h3><ul class="chx__ul">${raw(k.decisions.map((x) => html`<li>${x}</li>`).join(''))}</ul>` : '')}`
+      : empty(k.datetime ? `착수보고회 예정 · ${fmtDT(k.datetime)}` : '착수보고회가 아직 열리지 않았습니다.', '착수보고회에서 목표·범위·일정을 고객과 함께 확인하고, 결과를 기록하면 여기에 표시됩니다.', def('KICKOFF'), '착수보고회 준비 →'))}</div>`;
+  const gate = a || (k && !k.skipped) ? section('8', 'approval', raw(html`착수보고회 · 승인 ${raw(term('baseline'))}`), '승인된 목표·범위·일정을 기준선으로 보고 이후 변경 요청과 검수를 판단합니다.', html`${raw(kickInner)}${raw(approvalInner)}`) : '';
+
   /* ---------- right rail: outline (scroll-spy) · next milestone · what to complete · fill status ---------- */
-  const SECTIONS = [['profile', 'Project Profile'], ['goals', 'Goals & Success Criteria'], ['scope', 'Scope & Deliverables'], ['stakeholders', 'Stakeholders & Governance'], ['timeline', 'Timeline & Milestones'], ['conditions', 'Assumptions, Constraints & Risks'], ['operating', 'Operating Model']];
+  const SECTIONS = [['profile', 'Project Profile'], ['goals', 'Goals & Success Criteria'], ['scope', 'Scope & Deliverables'], ['stakeholders', 'Stakeholders & Governance'], ['timeline', 'Timeline & Milestones'], ['conditions', 'Assumptions, Constraints & Risks'], ['operating', 'Operating Model'], ...(gate ? [['approval', '착수보고회 · 승인']] : [])];
   const missing = ITEMS.filter((x) => !x.ok);
   const nextMs = tl.milestones.find((m) => m.date && m.date >= today);
   const dday = nextMs ? Math.round((dnum(nextMs.date) - dnum(today)) / DAY) : null;
-  const rail = html`<aside class="chr" aria-label="Project Chater 요약">
+  const rail = html`<aside class="chr" aria-label="Project Charter 요약">
     <nav class="chr__box chr__toc" aria-label="목차"><div class="chr__k">목차</div><ol>${raw(SECTIONS.map(([k, t], i) => {
       const its = ITEMS.filter((x) => x.sec === k); const n = its.filter((x) => x.ok).length;
-      return html`<li><button type="button" class="chr__ti" data-goto="ch-${k}"><span class="chr__tn mono">${i + 1}</span><span class="chr__tt">${t}</span><span class="chr__tc ${n === its.length ? 'is-ok' : ''}">${n === its.length ? '✓' : `${n}/${its.length}`}</span></button></li>`;
+      const tc = k === 'approval' ? (a && a.status === 'COMPLETED' ? '✓' : a && a.status === 'REAPPROVAL' ? '!' : '-') : n === its.length ? '✓' : `${n}/${its.length}`;
+      return html`<li><button type="button" class="chr__ti" data-goto="ch-${k}"><span class="chr__tn mono">${i + 1}</span><span class="chr__tt">${t}</span><span class="chr__tc ${tc === '✓' ? 'is-ok' : ''}">${tc}</span></button></li>`;
     }).join(''))}</ol></nav>
     ${raw(nextMs ? html`<div class="chr__box"><div class="chr__k">다음 마일스톤</div><div class="chr__ms"><b>${nextMs.title}</b><span>${fmtDate(nextMs.date)} · ${dday === 0 ? 'D-Day' : `D-${dday}`}</span></div></div>` : '')}
     ${raw(missing.length && !ro ? html`<div class="chr__box"><div class="chr__k">보완하면 AI 판단이 정확해지는 항목 <em>${missing.length}</em></div>
@@ -168,16 +190,17 @@ export async function charterPage(id) {
   </aside>`;
 
   main.innerHTML = html`<div class="page page--wide page--flow chp">
-    ${raw(projectHead(p, g, { tab: 'overview-charter', title: 'Project Chater' }))}
+    ${raw(projectHead(p, g, { tab: 'overview-charter', title: 'Project Charter' }))}
     <div class="chl"><div class="chx">
-      <div class="chx__head"><h1>Project Chater</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>
-      ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. Project Chater는 조회만 할 수 있습니다.</div>' : '')}
+      <div class="chx__head"><div><h1>Project Charter ${raw(term('charter'))}</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
+      ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. Project Charter는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(hero)}
-      ${raw(profile)}${raw(goals)}${raw(scope)}${raw(stake)}${raw(time)}${raw(acr)}${raw(ops)}
+      ${raw(profile)}${raw(goals)}${raw(scope)}${raw(stake)}${raw(time)}${raw(acr)}${raw(ops)}${raw(gate)}
       <p class="chx__src">이 화면은 조회 전용입니다. 모든 내용은 <a class="link" href="${u}/definition" data-link>01 착수 › 프로젝트 정의</a>${raw(ro ? '' : html`와 <a class="link" href="${u}/edit" data-link>프로젝트 정보</a>`)}에서 관리됩니다.</p>
     </div>${raw(rail)}</div>
   </div>`;
 
+  bindPlanMenu(main, p.id);
   // outline: smooth-scroll without touching the URL (a hash change would re-render the SPA), highlight the section in view
   main.querySelectorAll('[data-goto]').forEach((b) => { b.onclick = () => { const el = document.getElementById(b.dataset.goto); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
   if ('IntersectionObserver' in window) {

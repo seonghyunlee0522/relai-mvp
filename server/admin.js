@@ -99,7 +99,7 @@ const WS_COLS = `w.id, w.name, w.status, w.created_at, w.suspended_at,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id = w.id) AS member_count,
   (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status != 'ARCHIVED') AS project_count,
   (SELECT COUNT(*) FROM invitations i WHERE i.workspace_id = w.id AND i.status = 'PENDING' AND i.expires_at >= now()) AS pending_invitations,
-  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND NOT EXISTS (SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.status <> 'COMPLETED')) AS defined_projects,
+  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND NOT EXISTS (SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.step_key NOT IN ('KICKOFF','APPROVAL') AND s.status <> 'COMPLETED')) AS defined_projects,
   (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)
       AND EXISTS (SELECT 1 FROM wbs_items x WHERE x.project_id = p.id AND x.archived_at IS NULL AND x.item_type = 'TASK' AND NOT EXISTS (SELECT 1 FROM wbs_items c WHERE c.parent_id = x.id AND c.archived_at IS NULL))) AS activated_projects,
   (SELECT MAX(u.last_login_at) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = w.id) AS last_login_at,
