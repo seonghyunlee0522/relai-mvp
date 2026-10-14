@@ -234,7 +234,7 @@ export function sectionSummary(key, d, ctx = {}) {
     case 'KICKOFF': {
       const k = d.kickoff || {}; const when = k.datetime ? `${k.datetime.slice(5, 7)}/${k.datetime.slice(8, 10)}${k.datetime.length > 10 ? ` ${k.datetime.slice(11, 16)}` : ''}` : '';
       if (!when) return (k.prep || []).some((x) => x.done) || k.minutes || (k.decisions || []).length ? '일시 미정' : '';
-      if (k.datetime.slice(0, 16) > localNow()) { const p = k.prep || []; return `준비 중 · ${p.filter((x) => x.done).length}/${p.length} · ${when}`; }
+      if (k.datetime.slice(0, 16) > localNow()) { const p = k.prep || []; return p.length ? `준비 중 · ${p.filter((x) => x.done).length}/${p.length} · ${when}` : `예정 · ${when}`; }
       const parts = [`개최 ${when}`]; if ((k.attendees || []).length) parts.push(`참석 ${k.attendees.length}명`); if ((k.decisions || []).length) parts.push(`결정사항 ${k.decisions.length}건`);
       return parts.join(' · ');
     }

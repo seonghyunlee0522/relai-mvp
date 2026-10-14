@@ -16,7 +16,7 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { navigate } from '../core/router.js';
 import { bindCoach } from '../onboarding/ui.js';
 import { ob } from '../onboarding/state.js';
-import { josa } from '../shared/josa.js';
+import { josa, pickJosa } from '../shared/josa.js';
 import { noApprovalLine, bindPlanMenu } from './initiation.js';
 
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
@@ -97,7 +97,6 @@ const otherPhasePanel = (g, ph, archived) => {
     ${raw(ph.phase_key === 'INITIATION' ? noApprovalLine(g) : '')}
     <ol class="np__list ${hasActs ? '' : 'np__list--noacts'}">${raw(rows)}</ol>
     <div class="np__f"><span class="np__msg">${raw(cur ? html`현재 단계는 <b>${no2(cur.sequence)} ${cur.name}</b>입니다.` : '')}</span>
-      ${raw(!archived ? html`<button type="button" class="link linkbtn np__setcur" data-set-phase="${ph.id}">이 단계를 현재 단계로 변경</button>` : '')}
       <a class="link np__back" href="/app/projects/${g.project.id}" data-link>현재 단계 업무 보기 →</a></div>
   </section>`;
 };
@@ -148,14 +147,13 @@ export async function nextPage(id, main = $('#main')) {
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { g = await api('GET', wsApi(`/${id}`)); draw(); } };
     const nb = $('#next'); if (nb) nb.onclick = move;
     // 단계 선택: another phase's list → make it the current phase (same dialogs, incl. the 착수 승인 gate)
-    main.querySelectorAll('[data-set-phase]').forEach((b) => { b.onclick = async () => { const t = (g.phases || []).find((x) => x.id === b.dataset.setPhase); if (t && await moveToPhase(p.id, g, t)) navigate(`/app/projects/${p.id}`); }; });
     main.querySelectorAll('[data-dl]').forEach((b) => { b.onclick = async () => { try { const { download } = await import('../core/ui.js'); await download(b.dataset.dl); toast('사업수행계획서를 내려받았습니다.'); } catch (e) { toast(e.message); } }; });
     bindPlanMenu(main, p.id);
     main.querySelectorAll('[data-move-next]').forEach((b) => { b.onclick = g.next_phase ? move : null; });
     main.querySelectorAll('.np__row[data-href]').forEach((row) => { const go = () => navigate(row.dataset.href); row.onclick = (e) => { if (!e.target.closest('a,button')) go(); }; row.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a,button')) { e.preventDefault(); go(); } }; });
     main.querySelectorAll('[data-step]').forEach((b) => b.onclick = async () => {
       if (b.dataset.status === 'COMPLETED' && Number(b.dataset.open) > 0 && !(await confirmDialog({ title: '이 업무를 완료 처리할까요?', body: `'${b.dataset.title}' 체크리스트에 완료되지 않은 항목 ${b.dataset.open}건이 남아 있습니다. 그래도 완료로 기록합니다.`, confirm: '완료 처리' }))) return;
-      if (b.dataset.status === 'SKIPPED' && !(await confirmDialog({ title: '이 업무를 건너뛸까요?', body: `'${b.dataset.title}'은(는) 이번 프로젝트에서 수행하지 않는 것으로 기록됩니다. 나중에 다시 시작할 수 있습니다.`, confirm: '건너뛰기' }))) return;
+      if (b.dataset.status === 'SKIPPED' && !(await confirmDialog({ title: '이 업무를 건너뛸까요?', body: `'${b.dataset.title}'${pickJosa(b.dataset.title, '은')} 이번 프로젝트에서 수행하지 않는 것으로 기록됩니다. 나중에 다시 시작할 수 있습니다.`, confirm: '건너뛰기' }))) return;
       b.disabled = true;
       try { g = await api('PATCH', wsApi(`/${id}/steps/${b.dataset.step}`), { status: b.dataset.status }); toast(b.dataset.status === 'COMPLETED' ? '완료 처리했습니다.' : b.dataset.status === 'SKIPPED' ? '이 업무를 건너뛰었습니다.' : '업무를 다시 시작합니다.'); draw(); }
       catch (e) { toast(e.message); b.disabled = false; }

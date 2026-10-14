@@ -99,9 +99,12 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await gatePath('?move=next (Guide / Home 단계 시작 링크)', async () => { await page.goto(`${BASE}/app/projects/${p.id}?move=next`); });
   await page.click('[data-v="record"]'); await page.waitForURL(/activity=APPROVAL/, { timeout: 5000 }).catch(() => {});
   check('승인 기록하러 가기 → APPROVAL work screen', /definition\?activity=APPROVAL/.test(page.url()), page.url());
-  // path C: 단계 선택 (stepper → 02 list → 이 단계를 현재 단계로 변경)
-  await page.goto(`${BASE}/app/projects/${p.id}?phase=REQUIREMENTS`); await page.waitForSelector('[data-set-phase]');
-  await gatePath('단계 선택 메뉴', async () => { await page.click('[data-set-phase]'); });
+  // only these 2 paths leave 01: the 02 list has no "이 단계를 현재 단계로 변경" link
+  await page.goto(`${BASE}/app/projects/${p.id}?phase=REQUIREMENTS`); await page.waitForSelector('.np__list');
+  check('no 이 단계를 현재 단계로 변경 link', !(await page.$('[data-set-phase]')) && !/현재 단계로 변경/.test(await page.textContent('main')));
+  // proceed with a reason through the What's Next button
+  await page.goto(`${BASE}/app/projects/${p.id}`); await page.waitForSelector('#next');
+  await gatePath("What's Next button (사유 입력)", async () => { await page.click('#next'); });
   await page.fill('#ag-in', '고객 PM 휴가로 승인 회신이 다음 주 예정');
   await page.click('[data-v="proceed"]');
   await page.waitForTimeout(600);

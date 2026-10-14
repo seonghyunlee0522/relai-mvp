@@ -40,6 +40,9 @@ test('KICKOFF: defaults, completion needs a held meeting + minutes/decisions, su
   // future meeting, 3 of 4 prepared → 준비 중 · 3/4 · 11/02 10:00 (진행 중 on What's Next)
   r = await A.c('PUT', D, { kickoff: { datetime: '2099-11-02T10:00', place: '고객사 대회의실', attendees: ['sh-client'], prep: [{ text: '안건 확정', done: true }, { text: '발표자료', done: true }, { text: '초대 발송', done: true }, { text: '회의실', done: false }] } });
   assert.equal(r.status, 200); assert.equal(kick().summary, '준비 중 · 3/4 · 11/02 10:00');
+  r = await A.c('PUT', D, { kickoff: { datetime: '2099-11-02T10:00', prep: [] } });   // empty checklist → no "준비 중 · 0/0"
+  assert.equal(r.status, 200); assert.equal(kick().summary, '예정 · 11/02 10:00');
+  r = await A.c('PUT', D, { kickoff: { datetime: '2099-11-02T10:00', place: '고객사 대회의실', attendees: ['sh-client'], prep: [{ text: '안건 확정', done: true }, { text: '발표자료', done: true }, { text: '초대 발송', done: true }, { text: '회의실', done: false }] } });
   let g = await A.c('GET', A.purl);
   assert.equal(g.json.current_phase.steps.find((s) => s.step_key === 'KICKOFF').state, 'IN_PROGRESS');
   r = await A.c('POST', `${D}/sections/KICKOFF/complete`, {}); assert.equal(r.status, 400); assert.match(r.json.error.fields.section, /아직 열리지 않았습니다/);
@@ -159,6 +162,10 @@ test('plan markdown: fixed sections, 작성되지 않음, tables, approval rows,
   assert.deepEqual(org.header, ['구분', '조직', '부서', '이름', '역할', '주요 책임']); assert.deepEqual(org.rows[0], ['고객사', 'ACME', '-', '이수진', '차장', '최종 승인']);
   const sign = tables.find((t) => t.header && t.header.includes('서명')); assert.deepEqual(sign.rows.map((r) => r[0]), ['고객사', '수행사']); assert.equal(sign.rows[1][1], '김피엠');
   assert.ok(blocks.some((b) => b.type === 'pagebreak'));
+  const rev = () => tables.find((t) => t.header && t.header.includes('내용') && t.header.includes('버전'));
+  assert.deepEqual(rev().rows, [['v0.9', '2026-10-15', '초안', '홍길동']]);   // draft: one row, matches the cover, no blank rows
+  const approved = parseReportMarkdown(buildPlanMarkdown({ ...c, approval: { status: 'COMPLETED', date: '2026-10-10', approver: null } }, { author: '홍길동', today: '2026-10-15' }).markdown).filter((x) => x.type === 'table').find((t) => t.header && t.header.includes('버전'));
+  assert.deepEqual(approved.rows, [['v1.0', '2026-10-10', '승인', '홍길동']]);
   assert.deepEqual(planVersion({ status: 'COMPLETED' }), { version: 'v1.0', file: 'v1.0', footer: '' });
   assert.equal(planVersion({ status: 'REAPPROVAL' }).footer, '승인 후 변경된 초안'); assert.match(planVersion({ status: 'REAPPROVAL' }).version, /재승인 필요/);
 });

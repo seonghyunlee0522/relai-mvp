@@ -39,7 +39,7 @@ export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
 
 /**
  * Dialogs for changing the current phase. Resolves true when the transition went through.
- * Every way out of 01 착수 (What's Next button, this dialog, the phase list's "현재 단계로 변경") passes here, so the
+ * Every way out of 01 착수 (What's Next button, ?move=next from the guide / 정의 footer) passes here, so the
  * 착수 승인 soft gate lives here: APPROVAL not complete → record it first, or leave a reason (stored in the APPROVAL
  * step note as "[승인 전 진행] 사유 · 날짜 · 이름"). The server never blocks (확인 후 허용). */
 export async function moveToPhase(pid, g, target, { next = false } = {}) {

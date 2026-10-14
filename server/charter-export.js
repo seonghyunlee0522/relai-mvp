@@ -54,7 +54,11 @@ export function buildPlanMarkdown(c, { workspaceName = '', author = '', today })
 
   /* 2. 개정 이력 */
   h2('개정 이력');
-  L.push(table(['버전', '일자', '내용', '작성자'], [['v1.0', today, '최초 작성', author], [null, null, null, null], [null, null, null, null]]));
+  // One auto row that matches the document's state; no blank rows (no document versioning yet).
+  const st = c.approval ? c.approval.status : 'TODO'; const approvedOn = (c.approval && c.approval.date) || today;
+  const revs = st === 'TODO' ? [['v0.9', today, '초안', author]] : [['v1.0', approvedOn, '승인', author]];
+  if (st === 'REAPPROVAL') revs.push(['v1.0 → 변경됨', today, '승인 후 변경 (재승인 필요)', author]);
+  L.push(table(['버전', '일자', '내용', '작성자'], revs));
 
   /* 3. 사업 개요 */
   h2('1. 사업 개요');

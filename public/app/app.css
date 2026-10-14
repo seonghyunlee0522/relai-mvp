@@ -2356,12 +2356,13 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .pmenu__list button:hover,.pmenu__list button:focus-visible{background:var(--bg-tint)}
 .term{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#EEF2F6;color:var(--text-2);font-size:11px;font-weight:700;cursor:help;vertical-align:1px;margin-left:2px;font-style:normal;letter-spacing:0}
 .term::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:260px;white-space:normal;background:var(--navy);color:#fff;font-size:12px;font-weight:500;line-height:1.5;padding:7px 10px;border-radius:8px;box-shadow:var(--sh-lift);opacity:0;pointer-events:none;transition:opacity .12s;z-index:40;text-align:left}
+.term:not(:hover):not(:focus)::after{display:none}   /* a hidden tip still widens the page (sideways scroll on phones) */
 .term:hover::after,.term:focus::after{opacity:1}
+@media (max-width:600px){.term::after{position:fixed;left:16px;right:16px;bottom:16px;transform:none;width:auto;max-width:none}}
 .pv__h{display:flex;align-items:center;gap:10px}.pv__sp{flex:1}
 .pv__terms{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);margin:-4px 0 12px}.pv__terms span{white-space:nowrap}
 .np__noapv{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text-2);background:#FFFAEB;border:1px solid #FEDF89;border-radius:8px;padding:8px 12px;margin:0 0 12px}
 .np__sum{display:block;font-size:12.5px;color:var(--blue-deep);margin-top:2px}.np__sum.is-crit{color:var(--danger)}
-.np__setcur{font-size:13px;margin-left:auto;margin-right:12px}
 .def__schint{display:block;flex-basis:100%;font-size:12px;color:var(--muted);margin:2px 0 0 2px}.def__schint:empty{display:none}
 .def__list li:has(.def__schint:not(:empty)){flex-wrap:wrap}
 .def__warn{flex-basis:100%;font-size:12px;color:#B54708;margin:2px 0 0}
