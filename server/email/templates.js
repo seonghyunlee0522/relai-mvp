@@ -25,3 +25,17 @@ export function memberInviteEmail({ workspaceName, inviterName, roleLabel, link,
   const text = `${inviterName || 'Workspace 관리자'}님이 ${workspaceName} Workspace에 초대했습니다.\n역할: ${roleLabel}\n\n초대 확인 (${until}까지 유효):\n${link}\n`;
   return { subject, html, text };
 }
+export function passwordResetEmail({ link, minutes, support }) {
+  const subject = '[RELAI] 비밀번호 재설정';
+  const html = shell('비밀번호 재설정', `<p>RELAI 계정의 비밀번호 재설정이 요청되었습니다. 아래 버튼을 눌러 새 비밀번호를 설정하세요.</p>${button(link, '새 비밀번호 설정')}
+    <p style="font-size:13px;color:#667085">이 링크는 ${minutes}분 동안 한 번만 사용할 수 있습니다. 비밀번호를 바꾸면 모든 기기에서 로그아웃됩니다. 본인이 요청하지 않았다면 이 메일을 무시하세요 — 비밀번호는 바뀌지 않습니다.</p>`, support);
+  const text = `RELAI 비밀번호 재설정\n\n아래 링크에서 새 비밀번호를 설정하세요 (${minutes}분 동안 한 번만 사용 가능):\n${link}\n\n본인이 요청하지 않았다면 이 메일을 무시하세요.\n`;
+  return { subject, html, text };
+}
+export function verifyEmailEmail({ name, link, hours, support }) {
+  const subject = '[RELAI] 이메일 주소를 인증해 주세요';
+  const html = shell('이메일 주소 인증', `<p>${name ? `${esc(name)}님, ` : ''}RELAI 가입을 환영합니다. 아래 버튼을 눌러 이메일 주소를 인증해 주세요.</p>${button(link, '이메일 인증하기')}
+    <p style="font-size:13px;color:#667085">인증 전에는 팀원 초대와 결제를 할 수 없습니다. 이 링크는 ${hours}시간 동안 유효합니다.</p>`, support);
+  const text = `RELAI 이메일 주소 인증\n\n아래 링크에서 이메일 주소를 인증해 주세요 (${hours}시간 동안 유효):\n${link}\n\n인증 전에는 팀원 초대와 결제를 할 수 없습니다.\n`;
+  return { subject, html, text };
+}

@@ -1166,3 +1166,24 @@ CREATE TABLE IF NOT EXISTS subscription_events (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_subscription_events_sub ON subscription_events(subscription_id, created_at);
+-- Auth hardening (migration 26): single-use e-mail tokens (password reset, e-mail verification) and shared rate-limit counters.
+-- auth_tokens holds only sha256(secret:purpose:token); the raw token exists only in the e-mail link.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose     TEXT NOT NULL CHECK (purpose IN ('PASSWORD_RESET','EMAIL_VERIFY')),
+  token_hash  TEXT NOT NULL UNIQUE,
+  email       TEXT NOT NULL,                     -- address the link was sent to; must still match users.email when used
+  expires_at  timestamptz NOT NULL,
+  used_at     timestamptz,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_user ON auth_tokens(user_id, purpose);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_expires ON auth_tokens(expires_at);
+-- Fixed-window counters for login/signup/reset/invite limits. key = sha256(limiter name:key); purged once reset_at has passed.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key       TEXT PRIMARY KEY,
+  count     INTEGER NOT NULL,
+  reset_at  timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at);

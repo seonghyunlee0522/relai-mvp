@@ -11,18 +11,18 @@
 import { tx } from '../db.js';
 import { ValidationError } from '../validate.js';
 import { rateLimiter, sha256 } from '../security.js';
+import { requireVerifiedEmail } from './account-security.js';
 import { requireAction } from '../authz.js';
 import * as I from '../invitations.js';
 import { startGoogleAuth, finishGoogleAuth, googleConfig, getGoogleProvider, GoogleAuthError } from './google.js';
 import { listDeliveries, getEmailProvider } from '../email/service.js';
 
 export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin }) {
-  const googleStartLimit = rateLimiter({ max: 20, windowMs: 10 * 60 * 1000 });
-  const inviteLookupLimit = rateLimiter({ max: 60, windowMs: 10 * 60 * 1000 });
-  const memberInviteLimit = rateLimiter({ max: 20, windowMs: 60 * 60 * 1000 });       // per workspace
-  const inviteEmailLimit = rateLimiter({ max: 5, windowMs: 60 * 60 * 1000 });         // per target e-mail (all kinds)
-  const platformInviteLimit = rateLimiter({ max: 30, windowMs: 60 * 60 * 1000 });     // per admin
-  const resendLimit = rateLimiter({ max: 3, windowMs: 10 * 60 * 1000 });              // per invitation
+  const googleStartLimit = rateLimiter(db, { name: 'google-start', max: 20, windowMs: 10 * 60 * 1000 });
+  const inviteLookupLimit = rateLimiter(db, { name: 'invite-lookup', max: 60, windowMs: 10 * 60 * 1000 });
+  const memberInviteLimit = rateLimiter(db, { name: 'member-invite', max: 20, windowMs: 60 * 60 * 1000 });   // per workspace
+  const inviteEmailLimit = rateLimiter(db, { name: 'invite-email', max: 5, windowMs: 60 * 60 * 1000 });      // per target e-mail (all kinds)
+  const resendLimit = rateLimiter(db, { name: 'invite-resend', max: 3, windowMs: 10 * 60 * 1000 });          // per invitation
   const send = (res, fn) => fn().catch((e) => {
     if (e instanceof I.InviteError) return fail(res, e.status, e.code, e.message, e.extra);
     if (e instanceof GoogleAuthError) return fail(res, e.status, e.code, e.message);
@@ -60,8 +60,8 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
 
   /* ---------- Google ---------- */
   app.get('/api/auth/google/start', wrap(async (req, res) => {
-    if (googleStartLimit.blocked(req.ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
-    googleStartLimit.hit(req.ip);
+    if (await googleStartLimit.blocked(req.ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
+    await googleStartLimit.hit(req.ip);
     const intentRaw = String(req.query.intent || 'login').toLowerCase();
     let intent = intentRaw === 'signup' ? 'SIGNUP' : 'LOGIN'; let invitationId = null; let returnPath = safeNext(req.query.next);
     if (req.query.invite) {
@@ -86,8 +86,8 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
 
   /* ---------- invitation landing / accept ---------- */
   app.get('/api/invitations/:token', wrap(async (req, res) => {
-    if (inviteLookupLimit.blocked(req.ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
-    inviteLookupLimit.hit(req.ip);
+    if (await inviteLookupLimit.blocked(req.ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
+    await inviteLookupLimit.hit(req.ip);
     const inv = await I.getByToken(db, req.params.token);
     if (!inv) return fail(res, 404, 'invite_not_found', '초대를 찾을 수 없습니다. 링크가 올바른지 확인해 주세요.');
     res.json({ invitation: I.publicView(inv, req.user || null), google: { enabled: googleConfig().configured || getGoogleProvider().name === 'fake' } });
@@ -102,20 +102,21 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
   /* ---------- workspace member invitations ---------- */
   const W = '/api/workspaces/:wid/invitations';
   const manage = [...guard, requireAction('member_manage')];
+  const sendInvite = [...manage, requireVerifiedEmail(fail)];   // unverified accounts cannot send invitation e-mails
   app.get(W, manage, wrap(async (req, res) => res.json({ invitations: await I.pendingForWorkspace(db, req.params.wid), all: (await I.listInvitations(db, { workspaceId: req.params.wid, size: 100 })).items })));
-  app.post(W, manage, wrap(async (req, res) => send(res, async () => {
+  app.post(W, sendInvite, wrap(async (req, res) => send(res, async () => {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    if (memberInviteLimit.blocked(req.params.wid) || (email && inviteEmailLimit.blocked(email))) return fail(res, 429, 'rate_limited', '초대 발송이 너무 많습니다. 잠시 후 다시 시도해 주세요.');
+    if (await memberInviteLimit.blocked(req.params.wid) || (email && await inviteEmailLimit.blocked(email))) return fail(res, 429, 'rate_limited', '초대 발송이 너무 많습니다. 잠시 후 다시 시도해 주세요.');
     const r = await I.createMemberInvite(db, { workspaceId: req.params.wid, email, role: req.body?.role }, req.user, req.role);
-    memberInviteLimit.hit(req.params.wid); inviteEmailLimit.hit(email);
+    await memberInviteLimit.hit(req.params.wid); await inviteEmailLimit.hit(email);
     res.status(201).json(r);
   })));
   const loadWsInvite = async (req, res) => { const inv = await I.getInvitation(db, req.params.id); if (!inv || inv.type !== 'WORKSPACE_MEMBER' || inv.workspace_id !== req.params.wid) { fail(res, 404, 'not_found', '초대를 찾을 수 없습니다.'); return null; } return inv; };
-  app.post(`${W}/:id/resend`, manage, wrap(async (req, res) => send(res, async () => {
+  app.post(`${W}/:id/resend`, sendInvite, wrap(async (req, res) => send(res, async () => {
     const inv = await loadWsInvite(req, res); if (!inv) return;
     if (inv.role === 'ADMIN' && req.role !== 'OWNER') return fail(res, 403, 'forbidden', 'ADMIN 초대는 OWNER만 재발송할 수 있습니다.');
-    if (resendLimit.blocked(inv.id) || inviteEmailLimit.blocked(inv.email)) return fail(res, 429, 'rate_limited', '재발송이 너무 잦습니다. 잠시 후 다시 시도해 주세요.');
-    resendLimit.hit(inv.id); inviteEmailLimit.hit(inv.email);
+    if (await resendLimit.blocked(inv.id) || await inviteEmailLimit.blocked(inv.email)) return fail(res, 429, 'rate_limited', '재발송이 너무 잦습니다. 잠시 후 다시 시도해 주세요.');
+    await resendLimit.hit(inv.id); await inviteEmailLimit.hit(inv.email);
     res.json(await I.resendInvite(db, inv, req.user));
   })));
   app.delete(`${W}/:id`, manage, wrap(async (req, res) => send(res, async () => { const inv = await loadWsInvite(req, res); if (!inv) return; res.json({ invitation: await I.revokeInvite(db, inv, req.user) }); })));
@@ -124,19 +125,19 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
 
 /** Mounted from admin-routes.js (before its /api/admin/* catch-all). */
 export function mountAdminInvitationRoutes(app, db, { guard: adminGuard, wrap, fail }) {
-  const platformInviteLimit = rateLimiter({ max: 30, windowMs: 60 * 60 * 1000 }); const inviteEmailLimit = rateLimiter({ max: 5, windowMs: 60 * 60 * 1000 }); const resendLimit = rateLimiter({ max: 3, windowMs: 10 * 60 * 1000 });
+  const platformInviteLimit = rateLimiter(db, { name: 'platform-invite', max: 30, windowMs: 60 * 60 * 1000 }); const inviteEmailLimit = rateLimiter(db, { name: 'invite-email', max: 5, windowMs: 60 * 60 * 1000 }); const resendLimit = rateLimiter(db, { name: 'invite-resend', max: 3, windowMs: 10 * 60 * 1000 });
   const send = (res, fn) => fn().catch((e) => { if (e instanceof I.InviteError) return fail(res, e.status, e.code, e.message, e.extra); throw e; });
   /* ---------- admin: platform invitations + operations view ---------- */
   app.get('/api/admin/invitations', adminGuard, wrap(async (req, res) => { const page = Math.max(1, Number(req.query.page) || 1); const size = Math.min(100, Math.max(1, Number(req.query.size) || 50)); res.json(await I.listInvitations(db, { type: String(req.query.type || ''), status: String(req.query.status || ''), q: String(req.query.q || '').trim(), page, size })); }));
   app.post('/api/admin/invitations', adminGuard, wrap(async (req, res) => send(res, async () => {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    if (platformInviteLimit.blocked(req.user.id) || (email && inviteEmailLimit.blocked(email))) return fail(res, 429, 'rate_limited', '초대 발송이 너무 많습니다. 잠시 후 다시 시도해 주세요.');
+    if (await platformInviteLimit.blocked(req.user.id) || (email && await inviteEmailLimit.blocked(email))) return fail(res, 429, 'rate_limited', '초대 발송이 너무 많습니다. 잠시 후 다시 시도해 주세요.');
     const r = await I.createPlatformInvite(db, { email, workspaceName: req.body?.workspace_name, inviteeName: req.body?.invitee_name, note: req.body?.note }, req.user);
-    platformInviteLimit.hit(req.user.id); inviteEmailLimit.hit(email);
+    await platformInviteLimit.hit(req.user.id); await inviteEmailLimit.hit(email);
     res.status(201).json(r);
   })));
   const loadAdminInvite = async (req, res) => { const inv = await I.getInvitation(db, req.params.id); if (!inv) { fail(res, 404, 'not_found', '초대를 찾을 수 없습니다.'); return null; } if (inv.type !== 'WORKSPACE_CREATE') { fail(res, 403, 'forbidden', 'Workspace 멤버 초대는 해당 Workspace의 OWNER/ADMIN이 관리합니다.'); return null; } return inv; };
-  app.post('/api/admin/invitations/:id/resend', adminGuard, wrap(async (req, res) => send(res, async () => { const inv = await loadAdminInvite(req, res); if (!inv) return; if (resendLimit.blocked(inv.id)) return fail(res, 429, 'rate_limited', '재발송이 너무 잦습니다. 잠시 후 다시 시도해 주세요.'); resendLimit.hit(inv.id); res.json(await I.resendInvite(db, inv, req.user)); })));
+  app.post('/api/admin/invitations/:id/resend', adminGuard, wrap(async (req, res) => send(res, async () => { const inv = await loadAdminInvite(req, res); if (!inv) return; if (await resendLimit.blocked(inv.id)) return fail(res, 429, 'rate_limited', '재발송이 너무 잦습니다. 잠시 후 다시 시도해 주세요.'); await resendLimit.hit(inv.id); res.json(await I.resendInvite(db, inv, req.user)); })));
   app.post('/api/admin/invitations/:id/revoke', adminGuard, wrap(async (req, res) => send(res, async () => { const inv = await loadAdminInvite(req, res); if (!inv) return; res.json({ invitation: await I.revokeInvite(db, inv, req.user) }); })));
   app.get('/api/admin/email-deliveries', adminGuard, wrap(async (req, res) => { const page = Math.max(1, Number(req.query.page) || 1); const size = Math.min(100, Math.max(1, Number(req.query.size) || 50)); res.json(await listDeliveries(db, { page, size, status: String(req.query.status || ''), type: String(req.query.type || ''), q: String(req.query.q || '').trim() })); }));
 

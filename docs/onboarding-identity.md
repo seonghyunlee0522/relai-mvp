@@ -16,11 +16,18 @@
 - Google login: existing GOOGLE identity → login; else verified e-mail exactly matching an existing user → auto-link (audit `GOOGLE_IDENTITY_LINKED`); else new user (personal workspace unless INVITE intent).
 - Suspended user: password login, Google login and invite acceptance blocked. Suspended workspace: member invites cannot be created/resent/accepted.
 
+## Password reset & e-mail verification (auth hardening, migration 25)
+- Tokens: `auth_tokens(purpose PASSWORD_RESET | EMAIL_VERIFY)`; 256-bit random, only `sha256(purpose:SESSION_SECRET:token)` stored; single use via one conditional `UPDATE … RETURNING`; a new request invalidates the user's older unused tokens; the token's e-mail must still equal `users.email`.
+- Reset: `/forgot-password` → `POST /api/auth/password/forgot {email}` always answers `200 {ok:true}` (unknown address, suspended account, per-address limit — no difference; production pads the response to ≥800 ms) → mail link `APP_BASE_URL/reset-password?token=…` (30 min) → `POST /api/auth/password/reset {token,password}` → new password, **all sessions deleted**, other reset links void, e-mail marked verified, PASSWORD identity added if missing (Google-only users can set a password), audit `PASSWORD_RESET`. User logs in again.
+- Verification: direct password signup sends `APP_BASE_URL/verify-email?token=…` (48 h). `POST /api/auth/email/verify {token}` works without a session; `POST /api/auth/email/resend` (logged in, 3/h) rotates the link. `/api/me`, login and signup return `user.email_verified`. Google and invitation signups are verified at creation.
+- **Unverified users may:** log in, use their own personal workspace (projects, requirements, WBS, reports, AI within plan limits), accept invitations. **They may not:** send or resend workspace member invitations (`403 email_unverified`) or pay — billing routes must mount `requireVerifiedEmail(fail)` from `server/auth/account-security.js` on checkout / plan change. Adding an already-registered user via `POST …/members` sends no e-mail and stays allowed. An in-app banner offers [인증 메일 다시 받기].
+- Pages `/forgot-password`, `/reset-password`, `/verify-email` are served `Cache-Control: no-store` + `Referrer-Policy: no-referrer`, and the page strips the token from the address bar.
+
 ## Audit
 `admin_audit_logs.actor_kind` = `ADMIN` (operator actions, default view) | `USER` (signup/accept/member-invite events). Admin Audit page shows `ADMIN` by default (`?actor_kind=USER|all`).
 
 ## ENV
-`APP_BASE_URL`, `EMAIL_PROVIDER=fake|resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`, `INVITE_EXPIRY_DAYS=7`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_PROVIDER=fake` (dev only). Production requires https `APP_BASE_URL` and `RESEND_API_KEY` when `EMAIL_PROVIDER=resend`.
+`APP_BASE_URL` (also the base of reset/verify links), `CRON_SECRET` (enables `GET /api/cron/purge`), `EMAIL_PROVIDER=fake|resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`, `INVITE_EXPIRY_DAYS=7`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_PROVIDER=fake` (dev only). Production requires https `APP_BASE_URL` and `RESEND_API_KEY` when `EMAIL_PROVIDER=resend`.
 
 ## Tests
-`server/test/onboarding.test.js` (auth regression, platform/member invitations, concurrency, Google, e-mail, admin). Playwright flow: `/tmp/onboard-flow.cjs` (needs `EMAIL_PROVIDER=fake GOOGLE_PROVIDER=fake`; reads the fake outbox via dev-only `/api/_dev/email-outbox`).
+`server/test/auth-hardening.test.js` (reset, verification, shared rate limits, purge). `server/test/onboarding.test.js` (auth regression, platform/member invitations, concurrency, Google, e-mail, admin). Playwright flow: `/tmp/onboard-flow.cjs` (needs `EMAIL_PROVIDER=fake GOOGLE_PROVIDER=fake`; reads the fake outbox via dev-only `/api/_dev/email-outbox`).

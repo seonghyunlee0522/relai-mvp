@@ -15,12 +15,12 @@ import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } fr
 const catalogue = () => Object.values(PLANS).map((p) => ({ key: p.key, label: p.label, price_monthly: p.price_monthly, limits: p.limits }));
 
 export function mountBillingWebhook(app, db, { provider, fail }) {
-  const limiter = rateLimiter({ max: 300, windowMs: 60 * 1000 });   // per source IP; never shared with the login/signup limiters
+  const limiter = rateLimiter(db, { name: 'billing-webhook', max: 300, windowMs: 60 * 1000 });   // per source IP; never shared with the login/signup limiters
   app.post('/api/billing/webhook/:provider', express.raw({ type: '*/*', limit: '256kb' }), async (req, res, next) => {
     try {
       if (!provider || req.params.provider !== provider.name) return fail(res, 404, 'not_found', '찾을 수 없습니다.');
-      if (limiter.blocked(req.ip)) return fail(res, 429, 'rate_limited', '요청이 너무 많습니다.');
-      limiter.hit(req.ip);
+      if (await limiter.blocked(req.ip)) return fail(res, 429, 'rate_limited', '요청이 너무 많습니다.');
+      await limiter.hit(req.ip);
       const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       let ev;
       try { ev = await provider.handleWebhook({ rawBody, headers: req.headers }); }

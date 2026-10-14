@@ -27,6 +27,8 @@ import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
 import { mountAuthRoutes } from './auth/routes.js';
+import { mountAccountSecurityRoutes, sendVerificationEmail } from './auth/account-security.js';
+import { mountMaintenanceRoutes } from './maintenance.js';
 import { createDirectSignupUser, createUser, touchIdentity, normEmail } from './accounts.js';
 import * as I from './invitations.js';
 import { writeAudit } from './admin.js';
@@ -71,13 +73,14 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     next();
   });
 
-  const loginLimit = rateLimiter({ max: 8, windowMs: 15 * 60 * 1000 });
-  const signupLimit = rateLimiter({ max: 10, windowMs: 60 * 60 * 1000 });
+  // Postgres-backed (rate_limits table): shared by every serverless instance, survives cold starts.
+  const loginLimit = rateLimiter(db, { name: 'login', max: 8, windowMs: 15 * 60 * 1000 });
+  const signupLimit = rateLimiter(db, { name: 'signup', max: 10, windowMs: 60 * 60 * 1000 });
 
   /* ---------- helpers ---------- */
   const q = {
     userByEmail: { get: (email) => db.get('SELECT * FROM users WHERE email = ?', [email]) },
-    userById: { get: (id) => db.get('SELECT id, email, name, status, system_role FROM users WHERE id = ?', [id]) },
+    userById: { get: (id) => db.get('SELECT id, email, name, status, system_role, email_verified_at FROM users WHERE id = ?', [id]) },
     session: { get: (h, now) => db.get('SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?', [h, now]) },
     insSession: { run: (h, uid, exp) => db.run('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?,?,?)', [h, uid, exp]) },
     delSession: { run: (h) => db.run('DELETE FROM sessions WHERE token_hash = ?', [h]) },
@@ -135,7 +138,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   const requireAuth = (req, res, next) =>
     req.user ? next() : fail(res, 401, 'unauthenticated', '로그인이 필요합니다.');
-  const toPublicUser = (u) => ({ id: u.id, email: u.email, name: u.name, system_role: u.system_role || 'NONE' });
+  const toPublicUser = (u) => ({ id: u.id, email: u.email, name: u.name, system_role: u.system_role || 'NONE', email_verified: Boolean(u.email_verified_at) });
 
   /**
    * Single choke point for tenant isolation. Every /api/workspaces/:wid/* route passes through here.
@@ -170,8 +173,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   app.post('/api/auth/signup', wrap(async (req, res) => {
     const ip = req.ip;
-    if (signupLimit.blocked(ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
-    signupLimit.hit(ip);
+    if (await signupLimit.blocked(ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
+    await signupLimit.hit(ip);
     const { name, email, password } = parseSignup(req.body);
     if (await q.userByEmail.get(email)) return fail(res, 409, 'email_taken', '이미 가입된 이메일입니다.', { fields: { email: '이미 가입된 이메일입니다.' } });
     // Signup through an invitation link: the server reads the invitation (never workspace/role from the browser); the e-mail must match;
@@ -200,22 +203,25 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     }
     await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [userId]);
     await startSession(res, userId);
-    res.status(201).json({ user: { id: userId, email, name, system_role: 'NONE' }, workspaces: await q.memberships.all(userId), accepted: accepted ? { type: accepted.type, workspace_id: accepted.workspaceId } : null });
+    // Direct signup: the address is unproven until the link is clicked (invite signups are verified above). A failed send is
+    // recorded in email_deliveries and the user can resend from the app banner — signup itself still succeeds.
+    if (!invite) await sendVerificationEmail(db, { id: userId, email: normEmail(email), name });
+    res.status(201).json({ user: { id: userId, email, name, system_role: 'NONE', email_verified: Boolean(invite) }, workspaces: await q.memberships.all(userId), accepted: accepted ? { type: accepted.type, workspace_id: accepted.workspaceId } : null });
   }));
 
   app.post('/api/auth/login', wrap(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
     const key = `${req.ip}|${email}`;
-    if (loginLimit.blocked(key)) return fail(res, 429, 'rate_limited', '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.');
+    if (await loginLimit.blocked(key)) return fail(res, 429, 'rate_limited', '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.');
     const user = await q.userByEmail.get(email);
     // Always run a hash comparison so response time does not reveal whether the email exists.
     const ok = await verifyPassword(password, user?.password_hash ?? 'scrypt$16384$AAAAAAAAAAAAAAAAAAAAAA==$AAAA');
     if (!user || !user.password_hash || !ok) {
-      loginLimit.hit(key);
+      await loginLimit.hit(key);
       return fail(res, 401, 'invalid_credentials', '이메일 또는 비밀번호가 올바르지 않습니다.');
     }
-    loginLimit.reset(key);
+    await loginLimit.reset(key);
     if (user.status !== 'ACTIVE') return fail(res, 403, 'account_suspended', '정지된 계정입니다. 운영자에게 문의해 주세요.');
     await afterLogin(req, res, user);
     await touchIdentity(db, 'PASSWORD', user.id);
@@ -1007,6 +1013,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base });   // Phase 11 AI (draft/candidate endpoints + approval commits)
   mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base });   // Phase 12 integrations (Jira)
   mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin });   // Phase 13 Google sign-in + invitations
+  mountAccountSecurityRoutes({ app, db, wrap, fail, requireAuth });                       // password reset + e-mail verification
+  mountMaintenanceRoutes({ app, db, wrap, fail });                                        // GET /api/cron/purge (Vercel cron)
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
   mountBillingRoutes({ app, db, guard, wrap, fail, provider: billingProvider });        // Phase 10 billing: plan summary, checkout, cancel
   const wrbase = `${base}/:pid/weekly-reports`;
@@ -1045,6 +1053,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
   app.get(['/login', '/signup'], (req, res) => {
     if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect('/app');
+    res.sendFile(resolve(pub, 'app/index.html'));
+  });
+  // Account-security pages work with or without a session. The token sits in the query string, so never cache and never send a Referer.
+  app.get(['/forgot-password', '/reset-password', '/verify-email'], (req, res) => {
+    res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
     res.sendFile(resolve(pub, 'app/index.html'));
   });
   app.get(/^\/invite\/[A-Za-z0-9_-]+\/?$/, (req, res) => { res.set('Cache-Control', 'no-store'); res.sendFile(resolve(pub, 'app/index.html')); });   // public invite landing (Phase 13)

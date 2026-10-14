@@ -17,5 +17,11 @@
   ],
   "regions": [
     "sin1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/purge",
+      "schedule": "30 18 * * *"
+    }
   ]
 }
