@@ -43,7 +43,7 @@ export function verifyEmailEmail({ name, link, hours, support }) {
 export function renewalReminderEmail({ workspaceName, periodEnd, seats, link, support }) {
   const until = new Date(periodEnd).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
   const subject = `[RELAI] ${workspaceName} Team 플랜 이용 기간이 ${until}에 끝납니다`;
-  const html = shell('Team 플랜 이용 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> Workspace의 Team 플랜${seats ? `(${esc(seats)}석)` : ''} 이용 기간이 <b>${esc(until)}</b>에 끝납니다.</p>
+  const html = shell('Team 플랜 이용 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> Workspace의 Team 플랜${seats ? `(사용자 ${esc(seats)}명)` : ''} 이용 기간이 <b>${esc(until)}</b>에 끝납니다.</p>
     <p>자동 결제되지 않는 상품이라 연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다. 데이터는 삭제되지 않으며 새 항목 추가만 제한됩니다.</p>${link ? button(link, '이용 기간 연장하기') : ''}
     <p style="font-size:13px;color:#667085">연장은 Workspace OWNER가 설정 › 플랜 · 결제에서 할 수 있습니다. 남은 기간은 그대로 이어집니다.</p>`, support);
   const text = `${workspaceName} Workspace의 Team 플랜 이용 기간이 ${until}에 끝납니다.\n연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다(데이터는 유지).\n${link ? `\n연장하기: ${link}\n` : ''}`;

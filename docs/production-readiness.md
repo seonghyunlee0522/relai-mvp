@@ -96,11 +96,11 @@ DATABASE_URL=postgres://…/relai node scripts/migrate-sqlite-to-postgres.js --s
 - Provider 인터페이스 `server/billing/provider.js`: `createCheckout / handleWebhook / cancel`. Provider는 자기 Webhook을 정규화 이벤트(`subscription.activated`, `payment.succeeded`, `payment.failed`, `subscription.canceled`, `subscription.expired`)로 바꿔 돌려준다. 실제 Provider는 미선정 → fake만 등록.
 - 상태 전이는 `server/billing/subscriptions.js transition()` 한 곳. 유효 플랜: ACTIVE(해지 예약 + 기간 종료 시 FREE) · PAST_DUE는 `grace_period_end`(실패 후 7일)까지 유지 · CANCELED/EXPIRED는 FREE.
 **NicePay (billing-nicepay, migration v29)**:
-- 가격은 `server/plans.js` 한 곳(부가세 별도): FREE ₩0 · TEAM ₩15,000/석/월 연간 선결제 또는 ₩19,000/석 1개월, 최소 3석 · ENTERPRISE ₩25,000~/석 영업 문의. 파운딩: 선착순 10개 Workspace 첫 1년 40% 할인. 결제 금액 = 공급가액 + 부가세 10%.
-- 서버 가격: checkout이 `billing_orders` 행(좌석·기간·할인·VAT·합계)을 만들고, 결제창·승인·웹훅 모두 이 `amount`와 대조한다(금액 위변조 방지). 클라이언트가 보낸 금액은 쓰지 않는다.
+- 가격은 `server/plans.js` 한 곳(부가세 별도, 2026-10-14 v2): FREE ₩0 · TEAM ₩20,000/월 · 워크스페이스 1개(소유자 포함) + 사용자 추가 1명당 ₩5,000/월, 최소 인원 없음, 1개월 또는 연간 선결제(12개월 × 월 요금, `ANNUAL_DISCOUNT_PCT` 기본 0) · ENTERPRISE 가격 비공개, 영업 문의. 파운딩: 선착순 10개 Workspace 첫 1년 40% 할인. 결제 금액 = (월 요금 × 개월 − 할인) + 부가세 10%.
+- 서버 가격: checkout이 `billing_orders` 행(사용자 수·기간·할인·VAT·합계)을 만들고, 결제창·승인·웹훅 모두 이 `amount`와 대조한다(금액 위변조 방지). 클라이언트가 보낸 금액은 쓰지 않는다.
 - 기본 경로 = 일반결제(서버 승인): `/api/billing/nicepay/pay/:orderId`(결제창) → NicePay가 `/api/billing/nicepay/return`으로 POST → 인증 서명 `sha256(authToken+clientId+amount+secretKey)`·금액·clientId 검증 → 승인 `POST /v1/payments/{tid}` → 응답 서명 `sha256(tid+amount+ediDate+secretKey)`·금액·orderId 검증 → `subscription.activated`(이벤트 id `paid:<tid>`, 웹훅과 같은 id라 한 번만 반영). 승인 응답이 끊기면 망취소, 반영 실패 시 자동 환불.
 - 일반결제는 자동 갱신 없음(`auto_renew=false`): `current_period_end`만 연장(남은 기간에 이어서), 기간이 끝나면 FREE. 만료 7일 전 OWNER에게 연장 안내 메일(`GET /api/billing/cron/daily`, Vercel Cron 매일 00:00 UTC).
-- TEAM 멤버 한도 = 구매 좌석 수(`subscriptions.seats`).
+- TEAM 멤버 한도 = 구매 사용자 수(소유자 포함, `subscriptions.seats` = 1 + 추가 사용자).
 - 정기결제(빌키): `NICEPAY_RECURRING_ENABLED=true`일 때만. 카드정보는 AES 암호화(encData)로 NicePay에만 전달하고 저장하지 않는다. 빌키는 `INTEGRATION_ENCRYPTION_KEY`로 암호화해 `subscriptions.billing_key_enc`에만 둔다. 갱신 청구는 같은 cron, 실패 시 PAST_DUE + 7일 유예, 하루 1회 재시도. OWNER 해지 시 빌키 삭제.
 - 환불: `POST /api/billing/admin/payments/:id/refund {reason}`(SYSTEM_ADMIN) → NicePay 전체 취소 → 결제 REFUNDED, 이용 기간에서 해당 주문 개월 수 차감(남는 기간이 없으면 즉시 CANCELED). Audit `REFUND_PAYMENT`.
 - OWNER 해지(`requestCancel`)는 Provider 호출을 DB 트랜잭션 밖에서 한다(확인 → provider.cancel → 잠금·재확인·전이).

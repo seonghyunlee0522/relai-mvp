@@ -11,7 +11,7 @@
  *            provider_tid, moid, paid_at, failed_at, failure_code, failure_message, created_at)
  * Columns are whitelisted below — billing keys, card data, merchant keys, raw TIDs never leave this module.
  */
-import { PLANS } from './plans.js';
+import { PLANS, monthlyPrice } from './plans.js';
 import { GRANTS_PLAN_SQL } from './billing/subscriptions.js';
 
 const SUB_COLS = ['id', 'workspace_id', 'plan', 'status', 'seats', 'billing_cycle', 'auto_renew', 'current_period_start', 'current_period_end', 'next_billing_at', 'cancel_at_period_end', 'grace_period_end', 'payment_method_summary', 'created_at', 'updated_at'];
@@ -93,9 +93,9 @@ export async function billingDashboard(db) {
   const t = await billingTables(db); if (!(t.subscriptions && t.payments)) return null;
   const subs = await db.get(`SELECT COALESCE(SUM((status = 'ACTIVE' AND plan <> 'FREE')::int), 0) AS team_workspaces, COALESCE(SUM((status = ANY(?))::int), 0) AS past_due FROM subscriptions`, [PAST_DUE]);
   const pays = await db.get(`SELECT COALESCE(SUM((status = ANY(?) AND created_at >= now() - interval '7 days')::int), 0) AS failed_7d FROM payments`, [FAILED]);
-  // MRR at list price (VAT and founding discount excluded): per-seat monthly price of the subscription's cycle × seats.
+  // MRR at list price (VAT and discounts excluded): the plan's monthly price for the subscription's user count.
   const r = await db.all(`SELECT plan, billing_cycle, COALESCE(seats, 1) AS seats FROM subscriptions s WHERE ${GRANTS_PLAN_SQL}`);
-  const mrr = r.reduce((sum, x) => { const p = PLANS[x.plan]; const unit = x.billing_cycle === 'ANNUAL' ? p?.price_annual_monthly : p?.price_monthly; return sum + (unit || 0) * Number(x.seats); }, 0);
+  const mrr = r.reduce((sum, x) => { const p = PLANS[x.plan]; return sum + (p?.base_monthly ? monthlyPrice(p, Number(x.seats)) : 0); }, 0);
   const failed = (await db.all(`SELECT ${pick(PAY_COLS, t.payments, 'p')}, w.name AS workspace_name FROM payments p JOIN workspaces w ON w.id = p.workspace_id WHERE p.status = ANY(?) AND p.created_at >= now() - interval '7 days' ORDER BY p.created_at DESC LIMIT 10`, [FAILED])).map(payRow);
   const pastDue = (await db.all(`SELECT ${pick(SUB_COLS, t.subscriptions, 's')}, w.name AS workspace_name FROM subscriptions s JOIN workspaces w ON w.id = s.workspace_id WHERE s.status = ANY(?) ORDER BY s.updated_at DESC NULLS LAST LIMIT 10`, [PAST_DUE])).map(subRow);
   return { kpis: { team_workspaces: subs.team_workspaces, past_due: subs.past_due, payment_failed_7d: pays.failed_7d, mrr }, attention: { payment_failed: failed, past_due: pastDue } };

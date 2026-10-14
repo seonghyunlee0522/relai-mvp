@@ -751,7 +751,7 @@ p{margin:0}
       <p class="lead" style="margin-top:18px">Free로 프로젝트 하나를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 Team 플랜으로 한도 없이 사용하세요.</p>
     </div>
     <p class="pricing__offer reveal"><b>파운딩 고객 혜택</b> · 선착순 10개 팀, 첫 1년 <b>40% 할인</b></p>
-    <!-- 가격은 server/plans.js(PLANS · FOUNDING_OFFER)와 같은 값이어야 한다 -->
+    <!-- 가격은 server/plans.js(PLANS.TEAM base_monthly · extra_user_monthly, FOUNDING_OFFER)와 같은 값이어야 한다 -->
     <div class="pgrid reveal">
       <div class="plan">
         <div class="plan__n">Free</div>
@@ -768,21 +768,21 @@ p{margin:0}
       </div>
       <div class="plan plan--team">
         <div class="plan__n">Team</div>
-        <div class="plan__p" data-price="TEAM">₩15,000 <small>/ 사용자 · 월</small></div>
-        <p class="plan__s">연간 결제 기준 · 월 결제 시 ₩19,000 · 최소 3명</p>
+        <div class="plan__p" data-price="TEAM">₩20,000 <small>/ 월</small></div>
+        <p class="plan__s">워크스페이스 1개(소유자 포함) · 사용자 추가 1명당 ₩5,000/월</p>
         <p class="plan__d">여러 프로젝트와 팀을 한 Workspace에서 운영하는 팀을 위한 플랜.</p>
         <ul>
           <li>프로젝트 · 요구사항 · WBS 무제한</li>
           <li>주간보고 무제한</li>
-          <li>구매한 좌석 수만큼 멤버</li>
+          <li>필요한 만큼 사용자 추가 (최소 인원 없음)</li>
           <li>Free의 모든 기능</li>
-          <li>카드 결제 · 자동 결제 없음 (기간 종료 전 연장 안내)</li>
+          <li>월 단위 또는 연간 선결제(12개월) · 자동 결제 없음</li>
         </ul>
         <a href="/signup" class="btn btn--primary btn--block" data-auth="start" data-loc="pricing_team">무료로 시작 후 업그레이드</a>
       </div>
       <div class="plan">
         <div class="plan__n">Enterprise</div>
-        <div class="plan__p" data-price="ENTERPRISE">₩25,000~ <small>/ 사용자 · 월</small></div>
+        <div class="plan__p" data-price="ENTERPRISE">영업 문의</div>
         <p class="plan__s">조직 규모·요구사항에 맞춘 견적</p>
         <p class="plan__d">여러 조직과 대규모 프로젝트를 운영하는 기업을 위한 플랜.</p>
         <ul>

@@ -18,13 +18,13 @@ import { emailConfig } from '../email/config.js';
 import { requireVerifiedEmail } from '../auth/account-security.js';
 import { BillingError } from './provider.js';
 import { parseCard, safeEqual } from './nicepay.js';
-import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, foundingEligible, minSeats, publicOrder } from './orders.js';
+import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, foundingEligible, minUsers, MAX_USERS, publicOrder } from './orders.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals } from './cron.js';
 import { grantDueMonthlyCredits } from './ai-grants.js';
 
-const catalogue = () => Object.values(PLANS).map((p) => ({ key: p.key, label: p.label, price_monthly: p.price_monthly, price_annual_monthly: p.price_annual_monthly ?? null,
-  min_seats: p.min_seats ?? null, per_seat: Boolean(p.per_seat), price_from: Boolean(p.price_from), contact_sales: Boolean(p.contact_sales), limits: p.limits }));
+const catalogue = () => Object.values(PLANS).map((p) => ({ key: p.key, label: p.label, base_monthly: p.contact_sales ? null : (p.base_monthly ?? 0),
+  included_users: p.included_users ?? null, extra_user_monthly: p.extra_user_monthly ?? null, contact_sales: Boolean(p.contact_sales), limits: p.limits }));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
 const settingsUrl = (status, reason) => `/app/settings?checkout=${status}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}#billing`;
@@ -95,8 +95,8 @@ h1{font-size:20px;margin:0 0 16px}table{width:100%;border-collapse:collapse;font
 .total td,.total th{border-top:1px solid #EEF1F6;padding-top:12px;font-size:16px;color:#101828}button{width:100%;margin-top:20px;padding:13px;border:0;border-radius:8px;background:#2E51C4;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
 .note{font-size:12.5px;color:#667085;margin-top:14px;line-height:1.5}.err{color:#B42318;font-size:14px;margin-top:12px;min-height:1em}a{color:#2E51C4}</style></head>
 <body><main><div class="card"><h1>${esc(order.goods_name)}</h1>${sandbox ? '<p class="note">테스트(샌드박스) 결제입니다. 실제 청구되지 않습니다.</p>' : ''}<table>
-${row('좌석', `${order.seats}석`)}${row('이용 기간', order.months === 12 ? '12개월 (연간 선결제)' : '1개월')}${row('정가', won(order.list_amount))}
-${order.discount_amount ? row(`파운딩 고객 할인 (${FOUNDING_OFFER.pct}%)`, `−${won(order.discount_amount)}`) : ''}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}
+${row('사용자', `${order.seats}명 (소유자 포함)`)}${row('월 이용료', `${won(order.unit_price)} / 월`)}${row('이용 기간', order.months === 12 ? '12개월 (연간 선결제)' : '1개월')}${row('정가', won(order.list_amount))}
+${order.discount_amount ? row(order.founding ? `할인 (파운딩 고객 ${FOUNDING_OFFER.pct}% 포함)` : '할인', `−${won(order.discount_amount)}`) : ''}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}
 <tr class="total"><th>결제 금액</th><td><b>${esc(won(order.amount))}</b></td></tr></table>
 <button id="pay" type="button">${esc(won(order.amount))} 결제하기</button><p class="err" id="err" role="alert"></p>
 <p class="note">자동 결제되지 않습니다. 이용 기간이 끝나기 7일 전에 연장 안내 메일을 보내 드립니다. <a href="/app/settings#billing">결제 취소하고 돌아가기</a></p></div></main>
@@ -121,14 +121,15 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const canPurchase = plan === 'FREE' || (subscription && !subscription.auto_renew);
     return { billing: { plan, plan_label: PLANS[plan].label, subscription, usage: await workspaceUsage(db, wid, plan),
       plans: catalogue(), dims: USAGE_DIMS, provider_available: Boolean(provider), can_manage: can(role, 'billing'),
-      checkout: { can_purchase: Boolean(canPurchase), cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, unit_price: c.unit(PLANS.TEAM) })),
-        min_seats: await minSeats(db, wid), founding_eligible: await foundingEligible(db, wid), founding: FOUNDING_OFFER, vat_rate: VAT_RATE, prices_exclude_vat: true,
+      checkout: { can_purchase: Boolean(canPurchase), cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
+        base_monthly: PLANS.TEAM.base_monthly, included_users: PLANS.TEAM.included_users, extra_user_monthly: PLANS.TEAM.extra_user_monthly,
+        min_users: await minUsers(db, wid), max_users: MAX_USERS, founding_eligible: await foundingEligible(db, wid), founding: FOUNDING_OFFER, vat_rate: VAT_RATE, prices_exclude_vat: true,
         recurring_available: Boolean(provider?.recurringEnabled), sandbox: provider?.mode === 'sandbox' } } };
   };
   app.get(b, guard, wrap(async (req, res) => res.json(await summary(req.params.wid, req.role))));
 
   app.get(`${b}/quote`, guard, wrap(async (req, res) => {
-    try { res.json({ quote: await quoteFor(db, req.params.wid, { plan: 'TEAM', cycle: String(req.query.cycle || 'ANNUAL'), seats: req.query.seats }) }); }
+    try { res.json({ quote: await quoteFor(db, req.params.wid, { plan: 'TEAM', cycle: String(req.query.cycle || 'ANNUAL'), users: req.query.users ?? req.query.seats }) }); }
     catch (e) { if (e instanceof OrderError) return orderFail(res, e); throw e; }
   }));
 
@@ -139,7 +140,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (!provider) { unavailable(res); return null; }
     const sub = await getSubscription(db, req.params.wid);
     if ((await effectivePlan(db, req.params.wid)) === plan && sub?.auto_renew) { fail(res, 409, 'already_subscribed', '이미 Team 플랜을 사용 중입니다.'); return null; }
-    try { return await quoteFor(db, req.params.wid, { plan, cycle: String(req.body?.cycle || 'ANNUAL'), seats: req.body?.seats }); }
+    try { return await quoteFor(db, req.params.wid, { plan, cycle: String(req.body?.cycle || 'ANNUAL'), users: req.body?.users ?? req.body?.seats }); }
     catch (e) { if (e instanceof OrderError) { orderFail(res, e); return null; } throw e; }
   };
 

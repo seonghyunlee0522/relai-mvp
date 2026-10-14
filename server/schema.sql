@@ -1164,9 +1164,9 @@ CREATE TABLE IF NOT EXISTS billing_orders (
   cycle            TEXT NOT NULL CHECK (cycle IN ('ANNUAL','MONTHLY')),
   seats            INTEGER NOT NULL,
   months           INTEGER NOT NULL,
-  unit_price       INTEGER NOT NULL,                 -- per seat per month, VAT excluded
-  list_amount      INTEGER NOT NULL,                 -- unit_price × seats × months
-  discount_amount  INTEGER NOT NULL DEFAULT 0,       -- founding offer
+  unit_price       INTEGER NOT NULL,                 -- monthly price for all `seats` users, VAT excluded (pricing v2; v1 rows: per seat)
+  list_amount      INTEGER NOT NULL,                 -- unit_price × months (v1 rows: unit_price × seats × months)
+  discount_amount  INTEGER NOT NULL DEFAULT 0,       -- annual-cycle discount + founding offer
   supply_amount    INTEGER NOT NULL,                 -- list − discount (공급가액)
   vat_amount       INTEGER NOT NULL,
   amount           INTEGER NOT NULL,                 -- charged: supply + VAT
