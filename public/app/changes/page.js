@@ -187,7 +187,7 @@ export async function changesPage(id) {
       if (st === 'DRAFT') return html`<div class="decision"><p>작성 중인 변경 요청입니다. 내용과 영향을 정리한 뒤 검토를 요청하세요.</p>${raw(ro ? '' : '<button class="btn btn--primary" data-tr="submit">검토 요청</button>')}</div>`;
       if (st === 'UNDER_REVIEW') return html`<div class="decision decision--review"><p><b>검토 중인 변경 요청입니다.</b> ${c.submitted_at ? fmtShort(c.submitted_at) + ' 검토 요청' : ''}</p>
         ${raw(c.approver_name ? html`<p class="hint">지정 승인자: <b>${c.approver_name}</b></p>` : '')}
-        ${raw(ro ? '' : c.review && !c.review.allowed ? html`<p class="hint">${c.review.reason === 'author' ? '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. Owner·Admin 또는 지정 승인자가 결정합니다.' : '승인·반려는 Owner·Admin 또는 지정 승인자만 할 수 있습니다.'}</p>`
+        ${raw(ro ? '' : c.review && !c.review.allowed ? html`<p class="hint">${c.review.reason === 'author' ? '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. 소유자·관리자 또는 지정 승인자가 결정합니다.' : '승인·반려는 소유자·관리자 또는 지정 승인자만 할 수 있습니다.'}</p>`
           : html`<p class="hint" style="margin:0 0 8px">고객 결정을 받아 기록하세요. 승인은 고객이 누가·언제·어떻게 승인했는지와 함께 남습니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--secondary" data-tr="reject">반려</button></div>`)}</div>`;
       if (st === 'APPROVED') {
         const firstReq = liveReq[0]; const firstImp = liveImp[0];
@@ -195,7 +195,7 @@ export async function changesPage(id) {
         <p class="decision__targets"><span>반영 대상</span>
           <a href="/app/projects/${p.id}/requirements?cr=${c.id}${firstReq ? '&sel=' + firstReq.requirement_id : ''}" data-link>관련 요구사항 <b>${liveReq.length}</b></a>
           <a href="/app/projects/${p.id}/wbs?cr=${c.id}${firstImp ? '&sel=' + firstImp.wbs_item_id : ''}" data-link>영향 WBS <b>${liveImp.length}</b></a></p>
-        <p>각 화면에서 직접 반영하세요. 요구사항 수정은 이 변경 요청을 출처로 History에 남습니다. 반영이 끝나면 '반영 완료'로 처리하세요.</p>
+        <p>각 화면에서 직접 반영하세요. 요구사항 수정은 이 변경 요청을 출처로 변경 이력에 남습니다. 반영이 끝나면 '반영 완료'로 처리하세요.</p>
         <div class="actions" style="margin-top:0"><a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/requirements?cr=${c.id}${firstReq ? '&sel=' + firstReq.requirement_id : ''}" data-link>요구사항에서 반영</a><a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/wbs?cr=${c.id}${firstImp ? '&sel=' + firstImp.wbs_item_id : ''}" data-link>WBS에서 반영</a>${raw(ro ? '' : '<button class="btn btn--primary btn--sm" data-tr="implement">반영 완료</button>')}</div></div>`;
       }
       if (st === 'IMPLEMENTED') return html`<div class="decision decision--ok"><p><b>반영 완료된 변경 요청입니다.</b> ${c.implemented_at ? fmtShort(c.implemented_at) + ' 반영' : ''}${c.decision_note ? raw(html`<br><q>${c.decision_note}</q>`) : ''}</p>${raw(approvedLine(c))}</div>`;
@@ -229,7 +229,7 @@ export async function changesPage(id) {
         <div class="dfield"><span>요청자 조직</span><div><input class="input input--sm" data-field="requester_organization" value="${c.requester_organization}" maxlength="100" placeholder="조직" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>우선순위</span><div><select class="select select--sm" data-field="priority" ${fieldsRo ? 'disabled' : ''}>${raw(opt(CR_PRIORITY, c.priority))}</select></div></div>
         <div class="dfield"><span>요청일</span><div><input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${fieldsRo ? 'disabled' : ''}></div></div>
-        <div class="dfield"><span>승인자</span><div><select class="select select--sm" data-field="approver_user_id" title="Owner·Admin 외에 이 변경 요청을 승인할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">Owner·Admin</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select></div></div>
+        <div class="dfield"><span>내부 처리자</span><div><select class="select select--sm" data-field="approver_user_id" title="소유자·관리자 외에 이 변경 요청을 처리할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">소유자·관리자</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select></div></div>
       </div>
       <div class="dsave" id="dsave"></div>
 

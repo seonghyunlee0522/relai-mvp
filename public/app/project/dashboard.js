@@ -50,7 +50,7 @@ export function bindReportPanel(p, reports, archived) {
 export function periodDialog(def, onSubmit) {
   const el = document.createElement('div'); el.className = 'scrim';
   el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pdT"><h3 id="pdT">주간보고 생성</h3>
-    <div class="dialog__b">보고 기간을 확인하세요. 기본값은 이번 주 월요일부터 오늘(주가 끝났으면 금요일)까지입니다. 기간 내 상태 변경, 테스트 실행, 승인·반영 이력을 기준으로 보고서를 만듭니다.</div>
+    <div class="dialog__b">보고 기간을 확인하세요. 기본값은 이번 주 월요일부터 일요일까지입니다. 기간 내 상태 변경, 테스트 실행, 승인·반영 이력을 기준으로 보고서를 만듭니다.</div>
     <div class="row2"><div class="field"><label for="pd-s">시작일</label><input class="input" type="date" id="pd-s" value="${def?.period_start || ''}"><div class="err" data-for="period_start"></div></div>
       <div class="field"><label for="pd-e">종료일</label><input class="input" type="date" id="pd-e" value="${def?.period_end || ''}"><div class="err" data-for="period_end"></div></div></div>
     <div class="actions"><button class="btn btn--secondary" data-v="0">취소</button><button class="btn btn--primary" data-v="1">생성</button></div></div>`;

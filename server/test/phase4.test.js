@@ -210,11 +210,11 @@ test('US-5 issues: BLOCKED → RESOLVED directly; empty resolution allowed; 0 is
   const { server, client } = await boot();
   const A = await setup(client); await toPhase(A, 'DEVELOPMENT');
   let a = step((await A.c('GET', A.purl)).json, 'DEVELOPMENT', 'ISSUES');
-  assert.equal(a.text, '아직 기록된 Issue가 없습니다. 문제가 없었다면 완료 처리하세요.'); assert.equal(a.manual, true);
+  assert.equal(a.text, '아직 기록된 이슈가 없습니다. 문제가 없었다면 완료 처리하세요.'); assert.equal(a.manual, true);
   const iss = (await A.c('POST', `${A.purl}/issues`, { title: '배포 서버 접근 불가', severity: 'CRITICAL' })).json.issue;
   assert.equal((await A.c('PATCH', `${A.purl}/issues/${iss.id}`, { status: 'BLOCKED' })).status, 200);
   a = step((await A.c('GET', A.purl)).json, 'DEVELOPMENT', 'ISSUES');
-  assert.match(a.text, /열린 Issue 1건 · 심각 1건 · 차단됨 1건/);
+  assert.match(a.text, /열린 이슈 1건 · 심각 1건 · 차단됨 1건/);
   const r = await A.c('PATCH', `${A.purl}/issues/${iss.id}`, { status: 'RESOLVED', resolution: '' });
   assert.equal(r.status, 200); assert.equal(r.json.issue.status, 'RESOLVED');
   server.close();
@@ -246,13 +246,18 @@ test('US-7 health dimension labels are Korean', () => {
 });
 
 /* ---------- migration 35 ---------- */
-test('migration 35: originals backfilled for projects at/after 04 (value before 04 entry, else current), NULL before 04; WEEKLY_REPORT after CHANGES once', async () => {
+test('migration 35: originals backfilled for projects at/after 04 (value at 04 entry: first post-04 change\'s old value, else last pre-04 value, else current), NULL before 04; WEEKLY_REPORT after CHANGES once', async () => {
   const { server, client, db } = await boot();
   const A = await setup(client, 'a@x.com'); await toPhase(A, 'ANALYSIS_DESIGN');
   const t1 = await task(A, { planned_start_date: d(-5), planned_end_date: d(5) });
   await patch(A, t1.id, { planned_end_date: d(7) });             // 03 planning change → value at 04 entry = d(7)
   const t2 = await task(A, { planned_start_date: d(-5), planned_end_date: d(4) });
+  const ms = await task(A, { item_type: 'MILESTONE', title: '중간보고', milestone_date: '2026-11-01' });   // Q12-1: dated in 03, never edited before 04
+  const t4 = await task(A, { planned_start_date: '2026-10-20', planned_end_date: '2026-11-01' });
   await toPhase(A, 'DEVELOPMENT');
+  await patch(A, ms.id, { milestone_date: '2026-11-05' });         // first change after 04 entry (old build: no original frozen)
+  await patch(A, ms.id, { milestone_date: '2026-11-08' });
+  await patch(A, t4.id, { planned_end_date: '2026-11-05' });
   await patch(A, t1.id, { status: 'IN_PROGRESS', progress: 5 });
   await patch(A, t1.id, { planned_end_date: d(15), delay_reason: '사유' });
   const B = await setup(client, 'b@x.com'); await toPhase(B, 'ANALYSIS_DESIGN');
@@ -265,6 +270,8 @@ test('migration 35: originals backfilled for projects at/after 04 (value before 
   const orig = async (id) => (await db.get('SELECT original_planned_end_date AS o FROM wbs_items WHERE id = ?', [id])).o;
   assert.equal(await orig(t1.id), d(7), 'last end date recorded before 04 entry');
   assert.equal(await orig(t2.id), d(4), 'no change before 04 → its value then');
+  assert.equal(await orig(ms.id), '2026-11-01', 'milestone created 11/01 in 03, moved to 11/05 in 04 → original 11/01');
+  assert.equal(await orig(t4.id), '2026-11-01', 'task dated in 03, first pushed in 04 → value at 04 entry');
   assert.equal(await orig(t3.id), null, 'project still in 03');
   for (const P of [A, B]) {
     const steps = await db.all(`SELECT s.step_key, s.sequence, s.importance, s.status FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id

@@ -73,7 +73,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   /* ---------- US-5 / US-3 What's Next (before any issue / report) ---------- */
   await page.goto(A.url); await page.waitForSelector('.np__list');
   const issuesRow = page.locator('.np__row:has-text("이슈 관리")');
-  check('US-5 ISSUES 0건 text + manual 완료 처리', /아직 기록된 Issue가 없습니다\. 문제가 없었다면 완료 처리하세요\./.test(await page.textContent('main')) && (await issuesRow.locator('[data-status="COMPLETED"]').count()) === 1);
+  check('US-5 ISSUES 0건 text + manual 완료 처리', /아직 기록된 이슈가 없습니다\. 문제가 없었다면 완료 처리하세요\./.test(await page.textContent('main')) && (await issuesRow.locator('[data-status="COMPLETED"]').count()) === 1);
   const wrRow = page.locator('.np__row:has-text("주간보고 작성·공유")');
   check('US-3 WEEKLY_REPORT row: 권장 · 미시작 · "이번 주 주간보고를 만드세요"', (await wrRow.count()) === 1 && /권장/.test(await wrRow.textContent()) && /이번 주 주간보고를 만드세요/.test(await wrRow.textContent()) && /미시작/.test(await wrRow.textContent()));
   const wrBtn = wrRow.locator('[data-row-cta]');

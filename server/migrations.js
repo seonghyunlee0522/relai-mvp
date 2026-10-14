@@ -92,15 +92,19 @@ export const migrations = [
     await db.run(`UPDATE project_steps SET description = replace(description, 'Task 수준', '작업 수준') WHERE step_key = 'PLAN' AND description LIKE '%Task 수준%'`);
   } },
   { version: 35, name: 'Phase 4 구현: wbs_items.original_planned_end_date (backfilled for projects at/after 04), wbs_history.note, change_requests.customer_approval, issues.owner_stakeholder_id (schema.sql) + WEEKLY_REPORT (주간보고 작성·공유) added to every project\'s 04 right after CHANGES as TODO', async up(db) {
-    // 최초 종료일: projects already at/after 04 take the end date as it stood when 04 began (last planned_end_date / milestone_date change
-    // recorded before the first entry into DEVELOPMENT — or into any later phase when 04 was skipped), else the current value.
+    // 최초 종료일: projects already at/after 04 take the end date as it stood when 04 began (first entry into DEVELOPMENT — or into any
+    // later phase when 04 was skipped): the old value of the first planned_end_date / milestone_date change after that entry, else the
+    // last change recorded before it, else the current value (never changed). Creation is a CREATED row without a value, so an item
+    // dated in 03 and first pushed in 04 is only recoverable from the first post-04 UPDATED row's old value.
     // Projects before 04 stay NULL: the value is frozen when they enter 04 (guide.js transitionTo).
+    const entry = `(SELECT MIN(t.changed_at) FROM phase_transitions t JOIN project_phases ph ON ph.id = t.to_phase_id
+            WHERE t.project_id = w.project_id AND ph.sequence >= (SELECT sequence FROM project_phases d WHERE d.project_id = w.project_id AND d.phase_key = 'DEVELOPMENT'))`;
+    const dateRows = `FROM wbs_history h WHERE h.wbs_item_id = w.id AND h.action_type = 'UPDATED'
+          AND h.field_name = CASE WHEN w.item_type = 'MILESTONE' THEN 'milestone_date' ELSE 'planned_end_date' END`;
     await db.run(`UPDATE wbs_items w SET original_planned_end_date = COALESCE(
-        (SELECT (h.new_value)::date FROM wbs_history h WHERE h.wbs_item_id = w.id AND h.action_type = 'UPDATED'
-          AND h.field_name = CASE WHEN w.item_type = 'MILESTONE' THEN 'milestone_date' ELSE 'planned_end_date' END
-          AND h.new_value ~ '^\\d{4}-\\d{2}-\\d{2}$'
-          AND h.changed_at <= (SELECT MIN(t.changed_at) FROM phase_transitions t JOIN project_phases ph ON ph.id = t.to_phase_id
-            WHERE t.project_id = w.project_id AND ph.sequence >= (SELECT sequence FROM project_phases d WHERE d.project_id = w.project_id AND d.phase_key = 'DEVELOPMENT'))
+        (SELECT (h.old_value)::date ${dateRows} AND h.old_value ~ '^\\d{4}-\\d{2}-\\d{2}$' AND h.changed_at > ${entry}
+          ORDER BY h.changed_at ASC, h.seq ASC LIMIT 1),
+        (SELECT (h.new_value)::date ${dateRows} AND h.new_value ~ '^\\d{4}-\\d{2}-\\d{2}$' AND h.changed_at <= ${entry}
           ORDER BY h.changed_at DESC, h.seq DESC LIMIT 1),
         CASE WHEN w.item_type = 'MILESTONE' THEN w.milestone_date ELSE w.planned_end_date END)
       FROM projects p WHERE p.id = w.project_id AND w.original_planned_end_date IS NULL

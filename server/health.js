@@ -99,8 +99,8 @@ export function scopeHealth(f, R = HEALTH_RULES.scope) {
 
 export function qualityHealth(f, R = HEALTH_RULES.quality) {
   const i = f.iss; const t = f.tst; const a = f.acc; const reasons = [];
-  if (n(i.critical_open)) reasons.push(`심각한 Issue ${i.critical_open}건`);
-  if (n(i.high_open)) reasons.push(`높음 Issue ${i.high_open}건`);
+  if (n(i.critical_open)) reasons.push(`심각한 이슈 ${i.critical_open}건`);
+  if (n(i.high_open)) reasons.push(`높음 이슈 ${i.high_open}건`);
   if (n(t.last_fail)) reasons.push(`최근 실패한 테스트 ${t.last_fail}건`);
   if (n(a.rework)) reasons.push(`보완 필요 검수 ${a.rework}건`);
   if (n(i.critical_open)) return { status: STATUS.CRITICAL, reasons };
