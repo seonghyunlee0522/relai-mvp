@@ -19,6 +19,8 @@ RELAI의 정보구조는 기능이 아니라 프로젝트 생애주기 순서로
 - `project_phases` 7행/프로젝트, `project_steps` = Activity(`importance` REQUIRED | RECOMMENDED | OPTIONAL, `status` TODO | COMPLETED | SKIPPED).
 - **상태는 파생된다** (`server/activities.js`): 저장된 status는 수동 완료/제외 표시일 뿐이고, 실제 상태(NOT_STARTED / IN_PROGRESS / COMPLETED / SKIPPED)는 요구사항·WBS·테스트·검수·Issue·변경 데이터에서 계산한다. 예: 요구사항 0건 → 수집 NOT_STARTED, 유형 미지정이 있으면 분류 IN_PROGRESS, 모두 지정 → COMPLETED.
 - **Gate = REQUIRED 완료(또는 제외)**. 권장/선택은 미완료로 남아도 다음 단계로 이동할 수 있고, 미완료 상태의 이동도 확인 후 허용된다(단계는 IN_PROGRESS로 남는다). 퍼센트 진행률은 어디에도 없다.
+- **완료 처리 (manual activities)**: 데이터 신호가 없는 Activity(`manual: true` — 06/07 체크리스트 Activity, 04 의사결정 기록, 05 비기능 테스트)는 What's Next 행에서 `✓ 완료 처리` / `되돌리기`를 제공한다(현재 단계와 이미 지난 단계). 필수(REQUIRED)는 여전히 건너뛸 수 없다.
+- **06/07 체크리스트** (`activity_checklist_items`, migration v26, `server/checklists.js`, 화면 `/checklist?activity=KEY`): 전환 계획·데이터 마이그레이션·교육·Go-Live·안정화·운영 이관·유지보수·SLA·정기 배포·종료 정리는 항목·담당·기한·완료·메모 체크리스트로 진행한다. 항목이 있으면 상태가 파생된다(모두 완료 → COMPLETED, 아니면 IN_PROGRESS). 수동 완료 표시가 항상 우선. `기본 항목으로 시작`은 `CHECKLIST_TEMPLATES`(default-phases.js)의 시작 항목을 넣는다. API: `GET …/checklists`, `POST …/steps/:sid/checklist`, `POST …/steps/:sid/checklist/defaults`, `PATCH|DELETE …/checklist/:iid`.
 - `wbs_items.lifecycle_phase`(nullable)로 작업을 단계에 태깅하면 04 구현/05 시험/06 전환이 같은 WBS의 자기 영역만 본다.
 
 ## Navigation

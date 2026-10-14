@@ -170,6 +170,27 @@ ALTER TABLE project_steps ADD COLUMN IF NOT EXISTS importance TEXT NOT NULL DEFA
 ALTER TABLE project_steps DROP CONSTRAINT IF EXISTS project_steps_status_check;
 ALTER TABLE project_steps ADD CONSTRAINT project_steps_status_check CHECK (status IN ('TODO','COMPLETED','SKIPPED'));
 
+/* Activity checklist (06 전환·오픈 · 07 운영, 2026-10-14): activities without a dedicated work screen are worked through
+ * items here. The activity's live state derives from them (server/activities.js); project_steps.status stays the manual mark. */
+CREATE TABLE IF NOT EXISTS activity_checklist_items (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  step_id     TEXT NOT NULL REFERENCES project_steps(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL,
+  owner       TEXT NOT NULL DEFAULT '',          -- free text: 고객사·운영 조직 담당자도 적을 수 있도록
+  due_date    date,
+  done        boolean NOT NULL DEFAULT false,
+  done_at     timestamptz,
+  done_by     TEXT REFERENCES users(id) ON DELETE SET NULL,
+  note        TEXT NOT NULL DEFAULT '',
+  sequence    INTEGER NOT NULL DEFAULT 0,
+  created_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_checklist_step ON activity_checklist_items(step_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_checklist_project ON activity_checklist_items(project_id);
+
 -- Current-phase change log. Shape is generic enough to become the project activity log later.
 CREATE TABLE IF NOT EXISTS phase_transitions (
   id            TEXT PRIMARY KEY,

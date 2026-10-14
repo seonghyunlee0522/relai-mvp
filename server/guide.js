@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_PHASES, DEFAULT_TEMPLATE_KEY, PHASE_BY_KEY } from './templates/default-phases.js';
 import { activityStates, activitySummary } from './activities.js';
+import { checklistSummary } from './checklists.js';
 
 const now = () => new Date().toISOString();
 
@@ -55,6 +56,7 @@ export async function loadGuide(db, project, ctx = null) {
   const steps = (await db.all(`SELECT s.* FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id
     WHERE p.project_id = ? ORDER BY p.sequence, s.sequence`, [project.id]));
   const byPhase = new Map(phases.map((p) => [p.id, []]));
+  if (ctx && !ctx.checklists) ctx = { ...ctx, checklists: await checklistSummary(db, project.id) };   // 06/07 checklist activities derive from their items
   steps.forEach((s) => byPhase.get(s.project_phase_id).push(s));
   const out = phases.map((p) => {
     const st = byPhase.get(p.id);

@@ -4,7 +4,9 @@
  *   3. activities of the current phase and state  → ✓ 완료 · ● 진행 중 · ○ 미시작 · — 제외, with importance 필수/권장/선택
  *   4. what the next phase is                     → footer line + "NN 다음 단계 시작 →" once the REQUIRED gate is met
  * Status (완료/진행 중/미시작/제외) and importance (필수/권장/선택) are badges; no percentage anywhere. Activity states are derived server-side (server/activities.js) from real project data;
- * 완료 처리 / 제외 / 되돌리기 are the only stored marks (PATCH …/steps/:sid). No intermediate phase screens. */
+ * 완료 처리 / 제외 / 되돌리기 are the only stored marks (PATCH …/steps/:sid). No intermediate phase screens.
+ * 완료 처리 is offered here only for `manual` activities (no data signal decides them: 06/07 checklist activities, 의사결정 기록 …);
+ * data-driven ones complete on their work screen. */
 import { api, wsApi } from '../core/api.js';
 import { $, html, no2, raw } from '../core/dom.js';
 import { moveToPhase, projectHead } from './guide.js';
@@ -41,8 +43,9 @@ const guideCard = (g, p, archived, created) => {
 /* ---------- current phase activities (Process + Read view) ---------- */
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
 /** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not.
- * State is shown once, by the badge on the right (no leading icon). 완료 처리 lives on the work screen, not here. */
-const activityRow = (a, archived, isCurrent, browse = false) => {
+ * State is shown once, by the badge on the right (no leading icon). `markable` = rows whose phase is current or already reached
+ * (manual activities can be completed there); future phases stay read-only. */
+const activityRow = (a, archived, isCurrent, browse = false, markable = false) => {
   const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED; const cls = stateCls(a);
   const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
   // browse = another phase's list opened from the stepper: every row with a work screen is a way into it
@@ -50,9 +53,13 @@ const activityRow = (a, archived, isCurrent, browse = false) => {
   const acts = [];
   if (!archived) {
     if (skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">업무 다시 시작 →</button>`);
-    else if (manualDone && isCurrent) acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
-    else if (a.state !== 'COMPLETED' && (isCurrent || a.state === 'IN_PROGRESS')) {
-      // 완료 처리 is done on the work screen itself; here only 건너뛰기 (non-required) remains.
+    else if (manualDone && (isCurrent || (markable && a.manual))) acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
+    else if (a.state !== 'COMPLETED' && (isCurrent || a.state === 'IN_PROGRESS' || (markable && a.manual))) {
+      // Data-driven activities complete on their work screen; manual ones (no data signal) are completed here.
+      if (a.manual && (isCurrent || markable)) {
+        const open = a.checklist && a.checklist.total ? a.checklist.total - a.checklist.done : 0;
+        acts.push(html`<button type="button" class="link linkbtn np__act np__done" data-step="${a.id}" data-status="COMPLETED" data-title="${a.title}" data-open="${open}" title="이 업무를 완료한 것으로 기록합니다">✓ 완료 처리</button>`);
+      }
       if (a.importance !== 'REQUIRED' && a.linked_feature_type !== 'definition') acts.push(html`<button type="button" class="link linkbtn np__act np__skip" data-step="${a.id}" data-status="SKIPPED" data-title="${a.title}" title="이번 프로젝트에서는 수행하지 않는 업무로 기록합니다">↷ 건너뛰기</button>`);
     }
   }
@@ -74,7 +81,7 @@ const otherPhasePanel = (g, ph, archived) => {
   const st = phaseState(ph);
   const tag = st === 'done' ? (ph.status === 'COMPLETED' ? '<span class="np__tag is-done">✓ 완료</span>' : '<span class="np__tag is-done">✓ 다음 단계로 진행됨</span>') : '<span class="np__tag">예정</span>';
   const remain = st === 'done' ? (s.required_open ? `남은 필수 업무 ${s.required_open}건 — 필요하면 지금도 처리할 수 있습니다` : '이 단계의 필수 업무를 모두 마쳤습니다') : `필수 업무 ${s.required_open || 0}건`;
-  const rows = acts.map((a) => activityRow(a, archived, false, true)).join('');
+  const rows = acts.map((a) => activityRow(a, archived, false, true, st === 'done')).join('');
   const hasActs = /class="np__acts">(?!<\/span>)/.test(rows);
   return html`<section class="np np--other" aria-labelledby="npT">
     <div class="np__h">
@@ -95,7 +102,7 @@ const phasePanel = (g, p, archived) => {
   const current = acts.find((a) => a.state !== 'COMPLETED' && a.state !== 'SKIPPED');
   const allDone = !current;
   const remain = s.required_open ? `필수 업무 ${s.required_open}건 남음` : allDone ? '이 단계의 업무를 모두 처리했습니다' : '필수 업무를 모두 마쳤습니다';
-  const rows = acts.map((a) => activityRow(a, archived, current && a.id === current.id)).join('');
+  const rows = acts.map((a) => activityRow(a, archived, current && a.id === current.id, false, true)).join('');
   const hasActs = /class="np__acts">(?!<\/span>)/.test(rows);   // status badges hug the right edge when no row carries an action
   return html`<section class="np" aria-labelledby="npT">
     <div class="np__h">
@@ -136,6 +143,7 @@ export async function nextPage(id, main = $('#main')) {
     main.querySelectorAll('[data-move-next]').forEach((b) => { b.onclick = g.next_phase ? move : null; });
     main.querySelectorAll('.np__row[data-href]').forEach((row) => { const go = () => navigate(row.dataset.href); row.onclick = (e) => { if (!e.target.closest('a,button')) go(); }; row.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a,button')) { e.preventDefault(); go(); } }; });
     main.querySelectorAll('[data-step]').forEach((b) => b.onclick = async () => {
+      if (b.dataset.status === 'COMPLETED' && Number(b.dataset.open) > 0 && !(await confirmDialog({ title: '이 업무를 완료 처리할까요?', body: `'${b.dataset.title}' 체크리스트에 완료되지 않은 항목 ${b.dataset.open}건이 남아 있습니다. 그래도 완료로 기록합니다.`, confirm: '완료 처리' }))) return;
       if (b.dataset.status === 'SKIPPED' && !(await confirmDialog({ title: '이 업무를 건너뛸까요?', body: `'${b.dataset.title}'은(는) 이번 프로젝트에서 수행하지 않는 것으로 기록됩니다. 나중에 다시 시작할 수 있습니다.`, confirm: '건너뛰기' }))) return;
       b.disabled = true;
       try { g = await api('PATCH', wsApi(`/${id}/steps/${b.dataset.step}`), { status: b.dataset.status }); toast(b.dataset.status === 'COMPLETED' ? '완료 처리했습니다.' : b.dataset.status === 'SKIPPED' ? '이 업무를 건너뛰었습니다.' : '업무를 다시 시작합니다.'); draw(); }

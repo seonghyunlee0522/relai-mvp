@@ -8,6 +8,7 @@ import {
 } from './security.js';
 import { parseSignup, parseProject, ValidationError } from './validate.js';
 import { ensurePhases, loadGuide, updateStep, transitionTo } from './guide.js';
+import * as CL from './checklists.js';
 import * as D from './definition.js';
 import { buildProjectCharter } from './charter.js';
 import * as R from './requirements.js';
@@ -357,6 +358,51 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const step = (await updateStep(db, project, req.params.sid, fields, req.user.id));
     if (!step) return fail(res, 404, 'not_found', '할 일을 찾을 수 없습니다.');
     res.json({ step, ...(await guideResponse(project)) });
+  }));
+
+  /* ---------- activity checklists (06 전환·오픈 · 07 운영; server/checklists.js) ---------- */
+  const badItem = (res, errors) => fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: errors });
+  const loadChecklistStep = async (req, res, project) => {
+    const st = await CL.checklistStep(db, project.id, req.params.sid);
+    if (st === null) { fail(res, 404, 'not_found', '할 일을 찾을 수 없습니다.'); return null; }
+    if (st === false) { fail(res, 409, 'no_checklist', '이 업무는 체크리스트를 사용하지 않습니다.'); return null; }
+    return st;
+  };
+  app.get(`${base}/:pid/checklists`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res));
+    if (!project) return;
+    res.json({ items: await CL.listItems(db, project.id) });
+  }));
+  app.post(`${base}/:pid/steps/:sid/checklist`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res));
+    if (!project || !mutable(res, project)) return;
+    const { fields, errors } = CL.parseItem(req.body || {});
+    if (Object.keys(errors).length) return badItem(res, errors);
+    const step = await loadChecklistStep(req, res, project); if (!step) return;
+    res.status(201).json({ item: await CL.createItem(db, project.id, step, fields, req.user.id) });
+  }));
+  app.post(`${base}/:pid/steps/:sid/checklist/defaults`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res));
+    if (!project || !mutable(res, project)) return;
+    const step = await loadChecklistStep(req, res, project); if (!step) return;
+    const added = await tx(db, (d) => CL.addDefaults(d, project.id, step, req.user.id));
+    res.json({ added, items: await CL.listItems(db, project.id) });
+  }));
+  app.patch(`${base}/:pid/checklist/:iid`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res));
+    if (!project || !mutable(res, project)) return;
+    const { fields, errors } = CL.parseItem(req.body || {}, { partial: true });
+    if (Object.keys(errors).length) return badItem(res, errors);
+    if (!Object.keys(fields).length) return fail(res, 400, 'validation_error', '변경할 내용이 없습니다.');
+    const item = await CL.updateItem(db, project.id, req.params.iid, fields, req.user.id);
+    if (!item) return fail(res, 404, 'not_found', '체크리스트 항목을 찾을 수 없습니다.');
+    res.json({ item });
+  }));
+  app.delete(`${base}/:pid/checklist/:iid`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res));
+    if (!project || !mutable(res, project)) return;
+    if (!(await CL.deleteItem(db, project.id, req.params.iid))) return fail(res, 404, 'not_found', '체크리스트 항목을 찾을 수 없습니다.');
+    res.json({ ok: true });
   }));
 
   /** Make a phase the current one (next phase, or any phase chosen explicitly). */
