@@ -9,6 +9,7 @@ import { createProvider, AiProviderError } from './provider.js';
 import { SCHEMAS, validateSchema, trimDeep } from './schemas.js';
 import { retryHint } from './prompts.js';
 import { CreditError, getBalance, releaseIfPending, reserveRun, settleRun } from './credits.js';
+import { effectivePlan } from '../billing/subscriptions.js';
 
 export class AiError extends Error {
   constructor(code, message, { status = 400, ...extra } = {}) { super(message); this.code = code; this.status = status; this.extra = extra; }
@@ -19,7 +20,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Public status for the frontend: flag, costs, notice, and this workspace's credit balance. */
 export async function aiStatus(db, wid) {
   const pub = publicConfig();
-  return { ...pub, credits: pub.enabled ? await getBalance(db, wid) : null };
+  return { ...pub, plan: await effectivePlan(db, wid), credits: pub.enabled ? await getBalance(db, wid) : null };
 }
 
 async function checkLimits(db, cfg, { wid, userId }) {
@@ -47,7 +48,8 @@ export async function runAiFeature(db, { wid, projectId = null, userId, feature,
 
   const provider = createProvider(cfg);
   const cost = featureCreditCost(feature);
-  const run = await reserveRun(db, { wid, projectId, userId, feature, provider: provider.name, model: provider.model, inputSummary: String(prompt.inputSummary || '').slice(0, 300), cost });
+  const run = await reserveRun(db, { wid, projectId, userId, feature, provider: provider.name, model: provider.model, inputSummary: String(prompt.inputSummary || '').slice(0, 300), cost })
+    .catch(async (e) => { if (e instanceof CreditError) e.extra = { ...e.extra, plan: await effectivePlan(db, wid) }; throw e; });   // UI: upgrade link on FREE
   const started = Date.now();
   const usageSum = { input_tokens: 0, output_tokens: 0, seen: false };
   const addUsage = (u) => { if (!u) return; if (u.input_tokens != null) { usageSum.input_tokens += u.input_tokens; usageSum.seen = true; } if (u.output_tokens != null) { usageSum.output_tokens += u.output_tokens; usageSum.seen = true; } };

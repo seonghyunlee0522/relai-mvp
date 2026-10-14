@@ -19,14 +19,17 @@ export const creditLine = (st, feature) => {
   if (!st?.enabled) return '';
   const cost = st.costs?.[feature]; const bal = st.credits?.available;
   const short = typeof cost === 'number' && typeof bal === 'number' && bal < cost;
-  return html`<span class="ai-credit ${short ? 'is-short' : ''}" title="AI 사용량은 Workspace Credit으로 집계됩니다">예상 <b>${cost}</b> Credits 사용 · 잔여 <b>${bal ?? '-'}</b>${raw(short ? ' · <em>Credit 부족 — 관리자에게 문의하세요</em>' : '')}</span>`;
+  return html`<span class="ai-credit ${short ? 'is-short' : ''}" title="AI 사용량은 Workspace Credit으로 집계됩니다">예상 <b>${cost}</b> Credits 사용 · 잔여 <b>${bal ?? '-'}</b>${raw(short ? ` · <em>Credit 부족</em>${shortHint(st.plan)}` : '')}</span>`;
 };
+/** What to do when credits run out: FREE → upgrade link (Team includes monthly credits); paid plans → next monthly grant / operator. */
+export const UPGRADE_URL = '/app/settings#billing';
+const shortHint = (plan) => (plan === 'FREE' ? ` — <a href="${UPGRADE_URL}">Team 플랜으로 업그레이드</a>하면 매월 AI Credit이 지급됩니다` : ' — 다음 달 지급을 기다리거나 운영자에게 추가 지급을 요청하세요');
 export const canRun = (st, feature) => Boolean(st?.enabled) && !(typeof st.costs?.[feature] === 'number' && typeof st.credits?.available === 'number' && st.credits.available < st.costs[feature]);
 
 /** Human copy for AI error codes (the API message is kept as detail). */
 export function aiErrorMessage(e) {
   const code = e?.code;
-  if (code === 'AI_CREDIT_INSUFFICIENT') return `AI Credit이 부족합니다. 현재 ${e.error?.balance ?? '?'} Credits · 필요 ${e.error?.required ?? '?'} Credits — 관리자에게 문의하세요.`;
+  if (code === 'AI_CREDIT_INSUFFICIENT') return `AI Credit이 부족합니다. 현재 ${e.error?.balance ?? '?'} Credits · 필요 ${e.error?.required ?? '?'} Credits — ${e.error?.plan === 'FREE' ? `Team 플랜으로 업그레이드하면 매월 AI Credit이 지급됩니다 (설정 › 플랜 · 결제: ${UPGRADE_URL})` : '다음 달 지급을 기다리거나 운영자에게 추가 지급을 요청하세요.'}`;
   if (code === 'AI_DISABLED') return 'AI 기능을 사용할 수 없습니다. 관리자에게 문의하세요.';
   if (code === 'AI_RATE_LIMITED') return e.message || 'AI 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'AI_INPUT_TOO_LARGE') return e.message;

@@ -12,6 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { PLANS, DEFAULT_PLAN, FOUNDING_OFFER } from '../plans.js';
+import { grantMonthlyCredits } from './ai-grants.js';
 
 export const STATUSES = ['ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED'];
 export const GRACE_DAYS = 7;
@@ -179,6 +180,7 @@ export async function processWebhookEvent(db, provider, ev) {
       if (order) await settleOrder(db, provider, order, ev, t.id);
       const fresh = await db.get('SELECT * FROM subscriptions WHERE id = ?', [t.id]);
       const paymentId = ev.type === 'payment.refunded' ? null : await recordPayment(db, provider, fresh, ev, ins.id);
+      if (PAID_TYPES.includes(ev.type) && fresh.status === 'ACTIVE') await grantMonthlyCredits(db, fresh.workspace_id);   // same transaction: paid ⇔ granted
       return finish({ subscription_id: t.id, status: t.status, payment_id: paymentId, ...(order ? { order_id: order.id } : {}) }, fresh);
     });
   } catch (e) {

@@ -7,13 +7,20 @@
  *   ENTERPRISE  from ₩25,000 / seat / month, contact sales (not sold through checkout; set up by an operator).
  * Founding offer: the first FOUNDING_OFFER.customers paying workspaces get FOUNDING_OFFER.pct off for their first year.
  *
+ * AI credits: TEAM workspaces get AI_CREDITS_MONTHLY.TEAM credits per month while the subscription is ACTIVE (billing/ai-grants.js);
+ * ENTERPRISE credits are granted by an operator per contract. FREE keeps the one-time trial (ai/credits.js).
+ *
  * `null` limit = unlimited. Limits are enforced by billing/limits.js. On TEAM the member limit is the purchased seat count.
  */
+/** Monthly AI credit grant per plan (0 = none). Override TEAM with env AI_TEAM_MONTHLY_CREDITS. */
+const envInt = (v, d) => (Number.isInteger(Number(v)) && v !== undefined && v !== '' && Number(v) >= 0 ? Number(v) : d);
+export const AI_CREDITS_MONTHLY = { FREE: 0, TEAM: envInt(process.env.AI_TEAM_MONTHLY_CREDITS, 1000), ENTERPRISE: 0 };
+
 export const PLANS = {
-  FREE: { key: 'FREE', label: 'Free', price_monthly: 0, limits: { projects: 1, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 } },
-  TEAM: { key: 'TEAM', label: 'Team', price_monthly: 19000, price_annual_monthly: 15000, min_seats: 3, per_seat: true,
+  FREE: { key: 'FREE', label: 'Free', price_monthly: 0, ai_credits_monthly: AI_CREDITS_MONTHLY.FREE, limits: { projects: 1, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 } },
+  TEAM: { key: 'TEAM', label: 'Team', price_monthly: 19000, price_annual_monthly: 15000, min_seats: 3, per_seat: true, ai_credits_monthly: AI_CREDITS_MONTHLY.TEAM,
     limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
-  ENTERPRISE: { key: 'ENTERPRISE', label: 'Enterprise', price_monthly: 25000, price_from: true, per_seat: true, contact_sales: true,
+  ENTERPRISE: { key: 'ENTERPRISE', label: 'Enterprise', price_monthly: 25000, price_from: true, per_seat: true, contact_sales: true, ai_credits_monthly: AI_CREDITS_MONTHLY.ENTERPRISE,
     limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
 };
 export const DEFAULT_PLAN = 'FREE';

@@ -6,7 +6,7 @@
  *                                           verify → approve → apply → 303 to /app/settings?checkout=success|failed|canceled#billing
  *   mountBillingRoutes  — workspace-scoped: GET …/billing (any member), GET …/billing/quote, POST …/billing/checkout|cancel|recurring
  *     (OWNER: POLICY.billing); GET /api/billing/nicepay/pay/:orderId (the order's buyer); POST /api/billing/admin/payments/:id/refund
- *     (SYSTEM_ADMIN); GET /api/billing/cron/daily (CRON_SECRET).
+ *     (SYSTEM_ADMIN); GET /api/billing/cron/daily (CRON_SECRET: renewal reminders, renewal charges, monthly AI credit grants).
  */
 import express from 'express';
 import { rateLimiter } from '../security.js';
@@ -21,6 +21,7 @@ import { parseCard, safeEqual } from './nicepay.js';
 import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, foundingEligible, minSeats, publicOrder } from './orders.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals } from './cron.js';
+import { grantDueMonthlyCredits } from './ai-grants.js';
 
 const catalogue = () => Object.values(PLANS).map((p) => ({ key: p.key, label: p.label, price_monthly: p.price_monthly, price_annual_monthly: p.price_annual_monthly ?? null,
   min_seats: p.min_seats ?? null, per_seat: Boolean(p.per_seat), price_from: Boolean(p.price_from), contact_sales: Boolean(p.contact_sales), limits: p.limits }));
@@ -224,6 +225,6 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const secret = String(process.env.CRON_SECRET || '');
     if (!secret) return fail(res, 503, 'cron_unconfigured', 'CRON_SECRET is not set');
     if (!safeEqual(req.get('authorization'), `Bearer ${secret}`)) return fail(res, 401, 'unauthenticated', '인증이 필요합니다.');
-    res.json({ reminders: await sendRenewalReminders(db), renewals: await chargeDueRenewals(db, provider) });
+    res.json({ reminders: await sendRenewalReminders(db), renewals: await chargeDueRenewals(db, provider), ai_credits: await grantDueMonthlyCredits(db) });
   }));
 }
