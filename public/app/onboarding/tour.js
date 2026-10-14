@@ -53,15 +53,17 @@ const T = {
     const el = document.createElement('div'); el.className = `tour ${center ? 'tour--center' : ''} ${MOBILE() ? 'tour--mobile' : ''}`;
     el.innerHTML = html`<div class="tour__spot" hidden></div>
       <div class="tour__pop" role="dialog" aria-modal="true" aria-labelledby="tourT" aria-describedby="tourB" tabindex="-1">
+        <button type="button" class="tour__x" data-t="end" aria-label="가이드 끝내기" title="가이드 끝내기">×</button>
         <div class="tour__step">${i + 1} / ${n}</div>
         <h3 id="tourT">${step.title}</h3><p id="tourB">${step.body}</p>
         <div class="tour__btns">
-          <button type="button" class="btn btn--ghost btn--sm" data-t="end">가이드 종료</button><span class="tour__sp"></span>
+          <button type="button" class="btn btn--ghost btn--sm" data-t="end">건너뛰기</button><span class="tour__sp"></span>
           ${raw(i > 0 ? '<button type="button" class="btn btn--secondary btn--sm" data-t="prev">이전</button>' : '')}
-          ${raw(step.cta ? html`<button type="button" class="btn btn--secondary btn--sm" data-t="skip">건너뛰기</button><a class="btn btn--primary btn--sm" data-t="cta" href="${step.cta.href}" data-link>${step.cta.label}</a>` : html`<button type="button" class="btn btn--primary btn--sm" data-t="next">${i === n - 1 ? '완료' : '다음'}</button>`)}
+          ${raw(step.cta ? html`<button type="button" class="btn btn--secondary btn--sm" data-t="skip">다음</button><a class="btn btn--primary btn--sm" data-t="cta" href="${step.cta.href}" data-link>${step.cta.label}</a>` : html`<button type="button" class="btn btn--primary btn--sm" data-t="next">${i === n - 1 ? '완료' : '다음'}</button>`)}
         </div></div>`;
     document.body.append(el); this.el = el; this.target = target; this.active = true; this.paused = false;
     el.addEventListener('click', (e) => {
+      if (e.target === el) { this.end(); return; }   // a click on the dimmed area ends the guide — it never blocks the page without a way out
       const b = e.target.closest('[data-t]'); if (!b) return;
       if (b.dataset.t === 'cta') { this.pause(); return; }   // link navigates (data-link); tour resumes when the page it waits for appears
       if (b.dataset.t === 'next' || b.dataset.t === 'skip') this.next(); else if (b.dataset.t === 'prev') this.prev(); else if (b.dataset.t === 'end') this.end();
@@ -106,6 +108,8 @@ const T = {
   async end() { this.hide(); this.active = false; this.paused = false; pill(false); const o = ob.peek(); if (o && o.tour.status !== 'COMPLETED') await ob.update('PRODUCT_TOUR', 'skip'); toast('가이드를 종료했습니다. 도움말(?)에서 다시 볼 수 있습니다.'); },
 };
 export const tour = T;
+/* "1분 둘러보기" (Home empty state) — the only way the tour starts besides 도움말 (no auto-start). */
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-tour-start]'); if (!b) return; e.preventDefault(); const o = ob.peek(); T.start({ replay: Boolean(o && o.tour && o.tour.status !== 'NOT_STARTED' && o.tour.status !== 'IN_PROGRESS') }); });
 
 /* ---------- helpers ---------- */
 const usable = (o) => (o.tour.steps || []).filter((s) => s.available !== false && !(s.key === 'CREATE_PROJECT' && o.workspace.project_count > 0));

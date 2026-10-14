@@ -5,7 +5,6 @@ import { navigate } from '../core/router.js';
 import { createGrid } from '../shared/grid.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
-import { checklistCard } from '../onboarding/ui.js';
 import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 
@@ -13,9 +12,9 @@ const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 export const newWorkspaceHome = (o = null) => (canManage()
   ? html`<section class="hero" data-tour-id="hero">
       <div class="hero__t"><h2>첫 프로젝트를 만들어 시작하세요.</h2><p>RELAI가 <b>착수부터 운영까지 7단계</b>를 순서대로 안내합니다. 이름, 고객사, 기간만 입력하면 됩니다.</p>
-        <a class="btn btn--primary btn--lg" href="/app/projects/new" data-link data-tour-id="create-project">프로젝트 만들기</a></div>
+        <div class="hero__cta"><a class="btn btn--primary btn--lg" href="/app/projects/new" data-link data-tour-id="create-project">프로젝트 만들기</a><button type="button" class="link linkbtn" data-tour-start>1분 둘러보기</button></div></div>
       <ol class="hero__flow" aria-label="프로젝트 7단계">${raw(LIFECYCLE_PHASES.map((ph, i) => html`<li><i>${no2(i + 1)}</i>${ph.label}</li>`).join(''))}</ol>
-    </section>${raw(checklistCard(o))}`
+    </section>`
   : html`<section class="hero hero--member"><div class="hero__t"><h2>${state.workspace.name} Workspace에 참여했습니다.</h2><p>아직 프로젝트가 없습니다. Workspace 관리자(OWNER/ADMIN)가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.</p></div></section>`);
 export const emptyState = () => newWorkspaceHome(ob.peek());
 export async function projectsPage(main = $("#main")) {
@@ -42,7 +41,7 @@ export async function projectsPage(main = $("#main")) {
   const draw = () => {
     grid.setRows(filtered());
     main.innerHTML = html`<div class="page">
-      <div class="page__head"><div><h1>Projects</h1><p>${state.workspace.name} · ${all.length}개</p></div>
+      <div class="page__head"><div><h1>프로젝트</h1><p>${state.workspace.name} · ${all.length}개</p></div>
         ${raw(canManage() ? '<a class="btn btn--primary" href="/app/projects/new" data-link>+ 새 프로젝트</a>' : '')}</div>
       <div class="ptoolbar"><input class="input input--sm" id="pq" type="search" placeholder="프로젝트 검색" value="${q}" style="width:220px">
         <select class="select select--sm" id="pst" style="max-width:120px"><option value="">상태</option>${raw(Object.entries(STATUS).filter(([k]) => k !== 'ARCHIVED').map(([k, l]) => html`<option value="${k}" ${status === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>

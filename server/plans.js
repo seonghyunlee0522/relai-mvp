@@ -42,11 +42,11 @@ export const monthlyPrice = (plan, users) => plan.base_monthly + Math.max(0, use
 
 /** Usage dimension labels in UI order. weekly_reports is counted per calendar month (see usage.js). */
 export const USAGE_DIMS = [
-  { key: 'projects', label: 'Active Projects' },
-  { key: 'members', label: 'Members' },
-  { key: 'requirements', label: 'Requirements' },
+  { key: 'projects', label: '진행 중 프로젝트' },
+  { key: 'members', label: '멤버' },
+  { key: 'requirements', label: '요구사항' },
   { key: 'wbs', label: 'WBS' },
-  { key: 'weekly_reports', label: 'Weekly Reports (이번 달)' },
+  { key: 'weekly_reports', label: '주간보고 (이번 달)' },
 ];
 
 export const planOf = (key) => PLANS[key] || PLANS[DEFAULT_PLAN];

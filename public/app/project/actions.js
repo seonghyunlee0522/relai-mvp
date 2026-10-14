@@ -8,7 +8,7 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { periodDialog } from './dashboard.js';
 import { openJiraProjectSettings } from '../shared/jira.js';
 
-const ENT = { REQUIREMENT: 'REQ', WBS: 'WBS', CHANGE: 'CR', ISSUE: 'Issue', RISK: 'Risk', TEST: 'Test', ACCEPTANCE: 'Acc.', PHASE: '단계', JIRA: 'Jira' };
+const ENT = { REQUIREMENT: 'REQ', WBS: 'WBS', CHANGE: 'CR', ISSUE: '이슈', RISK: '리스크', TEST: '테스트', ACCEPTANCE: '검수', PHASE: '단계', JIRA: 'Jira' };
 const KINDS = [['ALL', '전체'], ['COMMENT', '댓글'], ['STATUS', '상태'], ['OWNER', '담당자'], ['SCHEDULE', '일정'], ['PHASE', '단계'], ['JIRA', 'Jira'], ['DATA', '기타']];
 const RS = { DRAFT: ['Draft', 'chip--muted'], FINAL: ['Final', 'chip--done'] };
 const fmtAt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${no2(d.getDate())} ${no2(d.getHours())}:${no2(d.getMinutes())}`; };
@@ -17,7 +17,7 @@ const fmtAt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${
 export const headerActions = (p) => {
   const ro = p.status === 'ARCHIVED';
   return html`<span class="wsh__act" data-pid="${p.id}" data-ro="${ro ? '1' : ''}" data-name="${p.name}">
-    <button type="button" class="btn btn--ghost btn--sm" data-act="activity" title="댓글·상태·담당자·일정·단계 변경 이력">Activity</button>
+    <button type="button" class="btn btn--ghost btn--sm" data-act="activity" title="댓글·상태·담당자·일정·단계 변경 이력">활동 기록</button>
     <span class="menuwrap"><button type="button" class="btn btn--ghost btn--sm" data-act="reports" aria-haspopup="menu" aria-expanded="false">보고서 ▾</button></span>
     <span class="menuwrap"><button type="button" class="btn btn--ghost btn--sm wsh__more" data-act="more" aria-haspopup="menu" aria-expanded="false" aria-label="더보기" title="더보기">⋯</button></span>
   </span>`;
@@ -49,7 +49,7 @@ async function reportsMenu(btn, c) {
 }
 
 function moreMenu(btn, c) {
-  const m = openMenu(btn, html`<button type="button" role="menuitem" class="amenu__act" data-more="activity">Activity</button>
+  const m = openMenu(btn, html`<button type="button" role="menuitem" class="amenu__act" data-more="activity">활동 기록</button>
     ${raw(c.ro ? '' : '<button type="button" role="menuitem" class="amenu__act amenu__act--sm" data-more="report-new">주간보고 생성</button>')}
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
     <button type="button" role="menuitem" data-more="jira">Jira 연동 설정</button>
@@ -77,7 +77,7 @@ export async function openActivity(pid) {
   document.querySelector('.actpanel')?.remove();
   const el = document.createElement('div'); el.className = 'actpanel';
   el.innerHTML = html`<div class="actpanel__scrim" data-close></div><aside class="actpanel__p" role="dialog" aria-modal="true" aria-labelledby="actT">
-    <div class="actpanel__h"><b id="actT">Activity</b><button type="button" class="drawer__x" data-close aria-label="닫기">×</button></div>
+    <div class="actpanel__h"><b id="actT">활동 기록</b><button type="button" class="drawer__x" data-close aria-label="닫기">×</button></div>
     <div class="actpanel__f">${raw(KINDS.map(([k, l]) => html`<button type="button" class="fchip2 ${k === 'ALL' ? 'is-on' : ''}" data-kind="${k}">${l}</button>`).join(''))}</div>
     <div class="actpanel__b"><div class="amenu__empty" style="padding:16px">불러오는 중…</div></div></aside>`;
   document.body.append(el);

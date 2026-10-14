@@ -3,7 +3,7 @@ import { isCurrent } from './core/router.js';
 import { $, html, raw, root } from './core/dom.js';
 import { state } from './core/state.js';
 import { store } from './core/ui.js';
-import { helpButton, wireHelp, maybeWelcome } from './onboarding/ui.js';
+import { helpButton, wireHelp } from './onboarding/ui.js';
 import { tour } from './onboarding/tour.js';
 import { ob } from './onboarding/state.js';
 import { verifyBanner, wireVerifyBanner } from './auth.js';
@@ -33,16 +33,16 @@ function wireOnce() {
 /** Global navigation (outside a project). Inside a project the sidebar holds the project LNB (project/lnb.js). */
 const globalNav = () => html`<a class="logo" href="/app" data-link><span class="logo__full">RELAI</span><span class="logo__mark">R</span></a>
   <nav aria-label="주요 메뉴">
-    <a class="navlink" data-nav="home" href="/app" data-link title="Home" data-tour-id="nav-home">${raw(icon.home)}<span class="nl">Home</span></a>
-    <a class="navlink" data-nav="projects" href="/app/projects" data-link title="Projects" data-tour-id="nav-projects">${raw(icon.projects)}<span class="nl">Projects</span></a>
+    <a class="navlink" data-nav="home" href="/app" data-link title="홈" data-tour-id="nav-home">${raw(icon.home)}<span class="nl">홈</span></a>
+    <a class="navlink" data-nav="projects" href="/app/projects" data-link title="프로젝트" data-tour-id="nav-projects">${raw(icon.projects)}<span class="nl">프로젝트</span></a>
   </nav>
   <div class="side__bottom">
-    <a class="navlink" data-nav="settings" href="/app/settings" data-link title="Settings" data-tour-id="nav-settings">${raw(icon.settings)}<span class="nl">Settings</span></a>
+    <a class="navlink" data-nav="settings" href="/app/settings" data-link title="설정" data-tour-id="nav-settings">${raw(icon.settings)}<span class="nl">설정</span></a>
     <div class="navlink navlink--help">${raw(helpButton())}<span class="nl">도움말</span></div>
     ${raw(state.user.system_role === 'SYSTEM_ADMIN' ? html`<a class="navlink navlink--admin" href="/admin" data-link title="Admin Console">${raw(icon.admin)}<span class="nl">Admin Console</span></a>` : '')}
     <div class="me"><span class="avatar">${[...state.user.name][0]}</span>
       <div class="me__t" style="min-width:0"><b>${state.user.name}</b><small>${state.user.email}</small></div></div>
-    <button class="navlink linkbtn" id="logout" title="Logout">${raw(icon.logout)}<span class="nl">Logout</span></button>
+    <button class="navlink linkbtn" id="logout" title="로그아웃">${raw(icon.logout)}<span class="nl">로그아웃</span></button>
     <button class="navlink linkbtn side__fold" id="fold" title="메뉴 접기/펼치기">${raw(icon.collapse)}<span class="nl">메뉴 접기</span></button>
   </div>`;
 
@@ -92,9 +92,9 @@ export async function shell(path, view, token = null) {
   if (stale()) return;              // BUG-001: a newer navigation already owns #main
   try { await view(main); } catch (e) { main.innerHTML = html`<div class="page"><div class="empty"><h2>${e.status === 404 ? '찾을 수 없습니다' : '문제가 발생했습니다'}</h2><p>${e.message}</p><a class="btn btn--primary" href="/app/projects" data-link>프로젝트로 돌아가기</a></div></div>`; }
   if (stale()) return;
-  // Phase 14: pages are rendered → first-login welcome (once), resume an in-progress tour, help button inside the workspace header
+  // Phase 14: pages are rendered → resume an in-progress tour, help button inside the workspace header.
+  // No automatic welcome dialog or tour (design §4 #6): the tour starts only from "1분 둘러보기" (Home) or 도움말.
   wireHelp(main);
   document.dispatchEvent(new CustomEvent('relai:rendered', { detail: { path } }));
-  if (!welcomed) { welcomed = true; maybeWelcome().then(() => tour.onRender()); } else tour.onRender();
+  tour.onRender();
 }
-let welcomed = false;

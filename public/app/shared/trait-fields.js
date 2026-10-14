@@ -9,7 +9,7 @@ export function traitFields(values = {}, { bind = 'name', disabled = false, idPr
     const id = `${idPrefix}-${t.field}`;
     // 유형: placeholder only while nothing is chosen (required on create; "미설정" on older projects)
     const opts = (t.required && !v ? html`<option value="" selected disabled>${t.placeholder}</option>` : '')
-      + t.options.map((o) => html`<option value="${o.value}" ${o.value === v ? 'selected' : ''} ${o.help ? `title="${o.help}"` : ''}>${o.label}</option>`).join('');
+      + t.options.map((o) => html`<option value="${o.value}" ${o.value === v ? 'selected' : ''} ${raw(o.help ? html`title="${o.help}"` : '')}>${o.label}</option>`).join('');
     const help = t.field === 'project_type'
       ? html`<div class="hint trf__help" data-type-help>${typeHelp(v)}</div>`
       : html`<div class="hint trf__help">${t.help}</div>`;

@@ -134,10 +134,10 @@ function development(key, ctx) {
       : n(ctx.overdue_tasks) ? prog(`종료 예정일이 지난 작업 ${ctx.overdue_tasks}건이 있습니다.`, act('지연 작업 확인 →', u('?f=overdue')), { crit: true })
       : ok('종료 예정일이 지난 미완료 작업이 없습니다.', act('WBS 보기 →', u('?ctx=monitor')));
     case 'ISSUES': {
-      if (n(is.total) === 0) return none('아직 기록된 Issue가 없습니다. 문제가 생기면 Issue로 기록하세요.', act('Issue 등록 →', iu('?new=1')));
-      if (n(is.active)) { const parts = [`Open Issue ${is.active}건`]; if (n(is.critical)) parts.push(`Critical ${is.critical}건`); if (n(is.blocked)) parts.push(`Blocked ${is.blocked}건`);
-        return prog(parts.join(' · '), act('Issue 처리 →', iu(n(is.critical) ? '?severity=CRITICAL' : n(is.blocked) ? '?status=BLOCKED' : '')), { crit: Boolean(n(is.critical) || n(is.blocked)) }); }
-      return ok(`Issue ${is.total}건이 모두 해결되었습니다.`, act('Issues 보기 →', iu()));
+      if (n(is.total) === 0) return none('아직 기록된 이슈가 없습니다. 문제가 생기면 이슈로 기록하세요.', act('이슈 등록 →', iu('?new=1')));
+      if (n(is.active)) { const parts = [`열린 이슈 ${is.active}건`]; if (n(is.critical)) parts.push(`Critical ${is.critical}건`); if (n(is.blocked)) parts.push(`Blocked ${is.blocked}건`);
+        return prog(parts.join(' · '), act('이슈 처리 →', iu(n(is.critical) ? '?severity=CRITICAL' : n(is.blocked) ? '?status=BLOCKED' : '')), { crit: Boolean(n(is.critical) || n(is.blocked)) }); }
+      return ok(`이슈 ${is.total}건이 모두 해결되었습니다.`, act('Issues 보기 →', iu()));
     }
     case 'CHANGES': {
       const cu = (qs = '') => `/app/projects/${ctx.pid}/changes${qs}`;
@@ -166,10 +166,10 @@ function testing(key, ctx) {
     case 'CASES': return n(t.total) === 0 ? empty : ok(`테스트 케이스 ${t.total}건이 등록되어 있습니다.`, act('테스트 케이스 추가 →', u('?new=1')));
     case 'RUN': return n(t.total) === 0 ? dep
       : n(t.executed) < n(t.total) ? (n(t.executed) ? prog(`${t.total}건 중 ${t.executed}건이 실행되었습니다.`, act('테스트 실행 →', u('?last_result=NOT_RUN'))) : none(`테스트 ${t.total}건이 아직 실행되지 않았습니다.`, act('테스트 실행 →', u('?last_result=NOT_RUN'))))
-      : ok(`테스트 ${t.total}건이 모두 실행되었습니다. (Pass ${n(t.last_pass)} · Fail ${n(t.last_fail)} · Blocked ${n(t.last_blocked)})`, act('결과 보기 →', u()));
+      : ok(`테스트 ${t.total}건이 모두 실행되었습니다. (Pass ${n(t.last_pass)} · 실패 ${n(t.last_fail)} · Blocked ${n(t.last_blocked)})`, act('결과 보기 →', u()));
     case 'DEFECTS': return n(t.executed) === 0 ? none('먼저 테스트를 실행하세요.', null)
-      : n(t.last_fail) ? prog(`Fail 테스트 ${t.last_fail}건${n(t.fail_issues_open) ? ` · 처리 중 Issue ${t.fail_issues_open}건` : ''}`, act('결함 조치 →', u('?last_result=FAIL')), { crit: true })
-      : ok('최근 결과가 Fail인 테스트가 없습니다.', act('결과 보기 →', u()));
+      : n(t.last_fail) ? prog(`실패 테스트 ${t.last_fail}건${n(t.fail_issues_open) ? ` · 처리 중 이슈 ${t.fail_issues_open}건` : ''}`, act('결함 조치 →', u('?last_result=FAIL')), { crit: true })
+      : ok('최근 결과가 실패인 테스트가 없습니다.', act('결과 보기 →', u()));
     case 'NON_FUNCTIONAL': return manual('성능·보안·마이그레이션 검증 결과를 테스트 케이스로 기록하거나 메모로 남깁니다.', act('테스트 케이스 추가 →', u('?new=1')));
     default: return manual('');
   }
@@ -189,14 +189,14 @@ function transition(key, ctx) {
     }
     case 'GO_LIVE': {
       const open = [];
-      if (n(is.active)) open.push(`Open Issue ${is.active}건`);
-      if (n(t.last_fail)) open.push(`Fail 테스트 ${t.last_fail}건`);
+      if (n(is.active)) open.push(`열린 이슈 ${is.active}건`);
+      if (n(t.last_fail)) open.push(`실패 테스트 ${t.last_fail}건`);
       if (n(a.requested) + n(a.rework)) open.push(`미완료 검수 ${n(a.requested) + n(a.rework)}건`);
       if (n(c.approved_unimplemented)) open.push(`미반영 변경 ${c.approved_unimplemented}건`);
-      return open.length ? manual(`오픈 전 확인: ${open.join(' · ')}`, act(n(is.active) ? 'Open Issue 확인 →' : n(t.last_fail) ? 'Fail 테스트 확인 →' : '확인 →', n(is.active) ? `/app/projects/${ctx.pid}/issues` : n(t.last_fail) ? `/app/projects/${ctx.pid}/tests?last_result=FAIL` : `/app/projects/${ctx.pid}/overview`))
+      return open.length ? manual(`오픈 전 확인: ${open.join(' · ')}`, act(n(is.active) ? '열린 이슈 확인 →' : n(t.last_fail) ? 'Fail 테스트 확인 →' : '확인 →', n(is.active) ? `/app/projects/${ctx.pid}/issues` : n(t.last_fail) ? `/app/projects/${ctx.pid}/tests?last_result=FAIL` : `/app/projects/${ctx.pid}/overview`))
         : manual('오픈을 막는 미완료 항목이 없습니다. 오픈 후 완료 처리하세요.', cl(ctx, key));
     }
-    case 'STABILIZE': return n(is.active) ? manual(`Open Issue ${is.active}건을 모니터링 중입니다.`, act('Issue 처리 →', `/app/projects/${ctx.pid}/issues`)) : manual('오픈 후 발생하는 문제를 Issue로 기록하고 처리합니다.', cl(ctx, key));
+    case 'STABILIZE': return n(is.active) ? manual(`열린 이슈 ${is.active}건을 모니터링 중입니다.`, act('이슈 처리 →', `/app/projects/${ctx.pid}/issues`)) : manual('오픈 후 발생하는 문제를 이슈로 기록하고 처리합니다.', cl(ctx, key));
     case 'CUTOVER_PLAN': return manual('전환 순서, 일정, 담당, 롤백 기준을 체크리스트로 정리합니다.', cl(ctx, key));
     case 'DATA_MIGRATION': return manual('이관 대상 분석, 매핑, 리허설, 본 이관과 검증을 수행합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
     case 'TRAINING': return manual('사용자·운영자 교육과 매뉴얼 전달을 체크리스트로 관리합니다.', cl(ctx, key));
@@ -208,7 +208,7 @@ function operations(key, ctx) {
   const is = ctx.stats.issues || {};
   switch (key) {
     case 'HANDOVER': return manual('운영 매뉴얼, 계정, 모니터링, 담당자를 운영 조직에 인수인계합니다.', cl(ctx, key));
-    case 'MAINTENANCE': return manual(n(is.active) ? `Open Issue ${is.active}건이 남아 있습니다. 운영 이관 대상인지 확인하세요.` : '장애·요청 접수 경로와 처리 절차를 정합니다.', n(is.active) ? act('Issue 보기 →', `/app/projects/${ctx.pid}/issues`) : cl(ctx, key));
+    case 'MAINTENANCE': return manual(n(is.active) ? `열린 이슈 ${is.active}건이 남아 있습니다. 운영 이관 대상인지 확인하세요.` : '장애·요청 접수 경로와 처리 절차를 정합니다.', n(is.active) ? act('이슈 보기 →', `/app/projects/${ctx.pid}/issues`) : cl(ctx, key));
     case 'SLA': return manual('응답·복구 시간 등 서비스 수준 기준을 확인합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
     case 'RELEASE_PLAN': return manual('개선 요청을 모아 배포하는 주기와 절차를 정합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
     case 'CLOSE': return manual('결과 공유, 미결 사항, 교훈을 정리하고 프로젝트를 종료합니다.', cl(ctx, key));

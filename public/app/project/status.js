@@ -20,12 +20,18 @@ export const phaseTip = (ph) => {
 /** Compact lifecycle stepper (no percentages): ✓ 착수 ─ ● 요구사항 정의 ─ ○ 분석·설계 … Green done · Blue current · Amber left with REQUIRED open (count badge, no ✓) · Gray not started.
  * A step opens that phase's activity list on What’s Next (…?phase=KEY; the current phase is What’s Next itself) — never a work screen.
  * `selKey` = the phase whose list is shown (outlined). */
-export const phaseStepper = (g, pid, selKey = null) => html`<ol class="pstep" aria-label="Project Lifecycle">${raw((g.phases || []).map((ph) => {
+/** On phones the stepper is one line — "03 / 07 · 분석·설계 ▾" — that opens the full list (design §3.8). */
+const curOf = (g) => (g.phases || []).find((ph) => ph.is_current) || (g.phases || [])[0];
+if (typeof document !== 'undefined' && !document.body?.dataset.pstepBound) {
+  document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-pstep-toggle]'); if (!b) return; const w = b.parentElement; const open = !w.classList.contains('is-open'); w.classList.toggle('is-open', open); b.setAttribute('aria-expanded', String(open)); });
+  if (document.body) document.body.dataset.pstepBound = '1';
+}
+export const phaseStepper = (g, pid, selKey = null) => { const c = curOf(g); return html`<div class="pstepw">${raw(c ? html`<button type="button" class="pstep__m" data-pstep-toggle aria-expanded="false">${no2(c.sequence)} / ${no2((g.phases || []).length)} · ${c.name} <i aria-hidden="true">▾</i></button>` : '')}<ol class="pstep" aria-label="프로젝트 단계">${raw((g.phases || []).map((ph) => {
   const state = phaseState(ph);
   const href = ph.is_current ? `/app/projects/${pid}` : `/app/projects/${pid}?phase=${ph.phase_key}`;
   const sel = selKey && selKey === ph.phase_key && !ph.is_current;
   return html`<li class="is-${state} ${sel ? 'is-sel' : ''}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기" ${sel ? 'aria-current="page"' : ''}><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : state === 'gap' ? '◐' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span>${raw(state === 'gap' ? html`<span class="pstep__n" title="필수 업무 ${reqOpen(ph)}건 남음">${reqOpen(ph)}</span>` : '')}</a></li>`;
-}).join(''))}</ol>`;
+}).join(''))}</ol></div>`; };
 
 /** Days from today to `date` (negative when past). null when no date. */
 export const daysUntil = (date) => (date ? Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${todayLocal()}T00:00:00Z`)) / 86400000) : null);
@@ -42,7 +48,7 @@ export const varianceTone = (v) => (v === null || v === undefined ? 'muted' : v 
 export function scheduleState(w) {
   if (!w || !n(w.tasks)) return { tone: 'muted', label: '-', detail: 'WBS가 등록되면 계산됩니다' };
   const od = n(w.overdue_tasks), om = n(w.overdue_milestones); const v = w.variance;
-  if (od || om) return { tone: 'crit', label: `${n(w.max_overdue_days)}일 지연`, detail: [od ? `지연 Task ${od}건` : '', om ? `지난 마일스톤 ${om}건` : ''].filter(Boolean).join(' · ') };
+  if (od || om) return { tone: 'crit', label: `${n(w.max_overdue_days)}일 지연`, detail: [od ? `지연 작업 ${od}건` : '', om ? `지난 마일스톤 ${om}건` : ''].filter(Boolean).join(' · ') };
   if (v !== null && v !== undefined && v < -5) return { tone: 'crit', label: '진척 지연', detail: `계획 대비 ${varianceText(v)}` };
   if (v !== null && v !== undefined && v < 0) return { tone: 'warn', label: '약간 지연', detail: `계획 대비 ${varianceText(v)}` };
   if (n(w.tasks_without_dates)) return { tone: 'warn', label: '확인 필요', detail: `일정 미입력 ${w.tasks_without_dates}건` };
@@ -60,7 +66,7 @@ export function exceptions(g, pid) {
   const rows = [
     ['ISSUE', '미해결 Issue', n(is.active), u(is.critical ? '/issues?severity=CRITICAL' : '/issues'), 'crit', is.critical ? `Critical ${is.critical}건` : ''],
     ['RISK', 'High 이상 Risk', n(rs.high_or_critical), u('/issues?tab=risks&risk_level=HIGH,CRITICAL'), 'crit', rs.critical ? `Critical ${rs.critical}건` : ''],
-    ['OVERDUE', '지연 Task', n(w.overdue_tasks), u('/wbs?f=overdue'), 'crit', ''],
+    ['OVERDUE', '지연 작업', n(w.overdue_tasks), u('/wbs?f=overdue'), 'crit', ''],
     ['MILESTONE', '지난 마일스톤', n(w.overdue_milestones), u('/wbs?view=gantt'), 'crit', ''],
     ['FAIL', 'Fail 테스트', n(t.last_fail), u('/tests?last_result=FAIL'), 'crit', ''],
     ['REWORK', '보완 필요 검수', n(a.rework), u('/tests?tab=acceptance&status=REWORK_REQUIRED'), 'warn', ''],

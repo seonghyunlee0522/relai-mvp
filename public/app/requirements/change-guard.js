@@ -7,20 +7,30 @@
  * [변경 요청 만들기] leaves the requirement untouched and creates one DRAFT change request through the existing CR API, linked to the
  * requirement(s), with the proposal (필드별 변경 전 → 후) as its description. [단순 수정으로 저장] (adding: [그냥 추가]) saves as before; [취소] saves nothing. */
 import { api, wsApi } from '../core/api.js';
-import { $, html } from '../core/dom.js';
+import { $, html, raw } from '../core/dom.js';
 import { toastAction } from '../shared/dialogs.js';
 import { navigate } from '../core/router.js';
 
 export { GUARDED_FIELDS, FIELD_LABEL, needsPrompt, needsAddPrompt, proposalLine } from './change-rules.js';
 import { needsPrompt, proposalLine } from './change-rules.js';
 
-/** Resolves 'cr' | 'save' | null (취소). */
-export function changePromptDialog({ adding = false } = {}) {
+const short = (s, n = 80) => (s.length > n ? `${s.slice(0, n)}…` : s);
+/** The grey one-line summary of what changes (L-D4): "완료 조건: 3개 → 4개", "제목: A → B". */
+export function diffLine(r, field, before, after) {
+  if (field === 'criteria') {
+    const n = (r.criteria && r.criteria.length) ?? Number(r.criteria_count || 0);
+    return before ? `완료 조건: ${short(String(before), 40)} → ${short(String(after), 40)}` : `완료 조건: ${n}개 → ${n + 1}개`;
+  }
+  if (field === 'archive') return `보관: ${r.display_id} ${short(r.title, 60)} (범위에서 제외)`;
+  return short(proposalLine(field, before, after).replace(/^- /, ''), 120);
+}
+/** Resolves 'cr' | 'save' | null (취소). `diff` = one grey line under the body. */
+export function changePromptDialog({ adding = false, diff = '' } = {}) {
   return new Promise((resolve) => {
     const el = document.createElement('div'); el.className = 'scrim';
     el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cgT" data-dialog="req-change" tabindex="-1"><h3 id="cgT">${adding ? '승인된 기준선에 요구사항을 추가하려 합니다' : '확정된 요구사항을 바꾸려 합니다'}</h3>
-      <div class="dialog__b">${adding ? '고객이 새로 요청한 요구사항이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 원래 승인 범위에 있었는데 빠뜨린 것이면 그냥 추가해도 됩니다.' : '고객 요청으로 내용이 바뀌는 것이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 오타·표현 수정이면 그냥 저장해도 됩니다.'}</div>
-      <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="save">${adding ? '그냥 추가' : '단순 수정으로 저장'}</button><button class="btn btn--primary" data-v="cr">변경 요청 만들기</button></div></div>`;
+      <div class="dialog__b">${adding ? '고객이 새로 요청한 요구사항이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 원래 승인 범위에 있었는데 빠뜨린 것이면 그냥 추가해도 됩니다.' : '고객 요청으로 내용이 바뀌는 것이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 오타·표현 수정이면 그냥 저장해도 됩니다.'}</div>${raw(diff ? html`<p class="dialog__diff" data-diff>${diff}</p>` : '')}
+      <div class="actions actions--stack"><button class="btn btn--ghost" data-v="cancel">취소</button><span class="actions__sp"></span><button class="btn btn--secondary" data-v="save">${adding ? '그냥 추가' : '단순 수정으로 저장'}</button><button class="btn btn--primary" data-v="cr">변경 요청 만들기</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };
     el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; } done(b.dataset.v === 'cancel' ? null : b.dataset.v); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });
@@ -44,7 +54,7 @@ export async function createChangeDraft(pid, { title, lines, requirementIds = []
  */
 export async function guardEdit(pid, { r, field, before, after }, apply) {
   if (!needsPrompt(r, field)) { await apply(); return true; }
-  const v = await changePromptDialog();
+  const v = await changePromptDialog({ diff: diffLine(r, field, before, after) });
   if (v === 'save') { await apply(); return true; }
   if (v === 'cr') await createChangeDraft(pid, { title: `${r.display_id} 변경: ${r.title}`, lines: [field === 'archive' ? `- 보관(범위에서 제외): ${r.display_id} ${r.title}` : proposalLine(field, before, after)], requirementIds: [r.id], relation: field === 'archive' ? 'REMOVES' : 'MODIFIES' });
   return false;

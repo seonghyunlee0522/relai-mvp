@@ -53,7 +53,7 @@ test('FREE limits: projects / requirements / WBS / weekly reports / members answ
   // projects: 1 active
   const p2 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));
   assert.equal(p2.status, 402); assert.equal(p2.json.error.code, 'plan_limit_reached');
-  assert.deepEqual(p2.json.error.limit, { dimension: 'projects', label: 'Active Projects', used: 1, limit: 1, plan: 'FREE', adding: 1 });
+  assert.deepEqual(p2.json.error.limit, { dimension: 'projects', label: '진행 중 프로젝트', used: 1, limit: 1, plan: 'FREE', adding: 1 });
   assert.equal(p2.json.error.upgrade.plan, 'TEAM');
   // archive frees the slot; unarchiving the first while the second is active is refused
   await A.c('POST', `${A.purl}/archive`, {});

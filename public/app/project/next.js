@@ -29,10 +29,11 @@ const guideCard = (g, p, archived, created) => {
   const cur = g.current_phase; const nx = g.next_phase;
   const movePrimary = isMove(q.primary_action);
   const primary = archived ? '' : movePrimary ? html`<button type="button" class="btn btn--primary btn--sm" data-move-next>${nx ? `${no2(nx.sequence)} ${nx.name} 단계 시작 →` : q.primary_action.label}</button>` : ctaLink(q.primary_action, 'btn btn--primary btn--sm');
-  const secondary = archived || !q.secondary_action || isMove(q.secondary_action) ? '' : ctaLink(q.secondary_action, 'link rg__sec');
+  // One next step per screen (design §1.1, J1): when the phase can move on, the move is the only CTA.
+  const secondary = archived || movePrimary || !q.secondary_action || isMove(q.secondary_action) ? '' : ctaLink(q.secondary_action, 'link rg__sec');
   return html`<section class="rg" aria-labelledby="rgT" data-tour-id="guidance">
     <header class="rg__h">
-      <span class="rg__mark" aria-hidden="true"><svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg></span><b id="rgT">RELAI Guide</b>
+      <span class="rg__mark" aria-hidden="true"><svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg></span><b id="rgT">RELAI 안내</b>
       ${raw(created ? '<span class="rg__new">프로젝트가 생성되었습니다.</span>' : '')}</header>
     <div class="rg__body">
       <h2 class="rg__title">${q.title}</h2>
@@ -130,7 +131,7 @@ export async function nextPage(id, main = $('#main')) {
   { const qp0 = new URLSearchParams(location.search); nextPage._flag = qp0.get('created') === '1' ? `created:${id}` : qp0.get('move') === 'next' ? `move:${id}` : null; if (nextPage._flag) history.replaceState(null, '', `/app/projects/${id}`); }
   let g = await api('GET', wsApi(`/${id}`));
   const p = g.project;
-  document.title = `What’s Next? — ${p.name} — RELAI`;
+  document.title = `지금 할 일 — ${p.name} — RELAI`;
   const archived = p.status === 'ARCHIVED';
   const created = nextPage._flag === `created:${id}`; const moveNext = nextPage._flag === `move:${id}`; nextPage._flag = null;
   await ob.get();
@@ -138,7 +139,7 @@ export async function nextPage(id, main = $('#main')) {
   const viewKey = new URLSearchParams(location.search).get('phase');   // stepper click on another phase → that phase's activity list
   const draw = () => {
     const view = viewKey ? (g.phases || []).find((x) => x.phase_key === viewKey && !x.is_current) : null;
-    main.innerHTML = html`<div class="page page--wide page--flow nx">
+    main.innerHTML = html`<div class="page page--wide page--flow page--guide nx">
       ${raw(projectHead(p, g, { tab: 'next' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 단계와 업무는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(phaseStepper(g, p.id, view ? view.phase_key : null))}

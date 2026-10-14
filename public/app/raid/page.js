@@ -40,13 +40,13 @@ export async function raidPage(id) {
     { key: 'overdue', label: 'Overdue', format: () => '예' }, { key: 'review', label: 'Review 필요', format: () => '예' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const ownerOpts = (cur, blank = '미지정') => html`<option value="">${blank}</option>` + members.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
   const dcell = (d) => (d ? html`${fmtShort(d)}` : '<span class="dim">-</span>');
-  document.title = `Issues & Risks — ${p.name} — RELAI`;
+  document.title = `이슈·리스크 — ${p.name} — RELAI`;
 
   const draw = () => {
     const q = params(); const I = isIssue();
     const hasFilter = ['q', ...filterKeys(), 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: 'raid', title: 'Issues & Risks' }))}
+      ${raw(projectHead(p, g, { tab: 'raid', title: '이슈·리스크' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. Issue와 Risk는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(coachMark('ISSUE_RISK_INTRO'))}
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? 'Issue는 이미 발생해 대응이 필요한 문제입니다.' : 'Risk는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">Issues${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">Risks${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>

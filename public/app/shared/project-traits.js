@@ -15,7 +15,7 @@ export const PROJECT_TYPES = [
 ];
 export const BOOLEAN_TBD_OPTIONS = [{ value: 'YES', label: '있음' }, { value: 'NO', label: '없음' }, { value: 'TBD', label: '미정' }];
 export const DATA_MIGRATION_OPTIONS = BOOLEAN_TBD_OPTIONS;
-export const DEPLOYMENT_ENVIRONMENTS = [{ value: 'CLOUD', label: 'Cloud' }, { value: 'ON_PREMISE', label: 'On-Premise' }, { value: 'HYBRID', label: 'Hybrid' }, { value: 'TBD', label: '미정' }];
+export const DEPLOYMENT_ENVIRONMENTS = [{ value: 'CLOUD', label: '클라우드' }, { value: 'ON_PREMISE', label: '온프레미스' }, { value: 'HYBRID', label: '하이브리드' }, { value: 'TBD', label: '미정' }];
 export const DELIVERY_MODELS = [{ value: 'ONSITE', label: '상주' }, { value: 'REMOTE', label: '비상주' }, { value: 'HYBRID', label: '혼합' }, { value: 'TBD', label: '미정' }];
 
 /** Field order = display order (2-column pairs on desktop: 유형·환경 / 이관·수행 방식 / 기존 시스템·외부 연계). */

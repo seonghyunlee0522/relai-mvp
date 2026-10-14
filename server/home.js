@@ -77,6 +77,7 @@ export async function homeCard(db, row, { today } = {}) {
   const attentionAll = early ? attentionRaw.filter((i) => i.kind !== 'CONFIRMED_UNLINKED_REQUIREMENT') : attentionRaw;
   const w = ctx.stats.wbs || {}; const iss = ctx.stats.issues || {};
   const attention = { total: attentionAll.length, crit: attentionAll.filter((i) => i.severity === 'crit').length,
+    unlinked: attentionAll.filter((i) => i.kind === 'CONFIRMED_UNLINKED_REQUIREMENT').length,   // Home shows this once, as the 다음 할 일 (design §4 #2)
     items: attentionAll.slice(0, 3).map(({ kind, type, severity, display_id, title, meta, href }) => ({ kind, type, severity, display_id, title, meta, href })) };
   const upcoming = upcomingAll.filter((u) => MILESTONE_KINDS.has(u.kind)).slice(0, 3).map(({ kind, type, title, date, label, href }) => ({ kind, type, title, date, label, href }));
   const nextDate = upcoming[0] || null;   // "다음 확인" = the nearest milestone-type date, never an arbitrary task start

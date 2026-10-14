@@ -10,7 +10,7 @@ test('traits: one option set — codes, labels, TBD defaults (never NO)', () => 
   assert.deepEqual(TRAIT_FIELDS, ['project_type', 'deployment_environment', 'data_migration', 'delivery_model', 'has_existing_system', 'has_external_integration']);
   assert.deepEqual(PROJECT_TRAITS[0].options.map((o) => o.value), ['NEW_BUILD', 'ENHANCEMENT', 'TRANSITION', 'OTHER']);
   for (const t of PROJECT_TRAITS.slice(1)) { assert.equal(t.default, 'TBD'); assert.ok(t.options.some((o) => o.value === 'TBD')); }
-  assert.equal(traitLabel('project_type', null), '미설정'); assert.equal(traitLabel('data_migration', 'TBD'), '미정'); assert.equal(traitLabel('deployment_environment', 'ON_PREMISE'), 'On-Premise');
+  assert.equal(traitLabel('project_type', null), '미설정'); assert.equal(traitLabel('data_migration', 'TBD'), '미정'); assert.equal(traitLabel('deployment_environment', 'ON_PREMISE'), '온프레미스');
   const f = {}; assert.deepEqual(parseTraits({}, f, { requireType: false }), { project_type: null, deployment_environment: 'TBD', data_migration: 'TBD', delivery_model: 'TBD', has_existing_system: 'TBD', has_external_integration: 'TBD' });
   const f2 = {}; parseTraits({ project_type: 'SI', delivery_model: 'X' }, f2); assert.ok(f2.project_type && f2.delivery_model);
 });
@@ -52,7 +52,7 @@ test('traits: edited in 프로젝트 정의 through the same PUT, stored on the 
   // Charter reads them straight from the project
   const c = (await A.c('GET', `${A.purl}/charter`)).json.charter;
   assert.equal(c.profile.project_type, '기타');
-  assert.deepEqual(c.profile.traits.map((t) => [t.field, t.value, t.value_label]), [['project_type', 'OTHER', '기타'], ['deployment_environment', 'CLOUD', 'Cloud'], ['data_migration', 'YES', '있음'], ['delivery_model', 'TBD', '미정'], ['has_existing_system', 'YES', '있음'], ['has_external_integration', 'TBD', '미정']]);
+  assert.deepEqual(c.profile.traits.map((t) => [t.field, t.value, t.value_label]), [['project_type', 'OTHER', '기타'], ['deployment_environment', 'CLOUD', '클라우드'], ['data_migration', 'YES', '있음'], ['delivery_model', 'TBD', '미정'], ['has_existing_system', 'YES', '있음'], ['has_external_integration', 'TBD', '미정']]);
   // legacy project: NULL type → 미설정, other screens fine, PATCH without type still works
   await db.run('UPDATE projects SET project_type = NULL WHERE id = ?', [A.p.id]);
   assert.equal((await A.c('GET', A.purl)).status, 200);

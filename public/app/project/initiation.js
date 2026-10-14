@@ -10,7 +10,7 @@ import { toast } from '../shared/dialogs.js';
 import { state } from '../core/state.js';
 
 export const TERMS = {
-  charter: ['Project Charter', '프로젝트의 목적·범위·조직·일정을 한 장으로 정리한 기준 문서'],
+  charter: ['프로젝트 헌장', '프로젝트의 목적·범위·조직·일정을 한 장으로 정리한 기준 문서'],
   kickoff: ['착수보고회(킥오프)', '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 회의'],
   plan: ['사업수행계획서', '수행사가 고객에게 제출하는 프로젝트 수행 계획 문서. 착수 단계에서 승인받습니다'],
   milestone: ['마일스톤', '착수보고·중간보고·검수·오픈처럼 반드시 지켜야 하는 프로젝트의 주요 시점'],
@@ -19,9 +19,9 @@ export const TERMS = {
   baseline: ['승인 / 기준선', '승인된 목표·범위·일정이 이후 변경관리·검수의 기준이 됩니다'],
   // 02 요구사항 정의 only (Phase 2 US-5)
   req_baseline: ['기준선', '고객이 승인한 요구사항 목록. 이후 바뀌는 것은 변경 요청으로 관리합니다'],
-  nonfunctional: ['비기능 요구사항', '기능이 아니라 성능·보안·가용성·운영처럼 시스템이 갖춰야 할 품질 조건에 대한 요구사항'],
+  nonfunctional: ['비기능 요구사항', '기능이 아니라 성능·보안·가용성·운영처럼 시스템이 갖춰야 할 품질 조건에 대한 요구사항. 예: 화면 응답 3초 이내'],
   criteria: ['완료 조건', '이 요구사항이 다 됐다고 판단하는 기준. 검수 기준이 됩니다'],
-  scope: ['범위 내 / 범위 외', '범위 내는 이번 계약에서 만드는 것, 범위 외는 이번에는 하지 않기로 한 것'],
+  scope: ['범위 내 / 범위 외', '범위 내는 이번 계약에서 만드는 것, 범위 외는 이번에는 하지 않기로 한 것. 범위 외를 나중에 하려면 변경 요청으로 추가합니다'],
 };
 /** Small "?" with a tooltip (hover / focus). */
 export const term = (key) => { const t = TERMS[key]; return t ? html`<span class="term" tabindex="0" role="note" aria-label="${t[0]}: ${t[1]}" data-tip="${t[1]}">?</span>` : ''; };

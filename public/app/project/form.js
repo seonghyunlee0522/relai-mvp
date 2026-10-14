@@ -14,8 +14,8 @@ export async function projectFormPage(id) {
     if (p.status === 'ARCHIVED') { navigate(`/app/projects/${id}`, { replace: true }); return; }
   }
   document.title = `${editing ? '프로젝트 정보 수정' : '새 프로젝트'} — RELAI`;
-  main.innerHTML = html`<div class="page page--form">
-    <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : 'Projects'}</a>
+  main.innerHTML = html`<div class="page page--form page--guide">
+    <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : '프로젝트'}</a>
     <div class="page__head"><div><h1>${editing ? '프로젝트 정보 수정' : '새 프로젝트 시작하기'}</h1>
       ${raw(editing ? '' : '<p>기본 정보와 프로젝트 유형만 정하면 됩니다. 목표·범위·이해관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
     <form class="panel form-panel pform" id="f" novalidate>

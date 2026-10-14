@@ -130,7 +130,7 @@ export async function openJiraProjectSettings(pid) {
   const draw = () => {
     const c = d.connection; const m = d.mapping; const s = d.summary; const lr = d.last_run;
     const body = !d.configured ? '<div class="notice">Jira 연동이 아직 서버에 설정되지 않았습니다. 운영자가 Atlassian 앱 정보(ATLASSIAN_CLIENT_ID 등)를 설정해야 합니다.</div>'
-      : !c || c.status === 'DISABLED' ? html`<div class="empty-inline"><b>Workspace에 Jira가 연결되어 있지 않습니다.</b><span>Settings → Integrations에서 Jira를 먼저 연결하세요. (Workspace OWNER/ADMIN)</span></div><div class="actions"><a class="btn btn--secondary btn--sm" href="/app/settings" data-link data-close>Settings → Integrations</a></div>`
+      : !c || c.status === 'DISABLED' ? html`<div class="empty-inline"><b>Workspace에 Jira가 연결되어 있지 않습니다.</b><span>설정 → 연동에서 Jira를 먼저 연결하세요. (Workspace OWNER/ADMIN)</span></div><div class="actions"><a class="btn btn--secondary btn--sm" href="/app/settings" data-link data-close>Settings → Integrations</a></div>`
       : editing || !m ? mappingForm(c) : html`
         <dl class="jinfo">
           <dt>Jira Site</dt><dd><a href="${c.site_url}" target="_blank" rel="noopener noreferrer">${c.site_url.replace(/^https?:\/\//, '')}</a></dd>

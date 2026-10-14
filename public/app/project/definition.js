@@ -19,7 +19,7 @@ import { TRAIT_FIELDS } from '../shared/project-traits.js';
 import { traitFields, traitGrid, wireTraitFields } from '../shared/trait-fields.js';
 import { josa } from '../shared/josa.js';
 import { planMenu, bindPlanMenu, term, isMeasurable, noApprovalLine } from './initiation.js';
-import { approvalFields, collectApproval, approvalBody } from '../shared/approval.js';
+import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 
 const ORG_TYPE = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 킥오프/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 Steering Committee 승인']];
@@ -115,7 +115,7 @@ export async function definitionPage(id) {
     return html`<section class="pv" aria-labelledby="pvT">
       <div class="pv__h"><span class="pv__no mono">01</span><h2 id="pvT">착수</h2>${raw(isCurrentPhase ? '<span class="np__cur">현재 단계</span>' : '')}<span class="pv__sp"></span>${raw(planMenu())}</div>
       <p class="pv__d">${ph ? ph.description : '프로젝트의 목표, 범위, 조직과 기본 계획을 정합니다.'}</p>
-      <p class="pv__terms">용어: <span>Project Charter ${raw(term('charter'))}</span><span>이해관계자 ${raw(term('stakeholder'))}</span><span>마일스톤 ${raw(term('milestone'))}</span><span>착수보고회 ${raw(term('kickoff'))}</span><span>사업수행계획서 ${raw(term('plan'))}</span><span>스폰서 ${raw(term('sponsor'))}</span><span>승인/기준선 ${raw(term('baseline'))}</span></p>
+      <p class="pv__terms">용어: <span>프로젝트 헌장 ${raw(term('charter'))}</span><span>이해관계자 ${raw(term('stakeholder'))}</span><span>마일스톤 ${raw(term('milestone'))}</span><span>착수보고회 ${raw(term('kickoff'))}</span><span>사업수행계획서 ${raw(term('plan'))}</span><span>스폰서 ${raw(term('sponsor'))}</span><span>승인/기준선 ${raw(term('baseline'))}</span></p>
       ${raw(noApprovalLine(g))}
       <div class="pvp" data-row-profile>
         <div class="pvp__h"><div><b>프로젝트 기본 특성</b><small>프로젝트 유형과 수행 환경 · 생성 시 입력한 값이며 여기서 수정합니다.</small></div>${raw(ro ? '' : '<button type="button" class="link linkbtn pv__go" data-open="PROFILE">수정 →</button>')}</div>
@@ -149,7 +149,7 @@ export async function definitionPage(id) {
       case 'SCOPE': return html`<div class="field" data-field="scope_in"><label>수행 범위 <small class="dim">이번 프로젝트에서 하는 것</small></label>${raw(listRows('scope_in', d.scope_in, '예: 계약서 자동 검토 기능(국문 표준계약 5종)'))}</div>
         <div class="field" data-field="scope_out"><label>제외 범위 <small class="dim">하지 않기로 한 것</small></label>${raw(listRows('scope_out', d.scope_out, '예: 영문 계약서, 기존 ERP 연동'))}</div>
         ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(0, 1)))}
-        <div class="def__sub"><b>전제 · 제약 · 초기 리스크</b><small>Project Charter와 RELAI AI가 WBS·요구사항·변경 영향을 판단할 때 함께 고려합니다.</small></div>
+        <div class="def__sub"><b>전제 · 제약 · 초기 리스크</b><small>프로젝트 헌장과 RELAI AI가 WBS·요구사항·변경 영향을 판단할 때 함께 고려합니다.</small></div>
         ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(1)))}
         <p class="hint">완료 처리하려면 수행 범위를 1개 이상 입력합니다. 산출물·전제·제약·리스크는 선택 항목입니다.</p>`;
       case 'STAKEHOLDERS': return html`${raw(hierarchy(d.stakeholders))}
@@ -167,7 +167,7 @@ export async function definitionPage(id) {
           ${raw(d.stakeholders.length ? '' : '<tr class="def__empty"><td colspan="7">아직 등록된 이해관계자가 없습니다. 직접 추가하거나 Excel 템플릿으로 한 번에 등록하세요.</td></tr>')}</tbody></table></div>
         <p class="hint">완료 처리하려면 조직 구분과 이름이 있는 이해관계자를 1명 이상 등록합니다.</p>`;
       case 'MILESTONES': return html`<div class="def__dates" data-field="project_dates"><span>프로젝트 기간</span><b>${fmtShort(m.project_dates.planned_start_date)} ~ ${fmtShort(m.project_dates.planned_end_date)}</b>${raw(ro ? '' : html`<a class="link" href="${u}/edit" data-link>정보 수정</a>`)}</div>
-        <div class="field" data-field="key_dates"><label>주요 일정 · 마일스톤 <small class="dim">계약·보고·검수 등 반드시 지켜야 할 시점 — Project Charter 타임라인에 표시됩니다</small></label>
+        <div class="field" data-field="key_dates"><label>주요 일정 · 마일스톤 <small class="dim">계약·보고·검수 등 반드시 지켜야 할 시점 — 프로젝트 헌장 타임라인에 표시됩니다</small></label>
           <ul class="def__list def__list--dates">${raw(d.key_dates.map((x) => html`<li data-kd="${x.id}"><input class="input input--sm" type="date" data-kdf="date" value="${x.date}" ${ro ? 'disabled' : ''}><input class="input input--sm" data-kdf="title" value="${x.title}" maxlength="200" placeholder="예: 킥오프, 중간보고, 최종 검수" ${ro ? 'disabled' : ''}>${raw(ro ? '' : html`<button type="button" class="def__x" data-kddel="${x.id}" aria-label="삭제">×</button>`)}${raw(afterEnd(x.date))}</li>`).join(''))}</ul>
           ${raw(ro ? '' : '<button type="button" class="link linkbtn def__add" id="kd-add">+ 일정 추가</button>')}</div>
         <div class="field"><label>WBS 마일스톤 <small class="dim">분석·설계 단계에서 WBS에 등록한 마일스톤 (조회만)</small></label>
@@ -236,7 +236,7 @@ export async function definitionPage(id) {
       ? html`<div class="wd__skipped"><i class="st st--skip" aria-hidden="true">—</i><div><b>이 업무는 건너뛴 상태입니다.</b><p>이번 프로젝트에서는 수행하지 않는 것으로 기록되어 있습니다. 필요해지면 다시 시작할 수 있습니다.</p>${raw(ro ? '' : '<button type="button" class="btn btn--primary btn--sm" data-wact="resume">업무 다시 시작 →</button>')}</div></div>`
       : html`${raw(st === 'review' ? '<div class="notice notice--soft">완료 처리 후 내용이 수정되었습니다. 확인한 뒤 다시 완료 처리하세요.</div>' : '')}<div class="wd__form" data-sec="${s.key}">${raw(form(s.key))}</div>`;
     const foot = ro || skipped ? '' : html`<div class="wd__f">
-      ${raw(s.skippable && !completed ? '<button type="button" class="link linkbtn wd__skip" data-wact="skip">↷ 이 업무 건너뛰기</button>' : '<span></span>')}
+      ${raw(s.skippable && !completed ? '<button type="button" class="link linkbtn wd__skip" data-wact="skip">↷ 이 업무 건너뛰기</button>' : s.key === 'APPROVAL' && !completed ? html`<span class="wd__stat hint" id="apv-stat">${approvalStatusText(d.approval || {})}</span>` : '<span></span>')}
       <span class="wd__btns"><span class="wd__stat" id="wd-stat">${dirty ? '저장되지 않은 변경' : ''}</span>
         <button type="button" class="btn btn--secondary btn--sm" data-wact="save">임시저장</button>
         ${raw(completed ? (st === 'review' ? '<button type="button" class="btn btn--primary btn--sm" data-wact="confirm">다시 확인 완료</button>' : '') + '<button type="button" class="btn btn--ghost btn--sm" data-wact="reopen">완료 취소</button>' : '<button type="button" class="btn btn--primary btn--sm" data-wact="complete">완료 처리</button>')}</span></div>`;
@@ -249,7 +249,7 @@ export async function definitionPage(id) {
   };
 
   const draw = () => {
-    main.innerHTML = html`<div class="page page--wide page--flow defp ${open ? 'has-wd' : ''}">
+    main.innerHTML = html`<div class="page page--wide page--flow page--guide defp ${open ? 'has-wd' : ''}">
       ${raw(projectHead(p, g, { tab: open && ['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL'].includes(open.key) ? open.key.toLowerCase() : 'definition', title: '프로젝트 정의' }))}
       ${raw(processView())}
       ${raw(drawer())}
@@ -285,7 +285,7 @@ export async function definitionPage(id) {
     if (key === 'KICKOFF') { const k = { ...body.kickoff }; delete k._prefilled; body.kickoff = k; }
     return body;
   };
-  const markDirty = () => { dirty = true; const st = $('#wd-stat'); if (st) st.textContent = '저장되지 않은 변경'; };
+  const markDirty = () => { dirty = true; const st = $('#wd-stat'); if (st) st.textContent = '저장되지 않은 변경'; const as = $('#apv-stat'); if (as && open && open.key === 'APPROVAL') { collect(); as.textContent = approvalStatusText(d.approval || {}); } };
   const reload = async () => { [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`))]); };
   const err = (e) => { const msg = e.fields ? Object.values(e.fields)[0] : e.message; toast(msg); const st = $('#wd-stat'); if (st) st.textContent = msg; };
 
@@ -306,6 +306,8 @@ export async function definitionPage(id) {
     }
     if (action === 'reopen' && !(await confirmDialog({ title: '완료를 취소할까요?', body: '작성한 내용은 그대로 남고, 이 업무만 다시 "진행 중"으로 바뀝니다.', confirm: '완료 취소' }))) return;
     collect();
+    const wd = $('#wdrawer');
+    if (key === 'APPROVAL' && action === 'complete' && wd && showApprovalErrors(wd, approvalErrors(d.approval || {}))) return;   // L-D2: inline, under each field
     const body = ['complete', 'confirm'].includes(action) ? sectionBody(key) : {};   // 완료 처리 = 저장 + 검증 + COMPLETED, one click
     try {
       const r = await api('POST', wsApi(`/${id}/definition/sections/${key}/${action}`), body);

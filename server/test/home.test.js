@@ -32,7 +32,7 @@ test('home: cards carry the same guidance as the project GET, list rows only for
   assert.equal(card.current_phase_name, g.current_phase.name);
   assert.equal(card.priority, 'ACTION');
   assert.ok(['GOOD', 'UNKNOWN'].includes(card.health.status));   // empty project: change=GOOD, the rest UNKNOWN
-  assert.deepEqual(card.attention, { total: 0, crit: 0, items: [] });
+  assert.deepEqual(card.attention, { total: 0, crit: 0, unlinked: 0, items: [] });
   assert.ok(Array.isArray(card.upcoming) && card.upcoming.length <= 3);
   const draft = r.json.projects.find((c) => c.id === p4.id);
   assert.equal(draft.priority, 'WAITING');

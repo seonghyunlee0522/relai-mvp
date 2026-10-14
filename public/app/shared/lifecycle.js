@@ -11,9 +11,13 @@
 /** The 7 lifecycle phases in order, for screens that have no project yet (Home empty state). Same keys/order as
  * server/templates/default-phases.js — server/test/phase1.test.js keeps the two in sync. `label` = the one-line flow wording. */
 export const LIFECYCLE_PHASES = [
-  { key: 'INITIATION', label: '착수' }, { key: 'REQUIREMENTS', label: '요구사항 정의' }, { key: 'ANALYSIS_DESIGN', label: '분석·설계' }, { key: 'DEVELOPMENT', label: '구현' },
-  { key: 'TESTING', label: '시험' }, { key: 'TRANSITION_GO_LIVE', label: '전환·오픈' }, { key: 'OPERATIONS', label: '운영' },
-];
+  { key: 'INITIATION', short: '착수', long: '착수' }, { key: 'REQUIREMENTS', short: '요구사항', long: '요구사항 정의' },
+  { key: 'ANALYSIS_DESIGN', short: '분석·설계', long: '분석·설계' }, { key: 'DEVELOPMENT', short: '구현', long: '구현' }, { key: 'TESTING', short: '시험', long: '시험' },
+  { key: 'TRANSITION_GO_LIVE', short: '전환·오픈', long: '전환 및 오픈' }, { key: 'OPERATIONS', short: '운영', long: '운영 및 유지보수' },
+].map((p) => ({ ...p, label: p.long }));
+/** The one phase-name lookup: key → long name (LNB, stepper, Home, auth). `short` only where space requires. */
+export const PHASE_NAME = Object.fromEntries(LIFECYCLE_PHASES.map((p) => [p.key, p.long]));
+export const PHASE_SHORT = Object.fromEntries(LIFECYCLE_PHASES.map((p) => [p.key, p.short]));
 
 const P = (pid, s = '') => `/app/projects/${pid}${s}`;
 const q = (qs, k, v) => (v === undefined ? qs.has(k) : qs.get(k) === v);
@@ -22,15 +26,15 @@ const isPath = (path, pid, suffix) => path === P(pid, suffix) || path === `${P(p
 const CL = (pid, key, label, activity) => ({ key, label, href: P(pid, `/checklist?activity=${activity}`), match: (path, qs) => isPath(path, pid, '/checklist') && q(qs, 'activity', activity) });
 
 export const HOME_ITEMS = (pid) => [
-  { key: 'next', label: 'What’s Next', href: P(pid), match: (path) => isPath(path, pid, '') },
-  { key: 'overview', label: 'Overview', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !qs.get('ctx'),
+  { key: 'next', label: '지금 할 일', href: P(pid), match: (path) => isPath(path, pid, '') },
+  { key: 'overview', label: '현황', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !qs.get('ctx'),
     children: [
       { key: 'overview-main', label: '프로젝트 현황', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !location.hash.includes('health') },
-      { key: 'overview-charter', label: 'Project Charter', href: P(pid, '/charter'), match: (path) => isPath(path, pid, '/charter') },
+      { key: 'overview-charter', label: '프로젝트 헌장', href: P(pid, '/charter'), match: (path) => isPath(path, pid, '/charter') },
       { key: 'overview-wbs', label: 'WBS', href: P(pid, '/wbs?ctx=monitor'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && !q(qs, 'view', 'gantt') },
       { key: 'overview-reports', label: '주간보고', href: P(pid, '/reports'), match: (path) => path.startsWith(P(pid, '/reports')) },
       { key: 'overview-schedule', label: '일정 / 마일스톤', href: P(pid, '/wbs?ctx=monitor&view=gantt'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && q(qs, 'view', 'gantt') },
-      { key: 'overview-health', label: 'Project Health', href: P(pid, '/overview#health'), match: (path) => isPath(path, pid, '/overview') && location.hash === '#health' },
+      { key: 'overview-health', label: '프로젝트 건강도', href: P(pid, '/overview#health'), match: (path) => isPath(path, pid, '/overview') && location.hash === '#health' },
     ] },
 ];
 
@@ -47,12 +51,12 @@ export const PHASE_ITEMS = {
   REQUIREMENTS: (pid) => [
     { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') && !(qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED') },
     { key: 'req-classify', label: '요구사항 분류 / 우선순위', href: P(pid, '/requirements?type=UNSPECIFIED'), match: (path, qs) => isPath(path, pid, '/requirements') && (qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED') },
-    { key: 'req-trace', label: 'Requirement Trace', href: P(pid, '/requirements?view=trace'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') },
+    { key: 'req-trace', label: '요구사항 추적', href: P(pid, '/requirements?view=trace'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') },
   ],
   ANALYSIS_DESIGN: (pid) => [
     { key: 'design', label: '분석·설계', enabled: false },
     { key: 'wbs', label: 'WBS 작성', href: P(pid, '/wbs'), match: (path, qs) => isPath(path, pid, '/wbs') && !q(qs, 'ctx', 'monitor') && !qs.get('phase') },
-    { key: 'wbs-trace', label: 'Requirements ↔ WBS Trace', href: P(pid, '/requirements?view=trace&scope=IN_SCOPE'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') && q(qs, 'scope', 'IN_SCOPE') },
+    { key: 'wbs-trace', label: '요구사항–WBS 연결', href: P(pid, '/requirements?view=trace&scope=IN_SCOPE'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') && q(qs, 'scope', 'IN_SCOPE') },
   ],
   DEVELOPMENT: (pid) => [
     { key: 'dev-status', label: '구현 현황', href: P(pid, '/wbs?ctx=monitor&phase=DEVELOPMENT'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'phase', 'DEVELOPMENT') },
@@ -81,10 +85,10 @@ export const PHASE_ITEMS = {
 };
 
 export const PM_ITEMS = (pid) => [
-  { key: 'changes', label: 'Changes', href: P(pid, '/changes'), match: (path) => isPath(path, pid, '/changes') },
-  { key: 'raid', label: 'Issues & Risks', href: P(pid, '/issues'), match: (path) => isPath(path, pid, '/issues') },
-  { key: 'activity', label: 'Activity', action: 'activity' },
-  { key: 'reports', label: 'Reports', href: P(pid, '/reports'), match: (path) => path.startsWith(P(pid, '/reports')) },
+  { key: 'changes', label: '변경 요청', href: P(pid, '/changes'), match: (path) => isPath(path, pid, '/changes') },
+  { key: 'raid', label: '이슈·리스크', href: P(pid, '/issues'), match: (path) => isPath(path, pid, '/issues') },
+  { key: 'activity', label: '활동 기록', action: 'activity' },
+  { key: 'reports', label: '보고서', href: P(pid, '/reports'), match: (path) => path.startsWith(P(pid, '/reports')) },
 ];
 
 /** Lifecycle phase (01…07) a work path belongs to — used to auto-expand the right accordion group. */

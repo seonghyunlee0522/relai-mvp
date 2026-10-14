@@ -13,7 +13,7 @@ import { resBadge, sevBadge, verifyChip } from '../shared/badges.js';
 import { ISSUE_STATUS, ISSUE_STATUS_CHIP, LINK_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RISK_STATUS, RISK_STATUS_CHIP, WBS_CSTATUS, WBS_CSTATUS_CHIP, WBS_STATUS, WBS_TYPE } from '../shared/constants.js';
 import { traceStrip } from '../shared/trace-strip.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
-import { appliedFilters, bindFilterClears } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, moreFilters } from '../shared/filters.js';
 import { emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { createGrid } from '../shared/grid.js';
@@ -153,11 +153,11 @@ export async function wbsPage(id) {
     columns: [
       { key: 'code', label: 'WBS', width: 70, sticky: true, fixed: true, cls: 'mono wcode', render: (r) => html`${r.wbs_code}` },
       { key: 'title', label: '업무명', width: 400, min: 200, sticky: true, fixed: true, cls: 'ttl', render: (r) => titleCell(r) },
-      { key: 'start', label: '계획 시작', width: 118, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
+      { key: 'start', label: '계획 시작', width: 118, card: false, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
       { key: 'end', label: '계획 종료', width: 118, edit: { type: 'date', field: 'planned_end_date', cls: (r) => (r.computed_status === 'DELAYED' ? 'cell--late' : ''), value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date) }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dateCell(r.milestone_date) : dateCell(r.planned_end, r.rollup)) },
       { key: 'astart', label: '실적 시작', width: 118, hidden: true, edit: { type: 'date', field: 'actual_start_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_start, r.rollup)) },
       { key: 'aend', label: '실적 종료', width: 118, hidden: true, edit: { type: 'date', field: 'actual_end_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_end, r.rollup)) },
-      { key: 'progress', label: '진행률', width: 126, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress },
+      { key: 'progress', label: '진행률', width: 126, card: false, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress },
         render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`<div class="pcell ${r.rollup ? 'is-roll' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : ''}"><div class="pbar"><i style="width:${r.computed_progress}%"></i></div><span>${r.computed_progress}%</span></div>`) },
       { key: 'owner', label: '담당자', width: 128, edit: { type: 'select', field: 'owner_user_id', options: ownerPairs, value: (r) => r.owner_user_id || '', prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : '') },
         render: (r) => (r._ghost ? '' : r.owner_name ? html`<span class="cellwrap"><i class="av">${[...r.owner_name][0]}</i>${r.owner_name}</span>` : dim()) },
@@ -274,14 +274,14 @@ export async function wbsPage(id) {
     const rows = visible(); const v = view(); const f = quick(); const q = params();
     g.wbs = summary;
     const body = !items.length && !ghost ? html`<div class="wempty" data-tour-id="wbs-empty"><h2>아직 실행 작업이 없습니다.</h2><p>요구사항을 실제 작업 단위로 나누어 계획하세요. 항목을 추가하면 번호(1, 1.1, 1.1.1)는 자동으로 매겨지고, 하위 작업을 넣으면 일정과 진행률이 자동으로 합산됩니다.${g.requirements && g.requirements.total ? '' : ' 요구사항이 아직 없다면 먼저 요구사항을 등록하는 것이 좋습니다.'}</p>
-        ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="add2">WBS 추가</button><button class="btn btn--secondary" id="xl-import2">Excel Import</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--ai" id="ai-wbs2">AI로 WBS 만들기</button>' : '<button class="btn btn--secondary btn--ai" id="ai-wbs2" disabled title="AI 기능이 설정되지 않았습니다.">AI로 WBS 만들기</button>')}</div>`)}${raw(ai.enabled ? '' : '<p class="hint">AI로 WBS 만들기: AI 기능이 설정되지 않았습니다. 운영자가 AI Provider를 설정하면 사용할 수 있습니다.</p>')}</div>`
+        ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="add2">WBS 추가</button><button class="btn btn--secondary" id="xl-import2">Excel로 가져오기</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--ai" id="ai-wbs2">AI로 WBS 만들기</button>' : '<button class="btn btn--secondary btn--ai" id="ai-wbs2" disabled title="AI 기능이 설정되지 않았습니다.">AI로 WBS 만들기</button>')}</div>`)}${raw(ai.enabled ? '' : '<p class="hint">AI로 WBS 만들기: AI 기능이 설정되지 않았습니다. 운영자가 AI Provider를 설정하면 사용할 수 있습니다.</p>')}</div>`
       : v === 'gantt' ? html`<div class="rtable-wrap wbs-wrap">${raw(rows.length ? gantt(rows) : emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '보기 조건을 바꾸거나 필터를 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }))}</div>`
       : grid.html();
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: ctx() === 'monitor' ? 'overview-wbs' : 'wbs', title: ctx() === 'monitor' ? 'WBS · 운영 조회' : 'WBS 작성' }))}
       ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 Lifecycle 단계를 지정할 수 있습니다.</div>` : '')}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : '')}
-      ${raw(items.length && !jira && !archived ? coachMark('JIRA_OPTIONAL_INTRO', { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira Issue를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 WBS 진행률만으로 프로젝트를 계속 진행할 수 있습니다.', cta: { label: '연결하기 (Settings › Integrations)', href: '/app/settings' } }) : '')}
+      ${raw(items.length && !jira && !archived ? coachMark('JIRA_OPTIONAL_INTRO', { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira 이슈를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 WBS 진행률만으로 프로젝트를 계속 진행할 수 있습니다.', cta: { label: '연결하기 (설정 › 연동)', href: '/app/settings' } }) : '')}
       ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. ${ctxCr.impacts && ctxCr.impacts.length ? `영향 WBS ${ctxCr.impacts.length}건만 표시합니다.` : '영향 WBS가 등록되지 않아 전체를 표시합니다.'} 반영이 끝나면 변경 요청을 '반영 완료'로 바꾸세요.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
       <div class="rtool">
@@ -290,9 +290,9 @@ export async function wbsPage(id) {
         <input class="input input--sm" id="q" type="search" placeholder="WBS명, 번호 검색" value="${q.get('q') || ''}" style="max-width:200px">
         <select class="select select--sm" id="f-owner" aria-label="담당자"><option value="">담당자</option><option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>${raw(members.map((m) => html`<option value="${m.id}" ${q.get('owner') === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select>
         <select class="select select--sm" id="f-cst" aria-label="상태"><option value="">상태</option>${raw(Object.entries(WBS_CSTATUS).map(([k, l]) => html`<option value="${k}" ${q.get('cst') === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
-        <select class="select select--sm" id="quick"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
+        ${raw(moreFilters(html`<select class="select select--sm" id="quick" aria-label="보기"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
+          <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, [f, q.get('archived')].filter(Boolean).length))}
         <button class="link linkbtn" id="expall" style="width:auto">모두 펼치기</button><button class="link linkbtn" id="colall" style="width:auto">모두 접기</button>
-        <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         <span class="rtool__sp"></span>
         ${raw(v === 'list' && items.length ? grid.toolsHtml() : '')}
         <span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
@@ -301,7 +301,7 @@ export async function wbsPage(id) {
         ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm" id="add-ms" title="마일스톤 추가 (기간 없이 날짜만)">◆ 마일스톤 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
-      ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: QUICK_LABEL }, { key: 'phase', label: 'Lifecycle 단계', map: LIFECYCLE_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}
+      ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: QUICK_LABEL }, { key: 'phase', label: '단계', map: LIFECYCLE_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}
       <div id="bulkslot"></div>
       <div class="rlayout ${sel ? 'has-drawer' : ''}">
         ${raw(body)}
@@ -444,6 +444,7 @@ export async function wbsPage(id) {
     const fc = $('#f-cst'); if (fc) fc.onchange = () => { setParam('cst', fc.value); syncRows(); draw(); };
     const qk = $('#quick'); if (qk) qk.onchange = () => { setParam('f', qk.value); syncRows(); draw(); };
     main.querySelectorAll('[data-kf]').forEach((b) => b.onclick = () => { setParam('f', b.dataset.kf); setParam('requirement', ''); ctxReq = null; syncRows(); draw(); });
+    bindMoreFilters(main);
     bindFilterClears(main, { setParam, keys: ['q', 'owner', 'cst', 'f', 'requirement'], reload: async () => { if (!params().get('requirement')) ctxReq = null; syncRows(); draw(); } });
     const cl2 = $('#clear2'); if (cl2) cl2.onclick = () => { for (const k of ['q', 'owner', 'cst', 'f']) setParam(k, ''); syncRows(); draw(); };
     const cx = $('#ctx-off'); if (cx) cx.onclick = () => { ctxCr = null; setParam('cr', ''); syncRows(); draw(); };
@@ -549,7 +550,7 @@ export async function wbsPage(id) {
             ${raw(group ? html`<p class="hint">하위 작업 ${live.children_count}개가 있는 작업 그룹입니다. 일정과 진행률은 하위 작업에서 자동 계산됩니다.</p>` : '')}
             ${raw(traceStrip([
               { label: 'Requirements', value: liveReq.length, tone: liveReq.length ? '' : isLeafTask(live) ? 'warn' : 'muted' },
-              { label: 'Changes', value: it.changes ? it.changes.length : 0, href: `/app/projects/${p.id}/changes?wbs=${it.id}`, tone: it.changes && it.changes.length ? 'warn' : 'muted' },
+              { label: '변경 요청', value: it.changes ? it.changes.length : 0, href: `/app/projects/${p.id}/changes?wbs=${it.id}`, tone: it.changes && it.changes.length ? 'warn' : 'muted' },
               { label: 'Issues', value: it.raid ? it.raid.issues.length : 0, sub: it.raid && it.raid.risks.length ? `Risk ${it.raid.risks.length}` : '', href: `/app/projects/${p.id}/issues?wbs=${it.id}`, tone: it.raid && it.raid.issues.length ? 'warn' : 'muted' },
               { label: 'Tests', value: it.testing ? it.testing.tests.length : 0, sub: it.testing && it.testing.tests.length ? `${it.testing.summary.pass} Pass · ${it.testing.summary.fail} Fail` : '', href: `/app/projects/${p.id}/tests?wbs=${it.id}`, tone: it.testing && it.testing.summary.fail ? 'crit' : it.testing && it.testing.tests.length ? '' : 'muted' },
             ], { compact: true }))}
@@ -565,7 +566,7 @@ export async function wbsPage(id) {
                 <div class="field"><label>계획 종료일</label>${raw(dateInput('planned_end_date', it.planned_end_date, readOnly))}<div class="err" data-for="planned_end_date"></div></div></div>
                 <div class="cols2"><div class="field"><label>실적 시작일</label>${raw(dateInput('actual_start_date', it.actual_start_date, readOnly))}</div><div class="field"><label>실적 종료일</label>${raw(dateInput('actual_end_date', it.actual_end_date, readOnly))}</div></div>
                 <div class="dfield"><span>진행률 (%)</span><div><input class="input input--sm" type="number" min="0" max="100" step="1" data-field="progress" value="${it.progress}" ${readOnly ? 'disabled' : ''}></div></div>`)}
-            ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield"><span>Lifecycle 단계</span><div><select class="select select--sm" data-field="lifecycle_phase" ${readOnly ? 'disabled' : ''}><option value="" ${it.lifecycle_phase ? '' : 'selected'}>미지정</option>${raw(Object.entries(LIFECYCLE_LABEL).map(([k, l]) => html`<option value="${k}" ${it.lifecycle_phase === k ? 'selected' : ''}>${l}</option>`).join(''))}</select></div></div>`)}
+            ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield"><span>단계</span><div><select class="select select--sm" data-field="lifecycle_phase" ${readOnly ? 'disabled' : ''}><option value="" ${it.lifecycle_phase ? '' : 'selected'}>미지정</option>${raw(Object.entries(LIFECYCLE_LABEL).map(([k, l]) => html`<option value="${k}" ${it.lifecycle_phase === k ? 'selected' : ''}>${l}</option>`).join(''))}</select></div></div>`)}
             ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield"><span>가중치 <small class="dim">(상위 진행률 계산)</small></span><div><input class="input input--sm" type="number" min="0" max="1000" step="1" data-field="weight" value="${it.weight ?? 1}" ${readOnly ? 'disabled' : ''}></div></div>`)}
             <div class="dfield"><span>상위 항목</span><div><select class="select select--sm" id="mv-parent" ${readOnly ? 'disabled' : ''}>${raw(parentOpts(it.parent_id || '', it.id))}</select></div></div>
             ${raw(readOnly ? '' : html`<div class="actions"><button class="btn btn--secondary btn--xs" id="mv-up" ${idx <= 0 ? 'disabled' : ''}>↑ 위로</button><button class="btn btn--secondary btn--xs" id="mv-down" ${idx < 0 || idx >= sibs.length - 1 ? 'disabled' : ''}>↓ 아래로</button><button class="btn btn--secondary btn--xs" id="mv-in" ${idx <= 0 ? 'disabled' : ''}>들여쓰기 →</button><button class="btn btn--secondary btn--xs" id="mv-out" ${it.parent_id ? '' : 'disabled'}>← 내어쓰기</button>${raw(t === 'MILESTONE' ? '' : '<button class="btn btn--secondary btn--xs" id="addchild">+ 하위 작업</button>')}</div>`)}
@@ -583,13 +584,13 @@ export async function wbsPage(id) {
           ${raw(readOnly ? '' : html`<div class="actions" style="margin-top:8px"><button class="btn btn--secondary btn--sm" id="rlink-add">+ 요구사항 연결</button></div>`)}
           ${raw(it.testing && it.testing.tests.length ? html`<h4 class="dh">관련 테스트 <em>${it.testing.tests.length}</em><span style="margin-left:auto">${raw(verifyChip(it.testing.summary.verification))}</span></h4>
             <ol class="crit links">${raw(it.testing.tests.map((x) => html`<li><a class="raidrow" href="/app/projects/${p.id}/tests?sel=${x.id}" data-link><span class="mono">${x.display_id}</span><span class="crit__in" style="padding:6px 4px">${x.title}</span>${raw(resBadge(x.last_result))}</a></li>`).join(''))}</ol>` : '')}
-          ${raw(it.raid && (it.raid.issues.length || it.raid.risks.length) ? html`<h4 class="dh">관련 Issues & Risks <em>${it.raid.issues.length + it.raid.risks.length}</em></h4>
+          ${raw(it.raid && (it.raid.issues.length || it.raid.risks.length) ? html`<h4 class="dh">관련 이슈·리스크 <em>${it.raid.issues.length + it.raid.risks.length}</em></h4>
             <ol class="crit links">${raw(it.raid.issues.map((x) => html`<li><a class="raidrow" href="/app/projects/${p.id}/issues?sel=${x.id}" data-link><span class="mono">${x.display_id}</span><span class="crit__in" style="padding:6px 4px">${x.title}</span>${raw(sevBadge(x.severity))}<span class="chip ${ISSUE_STATUS_CHIP[x.status] || ''}">${ISSUE_STATUS[x.status]}</span></a></li>`).join(''))}
             ${raw(it.raid.risks.map((x) => html`<li><a class="raidrow" href="/app/projects/${p.id}/issues?tab=risks&sel=${x.id}" data-link><span class="mono">${x.display_id}</span><span class="crit__in" style="padding:6px 4px">${x.title}</span>${raw(sevBadge(x.risk_level))}<span class="chip ${RISK_STATUS_CHIP[x.status] || ''}">${RISK_STATUS[x.status]}</span></a></li>`).join(''))}</ol>` : '')}
         </section>
         <section data-pane="dep" ${dtab === 'dep' ? '' : 'hidden'}>
           <h4 class="dh">선행 작업 <em>${it.predecessors.length}</em></h4>
-          <ol class="crit">${raw(it.predecessors.map((pp) => html`<li><span class="mono wcode">${pp.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${pp.title}</span><small class="dim">Finish to Start</small>
+          <ol class="crit">${raw(it.predecessors.map((pp) => html`<li><span class="mono wcode">${pp.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${pp.title}</span><small class="dim">선행 완료 후 시작</small>
             ${raw(readOnly ? '' : html`<span class="crit__act" style="opacity:1"><button data-dep-del="${pp.id}" title="삭제">×</button></span>`)}</li>`).join(''))}</ol>
           ${raw(readOnly ? (it.predecessors.length ? '' : '<p class="hint">선행 작업이 없습니다.</p>') : html`<div class="crit-add"><input class="input input--sm" id="dep-q" placeholder="선행 작업 검색 (번호 또는 이름)" style="flex:1" list="dep-list"><datalist id="dep-list">${raw(predCandidates.map((x) => html`<option value="${x.wbs_code} ${x.title}">`).join(''))}</datalist><button class="btn btn--secondary btn--sm" id="dep-add">추가</button></div><div class="err" id="dep-err"></div><p class="hint">순환 관계(A→B→A)는 저장되지 않습니다.</p>`)}
           ${raw(it.successors.length ? html`<h4 class="dh">후행 작업 <em>${it.successors.length}</em></h4><ol class="crit">${raw(it.successors.map((x) => html`<li><span class="mono wcode">${x.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${x.title}</span></li>`).join(''))}</ol>` : '')}

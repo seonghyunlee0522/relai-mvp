@@ -24,10 +24,13 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   const w = s.json.workspaces[0].id;
   // 1. tour: CREATE_PROJECT step highlighted → the real button is clickable (QA B1)
   await page.goto(BASE + '/app');
-  await page.click('.scrim >> text=시작하기', { timeout: 8000 }).catch((e) => log('welcome', e.message.split('\n')[0]));
+  await page.waitForSelector('.hero', { timeout: 8000 }); await page.waitForTimeout(600);
+  check('design clean-up: no welcome modal and no auto tour on a new account', !(await page.$('.scrim')) && !(await page.$('.tour')));
+  await page.click('[data-tour-start]', { timeout: 5000 }).catch((e) => log('tour start', e.message.split('\n')[0]));   // "1분 둘러보기" — the tour runs only when started
   for (let i = 0; i < 4; i++) { await page.waitForSelector('.tour__pop', { timeout: 8000 }).catch(() => {}); const t = await page.textContent('#tourT').catch(() => ''); if (/첫 프로젝트 만들기/.test(t)) break; await page.click('[data-t="next"]').catch(() => {}); await page.waitForTimeout(400); }
   const tourShown = await page.$('.tour');
   check('tour overlay visible on Home', Boolean(tourShown));
+  check('design clean-up: tour step has ✕ and 건너뛰기', Boolean(await page.$('.tour__x')) && /건너뛰기/.test(await page.textContent('.tour__btns').catch(() => '')));
   await page.screenshot({ path: `${SHOTS}/00-home-tour.png` });
   const homeText = await page.textContent('.hero');
   check('Home copy: 착수부터 운영까지 7단계 + 고객사', /착수부터 운영까지 7단계/.test(homeText) && /고객사/.test(homeText));
@@ -129,7 +132,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
 
   // 6. Charter: approval area shows 미승인 — 사유, timeline 종료 후 zone, export menu
   await page.goto(`${BASE}/app/projects/${p.id}/charter`); await page.waitForSelector('.chx__head');
-  check('Charter title spelled Project Charter', (await page.title()).startsWith('Project Charter'));
+  check('Charter title = 프로젝트 헌장 (Korean label set)', (await page.title()).startsWith('프로젝트 헌장'));
   check('Charter shows 미승인 — 사유', /미승인 — 사유: 고객 PM 휴가로/.test(await page.textContent('#ch-approval')));
   check('Charter timeline 종료 후 zone', Boolean(await page.$('.chtl__after')));
   await page.screenshot({ path: `${SHOTS}/06-charter.png`, fullPage: true });

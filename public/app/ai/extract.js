@@ -42,7 +42,7 @@ export async function openExtractDialog({ pid, onDone }) {
           <div class="aic__row">
             <label>유형 <select class="select select--sm" data-f="type" data-i="${i}">${raw(opt(REQ_TYPE, c.type))}</select></label>
             <label>우선순위 <select class="select select--sm" data-f="priority" data-i="${i}">${raw(opt(REQ_PRIORITY, c.priority))}</select></label>
-            <label>Scope <select class="select select--sm" data-f="scope" data-i="${i}">${raw(opt(REQ_SCOPE, c.scope))}</select></label>
+            <label>범위 <select class="select select--sm" data-f="scope" data-i="${i}">${raw(opt(REQ_SCOPE, c.scope))}</select></label>
             <label>요청자 <input class="input input--sm" data-f="requester_name" data-i="${i}" value="${c.requester_name || ''}" maxlength="100" placeholder="미상"></label>
           </div>
           <div class="aic__crit"><span class="lbl">완료 조건 <small class="dim">(줄 단위)</small></span><textarea class="textarea" data-f="criteria" data-i="${i}" rows="2" placeholder="완료 조건을 한 줄에 하나씩">${c.acceptance_criteria.join('\n')}</textarea></div>

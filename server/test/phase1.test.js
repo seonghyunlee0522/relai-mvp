@@ -202,4 +202,5 @@ test('success-criteria hint rule + Home 7-phase constant matches the server temp
   assert.equal(isMeasurable('UAT Critical 결함 0건'), true);
   assert.equal(isMeasurable('검토 리드타임 단축(2영업일 이내)'), true);
   assert.deepEqual(LIFECYCLE_PHASES.map((p) => p.key), DEFAULT_PHASES.map((p) => p.key));
+  assert.deepEqual(LIFECYCLE_PHASES.map((p) => [p.long, p.short]), DEFAULT_PHASES.map((p) => [p.name, p.short]));   // one phase-name constant (design §3.8)
 });

@@ -5,7 +5,8 @@
  * cfg: { key, columns, rowId(r), rowClass?(r), select = true, paginate = true, pageSize = 100, sortable = true,
  *        canEdit?(r, col), onEdit?(id, field, value), onOpen?(id), onSelect?(selectedSet), empty?(), activeId?() }
  * column: { key, label, width, min, sort?(r) → comparable, render(r) → html, cls?, align?, sticky?, hidden?, fixed?,
- *           edit?: { type: 'select'|'date'|'number', field, options?(r)|map|[[v,l]], value?(r), min?, max? } }
+ *           edit?: { type: 'select'|'date'|'number', field, options?(r)|map|[[v,l]], value?(r), min?, max? },
+ *           card?: false — left out of the <640px card row (ID + title on line 1, the other visible columns on line 2) }
  */
 import { esc, html, raw } from '../core/dom.js';
 import { store } from '../core/ui.js';
@@ -80,7 +81,7 @@ export function createGrid(cfg) {
     const active = cfg.activeId && String(cfg.activeId()) === id;
     return html`<tr class="${cfg.rowClass ? cfg.rowClass(r) : ''} ${checked ? 'is-checked' : ''} ${active ? 'is-sel' : ''}" data-id="${id}" tabindex="${i === 0 ? 0 : -1}">
       ${raw(select ? html`<td class="gc gc--chk"><input type="checkbox" data-pick aria-label="행 선택" ${checked ? 'checked' : ''}></td>` : '')}
-      ${raw(vc.map((c) => html`<td class="gc ${c.sticky ? 'gc--stick' : ''} ${c.cls || ''} ${c.align ? 'ta-' + c.align : ''}">${raw(cell(c, r))}</td>`).join(''))}</tr>`;
+      ${raw(vc.map((c) => html`<td class="gc ${c.sticky ? 'gc--stick' : ''} ${c.cls || ''} ${c.align ? 'ta-' + c.align : ''} ${c.card === false ? 'gc--nocard' : ''}" data-label="${c.label}">${raw(cell(c, r))}</td>`).join(''))}</tr>`;
   };
 
   const headHtml = (vc, pageRows) => {

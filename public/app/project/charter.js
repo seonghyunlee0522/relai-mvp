@@ -27,7 +27,7 @@ export async function charterPage(id) {
   const main = $('#main');
   const [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/charter`))]);
   const p = g.project; const c = r.charter; const ro = p.status === 'ARCHIVED';
-  document.title = `Project Charter — ${p.name} — RELAI`;
+  document.title = `프로젝트 헌장 — ${p.name} — RELAI`;
   const u = `/app/projects/${p.id}`;
   const def = (activity, field) => `${u}/definition?activity=${activity}${field ? `&field=${field}` : ''}`;
   const info = (field) => `${u}/edit?focus=${field}`;
@@ -57,8 +57,8 @@ export async function charterPage(id) {
   const hero = html`<section class="chai" aria-labelledby="chaiT">
     <span class="chai__mark">${raw(SPARK)}</span>
     <div class="chai__b">
-      <div class="chai__k" id="chaiT">RELAI AI Project Context</div>
-      <p class="chai__lead">RELAI AI는 Project Charter를 기준으로 이 프로젝트를 이해합니다.</p>
+      <div class="chai__k" id="chaiT">RELAI AI 프로젝트 맥락</div>
+      <p class="chai__lead">RELAI AI는 프로젝트 헌장을 기준으로 이 프로젝트를 이해합니다.</p>
       <p class="chai__d">프로젝트의 목표, 범위, 성공 기준, 일정, 이해관계자와 수행 조건을 바탕으로 요구사항을 검토하고, WBS를 구성하며, 변경 영향을 분석하고 다음 작업을 제안합니다.</p>
       <p class="chai__em">정보를 구체적으로 입력할수록 AI가 프로젝트 상황을 더 정확하게 판단할 수 있습니다.</p>
     </div>
@@ -68,7 +68,7 @@ export async function charterPage(id) {
   /* ---------- 1. Project Profile ---------- */
   const pf = c.profile;
   const kv = (k, v, fallback = null) => html`<div class="chx__kv"><dt>${k}</dt><dd>${raw(v ? html`${v}` : fallback || '<span class="chx__none">미입력</span>')}</dd></div>`;
-  const profile = section('1', 'profile', 'Project Profile', '프로젝트의 배경, 유형, 수행 기간을 바탕으로 프로젝트 전체 맥락을 이해합니다.', html`
+  const profile = section('1', 'profile', '프로젝트 개요', '프로젝트의 배경, 유형, 수행 기간을 바탕으로 프로젝트 전체 맥락을 이해합니다.', html`
     <h3 class="chx__name">${pf.name}</h3>
     ${raw(pf.description ? html`<div class="chx__blk chx__blk--lead">${raw(body(pf.description))}</div>`
       : empty('프로젝트 설명이 아직 작성되지 않았습니다.', '프로젝트의 배경과 목적을 구체적으로 작성하면 AI가 요구사항과 WBS를 더 정확하게 해석할 수 있습니다.', info('description'), '프로젝트 설명 입력 →'))}
@@ -83,17 +83,17 @@ export async function charterPage(id) {
         : t.field === 'project_type' && pf.project_type ? html`${pf.project_type}` : html`<span class="chx__none">${t.value_label}</span>`)}</dd></div>`).join(''))}</dl></div>`);
 
   /* ---------- 2. Goals & Success Criteria ---------- */
-  const goals = section('2', 'goals', 'Goals & Success Criteria', '요구사항과 WBS가 프로젝트 목표 및 성공 기준에 기여하는지 판단합니다.', html`
-    ${raw(block('Project Goals', c.goals, ['프로젝트 목표가 아직 작성되지 않았습니다.', '이 프로젝트로 달성하려는 결과를 작성하면 AI가 요구사항과 WBS가 그 방향에 맞는지 검토할 수 있습니다.', def('GOALS', 'goal'), '프로젝트 목표 입력 →']))}
-    ${raw(block('Success Criteria', c.successCriteria, ['성공 기준이 아직 작성되지 않았습니다.', '프로젝트가 언제 성공적으로 완료되었다고 볼 수 있는지 작성하면 AI가 WBS와 프로젝트 상태를 판단하는 데 활용할 수 있습니다.', def('GOALS', 'success_criteria'), '성공 기준 입력 →']))}`);
+  const goals = section('2', 'goals', '목표 · 성공 기준', '요구사항과 WBS가 프로젝트 목표 및 성공 기준에 기여하는지 판단합니다.', html`
+    ${raw(block('프로젝트 목표', c.goals, ['프로젝트 목표가 아직 작성되지 않았습니다.', '이 프로젝트로 달성하려는 결과를 작성하면 AI가 요구사항과 WBS가 그 방향에 맞는지 검토할 수 있습니다.', def('GOALS', 'goal'), '프로젝트 목표 입력 →']))}
+    ${raw(block('성공 기준', c.successCriteria, ['성공 기준이 아직 작성되지 않았습니다.', '프로젝트가 언제 성공적으로 완료되었다고 볼 수 있는지 작성하면 AI가 WBS와 프로젝트 상태를 판단하는 데 활용할 수 있습니다.', def('GOALS', 'success_criteria'), '성공 기준 입력 →']))}`);
 
   /* ---------- 3. Scope & Deliverables ---------- */
-  const scope = section('3', 'scope', 'Scope & Deliverables', '신규 요구사항이나 변경 요청이 프로젝트 범위에 포함되는지 판단하고, 필요한 주요 산출물이 누락되지 않았는지 검토합니다.', html`
+  const scope = section('3', 'scope', '범위 · 산출물', '신규 요구사항이나 변경 요청이 프로젝트 범위에 포함되는지 판단하고, 필요한 주요 산출물이 누락되지 않았는지 검토합니다.', html`
     <div class="chx__two">
-      ${raw(block('In Scope', c.scope.inScope, ['수행 범위가 정의되지 않았습니다.', '이번 프로젝트에서 하는 일을 작성하면 AI가 요구사항이 범위 안에 있는지 판단할 수 있습니다.', def('SCOPE', 'scope_in'), '수행 범위 입력 →']))}
-      ${raw(block('Out of Scope', c.scope.outOfScope, ['제외 범위가 정의되지 않았습니다.', '프로젝트에서 수행하지 않는 범위를 명확하게 작성하면 Scope Creep을 줄이고 AI가 신규 요구사항의 범위 포함 여부를 판단하는 데 도움이 됩니다.', def('SCOPE', 'scope_out'), '제외 범위 입력 →']))}
+      ${raw(block('수행 범위', c.scope.inScope, ['수행 범위가 정의되지 않았습니다.', '이번 프로젝트에서 하는 일을 작성하면 AI가 요구사항이 범위 안에 있는지 판단할 수 있습니다.', def('SCOPE', 'scope_in'), '수행 범위 입력 →']))}
+      ${raw(block('제외 범위', c.scope.outOfScope, ['제외 범위가 정의되지 않았습니다.', '프로젝트에서 수행하지 않는 범위를 명확하게 작성하면 범위 확대(Scope Creep)를 줄이고 AI가 신규 요구사항의 범위 포함 여부를 판단하는 데 도움이 됩니다.', def('SCOPE', 'scope_out'), '제외 범위 입력 →']))}
     </div>
-    ${raw(block('Key Deliverables', c.deliverables, ['주요 산출물이 정의되지 않았습니다.', '납품해야 할 산출물을 작성하면 AI가 WBS에 필요한 작업이 빠지지 않았는지 검토할 수 있습니다.', def('SCOPE', 'deliverables'), '주요 산출물 입력 →']))}`);
+    ${raw(block('주요 산출물', c.deliverables, ['주요 산출물이 정의되지 않았습니다.', '납품해야 할 산출물을 작성하면 AI가 WBS에 필요한 작업이 빠지지 않았는지 검토할 수 있습니다.', def('SCOPE', 'deliverables'), '주요 산출물 입력 →']))}`);
 
   /* ---------- 4. Stakeholders & Governance ---------- */
   const sh = [...c.stakeholders].sort((a, b) => CAT_ORDER.indexOf(a.category) - CAT_ORDER.indexOf(b.category));
@@ -130,7 +130,7 @@ export async function charterPage(id) {
     const now = phase === 'during' ? html`<div class="chtl__today" style="left:${pos(today).toFixed(2)}%"><span>TODAY · ${fmtDate(today)}</span></div>` : '';
     const state = phase === 'before' ? '프로젝트 시작 전' : phase === 'after' ? '프로젝트 기간 종료' : '';
     return html`<div class="chtl ${dated.length ? '' : 'chtl--bare'}" role="img" aria-label="프로젝트 기간 ${fmtDate(tl.startDate)} ~ ${fmtDate(tl.endDate)}, 오늘 ${fmtDate(today)}${state ? ` (${state})` : ''}, 마일스톤 ${dated.length}개">
-      <div class="chtl__ends"><span><small>START</small>${fmtDate(tl.startDate)}</span>${raw(state ? html`<em class="chtl__state is-${phase}">${state} · 오늘 ${fmtDate(today)}</em>` : '')}<span><small>END</small>${fmtDate(tl.endDate)}</span></div>
+      <div class="chtl__ends"><span><small>시작</small>${fmtDate(tl.startDate)}</span>${raw(state ? html`<em class="chtl__state is-${phase}">${state} · 오늘 ${fmtDate(today)}</em>` : '')}<span><small>END</small>${fmtDate(tl.endDate)}</span></div>
       <div class="chtl__track">${raw(late.length ? `<div class="chtl__after" style="left:${MAIN}%"><span>종료 후</span></div>` : '')}<div class="chtl__line" style="right:${100 - MAIN}%"><i class="chtl__done" style="width:${phase === 'before' ? 0 : phase === 'after' ? 100 : pos(today).toFixed(2)}%"></i></div>
         <span class="chtl__end chtl__end--s" aria-hidden="true"></span><span class="chtl__end chtl__end--e" aria-hidden="true" style="left:${MAIN}%"></span>
         <ol class="chtl__mss">${raw(marks)}</ol>${raw(now)}</div>
@@ -141,17 +141,17 @@ export async function charterPage(id) {
   const time = section('5', 'timeline', raw(html`Timeline &amp; Milestones ${raw(term('milestone'))}`), '현재 프로젝트 진행 위치와 남은 주요 일정을 기준으로 일정 위험과 다음 작업을 판단합니다.', html`${raw(timeline())}${raw(msList)}`);
 
   /* ---------- 6. Assumptions, Constraints & Risks ---------- */
-  const acr = section('6', 'conditions', 'Assumptions, Constraints & Risks', 'WBS 생성, 요구사항 검토 및 변경 영향 분석 시 프로젝트의 전제조건과 제약, 위험요소를 함께 고려합니다.', html`
-    ${raw(block('Assumptions', c.assumptions, ['가정사항이 작성되지 않았습니다.', '계획의 전제 조건(예: 고객사가 API 권한을 일정 내 제공)을 작성하면 AI가 그 전제가 깨질 때의 영향을 함께 검토할 수 있습니다.', def('SCOPE', 'assumptions'), '가정사항 입력 →']))}
-    ${raw(block('Constraints', c.constraints, ['제약사항이 작성되지 않았습니다.', '내부망 개발, 오픈 일정 고정처럼 수행을 제한하는 조건을 작성하면 AI가 제약에 어긋나는 제안을 하지 않습니다.', def('SCOPE', 'constraints'), '제약사항 입력 →']))}
-    ${raw(block('Initial Risks', c.risks, ['초기 리스크가 작성되지 않았습니다.', '착수 시점에 인지한 위험을 작성하면 AI가 WBS와 변경 영향을 검토할 때 함께 고려합니다.', def('SCOPE', 'initial_risks'), '초기 리스크 입력 →']))}`);
+  const acr = section('6', 'conditions', '전제 · 제약 · 초기 리스크', 'WBS 생성, 요구사항 검토 및 변경 영향 분석 시 프로젝트의 전제조건과 제약, 위험요소를 함께 고려합니다.', html`
+    ${raw(block('전제', c.assumptions, ['가정사항이 작성되지 않았습니다.', '계획의 전제 조건(예: 고객사가 API 권한을 일정 내 제공)을 작성하면 AI가 그 전제가 깨질 때의 영향을 함께 검토할 수 있습니다.', def('SCOPE', 'assumptions'), '가정사항 입력 →']))}
+    ${raw(block('제약', c.constraints, ['제약사항이 작성되지 않았습니다.', '내부망 개발, 오픈 일정 고정처럼 수행을 제한하는 조건을 작성하면 AI가 제약에 어긋나는 제안을 하지 않습니다.', def('SCOPE', 'constraints'), '제약사항 입력 →']))}
+    ${raw(block('초기 리스크', c.risks, ['초기 리스크가 작성되지 않았습니다.', '착수 시점에 인지한 위험을 작성하면 AI가 WBS와 변경 영향을 검토할 때 함께 고려합니다.', def('SCOPE', 'initial_risks'), '초기 리스크 입력 →']))}`);
 
   /* ---------- 7. Operating Model ---------- */
   const om = c.operatingModel;
-  const ops = section('7', 'operating', 'Operating Model', '프로젝트의 커뮤니케이션, 변경관리 및 검수 방식을 고려하여 적절한 다음 절차를 안내합니다.', html`
-    ${raw(block('Communication', om.communication, ['커뮤니케이션 방식이 작성되지 않았습니다.', '정기 회의·보고·소통 채널을 작성하면 AI가 다음 절차를 안내할 때 이 방식을 따릅니다.', def('OPERATIONS', 'meetings'), '커뮤니케이션 방식 입력 →']))}
-    ${raw(block('Change Management', om.changeManagement, ['변경관리 방식이 작성되지 않았습니다.', '변경 요청을 어떻게 검토·승인하는지 작성하면 AI가 변경 영향 분석 후 필요한 승인 절차를 안내할 수 있습니다.', def('OPERATIONS', 'change_management'), '변경관리 방식 입력 →']))}
-    ${raw(block('Acceptance / Completion', om.acceptance, ['검수 / 완료 기준이 작성되지 않았습니다.', '무엇이 충족되면 검수·완료로 보는지 작성하면 AI가 테스트와 검수 준비 상태를 판단하는 데 활용합니다.', def('OPERATIONS', 'acceptance'), '검수 / 완료 기준 입력 →']))}`);
+  const ops = section('7', 'operating', '운영 방식', '프로젝트의 커뮤니케이션, 변경관리 및 검수 방식을 고려하여 적절한 다음 절차를 안내합니다.', html`
+    ${raw(block('커뮤니케이션', om.communication, ['커뮤니케이션 방식이 작성되지 않았습니다.', '정기 회의·보고·소통 채널을 작성하면 AI가 다음 절차를 안내할 때 이 방식을 따릅니다.', def('OPERATIONS', 'meetings'), '커뮤니케이션 방식 입력 →']))}
+    ${raw(block('변경 관리', om.changeManagement, ['변경관리 방식이 작성되지 않았습니다.', '변경 요청을 어떻게 검토·승인하는지 작성하면 AI가 변경 영향 분석 후 필요한 승인 절차를 안내할 수 있습니다.', def('OPERATIONS', 'change_management'), '변경관리 방식 입력 →']))}
+    ${raw(block('검수 · 완료', om.acceptance, ['검수 / 완료 기준이 작성되지 않았습니다.', '무엇이 충족되면 검수·완료로 보는지 작성하면 AI가 테스트와 검수 준비 상태를 판단하는 데 활용합니다.', def('OPERATIONS', 'acceptance'), '검수 / 완료 기준 입력 →']))}`);
 
   /* ---------- 8. 착수보고회 · 착수 결과 승인 (Phase 1 v2) ---------- */
   const k = c.kickoff; const a = c.approval;
@@ -167,11 +167,11 @@ export async function charterPage(id) {
   const gate = a || (k && !k.skipped) ? section('8', 'approval', raw(html`착수보고회 · 승인 ${raw(term('baseline'))}`), '승인된 목표·범위·일정을 기준선으로 보고 이후 변경 요청과 검수를 판단합니다.', html`${raw(kickInner)}${raw(approvalInner)}`) : '';
 
   /* ---------- right rail: outline (scroll-spy) · next milestone · what to complete · fill status ---------- */
-  const SECTIONS = [['profile', 'Project Profile'], ['goals', 'Goals & Success Criteria'], ['scope', 'Scope & Deliverables'], ['stakeholders', 'Stakeholders & Governance'], ['timeline', 'Timeline & Milestones'], ['conditions', 'Assumptions, Constraints & Risks'], ['operating', 'Operating Model'], ...(gate ? [['approval', '착수보고회 · 승인']] : [])];
+  const SECTIONS = [['profile', '프로젝트 개요'], ['goals', '목표 · 성공 기준'], ['scope', '범위 · 산출물'], ['stakeholders', '이해관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(gate ? [['approval', '착수보고회 · 승인']] : [])];
   const missing = ITEMS.filter((x) => !x.ok);
   const nextMs = tl.milestones.find((m) => m.date && m.date >= today);
   const dday = nextMs ? Math.round((dnum(nextMs.date) - dnum(today)) / DAY) : null;
-  const rail = html`<aside class="chr" aria-label="Project Charter 요약">
+  const rail = html`<aside class="chr" aria-label="프로젝트 헌장 요약">
     <nav class="chr__box chr__toc" aria-label="목차"><div class="chr__k">목차</div><ol>${raw(SECTIONS.map(([k, t], i) => {
       const its = ITEMS.filter((x) => x.sec === k); const n = its.filter((x) => x.ok).length;
       const tc = k === 'approval' ? (a && a.status === 'COMPLETED' ? '✓' : a && a.status === 'REAPPROVAL' ? '!' : '-') : n === its.length ? '✓' : `${n}/${its.length}`;
@@ -190,10 +190,10 @@ export async function charterPage(id) {
   </aside>`;
 
   main.innerHTML = html`<div class="page page--wide page--flow chp">
-    ${raw(projectHead(p, g, { tab: 'overview-charter', title: 'Project Charter' }))}
+    ${raw(projectHead(p, g, { tab: 'overview-charter', title: '프로젝트 헌장' }))}
     <div class="chl"><div class="chx">
-      <div class="chx__head"><div><h1>Project Charter ${raw(term('charter'))}</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
-      ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. Project Charter는 조회만 할 수 있습니다.</div>' : '')}
+      <div class="chx__head"><div><h1>프로젝트 헌장 ${raw(term('charter'))}</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
+      ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 헌장은 조회만 할 수 있습니다.</div>' : '')}
       ${raw(hero)}
       ${raw(profile)}${raw(goals)}${raw(scope)}${raw(stake)}${raw(time)}${raw(acr)}${raw(ops)}${raw(gate)}
       <p class="chx__src">이 화면은 조회 전용입니다. 모든 내용은 <a class="link" href="${u}/definition" data-link>01 착수 › 프로젝트 정의</a>${raw(ro ? '' : html`와 <a class="link" href="${u}/edit" data-link>프로젝트 정보</a>`)}에서 관리됩니다.</p>

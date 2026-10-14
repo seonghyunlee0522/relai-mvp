@@ -3,9 +3,10 @@ import { $, html, raw, root } from './core/dom.js';
 import { navigate } from './core/router.js';
 import { state } from './core/state.js';
 import { showErrors } from './shared/dialogs.js';
+import { LIFECYCLE_PHASES } from './shared/lifecycle.js';
 
 /** The 7 lifecycle phases (docs/lifecycle-v2.md); the auth side panels list these, never the retired 일정/실행/검수 names. */
-export const PHASES = ['착수', '요구사항 정의', '분석·설계', '구현', '시험', '전환 및 오픈', '운영 및 유지보수'];
+export const PHASES = LIFECYCLE_PHASES.map((p) => p.long);
 
 const ERRORS = { google_denied: 'Google 로그인이 취소되었습니다.', oauth_state_invalid: 'Google 로그인 세션이 유효하지 않습니다. 다시 시도해 주세요.', oauth_state_expired: 'Google 로그인 세션이 만료되었습니다. 다시 시도해 주세요.',
   google_not_configured: 'Google 로그인이 아직 설정되지 않았습니다.', google_email_unverified: 'Google 계정의 이메일이 인증되지 않아 로그인할 수 없습니다.', google_id_token_invalid: 'Google 인증에 실패했습니다. 다시 시도해 주세요.', google_nonce_mismatch: 'Google 인증에 실패했습니다. 다시 시도해 주세요.',
@@ -21,7 +22,7 @@ const signupSide = () => html`<aside class="auth__side su-a">
     <p class="su-eyebrow">가입하면 바로 보게 될 화면</p>
     <h2>막히는 순간마다,<br>다음 순서를 먼저 보여줍니다.</h2>
     <div class="su-a__card" aria-hidden="true">
-      <div class="su-a__head"><b>What’s Next</b><span>01 착수</span></div>
+      <div class="su-a__head"><b>지금 할 일</b><span>01 착수</span></div>
       <ol class="su-a__steps">${raw(PHASES.map((p, i) => html`<li class="${i === 0 ? 'is-current' : ''}"><i>${String(i + 1).padStart(2, '0')}</i>${p}</li>`).join(''))}</ol>
       <div class="su-a__todo">
         <p class="su-a__k">지금 할 일</p>
@@ -176,10 +177,16 @@ export async function verifyPage() {
 }
 
 /** In-app banner for unverified accounts (shown above every page until verified). */
-export const verifyBanner = () => (state.user && state.user.email_verified === false ? html`<div class="verifybar" id="verifybar" role="status">
-  <span><b>${state.user.email}</b> 주소 인증이 필요합니다. 인증 전에는 팀원 초대와 결제를 할 수 없습니다.</span>
-  <button class="btn btn--secondary btn--sm" id="verify-resend" type="button">인증 메일 다시 받기</button></div>` : '');
+const VB_KEY = 'relai.verifybar.hidden';
+const vbHidden = () => { try { return sessionStorage.getItem(VB_KEY) === '1'; } catch { return false; } };
+/** Slim neutral bar for unverified accounts (design §3.10): one line, one link, ✕ hides it for this session. */
+export const verifyBanner = () => (state.user && state.user.email_verified === false && !vbHidden() ? html`<div class="verifybar" id="verifybar" role="status">
+  <span class="verifybar__t"><b>${state.user.email}</b> 이메일 인증이 필요합니다<span class="verifybar__why"> · 인증 전에는 팀원 초대와 결제를 할 수 없습니다</span></span>
+  <button class="linkbtn verifybar__a" id="verify-resend" type="button">인증 메일 다시 받기</button>
+  <button class="verifybar__x" id="verify-hide" type="button" aria-label="이번 접속 동안 숨기기" title="숨기기">×</button></div>` : '');
 export function wireVerifyBanner() {
+  const x = $('#verify-hide');
+  if (x) x.onclick = () => { try { sessionStorage.setItem(VB_KEY, '1'); } catch { /* private mode: hide for this page only */ } $('#verifybar')?.remove(); };
   const b = $('#verify-resend'); if (!b) return;
   b.onclick = async () => {
     b.disabled = true;

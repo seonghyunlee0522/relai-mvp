@@ -23,7 +23,7 @@ export async function changesPage(id) {
   const params = () => new URLSearchParams(location.search);
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
   const filterKeys = ['status', 'priority', 'requester', 'requirement', 'wbs', 'schedule', 'cost'];
-  const FILTER_DEFS = [{ key: 'q', label: '검색' }, { key: 'status', label: 'Status', map: CR_STATUS }, { key: 'priority', label: 'Priority', map: CR_PRIORITY }, { key: 'requester', label: '요청자' },
+  const FILTER_DEFS = [{ key: 'q', label: '검색' }, { key: 'status', label: '상태', map: CR_STATUS }, { key: 'priority', label: '우선순위', map: CR_PRIORITY }, { key: 'requester', label: '요청자' },
     { key: 'requirement', label: '관련 요구사항', format: (v) => { const r = (reqOptions || []).find((x) => x.id === v); return r ? `${r.display_id} ${r.title}` : '선택됨'; } }, { key: 'wbs', label: '영향 WBS', format: () => '선택됨' },
     { key: 'schedule', label: '일정 영향', format: () => '있음' }, { key: 'cost', label: '비용 영향', format: () => '있음' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
@@ -39,7 +39,7 @@ export async function changesPage(id) {
     const q = params();
     const hasFilter = ['q', ...filterKeys, 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: 'changes', title: 'Changes' }))}
+      ${raw(projectHead(p, g, { tab: 'changes', title: '변경 요청' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : '')}
       ${raw(coachMark('CHANGE_REQUEST_INTRO'))}
       <div class="summary summary--inline" style="margin-bottom:8px">
@@ -50,8 +50,8 @@ export async function changesPage(id) {
       </div>
       <div class="rtool">
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명, 요청자 검색" value="${q.get('q') || ''}">
-        ${raw(filterSelect('status', 'Status', CR_STATUS, q.get('status')))}
-        ${raw(filterSelect('priority', 'Priority', CR_PRIORITY, q.get('priority')))}
+        ${raw(filterSelect('status', '상태', CR_STATUS, q.get('status')))}
+        ${raw(filterSelect('priority', '우선순위', CR_PRIORITY, q.get('priority')))}
         <select class="select select--sm" data-f="requester"><option value="">요청자: 전체</option>${raw(requesters.map((r) => html`<option value="${r}" ${q.get('requester') === r ? 'selected' : ''}>${r}</option>`).join(''))}</select>
         <select class="select select--sm" data-f="requirement" id="f-req"><option value="">관련 요구사항: 전체</option>${raw((reqOptions || []).map((r) => html`<option value="${r.id}" ${q.get('requirement') === r.id ? 'selected' : ''}>${r.display_id} ${r.title}</option>`).join(''))}${raw(!reqOptions && q.get('requirement') ? html`<option value="${q.get('requirement')}" selected>선택됨</option>` : '')}</select>
         <label class="toggle"><input type="checkbox" data-t="schedule" ${q.get('schedule') ? 'checked' : ''}> 일정 영향 있음</label>
@@ -63,7 +63,7 @@ export async function changesPage(id) {
       ${raw(appliedFilters(q, FILTER_DEFS))}
       <div class="rlayout rlayout--cr ${sel || creating ? 'has-drawer' : ''}">
         <div class="rtable-wrap">${raw(rows.length ? html`<table class="rtable rtable--cr">
-          <thead><tr><th>ID</th><th>제목</th><th>Status</th><th>Priority</th><th>요청자</th><th class="num">관련 Req</th><th class="num">일정 영향</th><th class="num">비용 영향</th><th>Updated</th></tr></thead>
+          <thead><tr><th>ID</th><th>제목</th><th>상태</th><th>우선순위</th><th>요청자</th><th class="num">관련 Req</th><th class="num">일정 영향</th><th class="num">비용 영향</th><th>Updated</th></tr></thead>
           <tbody>${raw(rows.map((c) => html`<tr class="${sel && sel.id === c.id ? 'is-sel' : ''} ${c.archived_at ? 'is-arch' : ''}" data-row="${c.id}">
             <td class="mono">${c.display_id}</td>
             <td class="ttl"><span>${c.title}</span>${raw(c.impact_count ? html`<small title="영향 WBS ${c.impact_count}개">WBS ${c.impact_count}</small>` : '')}${raw(c.archived_at ? '<small>보관됨</small>' : '')}</td>
@@ -92,7 +92,7 @@ export async function changesPage(id) {
       <div class="row2">
         <div class="field"><label>요청자</label><input class="input" name="requester_name" maxlength="100" placeholder="예: 김OO 책임"></div>
         <div class="field"><label>요청자 조직</label><input class="input" name="requester_organization" maxlength="100" placeholder="예: A사 보안팀"></div>
-        <div class="field"><label>Priority</label><select class="select" name="priority">${raw(opt(CR_PRIORITY, 'MEDIUM'))}</select></div>
+        <div class="field"><label>우선순위</label><select class="select" name="priority">${raw(opt(CR_PRIORITY, 'MEDIUM'))}</select></div>
         <div class="field"><label>요청일</label><input class="input" type="date" name="requested_at" value="${todayLocal()}"></div>
       </div>
       <div class="field"><span class="lbl">관련 요구사항</span><div id="c-reqs" class="crit-pending-list"></div><div class="actions" style="margin-top:6px"><button type="button" class="btn btn--secondary btn--sm" id="c-req-add">+ 요구사항 연결</button></div></div>
@@ -138,7 +138,7 @@ export async function changesPage(id) {
         case 'WBS_IMPACT_ADDED': return html`영향 WBS 추가 <q>${lt(h.new_value)}</q>`;
         case 'WBS_IMPACT_UPDATED': return html`영향 유형 변경 <q>${lt(h.old_value)}</q> → <q>${lt(h.new_value)}</q>`;
         case 'WBS_IMPACT_REMOVED': return html`영향 WBS 제거 <q>${h.old_value}</q>`;
-        default: { const f = h.field_name; const L = { title: '제목', priority: 'Priority', requester_name: '요청자', requester_organization: '요청자 조직', requested_at: '요청일', approver_user_id: '승인자', schedule_impact_days: '일정 영향', effort_impact_md: '공수 영향', cost_impact: '비용 영향', relation_type: '관계 유형' };
+        default: { const f = h.field_name; const L = { title: '제목', priority: '우선순위', requester_name: '요청자', requester_organization: '요청자 조직', requested_at: '요청일', approver_user_id: '승인자', schedule_impact_days: '일정 영향', effort_impact_md: '공수 영향', cost_impact: '비용 영향', relation_type: '관계 유형' };
           const v = (x) => (x === null ? '-' : f === 'priority' ? CR_PRIORITY[x] || x : f === 'relation_type' ? lt(x) : x);
           return html`<b>${L[f] || f}</b> ${v(h.old_value)} → ${v(h.new_value)} <small>${h.changed_by_name || ''}</small>`; }
       }
@@ -153,7 +153,7 @@ export async function changesPage(id) {
         <div class="dfield" style="grid-column:1/-1"><span>요청 사유</span><div><textarea class="textarea" data-field="reason" maxlength="2000" style="min-height:56px;font-size:14px" placeholder="요청 사유" ${fieldsRo ? 'disabled' : ''}>${c.reason}</textarea></div></div>
         <div class="dfield"><span>요청자</span><div><input class="input input--sm" data-field="requester_name" value="${c.requester_name}" maxlength="100" placeholder="이름" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>요청자 조직</span><div><input class="input input--sm" data-field="requester_organization" value="${c.requester_organization}" maxlength="100" placeholder="조직" ${fieldsRo ? 'disabled' : ''}></div></div>
-        <div class="dfield"><span>Priority</span><div><select class="select select--sm" data-field="priority" ${fieldsRo ? 'disabled' : ''}>${raw(opt(CR_PRIORITY, c.priority))}</select></div></div>
+        <div class="dfield"><span>우선순위</span><div><select class="select select--sm" data-field="priority" ${fieldsRo ? 'disabled' : ''}>${raw(opt(CR_PRIORITY, c.priority))}</select></div></div>
         <div class="dfield"><span>요청일</span><div><input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>승인자</span><div><select class="select select--sm" data-field="approver_user_id" title="Owner·Admin 외에 이 변경 요청을 승인할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">Owner·Admin</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select></div></div>
       </div>

@@ -7,6 +7,17 @@ export const filterSelect = (key, label, map, cur, extra = '') => {
   return html`<select class="select select--sm" data-f="${key}" aria-label="${label}"><option value="">${label}</option>${raw(Object.entries(map).map(([v, l]) => html`<option value="${v}" ${first === v ? 'selected' : ''}>${l}</option>`).join(''))}${raw(extra)}</select>`;
 };
 
+/** Filters beyond search + 2 dropdowns sit behind one "필터 (n)" button (design §3.3): a popover on desktop, a bottom sheet under 640px.
+ * The controls inside keep their own ids / data-f, so the page's existing bindings work unchanged. */
+export const moreFilters = (inner, n = 0) => html`<span class="gtools fmore"><button type="button" class="btn btn--secondary btn--sm" data-fmore aria-haspopup="true">필터${n ? ` (${n})` : ''}</button><div class="gpop gpop--filters" hidden><div class="gpop__t">필터</div>${raw(inner)}</div></span>`;
+export function bindMoreFilters(root) {
+  root.querySelectorAll('[data-fmore]').forEach((btn) => {
+    const pop = btn.nextElementSibling;
+    btn.onclick = (e) => { e.stopPropagation(); const open = pop.hidden; document.querySelectorAll('.gpop').forEach((x) => { x.hidden = true; }); pop.hidden = !open; };
+    pop.onclick = (e) => e.stopPropagation();
+  });
+}
+
 /**
  * Applied-filter chips. defs: [{ key, label, map?, format?(value) }]. Values can be comma lists.
  * Renders nothing when no filter is active. Chips carry data-fclear="<key>"; "필터 초기화" carries id="clear".

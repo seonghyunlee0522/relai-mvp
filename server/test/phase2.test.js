@@ -167,7 +167,7 @@ test('US-2 markdown: revision row per state, tables parse, empty lists keep the 
   const done = buildReqDocMarkdown(c, [{ id: '1', display_id: 'REQ-001', sequence_number: 1, title: 'T', type: 'SECURITY', priority: 'HIGH', scope: 'IN_SCOPE', criteria: [] }], { status: 'COMPLETED', approval: { date: '2026-01-10', evidence: 'e' }, approver: { name: '이', title: '차장' }, method_label: '이메일 회신', bypass: null }, { workspaceName: 'W', author: '홍', today: '2026-10-15' });
   assert.equal(done.version, 'v1.0'); assert.equal(done.footer, ''); assert.match(done.markdown, /\| v1\.0 \| 2026-01-10 \| 승인 \| 홍 \|/);
   const t = parseReportMarkdown(done.markdown).filter((x) => x.type === 'table').find((x) => x.header && x.header[0] === 'ID');
-  assert.deepEqual(t.rows[0], ['REQ-001', 'T', '보안', 'High', '-']);
+  assert.deepEqual(t.rows[0], ['REQ-001', 'T', '보안', '높음', '-']);
 });
 
 test('US-3 rules: prompt only for 확정 요구사항 제목·설명·완료 조건·범위 / 범위 내 보관, never with an approved CR; add after approval', () => {

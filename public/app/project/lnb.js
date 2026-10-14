@@ -39,7 +39,7 @@ export function projectNav(p, g, activeKey) {
 
   const home = HOME_ITEMS(pid);
   const ovOpen = open.overview !== undefined ? open.overview : (home[1].children.some(isActive) || path.includes('/overview'));
-  const homeHtml = html`<div class="lnb__sec"><div class="lnb__h">PROJECT HOME</div>
+  const homeHtml = html`<div class="lnb__sec"><div class="lnb__h">프로젝트</div>
     ${raw(link(home[0], isActive(home[0]), { tour: 'lnb-next' }))}
     <div class="lnb__grp ${ovOpen ? 'is-open' : ''}" data-grp="overview">
       <div class="lnb__row">${raw(link(home[1], isActive(home[1]) || (!ovOpen && home[1].children.some(isActive)), { tour: 'lnb-overview' }))}<button type="button" class="lnb__tg" data-lnb-toggle="overview" aria-label="Overview 하위 메뉴 ${ovOpen ? '접기' : '펼치기'}" aria-expanded="${ovOpen}"></button></div>
@@ -66,8 +66,8 @@ export function projectNav(p, g, activeKey) {
   return html`<nav class="lnb" aria-label="프로젝트 메뉴">
     <a class="lnb__back" href="/app/projects" data-link title="프로젝트 목록"><span class="lnb__ic">‹</span><span class="lnb__t">프로젝트</span></a>
     ${raw(homeHtml)}
-    <div class="lnb__sec lnb__sec--lc" data-tour-id="lnb-lifecycle"><div class="lnb__h">PROJECT LIFECYCLE</div>${raw(phases)}</div>
-    <div class="lnb__sec"><div class="lnb__h">PROJECT MANAGEMENT</div>${raw(pm.map((it) => link(it, isActive(it), { tour: `lnb-${it.key}` })).join(''))}</div>
+    <div class="lnb__sec lnb__sec--lc" data-tour-id="lnb-lifecycle"><div class="lnb__h">단계</div>${raw(phases)}</div>
+    <div class="lnb__sec"><div class="lnb__h">관리</div>${raw(pm.map((it) => link(it, isActive(it), { tour: `lnb-${it.key}` })).join(''))}</div>
   </nav>`;
 }
 
@@ -104,8 +104,8 @@ export function mountLnb(p, g, activeKey = null) {
   side.classList.add('side--project');
   side.innerHTML = html`<div class="lnb__wrap" data-lnb-pid="${p.id}">${raw(projectNav(p, g, activeKey))}</div>
     <div class="side__bottom side__bottom--project">
-      <a class="navlink" href="/app" data-link title="Home"><span class="lnb__ic">⌂</span><span class="nl">Home</span></a>
-      <a class="navlink" href="/app/settings" data-link title="Settings"><span class="lnb__ic">⚙</span><span class="nl">Settings</span></a>
+      <a class="navlink" href="/app" data-link title="홈"><span class="lnb__ic">⌂</span><span class="nl">홈</span></a>
+      <a class="navlink" href="/app/settings" data-link title="설정"><span class="lnb__ic">⚙</span><span class="nl">설정</span></a>
       <button type="button" class="navlink linkbtn side__fold" id="fold" title="메뉴 접기/펼치기"><span class="lnb__ic">⇤</span><span class="nl">메뉴 접기</span></button>
     </div>`;
   const fold = $('#fold', side);

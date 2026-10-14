@@ -9,11 +9,11 @@ import { usageBars, fmtDay } from './admin/ui.js';
 const qp0 = () => new URLSearchParams(location.search);
 const unverified = () => state.user?.email_verified === false;   // server refuses checkout/invitations until the e-mail is verified
 const VERIFY_HINT = '이메일 인증 후 이용할 수 있습니다. 상단 배너에서 인증 메일을 다시 받을 수 있습니다.';
-const ROLE = { OWNER: 'Owner', ADMIN: 'Admin', MEMBER: 'Member' };
+const ROLE = { OWNER: '소유자', ADMIN: '관리자', MEMBER: '멤버' };
 const ROLE_DESC = { OWNER: '모든 기능 · 멤버/설정/결제 관리', ADMIN: '프로젝트 생성·관리 · 멤버/설정 관리 (결제 불가)', MEMBER: '프로젝트 업무 수행 (멤버/설정/결제 불가)' };
 
 export async function settingsPage(main = $('#main')) {
-  document.title = 'Settings — RELAI';
+  document.title = '설정 — RELAI';
   const wid = state.workspace.id;
   let integ; const [{ workspace }, { members }, integ0] = await Promise.all([api('GET', `/api/workspaces/${wid}`), api('GET', `/api/workspaces/${wid}/members`), api('GET', `/api/workspaces/${wid}/integrations`).catch(() => null)]);
   integ = integ0; const perm = workspace.permissions; const me = state.user.id;
@@ -85,7 +85,7 @@ export async function settingsPage(main = $('#main')) {
   // Pending invitations (OWNER/ADMIN only) — Phase 13
   let invites = []; const loadInvites = async () => { if (!perm.member_manage) return; try { invites = (await api('GET', `/api/workspaces/${wid}/invitations`)).all.filter((i) => i.status === 'PENDING' || i.status === 'EXPIRED').slice(0, 50); } catch { invites = []; } };
   await loadInvites();
-  const inviteTable = () => !perm.member_manage ? '' : html`<div class="panel" style="margin-top:20px"><div class="panel__h">초대 대기 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${invites.filter((i) => i.status === 'PENDING').length}</em><span class="panel__sp"></span><button class="btn btn--primary btn--sm" id="invite-btn" data-tour-id="invite-members"${raw(unverified() ? html` disabled title="${VERIFY_HINT}"` : '')}>멤버 초대</button></div>${raw(unverified() ? html`<p class="hint" id="invite-verify" style="padding:0 20px">${VERIFY_HINT}</p>` : '')}
+  const inviteTable = () => !perm.member_manage ? '' : html`<div class="panel" style="margin-top:20px"><div class="panel__h">초대 대기 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${invites.filter((i) => i.status === 'PENDING').length}</em><span class="panel__sp"></span><button class="btn btn--secondary btn--sm" id="invite-btn" data-tour-id="invite-members"${raw(unverified() ? html` disabled title="${VERIFY_HINT}"` : '')}>멤버 초대</button></div>${raw(unverified() ? html`<p class="hint" id="invite-verify" style="padding:0 20px">${VERIFY_HINT}</p>` : '')}
       <div class="rtable-wrap--in"><table class="rtable rtable--raid" style="margin:0" id="invtbl"><thead><tr><th>이메일</th><th>역할</th><th>초대한 사람</th><th>만료</th><th>상태</th><th>메일</th><th></th></tr></thead>
       <tbody>${raw(invites.length ? invites.map((i) => html`<tr data-inv="${i.id}">
         <td class="mono">${i.email}</td><td>${ROLE[i.role] || i.role}</td><td class="dim">${i.invited_by_name || '-'}</td><td class="dim">${fmtShort(i.expires_at)}</td><td>${raw(inviteStatusChip(i.status))}</td>
@@ -99,18 +99,18 @@ export async function settingsPage(main = $('#main')) {
     const pv = integ && integ.providers.find((x) => x.provider === 'JIRA'); if (!pv) return '';
     const c = pv.connection; const can = perm.integration_manage;
     const status = !c ? '' : c.status === 'ACTIVE' ? '<span class="chip chip--done">정상</span>' : c.status === 'ERROR' ? html`<span class="chip chip--fail">${c.reconnect_required ? '재연결 필요' : '오류'}</span>` : c.status === 'DISABLED' ? '<span class="chip chip--muted">연결 해제됨</span>' : '<span class="chip chip--hold">대기</span>';
-    return html`<div class="panel" style="margin-top:20px"><div class="panel__h">Integrations</div><div class="panel__b">
+    return html`<div class="panel" style="margin-top:20px"><div class="panel__h">연동</div><div class="panel__b">
       <div class="icard"><div class="icard__logo">J</div><div class="icard__m">
         <div class="icard__t"><b>Jira</b>${raw(c && c.status !== 'DISABLED' ? '<span class="chip chip--active">연결됨</span>' : '<span class="chip chip--muted">미연결</span>')}${raw(!pv.configured ? '<span class="chip chip--hold">서버 설정 필요</span>' : '')}</div>
         ${raw(c && c.status !== 'DISABLED' ? html`<div class="icard__site"><a href="${c.site_url}" target="_blank" rel="noopener noreferrer">${(c.site_url || '').replace(/^https?:\/\//, '')}</a></div>
           <dl class="icard__d"><dt>상태</dt><dd>${raw(status)}${raw(c.last_error ? html` <small class="dim">${c.last_error}</small>` : '')}</dd><dt>연결자</dt><dd>${c.connected_by_name || '-'}${raw(c.external_account_name ? html` <small class="dim">(Jira: ${c.external_account_name})</small>` : '')}</dd><dt>마지막 동기화</dt><dd>${c.last_synced_at ? relTime(c.last_synced_at) : '아직 없음'}</dd><dt>연결된 프로젝트</dt><dd>${c.mapped_projects}개</dd></dl>`
-          : html`<p class="hint">Jira Cloud 사이트를 연결하면 각 프로젝트의 ⋯ 메뉴 → Jira 연동 설정에서 Jira 프로젝트를 매핑하고, WBS Leaf 작업에 Jira Issue를 연결해 실행 상태를 볼 수 있습니다. ${pv.configured ? '' : '운영자가 서버에 Atlassian 앱 정보를 설정하면 연결할 수 있습니다.'}</p>`)}
-        ${raw(can ? html`<div class="actions" style="margin-top:10px">${raw(c && c.status !== 'DISABLED' ? html`<button class="btn btn--secondary btn--sm" id="jira-reconnect" ${pv.configured ? '' : 'disabled'}>재연결</button><button class="btn btn--ghost btn--sm is-danger" id="jira-disconnect">연결 해제</button>` : html`<button class="btn btn--primary btn--sm" id="jira-connect" ${pv.configured ? '' : 'disabled'}>Jira 연결</button>`)}</div>` : '<p class="hint">연결 설정은 Workspace OWNER/ADMIN만 할 수 있습니다.</p>')}
+          : html`<p class="hint">Jira Cloud 사이트를 연결하면 각 프로젝트의 ⋯ 메뉴 → Jira 연동 설정에서 Jira 프로젝트를 매핑하고, WBS 하위 작업에 Jira 이슈를 연결해 실행 상태를 볼 수 있습니다. ${pv.configured ? '' : '운영자가 서버에 Atlassian 앱 정보를 설정하면 연결할 수 있습니다.'}</p>`)}
+        ${raw(can ? html`<div class="actions" style="margin-top:10px">${raw(c && c.status !== 'DISABLED' ? html`<button class="btn btn--secondary btn--sm" id="jira-reconnect" ${pv.configured ? '' : 'disabled'}>재연결</button><button class="btn btn--ghost btn--sm is-danger" id="jira-disconnect">연결 해제</button>` : html`<button class="btn btn--secondary btn--sm" id="jira-connect" ${pv.configured ? '' : 'disabled'}>Jira 연결</button>`)}</div>` : '<p class="hint">연결 설정은 Workspace OWNER/ADMIN만 할 수 있습니다.</p>')}
       </div></div></div></div>`;
   };
   const draw = (members) => {
     resetMembers();
-    main.innerHTML = html`<div class="page page--narrow"><div class="page__head"><h1>Settings</h1></div>
+    main.innerHTML = html`<div class="page page--narrow page--guide"><div class="page__head"><h1>설정</h1></div>
     <div class="panel" id="profile"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd><form id="mef" class="inline-form"><input class="input input--sm" name="name" value="${state.user.name}" maxlength="50" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form></dd>
       <dt>이메일</dt><dd>${state.user.email}</dd>
@@ -118,7 +118,7 @@ export async function settingsPage(main = $('#main')) {
       ${raw(account ? html`<div class="actions" style="margin-top:14px">${raw(account.has_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 변경</button>'
         : account.can_set_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 설정</button>' : '<small class="dim">이메일 인증 후 비밀번호를 설정할 수 있습니다.</small>')}
         <span class="panel__sp"></span><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}</div></div>
-    <div class="panel" style="margin-top:20px" data-tour-id="workspace-settings"><div class="panel__h">Workspace</div><div class="panel__b"><dl class="info">
+    <div class="panel" style="margin-top:20px" data-tour-id="workspace-settings"><div class="panel__h">워크스페이스</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
       <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
       ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">Workspace 삭제</button></div>' : '')}</div></div>
@@ -130,7 +130,7 @@ export async function settingsPage(main = $('#main')) {
         <td>${raw(perm.member_manage ? html`<select class="select select--sm" data-role="${m.id}">${raw(Object.entries(ROLE).map(([k, l]) => html`<option value="${k}" ${m.role === k ? 'selected' : ''} ${k === 'OWNER' && !perm.owner_grant ? 'disabled' : ''}>${l}</option>`).join(''))}</select>` : ROLE[m.role])}</td>
         <td class="dim">${fmtShort(m.created_at)}</td>
         ${raw(perm.member_manage ? html`<td><button class="link linkbtn" data-remove="${m.id}" style="width:auto;color:#B42318">제거</button></td>` : '')}</tr>`).join(''))}</tbody></table></div>
-      ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">Member</option><option value="ADMIN">Admin</option>${raw(perm.owner_grant ? '<option value="OWNER">Owner</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
+      ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
     </div>${raw(inviteTable())}${raw(jiraCard())}</div>`;
     members0 = members; bindBuy();
     const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 Free 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };

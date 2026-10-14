@@ -72,7 +72,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await page.goto(`${reqUrl}?sel=${r1.id}`); await page.waitForSelector('#drawer .dtitle');
   const terms = await page.$$eval('#drawer .term', (els) => els.map((e) => e.getAttribute('aria-label')));
   check('US-5 terms: 완료 조건 · 범위 내/외 · 비기능 on the 02 detail', ['완료 조건', '범위 내 / 범위 외', '비기능 요구사항'].every((t) => terms.some((x) => x.startsWith(t))), JSON.stringify(terms));
-  check('US-5 priority hint', /High = 없으면 오픈할 수 없는 것/.test(await page.textContent('#drawer')));
+  check('US-5 priority hint', /높음 = 없으면 오픈할 수 없는 것/.test(await page.textContent('#drawer')));
   await page.click('[data-dtab="links"]');
   check('US-4(4) no Delivery Trace in 02', !(await page.$('#drawer .trace')));
   await page.goto(`${BASE}/app/projects/${p.id}`); await page.waitForSelector('.np__list');
@@ -89,7 +89,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await shot('03-whats-next-02.png');
   await page.goto(`${BASE}/app`); await page.waitForSelector('main');
   await page.waitForTimeout(800);
-  check('US-4(6) Home card in 02: no WBS 미연결 / Blocker', !/WBS 미연결/.test(await page.textContent('main')) && !/Blocker/.test(await page.textContent('main')));
+  check('US-4(6) Home card in 02: no WBS 미연결 / Blocker', !/WBS 미연결/.test(await page.textContent('main')) && !/Blocker|막힘/.test(await page.textContent('main')));
 
   /* ---------- US-3: confirmed requirement → 변경 요청 prompt ---------- */
   const reqApi = async (r) => (await api('GET', `${R}/${r.id}`)).json.requirement;
@@ -98,6 +98,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await page.fill('#drawer .dtitle', 'SSO·OTP 로그인'); await page.press('#drawer .dtitle', 'Enter');
   check('US-3 dialog on confirmed title edit', await dialogShown('[data-dialog="req-change"]'));
   check('US-3 dialog title', (await page.textContent('#cgT')) === '확정된 요구사항을 바꾸려 합니다');
+  check('L-D4 one-line diff', /제목: SSO 로그인 → SSO·OTP 로그인/.test(await page.textContent('[data-dialog="req-change"] [data-diff]').catch(() => '')));
   await shot('04-change-prompt.png');
   await page.click('[data-dialog="req-change"] [data-v="cr"]');
   await page.waitForSelector('.toast--act', { timeout: 5000 }).catch(() => {});
@@ -189,8 +190,11 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   check('US-1 Drawer has 요구사항 정의서 내려받기', Boolean(await page.$('[data-approval-drawer] [data-reqdoc-menu]')));
   const cbLabel = await page.textContent('.apv__confirm');
   check('US-1 checkbox 범위 내 미확정 3건을 함께 확정합니다 (default ON)', /범위 내 미확정 3건을 함께 확정합니다/.test(cbLabel) && await page.isChecked('#apv-confirm'));
+  check('Q6-1 02 approval = right-side panel (like 01)', await page.$eval('#drawer', (d) => d.classList.contains('drawer--side') && d.getBoundingClientRect().right >= window.innerWidth - 1 && d.getBoundingClientRect().left > 300));
+  check('Q6-2 승인 방법 chips + 필수 4개 중 N개 line', Boolean(await page.$('.apv__methods .choice')) && /필수 4개 중 0개 입력/.test(await page.textContent('#apv-stat')));
   await page.click('[data-apv="complete"]'); await page.waitForTimeout(600);
   check('US-1 empty fields → cannot complete', (await api('GET', `${R}/baseline`)).json.baseline.status === 'TODO');
+  check('L-D2 errors inline under the fields', (await page.$$('[data-approval-drawer] .apv__err')).length === 4);
   await page.selectOption('[data-af="approver_id"]', 's1');
   await page.fill('[data-af="date"]', '2099-01-01');
   check('US-1 승인일 input max = today', (await page.getAttribute('[data-af="date"]', 'max')) <= new Date(Date.now() + 86400e3).toISOString().slice(0, 10));
@@ -241,7 +245,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   // 03: WBS banner back
   await page.goto(reqUrl); await page.waitForSelector('.rtool');
   check('US-4(4) WBS banner from 03', Boolean(await page.$('[data-tour-id="req-next"]')));
-  check('P-1 03: KPI WBS 미연결 + 없음 chip shown', /WBS 미연결 \(범위 내\)/.test(await page.textContent('#kstrip')) && Boolean(await page.$('.chip--hold')));
+  check('P-1 03: KPI WBS 미연결 + 미연결 mark shown', /WBS 미연결 \(범위 내\)/.test(await page.textContent('#kstrip')) && Boolean(await page.$('.is-unlinked')));
   await page.goto(`${reqUrl}?sel=${r1.id}`); await page.waitForSelector('#drawer .dtitle'); await page.click('[data-dtab="links"]');
   check('US-4(4) Delivery Trace from 03', Boolean(await page.$('#drawer .trace')));
 
