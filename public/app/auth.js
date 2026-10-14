@@ -15,6 +15,26 @@ const ERRORS = { google_denied: 'Google 로그인이 취소되었습니다.', oa
 export const googleButton = (href, { label = 'Google로 계속하기', divider = true } = {}) => html`${raw(divider ? '<div class="auth__or" role="separator"><span>또는</span></div>' : '')}
   <a class="btn btn--secondary btn--lg btn--block btn--google" href="${href}" id="google-btn" data-google><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.5-4.1 7-10.2 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.6A14.5 14.5 0 0 1 9.7 24c0-1.6.3-3.1.8-4.6l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.7-2.1 15.6-5.7l-7.6-5.9c-2.1 1.4-4.8 2.3-8 2.3-6.3 0-11.6-4.1-13.5-9.9l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>${label}</a>`;
 
+/* Signup direction A — "가입하면 바로 보게 될 화면": a What's Next preview instead of a slogan. */
+const signupSide = () => html`<aside class="auth__side su-a">
+  <div class="su-a__inner">
+    <p class="su-eyebrow">가입하면 바로 보게 될 화면</p>
+    <h2>막히는 순간마다,<br>다음 순서를 먼저 보여줍니다.</h2>
+    <div class="su-a__card" aria-hidden="true">
+      <div class="su-a__head"><b>What’s Next</b><span>01 착수</span></div>
+      <ol class="su-a__steps">${raw(PHASES.map((p, i) => html`<li class="${i === 0 ? 'is-current' : ''}"><i>${String(i + 1).padStart(2, '0')}</i>${p}</li>`).join(''))}</ol>
+      <div class="su-a__todo">
+        <p class="su-a__k">지금 할 일</p>
+        <p class="su-a__t">프로젝트 목표와 범위 정리하기</p>
+        <p class="su-a__d">범위를 먼저 정해 두면 요구사항 정의 단계에서 고객과의 논의가 흔들리지 않습니다.</p>
+        <span class="su-a__cta">프로젝트 정의 시작 →</span>
+      </div>
+    </div>
+    <p class="su-a__foot">프로젝트 1개는 무료 · 팀으로 쓰면 Team ₩15,000/인·월(연간)</p>
+  </div></aside>`;
+/** Small screens hide the side panel, so the 7 phases move under the headline. */
+const signupMobile = () => html`<div class="su-mobile su-a-m" aria-label="프로젝트 7단계">${raw(PHASES.map((p, i) => html`<span class="${i === 0 ? 'is-current' : ''}"><i>${i + 1}</i>${p}</span>`).join(''))}</div>`;
+
 export async function authPage(mode) {
   const isSignup = mode === 'signup';
   const qp = new URLSearchParams(location.search);
@@ -32,11 +52,12 @@ export async function authPage(mode) {
   const inviteBanner = !invite ? '' : invite.invalid ? html`<div class="notice notice--warn" style="margin-bottom:14px">초대 링크가 ${invite.status === 'ACCEPTED' ? '이미 사용되었습니다' : invite.status === 'REVOKED' ? '취소되었습니다' : invite.status === 'EXPIRED' ? '만료되었습니다' : '유효하지 않습니다'}. 초대한 분에게 새 링크를 요청해 주세요. 일반 가입은 계속할 수 있습니다.</div>`
     : html`<div class="notice notice--invite" style="margin-bottom:14px"><b>${invite.type === 'WORKSPACE_CREATE' ? `${invite.workspace_name} Workspace 생성 초대` : `${invite.workspace_name} Workspace 멤버 초대`}</b><br>
       <span class="dim">${invite.email_masked} 로 초대되었습니다. 초대받은 이메일로 가입해야 하며, 가입 완료 시 ${raw(invite.type === 'WORKSPACE_CREATE' ? html`<b>${invite.workspace_name}</b> Workspace가 생성되고 OWNER가 됩니다.` : html`<b>${invite.workspace_name}</b> Workspace에 ${invite.role_label}로 참여합니다.`)}</span></div>`;
-  root.innerHTML = html`<div class="auth">
+  root.innerHTML = html`<div class="auth${isSignup ? ' auth--su-a' : ''}">
     <main class="auth__form">
       <a class="logo" href="/">RELAI</a>
-      <h1>${isSignup ? (invite && !invite.invalid ? '초대받은 계정 만들기' : '무료로 시작하기') : '다시 만나서 반갑습니다'}</h1>
-      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : '가입하면 나만의 Workspace가 바로 만들어집니다.') : '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.'}</p>
+      <h1>${isSignup ? (invite && !invite.invalid ? '초대받은 계정 만들기' : raw('처음 맡은 프로젝트,<br>다음 할 일부터 알려드릴게요.')) : '다시 만나서 반갑습니다'}</h1>
+      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : 'PM 방법론을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다.') : '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.'}</p>
+      ${raw(isSignup ? signupMobile() : '')}
       <form id="f" novalidate>
         <div class="form-err" id="ferr" role="alert" hidden></div>
         ${raw(!isSignup && qp.get('deleted') ? '<div class="notice" style="margin-bottom:14px">계정이 삭제되었습니다. 그동안 RELAI를 이용해 주셔서 감사합니다.</div>' : '')}
@@ -50,17 +71,17 @@ export async function authPage(mode) {
         <div class="field"><label for="password">비밀번호 <span class="req">*</span></label>
           <input class="input" id="password" name="password" type="password" autocomplete="${isSignup ? 'new-password' : 'current-password'}">
           ${raw(isSignup ? '<div class="hint">영문과 숫자를 포함해 8자 이상</div>' : '<div class="hint"><a class="link" href="/forgot-password">비밀번호를 잊으셨나요?</a></div>')}<div class="err" data-for="password"></div></div>
-        <button class="btn btn--primary btn--lg btn--block" type="submit">${isSignup ? (invite && !invite.invalid ? '가입하고 초대 수락하기' : '가입하고 시작하기') : '로그인'}</button>
+        <button class="btn btn--primary btn--lg btn--block" type="submit">${isSignup ? (invite && !invite.invalid ? '가입하고 초대 수락하기' : '무료로 첫 프로젝트 시작하기') : '로그인'}</button>
       </form>
       ${raw(google.enabled ? googleButton(googleHref) : '')}
       <p class="auth__alt">${isSignup ? '이미 계정이 있나요?' : '아직 계정이 없나요?'}
         <a class="link" href="${isSignup ? `/login${inviteToken ? `?next=${encodeURIComponent(`/invite/${inviteToken}`)}` : ''}` : `/signup${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`}">${isSignup ? '로그인' : '회원가입'}</a></p>
     </main>
-    <aside class="auth__side"><blockquote>
+    ${raw(isSignup ? signupSide() : html`<aside class="auth__side"><blockquote>
       <h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
       <p>RELAI가 프로젝트의 시작부터 종료까지 다음에 해야 할 일을 안내합니다.</p>
       <div class="auth__phases">${raw(PHASES.map((p) => html`<span>${p}</span>`).join(''))}</div>
-    </blockquote></aside></div>`;
+    </blockquote></aside>`)}</div>`;
   const form = $('#f');
   $(isSignup ? '#name' : '#email').focus();
   form.addEventListener('submit', async (e) => {
