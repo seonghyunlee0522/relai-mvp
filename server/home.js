@@ -89,6 +89,7 @@ export async function homeCard(db, row, { today } = {}) {
     planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date,
     current_phase: project.current_phase, current_phase_name: project.current_phase_name, current_phase_sequence: project.current_phase_sequence,
     guidance: g ? { rule: g.rule, kind: guidanceKind(g), title: g.title, description: g.description, primary_action: g.primary_action, secondary_action: g.secondary_action, warnings: g.warnings } : null,
+    phase_states: ctx.guide.phases.map((p) => p.display_state),   // B-1: the lifecycle bar uses the same gate-based ✓ as the LNB / stepper
     next_phase: ctx.guide.next_phase ? { key: ctx.guide.next_phase.phase_key, name: ctx.guide.next_phase.name, sequence: ctx.guide.next_phase.sequence } : null,
     wbs: { tasks: n(w.tasks), progress: w.progress ?? 0, planned_progress: w.planned_progress ?? null, variance: w.variance ?? null,
       overdue_tasks: n(w.overdue_tasks), overdue_milestones: n(w.overdue_milestones), max_overdue_days: n(w.max_overdue_days), tasks_without_dates: n(w.tasks_without_dates) },

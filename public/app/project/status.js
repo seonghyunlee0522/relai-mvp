@@ -6,9 +6,9 @@ import { html, no2, raw, todayLocal } from '../core/dom.js';
 const n = (v) => Number(v) || 0;
 
 const reqOpen = (ph) => (ph.summary ? ph.summary.required_open : 0);
-/** Display state of a phase, shared by the stepper and the LNB: cur · done (COMPLETED, or left for a later phase with its REQUIRED gate
- * now met — e.g. approval recorded after a bypass) · gap (left for a later phase with REQUIRED activities still open: number + count, no ✓) · todo. */
-export const phaseState = (ph) => (ph.is_current ? 'cur' : ph.status === 'COMPLETED' ? 'done' : ph.is_passed ? (reqOpen(ph) ? 'gap' : 'done') : 'todo');
+/** Display state of a phase, shared by the stepper, the LNB and Home: cur · done (left — COMPLETED or passed — with its REQUIRED gate
+ * met now; a stored COMPLETED alone is not enough) · gap (left for a later phase with REQUIRED activities still open: number + count, no ✓) · todo. */
+export const phaseState = (ph) => ph.display_state || (ph.is_current ? 'cur' : ph.is_passed || ph.status === 'COMPLETED' ? (reqOpen(ph) ? 'gap' : 'done') : 'todo');   // server guide.js phaseDisplayState (B-1: gate, not stored status)
 /** Tooltip text for a phase: "완료" / "다음 단계로 진행됨 · 남은 필수 업무 N건" / "현재 단계" / "미시작". */
 export const phaseTip = (ph) => {
   const st = phaseState(ph); const req = reqOpen(ph);

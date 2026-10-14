@@ -117,8 +117,8 @@ export async function wbsPage(id) {
 
   const teamLabel = (t) => (t.role ? `${t.name} · ${t.role}` : t.name);
   /** Owner choices: 미지정 · <optgroup RELAI 사용자> · <optgroup 팀원 (계정 없음)> (01 당사·협력사 이해관계자). A deleted stakeholder still shows as the current value. */
-  const ownerChoices = (cur = '') => {
-    const team = owners.team.map((t) => [`s:${t.id}`, teamLabel(t)]);
+  const ownerChoices = (cur = '', short = false) => {   // short: the grid cell shows the name only (no '· 역할'), so it never clips (L-C1)
+    const team = owners.team.map((t) => [`s:${t.id}`, short ? t.name : teamLabel(t)]);
     if (/^s:/.test(cur) && !team.some(([v]) => v === cur)) team.push([cur, '(삭제된 담당자)']);
     return [['', '미지정'], { group: 'RELAI 사용자', options: members.map((m) => [`u:${m.id}`, m.name]) }, { group: '팀원 (계정 없음)', options: team }];
   };
@@ -136,6 +136,7 @@ export async function wbsPage(id) {
       .map((i) => html`<option value="${i.id}" ${cur === i.id ? 'selected' : ''}>${'  '.repeat(i.depth)}${i.wbs_code} ${i.title}</option>`).join('');
   };
   const dim = (t = '-') => html`<span class="dim">${t}</span>`;
+  const progCell = (r) => html`<div class="pcell ${r.rollup ? 'is-roll' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : ''}"><div class="pbar"><i style="width:${r.computed_progress}%"></i></div><span>${r.computed_progress}%</span></div>`;   // same bar + % on editable and roll-up rows (L-C1)
   const dateCell = (d, derived = false, past = false) => (d ? (derived ? html`<span class="dim" title="하위 작업 기준 자동 계산">${fmtShort(d)}</span>` : past ? html`<span class="wpast" title="${PAST_END()}"><i aria-hidden="true">!</i>${fmtShort(d)}</span>` : html`${fmtShort(d)}`) : dim());
   const statusBadge = (it) => html`<span class="chip ${WBS_CSTATUS_CHIP[it.computed_status] || ''}">${WBS_CSTATUS[it.computed_status] || it.computed_status}</span>`;
 
@@ -177,9 +178,9 @@ export async function wbsPage(id) {
       { key: 'end', label: '계획 종료', width: 118, edit: { type: 'date', field: 'planned_end_date', cls: (r) => (r.past_end ? 'cell--past' : r.computed_status === 'DELAYED' ? 'cell--late' : ''), title: (r) => (r.past_end ? PAST_END() : ''), prefix: (r) => (r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : ''), value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date) }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dateCell(r.milestone_date, false, r.past_end) : dateCell(r.planned_end, r.rollup, r.past_end)) },   // US-3: past the project end → warn colour + !, never red
       { key: 'astart', label: '실적 시작', width: 118, hidden: true, edit: { type: 'date', field: 'actual_start_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_start, r.rollup)) },
       { key: 'aend', label: '실적 종료', width: 118, hidden: true, edit: { type: 'date', field: 'actual_end_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_end, r.rollup)) },
-      { key: 'progress', label: '진행률', width: 126, card: false, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress },
-        render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`<div class="pcell ${r.rollup ? 'is-roll' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : ''}"><div class="pbar"><i style="width:${r.computed_progress}%"></i></div><span>${r.computed_progress}%</span></div>`) },
-      { key: 'owner', label: '담당자', width: 176, edit: { type: 'select', field: 'owner', options: (r) => ownerChoices(ownerKey(r)), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: noAcct },
+      { key: 'progress', label: '진행률', width: 126, card: false, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress, display: (r) => progCell(r) },
+        render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : progCell(r)) },
+      { key: 'owner', label: '담당자', width: 176, edit: { type: 'select', field: 'owner', options: (r) => ownerChoices(ownerKey(r), true), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: noAcct },
         render: (r) => (r._ghost ? '' : ownerCell(r)) },
       { key: 'status', label: '상태', width: 118, edit: { type: 'select', field: 'status', options: STATUS_EDIT, cls: (r) => (r.computed_status === 'DELAYED' ? 'cell--late' : ''), prefix: (r) => (r.computed_status === 'DELAYED' ? '<i class="wlate" title="계획 종료일이 지났습니다">지연</i>' : '') }, render: (r) => (r._ghost ? '' : statusBadge(r)) },   // UI-006: leaf rows show 지연 on the select too
       { key: 'weight', label: '가중치', width: 76, hidden: true, align: 'right', edit: { type: 'number', field: 'weight', value: (r) => r.weight, min: 0, max: 1000 }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`${r.weight}`) },

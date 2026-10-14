@@ -8,7 +8,7 @@
  * Groups are SUMMARY, tasks TASK, every one tagged with its lifecycle_phase; dates and owners stay empty (the PM fills them —
  * the next guide rows say so). Each 구현 task is linked (유형 구현) to its in-scope confirmed requirement.
  */
-import { createWbs, renumber, projectStakeholders, teamOf } from './wbs.js';
+import { createWbs, renumber, projectStakeholders, teamOf, todayStr } from './wbs.js';
 import { addLink } from './trace.js';
 
 export const SKELETON_SOURCE = '뼈대로 생성';
@@ -77,12 +77,13 @@ export async function pendingKeyDates(db, project) {
   return kd.filter((k) => !seen.has(`${k.title}\u0000${k.date || ''}`));
 }
 
-/** One MILESTONE per pending 01 key_date at the WBS root, after everything else (duplicates skipped). Returns the new ids. */
+/** One MILESTONE per pending 01 key_date at the WBS root, after everything else (duplicates skipped). Returns the new ids.
+ *  A key date already behind us (before today, APP_TIMEZONE) happened — it lands COMPLETED, so day one of 03 shows no '지연'. */
 export async function milestonesFromKeyDates(db, project, userId, { source = '착수 주요 일정에서 가져옴', skipRenumber = false } = {}) {
-  const ids = []; const seen = new Set();
+  const ids = []; const seen = new Set(); const today = todayStr();
   for (const k of await pendingKeyDates(db, project)) {
     const key = `${k.title}\u0000${k.date || ''}`; if (seen.has(key)) continue; seen.add(key);   // the same key date twice in 01 → one milestone
-    ids.push(await createWbs(db, project, { item_type: 'MILESTONE', title: String(k.title).slice(0, 200), milestone_date: k.date || null, history_source: source }, userId, { skipRenumber: true, skipGuard: true }));
+    ids.push(await createWbs(db, project, { item_type: 'MILESTONE', title: String(k.title).slice(0, 200), milestone_date: k.date || null, ...(k.date && k.date < today ? { status: 'COMPLETED', actual_end_date: k.date } : {}), history_source: source }, userId, { skipRenumber: true, skipGuard: true }));
   }
   if (ids.length && !skipRenumber) await renumber(db, project.id);
   return ids;
@@ -91,5 +92,12 @@ export async function milestonesFromKeyDates(db, project, userId, { source = '�
 /** Team (계정 없는 팀원) for the WBS owner picker + the "only the PM is registered" hint (US-1). */
 export async function ownerOptions(db, project) {
   const all = await projectStakeholders(db, project.id);
-  return { team: teamOf(all), stakeholders_total: all.length };
+  // A stakeholder who IS a workspace member (01 tells the PM to list themself) is offered once, as the RELAI 사용자 (J-A2).
+  const norm = (v) => String(v || '').trim().toLowerCase();
+  const members = await db.all('SELECT u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', [project.workspace_id]);
+  const names = new Set(members.map((m) => norm(m.name)).filter(Boolean)); const emails = new Set(members.map((m) => norm(m.email)).filter(Boolean));
+  // A task that already names such a stakeholder keeps showing (and keeping) them.
+  const used = new Set((await db.all('SELECT DISTINCT owner_stakeholder_id AS id FROM wbs_items WHERE project_id = ? AND owner_stakeholder_id IS NOT NULL', [project.id])).map((r) => r.id));
+  const team = teamOf(all).filter((x) => used.has(x.id) || (!names.has(norm(x.name)) && !emails.has(norm(all.find((s) => s.id === x.id)?.email))));
+  return { team, stakeholders_total: all.length };
 }

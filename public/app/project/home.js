@@ -12,6 +12,8 @@ import { bindChecklist, checklistCard } from '../onboarding/ui.js';
 import { scheduleState } from './status.js';
 import { newWorkspaceHome } from './list.js';
 
+/** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
+const wsName = (v) => String(v || '').replace(/ Workspace$/, ' 워크스페이스');
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 const n = (v) => Number(v) || 0;
 const ATT_TYPE = { ISSUE: '이슈', RISK: '리스크', TEST: '테스트', CHANGE: '변경', WBS: 'WBS', ACCEPTANCE: '검수', REQUIREMENT: '요구사항' };
@@ -20,7 +22,8 @@ const UNLINKED = 'CONFIRMED_UNLINKED_REQUIREMENT';
  * "Not done yet" (e.g. 03 with WBS 미연결) is the next step, not an alert. */
 const isAlert = (c) => Boolean(n(c.wbs && c.wbs.overdue_tasks) || n(c.wbs && c.wbs.overdue_milestones) || n(c.attention && c.attention.crit));
 
-const lifecycle = (seq) => html`<span class="lcpos" aria-label="Lifecycle 위치">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < seq ? 'is-done' : i + 1 === seq ? 'is-cur' : ''}"></i>`).join(''))}</span>`;
+/** Lifecycle bar: one segment per phase — green only when that phase's REQUIRED gate is met (B-1), amber when left with REQUIRED open. */
+const lifecycle = (seq, states) => html`<span class="lcpos" aria-label="단계 위치">${raw(Array.from({ length: 7 }, (_, i) => { const st = states && states[i] ? states[i] : i + 1 < seq ? 'done' : i + 1 === seq ? 'cur' : 'todo'; return `<i class="${st === 'todo' ? '' : `is-${st}`}"></i>`; }).join(''))}</span>`;
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
 
 /* ---------- 다음 할 일: the What's Next CTA, verbatim. ?move=next (phase transition) keeps its confirm dialog in Project Home. ---------- */
@@ -48,13 +51,13 @@ const nextBlock = (c, first = false) => {
 /* ---------- bottom strip: 진행률 · 일정 · 확인 필요 (one line, Overview numbers) ---------- */
 const stripBlock = (c) => {
   const w = c.wbs || {}; const sch = scheduleState(w); const a = c.attention || { total: 0, crit: 0, items: [] };
-  const prog = n(w.tasks) ? `${n(w.progress)}%` : '-';
+  const prog = n(w.tasks) ? `${n(w.progress)}%` : null;   // no tasks yet → no 진행률 slot at all (a '-' next to '·' read as a doubled separator, L-C6)
   const overdue = n(w.overdue_tasks) || n(w.overdue_milestones);
   const tone = sch.tone === 'crit' && !overdue ? 'warn' : sch.tone;   // red only when something is actually overdue
   const other = n(a.total) - n(a.unlinked);
   const att = other ? html`<a class="hc__att is-${a.crit ? 'crit' : 'warn'}" href="/app/projects/${c.id}/overview#att" data-link>확인 필요 ${other}건</a>` : '';
   return html`<div class="hc__strip">
-    <span class="hc__m"><small>진행률</small><b>${prog}</b></span><i class="hc__sep">·</i>
+    ${raw(prog ? html`<span class="hc__m"><small>진행률</small><b>${prog}</b></span><i class="hc__sep">·</i>` : '')}
     <span class="hc__m"><small>일정</small><b class="is-${tone}">${sch.label === '-' ? '정상' : sch.label}</b></span>
     ${raw(att)}
   </div>`;
@@ -80,7 +83,7 @@ const card = (c, i) => {
       <span class="hc__client">${c.client_name || ''}</span>
       <span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>
     </header>
-    <div class="hc__phase"><span class="hc__k">현재 단계</span><b>${no2(c.current_phase_sequence)} ${c.current_phase_name}</b>${raw(lifecycle(c.current_phase_sequence))}${raw(c.soon && c.next_date ? html`<span class="hc__soon" title="${c.next_date.label}">D-${c.next_date_days} ${c.next_date.title}</span>` : '')}</div>
+    <div class="hc__phase"><span class="hc__k">현재 단계</span><b>${no2(c.current_phase_sequence)} ${c.current_phase_name}</b>${raw(lifecycle(c.current_phase_sequence, c.phase_states))}${raw(c.soon && c.next_date ? html`<span class="hc__soon" title="${c.next_date.label}">D-${c.next_date_days} ${c.next_date.title}</span>` : '')}</div>
     ${raw(nextBlock(c, i === 0))}
     ${raw(stripBlock(c))}
     ${raw(attentionList(c))}
@@ -101,10 +104,10 @@ export async function homePage(main = $('#main')) {
   const live = h.projects || []; const done = h.completed || [];
   const any = live.length || done.length;
   main.innerHTML = html`<div class="page page--guide home">
-    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${state.workspace.name}</p></div>
+    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${wsName(state.workspace.name)}</p></div>
       ${raw(any && canManage() ? `<a class="btn ${live.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
     ${raw(any ? checklistCard(o, { compact: true }) : '')}
-    ${raw(live.length && !canManage() ? html`<p class="home__member">${state.workspace.name} Workspace에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
+    ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
     ${raw(live.length ? html`<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
         <div class="hgrid">${raw(live.map(card).join(''))}</div></section>`
       : any ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>완료·보관된 프로젝트는 프로젝트 목록에서 볼 수 있습니다.</p></div>' : newWorkspaceHome(o))}

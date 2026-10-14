@@ -86,6 +86,11 @@ export const migrations = [
       AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'ANALYSIS_DESIGN')`);
     await db.run(`UPDATE project_phases SET description = ? WHERE phase_key = 'ANALYSIS_DESIGN' AND description = ?`, [ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1]);
   } },
+  { version: 34, name: 'Phase 3 acceptance J-A3: stored 03 activity copy → Korean (REQ_TRACE \'요구사항–WBS 연결\', PLAN \'작업 수준\')', async up(db) {
+    // Only rows still carrying the old template text are touched (a PM-edited title stays as is).
+    await db.run(`UPDATE project_steps SET title = '요구사항–WBS 연결' WHERE step_key = 'REQ_TRACE' AND title = 'Requirements ↔ WBS 연결'`);
+    await db.run(`UPDATE project_steps SET description = replace(description, 'Task 수준', '작업 수준') WHERE step_key = 'PLAN' AND description LIKE '%Task 수준%'`);
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

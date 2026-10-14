@@ -219,6 +219,68 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   check('US-4 twice → no duplicates', again.created === 0 && again.items.filter((i) => i.item_type === 'MILESTONE').length === 3);
   await shot('13-milestones-imported.png');
 
+  /* ---------- Phase 3 acceptance fixes (J-A1 · J-A2 · J-A3 · B-1 · L-C1 · L-C6) ---------- */
+  const todayK = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const dayShift = (n) => { const d = new Date(`${todayK}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  // J-A1 + J-A2: a past key date and the PM (= the signed-up member 홍길동) listed as a 당사 stakeholder, as 01 tells the PM to do
+  const C = await mkProject('지난 일정 프로젝트', { n: 2, team: [{ id: 'sh-me', name: '홍길동', org_type: 'OWN', role: 'PM' }, ...TEAM], keyDates: [{ title: '착수보고회', date: dayShift(-1) }, { title: '오픈', date: '2027-04-01' }] });
+  const ct = (await api('POST', `${C.P}/wbs`, { title: '현행 분석' })).json.item;
+  const imp = (await api('POST', `${C.P}/wbs/milestones/from-key-dates`, {})).json;
+  const kick = imp.items.find((i) => i.title === '착수보고회');
+  check('J-A1 past key date → 완료 milestone (no 지연)', kick && kick.status === 'COMPLETED' && kick.computed_status !== 'DELAYED' && !imp.summary.overdue_milestones, JSON.stringify(kick && [kick.status, kick.computed_status]));
+  await page.goto(`${C.url}/wbs?sel=${ct.id}`); await page.waitForSelector('#drawer [data-field="owner"]');
+  check('J-A1 WBS: no red 지연 row / 지연 작업 chip on day one', !(await page.$('main tr.is-late')) && !(await page.$('.kchip.is-crit[data-kf="overdue"]')));
+  const cGroups = await page.$$eval('#drawer [data-field="owner"] optgroup', (els) => els.map((o) => [o.label, [...o.querySelectorAll('option')].map((x) => x.textContent)]));
+  const users = (cGroups.find((x) => x[0] === 'RELAI 사용자') || [0, []])[1]; const team = (cGroups.find((x) => x[0] === '팀원 (계정 없음)') || [0, []])[1];
+  check('J-A2 PM listed once (RELAI 사용자), not again as 팀원 (계정 없음)', users.includes('홍길동') && !team.some((t) => /홍길동/.test(t)) && team.includes('김피엠 · PM'), JSON.stringify(cGroups));
+  await shot('14-accept-owner-picker.png');
+
+  // J-A3: 03 activity copy (What's Next, project A in 03)
+  const D = await mkProject('복사 확인 프로젝트', { n: 1 });
+  await page.goto(D.url); await page.waitForSelector('.np__list');
+  const npText = await page.textContent('.np__list');
+  check('J-A3 row 요구사항–WBS 연결 (no English)', /요구사항–WBS 연결/.test(npText) && !/Requirements ↔ WBS/.test(npText));
+  check('J-A3 일정 입력: 작업 수준 (no "Task 수준")', /작업 수준/.test(npText) && !/Task 수준/.test(npText));
+
+  // B-1: a legacy project that passed 01–03 before the gates existed (phase rows set directly) — no ✓ anywhere while REQUIRED is open
+  if (process.env.DATABASE_URL) {
+    const { Client } = require('pg'); const pg = new Client({ connectionString: process.env.DATABASE_URL }); await pg.connect();
+    const E = await mkProject('예전 프로젝트', { n: 1 });
+    await pg.query(`UPDATE project_phases SET status = 'COMPLETED' WHERE project_id = $1 AND phase_key IN ('INITIATION','REQUIREMENTS','ANALYSIS_DESIGN')`, [E.p.id]);
+    await pg.query(`UPDATE project_phases SET status = 'IN_PROGRESS' WHERE project_id = $1 AND phase_key = 'DEVELOPMENT'`, [E.p.id]);
+    await pg.query(`UPDATE projects SET current_phase = 'DEVELOPMENT' WHERE id = $1`, [E.p.id]);
+    await pg.end();
+    await page.goto(E.url); await page.waitForSelector('.pstep li');
+    const stepper = await page.$$eval('.pstep li', (els) => els.slice(0, 4).map((e) => [e.className.trim().split(/\s+/)[0], e.querySelector('.st').textContent]));
+    check('B-1 stepper: 01–03 ◐ (is-gap), no ✓; 04 current', JSON.stringify(stepper) === JSON.stringify([['is-gap', '◐'], ['is-gap', '◐'], ['is-gap', '◐'], ['is-cur', '●']]), JSON.stringify(stepper));
+    const lnb = await page.$$eval('.lnb__ph', (els) => els.slice(0, 3).map((e) => [e.classList.contains('is-gap'), e.querySelector('.lnb__mark').textContent]));
+    check('B-1 LNB: 01–03 number + count, no ✓', lnb.length === 3 && lnb.every(([gap, m]) => gap && m !== '✓'), JSON.stringify(lnb));
+    await shot('15-accept-b1-stepper.png');
+    await page.goto(`${BASE}/app`); await page.waitForSelector(`.hc[data-pid="${E.p.id}"]`);
+    const bar = await page.$$eval(`.hc[data-pid="${E.p.id}"] .lcpos i`, (els) => els.map((e) => e.className));
+    check('B-1 Home lifecycle bar: 01–03 amber (is-gap), never green', JSON.stringify(bar.slice(0, 4)) === JSON.stringify(['is-gap', 'is-gap', 'is-gap', 'is-cur']), JSON.stringify(bar));
+  } else check('B-1 legacy project (needs DATABASE_URL)', false, 'DATABASE_URL not set');
+
+  // L-C6: Home — 워크스페이스 (no English) · no 진행률 slot / doubled separator on a card without tasks
+  await page.goto(`${BASE}/app`); await page.waitForSelector(`.hc[data-pid="${D.p.id}"]`);
+  const sub = await page.textContent('.page__head p');
+  check('L-C6 Home subtitle 워크스페이스', /워크스페이스/.test(sub) && !/Workspace/.test(sub), sub);
+  const strip = (await page.textContent(`.hc[data-pid="${D.p.id}"] .hc__strip`)).replace(/\s+/g, ' ').trim();
+  check('L-C6 empty progress: no "진행률 -" and no doubled separator', !/진행률/.test(strip) && !/·\s*·/.test(strip) && !/^·/.test(strip), strip);
+  await shot('16-accept-home.png');
+
+  // L-C1: WBS grid — one text format for dates (10/20) and progress (0%) on editable rows; no mm/dd/yyyy; owner name + 계정 없음 not clipped
+  await page.goto(`${A.url}/wbs`); await page.waitForSelector('main table');
+  await page.mouse.move(5, 5);
+  const fmt = await page.$$eval('main tbody tr:not(.is-group)', (trs) => trs.slice(0, 12).map((tr) => [...tr.querySelectorAll('.cedit__v')].map((v) => v.textContent.trim())).flat());
+  check('L-C1 editable dates as M/DD, progress as N%', fmt.length > 0 && fmt.every((t) => /^(\d{1,2}\/\d{2}|-|\d{1,3}%)$/.test(t)) && fmt.some((t) => /%$/.test(t)) && fmt.some((t) => /\//.test(t)), JSON.stringify(fmt.slice(0, 8)));
+  const restInput = await page.$eval('main tbody tr:not(.is-group) .cedit .cell--date', (e) => getComputedStyle(e).color);
+  check('L-C1 native date text hidden at rest (no mm/dd/yyyy)', restInput === 'rgba(0, 0, 0, 0)', restInput);
+  const clip = await page.$eval(`main tr[data-id="${design.id}"] .wnoacct`, (e) => { const td = e.closest('td').getBoundingClientRect(); const r = e.getBoundingClientRect(); return r.right <= td.right + 0.5 && e.scrollWidth <= e.clientWidth + 1; }).catch(() => false);
+  const ownerSel = await page.$eval(`main tr[data-id="${design.id}"] select[data-edit="owner"]`, (e) => [e.options[e.selectedIndex].textContent, e.scrollWidth <= e.clientWidth + 1]).catch(() => ['', false]);
+  check('L-C1 owner cell: name only + 계정 없음 fully visible', clip && ownerSel[0] === '박협력', JSON.stringify(ownerSel));
+  await shot('17-accept-grid-format.png');
+
   await browser.close();
   const fails = results.filter((x) => !x[1]);
   log(`\n${results.length - fails.length}/${results.length} passed`);

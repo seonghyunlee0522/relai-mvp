@@ -257,7 +257,7 @@ test('migration 33: NON_DEV_TASKS 선택 → 권장 + 03 description in existing
   const A = await setup(client);
   await db.run(`UPDATE project_steps SET importance = 'OPTIONAL', is_required = 0 WHERE step_key = 'NON_DEV_TASKS'`);
   await db.run(`UPDATE project_phases SET description = ? WHERE phase_key = 'ANALYSIS_DESIGN'`, [ANALYSIS_DESIGN_DESCRIPTION_V1]);
-  const m33 = migrations.find((m) => m.version === 33); assert.ok(m33); assert.equal(migrations[migrations.length - 1].version, 33);
+  const m33 = migrations.find((m) => m.version === 33); assert.ok(m33); assert.ok(migrations[migrations.length - 1].version >= 33);
   await m33.up(db); await m33.up(db);
   const row = await db.get(`SELECT s.importance, s.is_required FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE p.project_id = ? AND s.step_key = 'NON_DEV_TASKS'`, [A.p.id]);
   assert.deepEqual({ ...row }, { importance: 'RECOMMENDED', is_required: 0 });

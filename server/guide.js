@@ -74,9 +74,18 @@ export async function loadGuide(db, project, ctx = null) {
   const current = out.find((p) => p.is_current) || null;
   // A phase before the current one has been left for the next step — shown as ended (✓) even if some activities stayed open.
   // Display only: status stays IN_PROGRESS for such a phase (transitionTo), so the open activities are still visible.
-  for (const p of out) p.is_passed = Boolean(current && p.sequence < current.sequence);
+  for (const p of out) { p.is_passed = Boolean(current && p.sequence < current.sequence); p.display_state = phaseDisplayState(p); }
   const next = current ? out.find((p) => p.sequence === current.sequence + 1) || null : null;
   return { phases: out, current_phase: current, next_phase: next, history };
+}
+
+/** Display state shared by the LNB, the top stepper and Home (B-1): cur · done · gap · todo. ✓ (done) comes from the phase's REQUIRED gate
+ * on every read — never from a stored project_phases.status = COMPLETED alone (a legacy project may have passed 02 before the gate existed).
+ * Without resolved activities (no ctx) a left phase falls back to done. */
+export function phaseDisplayState(p) {
+  if (p.is_current) return 'cur';
+  if (!p.is_passed && p.status !== 'COMPLETED') return 'todo';
+  return p.summary && p.summary.required_open > 0 ? 'gap' : 'done';
 }
 
 /* ---------- writes ---------- */

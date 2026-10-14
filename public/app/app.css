@@ -1010,6 +1010,17 @@ body.is-resizing{cursor:col-resize;user-select:none}
 .cell--sel:hover,.cell--sel:focus{background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='%23667085' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 4px center}
 .cell--date{padding:0 2px;font-size:var(--fs-sm);min-width:104px}
 .cell--num{text-align:right;padding-right:2px;width:56px}
+/* L-C1: editable date / number cells read as text at rest (`10/20`, `0%` + bar) — the native input shows on hover / focus only */
+.cedit{position:relative;display:block;flex:1 1 auto;min-width:0}
+.cedit>.cell{color:transparent}.cedit>.cell::-webkit-datetime-edit{color:transparent}
+.cedit:hover>.cell,.cedit:focus-within>.cell,.cedit:hover>.cell::-webkit-datetime-edit,.cedit:focus-within>.cell::-webkit-datetime-edit{color:inherit}
+.cedit__v{position:absolute;inset:0;display:flex;align-items:center;padding:0 4px;pointer-events:none;white-space:nowrap;overflow:hidden;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+td[style*="right"] .cedit__v,.cedit>.cell--num+.cedit__v{justify-content:flex-end}
+.cedit__v .pcell{width:100%}
+.cedit:hover>.cedit__v,.cedit:focus-within>.cedit__v{visibility:hidden}
+.cell--late+.cedit__v{color:var(--danger-fg);font-weight:600}.cell--past+.cedit__v{color:var(--warn-fg);font-weight:600}
+/* owner cell: avatar + name + '계정 없음' — the tag never shrinks, the name takes the rest */
+.cellwrap .cell--sel{flex:1 1 auto;width:auto}.cellwrap .wnoacct{flex:none}
 .cell:disabled{opacity:.5}
 .gfoot{display:flex;align-items:center;gap:10px;padding:4px 12px;border-top:1px solid var(--border);background:#fff;font-size:var(--fs-xs);color:var(--text-2);flex:none;min-height:32px}
 .gfoot b{color:var(--navy)}
@@ -1238,7 +1249,7 @@ body.is-resizing{cursor:col-resize;user-select:none}
 .toggle{font-size:var(--fs-sm)}
 .rlayout{align-items:stretch;gap:0}
 .gtable tbody tr.is-late td:nth-child(5),.gtable tbody tr.is-late td:nth-child(6){color:inherit}
-.gtable tbody tr.is-late td:nth-child(5) .cell--date,.gtable tbody tr.is-late td:nth-child(5) .wdate{color:var(--danger-fg);font-weight:600}
+.gtable tbody tr.is-late td:nth-child(5) .cell--date,.gtable tbody tr.is-late td:nth-child(5) .cedit__v,.gtable tbody tr.is-late td:nth-child(5) .wdate{color:var(--danger-fg);font-weight:600}
 .dside .cols2{grid-template-columns:1fr}
 .dside .input,.dside .select{width:100%;min-width:0}
 .dgrid3 .panel{margin:0}
@@ -2064,7 +2075,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 /* lifecycle position dots (project list) */
 .lcpos{display:inline-flex;gap:3px;align-items:center}
 .lcpos i{display:inline-block;width:14px;height:5px;border-radius:var(--r-sm);background:var(--border)}
-.lcpos i.is-done{background:var(--ok)}.lcpos i.is-cur{background:var(--blue)}
+.lcpos i.is-done{background:var(--ok)}.lcpos i.is-cur{background:var(--blue)}.lcpos i.is-gap{background:var(--warn)}
 /* ---------- badges: status (완료/진행 중/미시작/제외/확인 필요) and importance (필수/권장/선택) — same semantic colors as chips/health ---------- */
 .badge{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:var(--fs-xs);font-weight:700;white-space:nowrap;line-height:1;background:var(--border-soft);color:var(--text-2);flex:none}
 .badge--req{background:var(--danger-bg);color:var(--danger-fg);height:18px;padding:0 6px;font-size:var(--fs-2xs)}
