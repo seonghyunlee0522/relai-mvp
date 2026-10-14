@@ -159,12 +159,13 @@ export async function reopenProject(pid) {
 /** What's Next after 종료 — empty-state pattern; the phase list stays available, folded below. */
 export const closedPanel = (g) => {
   const p = g.project; const cr = g.completion_report;
-  const href = cr && cr.report_id ? `/app/projects/${p.id}/reports/${cr.report_id}` : `/app/projects/${p.id}/reports`;
+  const has = Boolean(cr && cr.report_id);   // K32: a project closed before Phase 7 may have no 완료보고서 — offer to make one
+  const href = has ? `/app/projects/${p.id}/reports/${cr.report_id}` : `/app/projects/${p.id}/reports?new=completion`;
   return html`<section class="closed" aria-labelledby="clsT" data-closed>
     <span class="closed__ic" aria-hidden="true">✓</span>
     <h2 id="clsT">프로젝트가 종료되었습니다</h2>
     <p class="closed__d">${md(String(p.closed_on || '').slice(0, 10))} 종료${p.warranty_end_on ? ` · 하자보수 ${ymdSlash(p.warranty_end_on)}까지` : ''}</p>
-    <a class="btn btn--primary closed__cta" href="${href}" data-link>완료보고서 보기</a>
+    <a class="btn btn--primary closed__cta" href="${href}" data-link>${has ? '완료보고서 보기' : '완료보고서 만들기'}</a>
     ${raw(p.status === 'COMPLETED' ? '<button type="button" class="link linkbtn closed__undo" data-reopen>종료 취소</button>' : '')}
   </section>`;
 };

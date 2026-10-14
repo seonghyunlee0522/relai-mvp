@@ -313,7 +313,7 @@ test('migration 38: report_type + 1건 index, closed_on / warranty / handover co
   await db.run(`UPDATE activity_checklist_items SET title = '교훈(Lessons Learned) 정리' WHERE id = ?`, [items.find((i) => /교훈/.test(i.title)).id]);
   const custom = items.find((i) => !/교훈/.test(i.title));
   await db.run(`UPDATE activity_checklist_items SET title = 'PM이 고친 제목' WHERE id = ?`, [custom.id]);
-  const m38 = migrations.find((m) => m.version === 38); assert.ok(m38); assert.equal(migrations[migrations.length - 1].version, 38);
+  const m38 = migrations.find((m) => m.version === 38); assert.ok(m38); assert.ok(migrations[migrations.length - 1].version >= 38);
   await m38.up(db); await m38.up(db);
   const P = await db.get(`SELECT description FROM project_phases WHERE project_id = ? AND phase_key = 'OPERATIONS'`, [A.p.id]);
   assert.equal(P.description, PHASE_BY_KEY.OPERATIONS.description);

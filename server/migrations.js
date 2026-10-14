@@ -11,6 +11,9 @@ import { randomUUID } from 'node:crypto';
 import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA, ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA,
   OPERATIONS_DESCRIPTION, HANDOVER_CRITERIA, MAINTENANCE_DESCRIPTION, SLA_DESCRIPTION, RELEASE_PLAN_DESCRIPTION, CLOSE_DESCRIPTION, CLOSE_CRITERIA, LESSONS_ITEM_V1, LESSONS_ITEM } from './templates/default-phases.js';
 
+/** Migration 39 (K32): note left on a legacy hand-✓ step that was reset because its record is missing. */
+export const LEGACY_RESET_NOTE = '예전 완료 표시에 기록(승인·오픈일·인수자·완료보고서)이 없어 다시 진행 중으로 바꿨습니다. 기록을 남기면 완료됩니다.';
+
 export const migrations = [
   { version: 1, name: 'projects.current_phase template-based (SQLite era)', up() {} },
   { version: 2, name: 'backfill guided phases for existing projects', async up(db) { for (const p of await db.all('SELECT * FROM projects')) await ensurePhases(db, p, { createdBy: p.created_by, at: p.created_at }); } },
@@ -165,6 +168,17 @@ export const migrations = [
     await db.run(`UPDATE project_steps SET description = ?, completion_criteria = ?, updated_at = now() WHERE step_key = 'CLOSE' AND ${OPS}`, [CLOSE_DESCRIPTION, CLOSE_CRITERIA]);
     // items the PM renamed keep their title (same rule as migration 34)
     await db.run(`UPDATE activity_checklist_items SET title = ?, updated_at = now() WHERE title = ?`, [LESSONS_ITEM, LESSONS_ITEM_V1]);
+  } },
+  { version: 39, name: 'Polish K32: legacy hand-✓ on 06 ACCEPTANCE / GO_LIVE and 07 HANDOVER / CLOSE with no backing record (승인된 검수 · 오픈 기록 · 인수 기록 · 확정 완료보고서 / 외부 완료보고서 사유) → back to TODO, on projects that are not COMPLETED; COMPLETED projects and history untouched', async up(db) {
+    const steps = (phase, key) => `step_key = '${key}' AND status = 'COMPLETED' AND project_phase_id IN (SELECT ph.id FROM project_phases ph JOIN projects p ON p.id = ph.project_id WHERE ph.phase_key = '${phase}' AND p.status <> 'COMPLETED'`;
+    const pidOf = '(SELECT project_id FROM project_phases WHERE id = project_steps.project_phase_id)';
+    const rec = (col) => `(SELECT 1 FROM project_definitions d WHERE d.project_id = ${pidOf} AND COALESCE(NULLIF(d.${col}, ''), '{}')::jsonb ->> 'date' IS NOT NULL)`;
+    const reset = (where) => db.run(`UPDATE project_steps SET status = 'TODO', completed_at = NULL, completed_by = NULL,
+      note = CASE WHEN note = '' THEN ? ELSE note END, updated_at = now() WHERE ${where}`, [LEGACY_RESET_NOTE]);
+    await reset(`${steps('TRANSITION_GO_LIVE', 'ACCEPTANCE')}) AND NOT EXISTS (SELECT 1 FROM acceptances a WHERE a.project_id = ${pidOf} AND a.status = 'ACCEPTED' AND a.archived_at IS NULL AND COALESCE(NULLIF(a.customer_approval, ''), '{}') <> '{}')`);
+    await reset(`${steps('TRANSITION_GO_LIVE', 'GO_LIVE')}) AND NOT EXISTS ${rec('go_live')}`);
+    await reset(`${steps('OPERATIONS', 'HANDOVER')}) AND NOT EXISTS ${rec('handover')}`);
+    await reset(`${steps('OPERATIONS', 'CLOSE')}) AND note NOT LIKE '%[외부 완료보고서]%' AND NOT EXISTS (SELECT 1 FROM weekly_reports w WHERE w.project_id = ${pidOf} AND w.report_type = 'COMPLETION' AND w.status = 'FINAL')`);
   } },
 ];
 
