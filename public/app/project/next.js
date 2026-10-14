@@ -83,15 +83,15 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
 /** Another phase's activities, opened from the stepper (…?phase=KEY). Same rows as the current phase, no phase-move footer. */
 const otherPhasePanel = (g, ph, archived) => {
   const acts = ph.steps || []; const s = ph.summary || { required_open: 0 }; const cur = g.current_phase;
-  const st = phaseState(ph);
-  const tag = st === 'done' ? (ph.status === 'COMPLETED' ? '<span class="np__tag is-done">✓ 완료</span>' : '<span class="np__tag is-done">✓ 다음 단계로 진행됨</span>') : '<span class="np__tag">예정</span>';
-  const remain = st === 'done' ? (s.required_open ? `남은 필수 업무 ${s.required_open}건 — 필요하면 지금도 처리할 수 있습니다` : '이 단계의 필수 업무를 모두 마쳤습니다') : `필수 업무 ${s.required_open || 0}건`;
-  const rows = acts.map((a) => activityRow(a, archived, false, true, st === 'done')).join('');
+  const st = phaseState(ph); const passed = st === 'done' || st === 'gap';
+  const tag = st === 'done' ? (ph.status === 'COMPLETED' ? '<span class="np__tag is-done">✓ 완료</span>' : '<span class="np__tag is-done">✓ 다음 단계로 진행됨</span>') : st === 'gap' ? '<span class="np__tag is-gap">다음 단계로 진행됨 · 필수 업무 남음</span>' : '<span class="np__tag">예정</span>';
+  const remain = passed ? (s.required_open ? `남은 필수 업무 ${s.required_open}건 — 필요하면 지금도 처리할 수 있습니다` : '이 단계의 필수 업무를 모두 마쳤습니다') : `필수 업무 ${s.required_open || 0}건`;
+  const rows = acts.map((a) => activityRow(a, archived, false, true, passed)).join('');
   const hasActs = /class="np__acts">(?!<\/span>)/.test(rows);
   return html`<section class="np np--other" aria-labelledby="npT">
     <div class="np__h">
       <div class="np__t"><span class="np__no mono">${no2(ph.sequence)}</span><h2 id="npT">${ph.name}</h2>${raw(tag)}</div>
-      <span class="np__remain ${st === 'done' && !s.required_open ? 'is-good' : ''}">${remain}</span>
+      <span class="np__remain ${passed && !s.required_open ? 'is-good' : ''}">${remain}</span>
     </div>
     <p class="np__d">${ph.description}</p>
     ${raw(ph.phase_key === 'INITIATION' ? noApprovalLine(g) : '')}

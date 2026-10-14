@@ -117,6 +117,16 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   check('reason stored in APPROVAL note', /^\[승인 전 진행\] 고객 PM 휴가로 승인 회신이 다음 주 예정 · \d{4}-\d{2}-\d{2} · 홍길동$/.test(apvStep.note), apvStep.note);
   check('APPROVAL row text 승인 전 진행 · 사유 있음', /승인 전 진행 · 사유 있음/.test(apvStep.text), apvStep.text);
 
+  // F6: 01 left with approval unrecorded → number + open-required badge in LNB and stepper, never ✓
+  const lc01 = async () => { await page.goto(`${BASE}/app/projects/${p.id}`); await page.waitForSelector('.pstep'); return page.evaluate(() => {
+    const ph = document.querySelector('.lnb__ph[data-grp="INITIATION"]'); const st = document.querySelector('.pstep li:first-child');
+    return { lnbCls: ph.className, mark: ph.querySelector('.lnb__mark').textContent.trim(), badge: (ph.querySelector('.lnb__n') || {}).textContent || '',
+      stCls: st.className, stIcon: st.querySelector('.st').textContent.trim(), stBadge: (st.querySelector('.pstep__n') || {}).textContent || '' }; }); };
+  const b1 = await lc01();
+  check('bypass: LNB 01 shows number + badge 1, not ✓', /is-gap/.test(b1.lnbCls) && b1.mark === '01' && b1.badge.trim() === '1', JSON.stringify(b1));
+  check('bypass: stepper 01 not ✓, badge 1', /is-gap/.test(b1.stCls) && b1.stIcon !== '✓' && b1.stBadge.trim() === '1', JSON.stringify(b1));
+  await page.screenshot({ path: `${SHOTS}/05b-lnb-gap.png` });
+
   // 6. Charter: approval area shows 미승인 — 사유, timeline 종료 후 zone, export menu
   await page.goto(`${BASE}/app/projects/${p.id}/charter`); await page.waitForSelector('.chx__head');
   check('Charter title spelled Project Charter', (await page.title()).startsWith('Project Charter'));
@@ -140,6 +150,9 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.screenshot({ path: `${SHOTS}/07-approval-screen.png` });
   await page.click('[data-wact="complete"]'); await page.waitForTimeout(800);
   check('approval completed', /완료/.test(await page.textContent('[data-row="APPROVAL"]')));
+  const b2 = await lc01();
+  check('approval recorded: LNB 01 ✓, no badge', /is-done/.test(b2.lnbCls) && b2.mark === '✓' && !b2.badge, JSON.stringify(b2));
+  check('approval recorded: stepper 01 ✓', /is-done/.test(b2.stCls) && b2.stIcon === '✓' && !b2.stBadge, JSON.stringify(b2));
   await api('PUT', `${P}/definition`, { goal: '계약 검토 리드타임 70% 단축' });
   await page.goto(`${BASE}/app/projects/${p.id}/definition`); await page.waitForSelector('[data-row="APPROVAL"]');
   check('re-approval → 확인 필요', /확인 필요/.test(await page.textContent('[data-row="APPROVAL"]')));

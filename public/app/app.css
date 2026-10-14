@@ -896,6 +896,7 @@ h1,h2,h3{letter-spacing:-0.025em}
 .lnb__ph.is-cur .lnb__phh{color:var(--blue-deep);font-weight:700}
 .lnb__ph.is-cur{box-shadow:inset 3px 0 0 var(--blue);border-radius:0 7px 7px 0}
 .lnb__ph.is-done .lnb__mark{background:#E8F7F0;color:#0E7A4F}
+.lnb__ph.is-gap .lnb__mark{background:#FEF6E7;color:#B45309}
 .lnb__ph.is-done .lnb__phh{color:var(--text-2)}
 .lnb__ph.is-todo .lnb__phh{color:#8A94A6}
 .lnb__pn{min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -1893,6 +1894,8 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .pstep li.is-done a{color:#0E7A4F}.pstep li.is-done .st{color:#12B76A}
 .pstep li.is-cur a{color:var(--blue-deep);font-weight:700}.pstep li.is-cur .st{color:var(--blue)}
 .pstep li.is-todo .st{color:#C2CAD6}
+.pstep li.is-gap a{color:#B45309}.pstep li.is-gap .st{color:#F79009}
+.pstep__n{font-size:10.5px;font-weight:700;color:#B45309;background:#FEF6E7;border-radius:999px;padding:0 6px;min-width:18px;text-align:center}
 /* RELAI Guide (compact: 완료 · 현재 meta → next action) */
 .rg{background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
 .rg__h{display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid var(--border-soft);min-width:0}
@@ -2260,6 +2263,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .pstep li.is-sel a{background:var(--bg-tint);box-shadow:inset 0 0 0 1px var(--border-blue);color:var(--navy);font-weight:700}
 .np__tag{font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;background:#F2F4F7;color:var(--text-2)}
 .np__tag.is-done{background:#E8F7F0;color:#0E7A4F}
+.np__tag.is-gap{background:#FEF6E7;color:#B45309}
 .np__back{font-size:12.5px}
 .chr__more{display:inline-block;margin-top:6px;font-size:12.5px}
 .chx__sec{scroll-margin-top:56px}

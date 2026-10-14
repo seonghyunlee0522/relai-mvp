@@ -5,23 +5,26 @@ import { html, no2, raw, todayLocal } from '../core/dom.js';
 
 const n = (v) => Number(v) || 0;
 
-/** Display state of a phase: cur · done (completed, or left for a later phase even with open activities) · todo. Shared by the stepper and the LNB. */
-export const phaseState = (ph) => (ph.is_current ? 'cur' : ph.status === 'COMPLETED' || ph.is_passed ? 'done' : 'todo');
+const reqOpen = (ph) => (ph.summary ? ph.summary.required_open : 0);
+/** Display state of a phase, shared by the stepper and the LNB: cur · done (COMPLETED, or left for a later phase with its REQUIRED gate
+ * now met — e.g. approval recorded after a bypass) · gap (left for a later phase with REQUIRED activities still open: number + count, no ✓) · todo. */
+export const phaseState = (ph) => (ph.is_current ? 'cur' : ph.status === 'COMPLETED' ? 'done' : ph.is_passed ? (reqOpen(ph) ? 'gap' : 'done') : 'todo');
 /** Tooltip text for a phase: "완료" / "다음 단계로 진행됨 · 남은 필수 업무 N건" / "현재 단계" / "미시작". */
 export const phaseTip = (ph) => {
-  const st = phaseState(ph); const req = ph.summary ? ph.summary.required_open : 0;
+  const st = phaseState(ph); const req = reqOpen(ph);
   if (st === 'cur') return '현재 단계';
-  if (st === 'done') return ph.status === 'COMPLETED' ? '완료' : `다음 단계로 진행됨${req ? ` · 남은 필수 업무 ${req}건` : ''}`;
+  if (st === 'done') return ph.status === 'COMPLETED' ? '완료' : '다음 단계로 진행됨 · 필수 업무 완료';
+  if (st === 'gap') return `다음 단계로 진행됨 · 남은 필수 업무 ${req}건`;
   return req ? `미시작 · 필수 업무 ${req}건` : '미시작';
 };
-/** Compact lifecycle stepper (no percentages): ✓ 착수 ─ ● 요구사항 정의 ─ ○ 분석·설계 … Green done/ended · Blue current · Gray not started.
+/** Compact lifecycle stepper (no percentages): ✓ 착수 ─ ● 요구사항 정의 ─ ○ 분석·설계 … Green done · Blue current · Amber left with REQUIRED open (count badge, no ✓) · Gray not started.
  * A step opens that phase's activity list on What’s Next (…?phase=KEY; the current phase is What’s Next itself) — never a work screen.
  * `selKey` = the phase whose list is shown (outlined). */
 export const phaseStepper = (g, pid, selKey = null) => html`<ol class="pstep" aria-label="Project Lifecycle">${raw((g.phases || []).map((ph) => {
   const state = phaseState(ph);
   const href = ph.is_current ? `/app/projects/${pid}` : `/app/projects/${pid}?phase=${ph.phase_key}`;
   const sel = selKey && selKey === ph.phase_key && !ph.is_current;
-  return html`<li class="is-${state} ${sel ? 'is-sel' : ''}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기" ${sel ? 'aria-current="page"' : ''}><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span></a></li>`;
+  return html`<li class="is-${state} ${sel ? 'is-sel' : ''}"><a href="${href}" data-link title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기" ${sel ? 'aria-current="page"' : ''}><i class="st st--${state}" aria-hidden="true">${state === 'done' ? '✓' : state === 'cur' ? '●' : state === 'gap' ? '◐' : '○'}</i><span><small>${no2(ph.sequence)}</small>${ph.name}</span>${raw(state === 'gap' ? html`<span class="pstep__n" title="필수 업무 ${reqOpen(ph)}건 남음">${reqOpen(ph)}</span>` : '')}</a></li>`;
 }).join(''))}</ol>`;
 
 /** Days from today to `date` (negative when past). null when no date. */

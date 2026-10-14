@@ -1,7 +1,7 @@
 /* Project LNB (Lifecycle V2) — the primary navigation inside a project.
  *
  *   PROJECT HOME        What's Next · Overview ▾ (프로젝트 현황 · Project Charter · WBS · 주간보고 · 일정/마일스톤 · Project Health)
- *   PROJECT LIFECYCLE   01…07 as an accordion: current phase open + blue bar, completed phases ✓ green, future gray
+ *   PROJECT LIFECYCLE   01…07 as an accordion: current phase open + blue bar, completed phases ✓ green, left-with-required-open amber number + count, future gray
  *   PROJECT MANAGEMENT  Changes · Issues & Risks · Activity · Reports
  *
  * Rendered into the shell's <aside id="side"> by projectHead() on every project screen, so the same payload (g) that
@@ -48,14 +48,14 @@ export function projectNav(p, g, activeKey) {
 
   const phases = (g.phases || []).map((ph) => {
     const items = (PHASE_ITEMS[ph.phase_key] ? PHASE_ITEMS[ph.phase_key](pid) : []).filter((it) => it.enabled !== false);
-    const state = phaseState(ph);   // a phase left for a later one shows as ended (✓), same as the stepper
+    const state = phaseState(ph);   // ✓ only when COMPLETED / gate met; a phase left with REQUIRED open shows its number + count (same as the stepper)
     const isOpen = open[ph.phase_key] !== undefined ? open[ph.phase_key] : (ph.is_current || pathPhase === ph.phase_key);
     const reqOpen = ph.summary ? ph.summary.required_open : 0;
     return html`<div class="lnb__ph is-${state} ${isOpen ? 'is-open' : ''} ${items.length ? '' : 'is-leaf'}" data-grp="${ph.phase_key}">
       <button type="button" class="lnb__phh" data-lnb-toggle="${ph.phase_key}" data-phase-href="/app/projects/${pid}${ph.is_current ? '' : `?phase=${ph.phase_key}`}" aria-expanded="${isOpen}" title="${no2(ph.sequence)} ${ph.name} · ${phaseTip(ph)} — 업무 목록 보기">
         <i class="lnb__mark" aria-hidden="true">${state === 'done' ? '✓' : no2(ph.sequence)}</i>
         <span class="lnb__t"><span class="lnb__pn">${ph.name}</span></span>
-        ${raw(state === 'cur' && reqOpen ? html`<span class="lnb__n" title="필수 업무 ${reqOpen}건 남음">${reqOpen}</span>` : '')}
+        ${raw((state === 'cur' || state === 'gap') && reqOpen ? html`<span class="lnb__n" title="필수 업무 ${reqOpen}건 남음">${reqOpen}</span>` : '')}
         ${raw(items.length ? '<span class="lnb__chev" aria-hidden="true"></span>' : '')}
       </button>
       ${raw(items.length ? html`<div class="lnb__sub">${raw(items.map((it, i) => link(it, isActive(it), { cls: 'lnb__i--sub', tour: i === 0 ? `lnb-${it.key}` : it.key === 'wbs' || it.key === 'tests' || it.key === 'requirements' || it.key === 'definition' ? `lnb-${it.key}` : null })).join(''))}</div>` : '')}
