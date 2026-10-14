@@ -81,7 +81,7 @@ export function checklistSteps(f) {
   const pid = f.first_project_id;
   const u = (p) => (pid ? `/app/projects/${pid}${p}` : '/app/projects/new');
   return [
-    { key: 'WORKSPACE', label: 'Workspace 생성', done: true, href: '/app/settings' },
+    { key: 'WORKSPACE', label: '워크스페이스 생성', done: true, href: '/app/settings' },
     { key: 'PROJECT', label: '프로젝트 생성', done: f.projects > 0, href: '/app/projects/new' },
     { key: 'DEFINITION', label: '프로젝트 정의', done: f.defined_projects > 0, href: u('/definition') },
     { key: 'REQUIREMENTS', label: '요구사항 등록', done: f.projects_with_requirements > 0, href: u('/requirements') },

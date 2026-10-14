@@ -75,7 +75,7 @@ export async function testsPage(id) {
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객이 결과물을 확인하고 승인하는 검수를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">
         <button class="${T === 'cases' ? 'is-on' : ''}" data-tab="cases" role="tab">테스트 케이스${raw(ts.total ? html`<em>${ts.total}</em>` : '')}</button>
         <button class="${T === 'acceptance' ? 'is-on' : ''}" data-tab="acceptance" role="tab">검수${raw(ac.in_progress ? html`<em>${ac.in_progress}</em>` : '')}${raw(before06 ? '<span class="tag-later">06에서 진행</span>' : '')}</button>
-        <button class="${T === 'coverage' ? 'is-on' : ''}" data-tab="coverage" role="tab">요구사항 커버리지${raw(ts.coverage !== null && ts.coverage !== undefined ? html`<em>${ts.coverage}%</em>` : '')}</button></div>
+        <button class="${T === 'coverage' ? 'is-on' : ''}" data-tab="coverage" role="tab">요구사항 커버리지${raw(ts.verify_coverage !== null && ts.verify_coverage !== undefined ? html`<em>${ts.verify_coverage}%</em>` : '')}</button></div>
       ${raw(T === 'cases' ? html`<div class="summary summary--inline">
           <div><b>${ts.total}</b><span>전체 <small>(미실행 ${ts.total - ts.executed})</small></span></div><div><b>${ts.ready}</b><span>준비됨</span></div>
           <div class="${ts.last_fail ? 'is-crit' : ''}"><b>${ts.last_fail}</b><span>실패</span></div><div class="${ts.last_blocked ? 'is-warn' : ''}"><b>${ts.last_blocked}</b><span>막힘</span></div></div>`
@@ -116,10 +116,12 @@ export async function testsPage(id) {
       <button class="btn btn--primary btn--lg" id="gen">요구사항별 테스트 만들기</button>
       <p class="tempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button></p></div>`;
   };
+  /** K10: no 기대 결과 anywhere (field or steps) → a grey hint in the list. */
+  const noExpected = (x) => !String(x.expected_result || '').trim() && !(Array.isArray(x.steps) && x.steps.some((st) => String(st.expected || '').trim()));
   const caseTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>최근 결과</th><th>요구사항</th>${raw(showStatus ? '<th>상태</th>' : '')}<th>우선순위</th><th>담당자</th><th class="num">실행</th><th>수정일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
-      <td class="ttl"><span>${x.title}</span>${raw(x.archived_at ? '<small>보관됨</small>' : '')}${raw(carryTag(carry, 'TEST', x.id))}</td>
+      <td class="ttl"><span>${x.title}</span>${raw(x.archived_at ? '<small>보관됨</small>' : '')}${raw(noExpected(x) ? '<small class="dim">기대 결과 없음</small>' : '')}${raw(carryTag(carry, 'TEST', x.id))}</td>
       <td>${raw(resBadge(x.last_result))}${raw(x.last_run_at ? html` <small class="dim">${fmtShort(x.last_run_at)}</small>` : '')}</td>
       <td>${raw(Number(x.requirement_count) ? html`${x.requirement_count}건` : '<span class="noreq">요구사항 없음</span>')}</td>
       ${raw(showStatus ? html`<td>${raw(statusChip(TC_STATUS, TC_STATUS_CHIP, x.status))}</td>` : '')}<td>${raw(prText(x.priority))}</td>
@@ -137,10 +139,10 @@ export async function testsPage(id) {
   const coverageTable = () => {
     if (!cov.length) return html`<div class="empty"><h2>범위 내 요구사항이 없습니다.</h2><p>요구사항의 범위를 '범위 내'로 정하면 여기에 테스트 커버리지가 표시됩니다.</p><a class="btn btn--secondary" href="/app/projects/${p.id}/requirements" data-link>요구사항 관리</a></div>`;
     const k = Number(ts.in_scope_untested) || 0; const un = Number(ts.in_scope_unconfirmed) || 0;
-    const head = html`<div class="covhead"><span class="covhead__n" data-cov-sum>범위 내 ${ts.target}건 · 테스트 있음 <b>${ts.target_tested}</b> · 제외 <b>${ts.excluded}</b> · <span class="${k ? 'is-warn' : ''}">없음 ${k}</span></span>
-      <span class="dim">커버리지 ${ts.coverage === null ? '-' : ts.coverage + '%'} ${raw(term('coverage'))}</span><span class="covhead__sp"></span>
+    const head = html`<div class="covhead"><span class="covhead__n" data-cov-sum>검증 대상 ${ts.verify_target}건 중 <b>${ts.target_tested}</b>건 테스트 있음${raw(ts.excluded ? html` · 제외 ${ts.excluded}건` : '')}${raw(k ? html` · <span class="is-warn">없음 ${k}건</span>` : '')}</span>
+      <span class="dim">커버리지 ${ts.verify_coverage === null || ts.verify_coverage === undefined ? '-' : ts.verify_coverage + '%'} ${raw(term('coverage'))}</span><span class="covhead__sp"></span>
       ${raw(k && !archived ? '<button class="btn btn--primary btn--sm" id="gen">요구사항별 테스트 만들기</button>' : '')}</div>
-      ${raw(un ? html`<p class="covwarn" data-cov-warn><i class="st st--warn" aria-hidden="true">!</i>확정되지 않은 범위 내 요구사항 ${un}건 — 확정하면 테스트 대상에 들어갑니다 <a class="link" href="/app/projects/${p.id}/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED" data-link>미확정 요구사항 보기</a></p>` : '')}`;
+      ${raw(un ? html`<p class="covwarn" data-cov-warn><i class="st st--warn" aria-hidden="true">!</i>확정되지 않은 범위 내 요구사항 ${un}건 — 확정하면 테스트 대상에 들어갑니다 <a class="link" href="/app/projects/${p.id}/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD" data-link>미확정 요구사항 보기</a></p>` : '')}`;
     const cell = (r) => {
       if (r.total) return html`<span class="covacts">${raw(r.tests.slice(0, 3).map((t) => html`<a class="link mono" href="/app/projects/${p.id}/tests?sel=${t.id}" data-link data-stop>${t.display_id}</a>`).join(' '))}${raw(r.tests.length > 3 ? html`<a class="link" href="/app/projects/${p.id}/tests?requirement=${r.id}" data-link data-stop>+${r.tests.length - 3}</a>` : '')}</span>`;
       if (r.test_exclusion_reason) return html`<span class="covacts"><span class="covx">테스트 제외 · <q>${r.test_exclusion_reason}</q></span>${raw(archived ? '' : html`<button type="button" class="link linkbtn" data-unexclude="${r.id}" data-stop>제외 취소</button>`)}</span>`;
@@ -250,7 +252,7 @@ export async function testsPage(id) {
       <div class="dfield" style="margin-top:10px"><span>사전 조건</span><div><textarea class="textarea" data-field="precondition" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="테스트 전에 갖춰야 할 조건" ${ro ? 'disabled' : ''}>${x.precondition}</textarea></div></div>
       <h4 class="dh">테스트 절차 <em>${x.steps.length}</em>${raw(ro ? '' : '<button class="link linkbtn" id="steps-save" style="margin-left:auto;width:auto;font-size:12.5px" hidden>절차 저장</button>')}</h4>
       <div id="steps-wrap">${raw(stepsEditor(x.steps, ro))}</div>
-      <div class="dfield" style="margin-top:10px"><span>기대 결과</span><div><textarea class="textarea" data-field="expected_result" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="성공했을 때 기대하는 결과" ${ro ? 'disabled' : ''}>${x.expected_result}</textarea></div></div>
+      <div class="dfield" style="margin-top:10px"><span>기대 결과</span><div><textarea class="textarea" data-field="expected_result" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="기대 결과를 적어 주세요" ${ro ? 'disabled' : ''}>${x.expected_result}</textarea></div></div>
       <div class="dsave" id="dsave"></div>
       ${raw(ro ? '' : html`<div class="decision decision--review"><p><b>이 테스트를 실행했나요?</b> 결과(통과 / 실패 / 막힘)와 실제 결과를 기록하세요. 기록은 수정되지 않고 실행 이력으로 쌓입니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="run">테스트 실행</button></div></div>`)}
       </section>

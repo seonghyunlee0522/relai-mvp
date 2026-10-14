@@ -29,7 +29,8 @@ export function docVersion(status) {
 /** 표지: title, project name in bold, key/value table, the draft notice when not approved, then a page break. */
 export function coverLines(title, name, pairs, footer) {
   const L = [`# ${title}`, '', `**${name}**`, '', kv(pairs)];
-  if (footer) L.push('', `**${footer}** — 고객 승인 전에는 내용이 바뀔 수 있습니다.`);
+  // K2: a changed approved document is waiting for 재승인, not a first 승인
+  if (footer) L.push('', `**${footer}** — ${/승인 후 변경/.test(footer) ? '재승인 전까지는' : '고객 승인 전에는'} 내용이 바뀔 수 있습니다.`);
   L.push('', '<!-- pagebreak -->');
   return L;
 }

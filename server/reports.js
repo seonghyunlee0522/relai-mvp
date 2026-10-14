@@ -271,7 +271,7 @@ export async function reopenReport(db, report) {
  * Seven rule-based sections filled from the project's own data (no AI); 7절 교훈 is three empty PM fields. */
 export const COMPLETION_SECTIONS = [['overview', '개요'], ['scope', '범위'], ['schedule', '일정'], ['quality', '품질'], ['acceptance', '검수'], ['carryover', '남은 일 (운영 이관)'], ['lessons', '교훈']];
 export const LESSON_FIELDS = [['good', '잘된 점'], ['bad', '아쉬운 점'], ['next', '다음에 할 일']];
-export const lessonsBody = (fields) => fields.map((x) => `**${x.label}**\n${String(x.body || '').trim() || '-'}`).join('\n\n');
+export const lessonsBody = (fields) => fields.map((x) => `**${x.label}**\n${String(x.body || '').trim() || '없음'}`).join('\n\n');   // K30: an empty field prints 없음, not a bare '-'
 const CARRY_KO = { ISSUE: '이슈', TEST: '테스트', CR: '변경 요청', ACCEPTANCE: '검수' };
 const no2 = (x) => String(x).padStart(2, '0');
 

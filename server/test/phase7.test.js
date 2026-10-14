@@ -114,7 +114,7 @@ test('US-1 완료보고서: 7 sections filled with numbers; one per project; fin
   // edit: a section body + the 교훈 fields
   r = await A.c('PATCH', `${A.purl}/weekly-reports/${rep.id}`, { sections: [{ key: 'scope', body: '- 범위 내 2건 (고객 확인)' }, { key: 'lessons', fields: { good: '- 기준선 승인을 일찍 받았다', next: '- 이관 리허설을 두 번 한다' } }] });
   assert.equal(r.status, 200);
-  assert.match(r.json.report.rendered_content, /\*\*잘된 점\*\*\n- 기준선 승인을 일찍 받았다\n\n\*\*아쉬운 점\*\*\n-\n\n\*\*다음에 할 일\*\*\n- 이관 리허설을 두 번 한다/);
+  assert.match(r.json.report.rendered_content, /\*\*잘된 점\*\*\n- 기준선 승인을 일찍 받았다\n\n\*\*아쉬운 점\*\*\n없음\n\n\*\*다음에 할 일\*\*\n- 이관 리허설을 두 번 한다/);
   assert.equal((await A.c('PATCH', `${A.purl}/weekly-reports/${rep.id}`, { sections: [{ key: 'lessons', fields: { nope: 'x' } }] })).status, 400);
   // finalize → CLOSE 완료 (data), PDF / Word
   r = await A.c('POST', `${A.purl}/weekly-reports/${rep.id}/finalize`, {});

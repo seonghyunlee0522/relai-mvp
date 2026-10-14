@@ -115,7 +115,7 @@ test('US-1 테스트 제외: reason counts as covered, blank 422, null cancels, 
   const cov = (await A.c('GET', `${tests(A)}/coverage`)).json.coverage; assert.equal(cov.find((x) => x.id === R[1].id).test_exclusion_reason, '06 검수에서 고객이 직접 확인');
   // C1: guidance warns about the unconfirmed in-scope requirement (and links the 미확정 filter); 0 → no line
   const w = '확정되지 않은 범위 내 요구사항 1건 — 확정하면 테스트 대상에 들어갑니다';
-  assert.ok(G.guidance.warnings.includes(w)); assert.match(G.guidance.warning_links[w], /requirements\?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED$/);
+  assert.ok(G.guidance.warnings.includes(w)); assert.match(G.guidance.warning_links[w], /requirements\?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD$/);
   assert.ok(!G.guidance.warnings.some((x) => /^미확정 요구사항/.test(x)), 'no duplicate generic line in 05');
   // cancel → back to untested; history
   assert.equal((await ex(R[1].id, { reason: null })).status, 200);

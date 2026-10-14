@@ -15,7 +15,7 @@ export const newWorkspaceHome = (o = null) => (canManage()
         <div class="hero__cta"><a class="btn btn--primary btn--lg" href="/app/projects/new" data-link data-tour-id="create-project">프로젝트 만들기</a><button type="button" class="link linkbtn" data-tour-start>1분 둘러보기</button></div></div>
       <ol class="hero__flow" aria-label="프로젝트 7단계">${raw(LIFECYCLE_PHASES.map((ph, i) => html`<li><i>${no2(i + 1)}</i>${ph.label}</li>`).join(''))}</ol>
     </section>`
-  : html`<section class="hero hero--member"><div class="hero__t"><h2>${state.workspace.name} Workspace에 참여했습니다.</h2><p>아직 프로젝트가 없습니다. Workspace 관리자(OWNER/ADMIN)가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.</p></div></section>`);
+  : html`<section class="hero hero--member"><div class="hero__t"><h2>${state.workspace.name} 워크스페이스에 참여했습니다.</h2><p>아직 프로젝트가 없습니다. 워크스페이스 관리자(OWNER/ADMIN)가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.</p></div></section>`);
 export const emptyState = () => newWorkspaceHome(ob.peek());
 export async function projectsPage(main = $("#main")) {
   document.title = 'Projects — RELAI';

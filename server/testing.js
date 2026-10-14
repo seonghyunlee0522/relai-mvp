@@ -128,7 +128,7 @@ export async function testStats(db, projectId) {
       COALESCE(SUM((x.status = 'CONFIRMED' AND x.tested)::int), 0) AS target_tested,
       COALESCE(SUM((x.status = 'CONFIRMED' AND NOT x.tested AND x.excluded)::int), 0) AS excluded,
       COALESCE(SUM((x.status = 'CONFIRMED' AND NOT x.tested AND NOT x.excluded)::int), 0) AS untested,
-      COALESCE(SUM((x.status <> 'CONFIRMED')::int), 0) AS unconfirmed
+      COALESCE(SUM((x.status NOT IN ('CONFIRMED','REJECTED'))::int), 0) AS unconfirmed   -- K8: a REJECTED requirement never becomes a test target
     FROM (SELECT r.status, COALESCE(TRIM(r.test_exclusion_reason), '') <> '' AS excluded,
         EXISTS (SELECT 1 FROM test_links l JOIN test_cases tc ON tc.id = l.test_case_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = r.id AND tc.archived_at IS NULL) AS tested
       FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE') x`, [projectId]));
@@ -136,7 +136,9 @@ export async function testStats(db, projectId) {
   const fi = (await db.all(`SELECT i.display_id FROM issues i WHERE i.project_id = ? AND i.archived_at IS NULL AND i.source_test_execution_id IS NOT NULL AND i.status NOT IN ('RESOLVED','CLOSED') ORDER BY i.sequence_number`, [projectId])).map((r) => r.display_id);
   return { ...t, in_scope: c.in_scope, in_scope_tested: c.in_scope_tested, in_scope_untested: c.untested,
     target: c.target, target_tested: c.target_tested, excluded: c.excluded, in_scope_unconfirmed: c.unconfirmed,
-    coverage: c.in_scope ? Math.round((c.in_scope_tested / c.in_scope) * 100) : null, fail_issues_open: fi.length, fail_issue_ids: fi };
+    coverage: c.in_scope ? Math.round((c.in_scope_tested / c.in_scope) * 100) : null,
+    // K9: 검증 대상 = 범위 내 확정 − 테스트 제외; the coverage tab's % is over that, so "제외 1" never pulls it below 100
+    verify_target: c.target - c.excluded, verify_coverage: c.target - c.excluded ? Math.round((c.target_tested / (c.target - c.excluded)) * 100) : null, fail_issues_open: fi.length, fail_issue_ids: fi };
 }
 
 /** Coverage view: every active IN_SCOPE requirement with its latest-result summary (one query for links, grouped in JS). */
@@ -245,7 +247,7 @@ export async function untestedRequirements(db, projectId) {
 }
 /** Test fields for one requirement: 제목 "{REQ-ID} {제목} 확인", 기대 결과 = 완료 조건 (줄마다) or the description, 상태 준비됨. */
 export const testFromRequirement = (r) => ({
-  title: `${r.display_id} ${r.title} 확인`.slice(0, 200),
+  title: `${r.display_id} ${r.title}${/확인$/.test(String(r.title).trim()) ? '' : ' 확인'}`.slice(0, 200),   // K7: "입고 확인" never becomes "입고 확인 확인"
   expected_result: (r.criteria.length ? r.criteria.map((c) => (r.criteria.length > 1 ? `- ${c}` : c)).join('\n') : (r.description || '').trim()).slice(0, 2000),
   status: 'READY', priority: 'MEDIUM',
 });

@@ -87,7 +87,7 @@ export async function raidPage(id) {
   const issueTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>심각도</th><th>상태</th><th>담당자</th><th>기한</th><th class="num">관련 WBS</th><th>수정일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
-      <td class="ttl"><span>${x.title}</span>${raw(x.source_risk_display_id ? html`<small title="원본 리스크">${x.source_risk_display_id}</small>` : '')}${raw(x.source_test_execution_id ? '<small title="테스트 실패에서 등록">테스트 실패</small>' : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}${raw(carryTag(carry, 'ISSUE', x.id))}</td>
+      <td class="ttl"><span>${x.title}</span>${raw([x.source_risk_display_id ? html`<small title="원본 리스크">${x.source_risk_display_id}</small>` : '', x.source_test_execution_id ? '<small title="테스트 실패에서 등록">테스트 실패</small>' : '', x.archived_at ? '<small>보관됨</small>' : '', carryTag(carry, 'ISSUE', x.id)].filter(Boolean).map((t) => ` ${t}`).join(''))}</td>
       <td>${raw(sevBadge(x.severity))}</td><td>${raw(statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status))}</td>
       <td>${x.owner_name || raw('<span class="dim">-</span>')}${raw(OP.noAcct(x))}</td>
       <td class="${x.is_overdue ? 'is-overdue' : ''}">${raw(dcell(x.due_date))}${raw(x.is_overdue ? ' <small class="over">지남</small>' : '')}</td>

@@ -27,7 +27,7 @@ export const PHASE_INTRO = Object.fromEntries(DEFAULT_PHASES.map((p) => [p.key, 
 export const scopeOutHint = (list) => (list && list.length ? `착수 때 제외하기로 한 것: ${list.join(', ')}. 여기에 해당하는 요구사항은 '범위 외'로 두세요.` : '');
 
 /** Phase 5 C1 — 05 guide + 커버리지 탭 head (one text, one link: 요구사항 화면 미확정 필터). */
-export const UNCONFIRMED_HREF = '/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED';
+export const UNCONFIRMED_HREF = '/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD';   // K8: REJECTED is not 확정 대기
 export const unconfirmedTestText = (k) => `확정되지 않은 범위 내 요구사항 ${k}건 — 확정하면 테스트 대상에 들어갑니다`;
 /** 05 완료 가이드 제목 (US-1): real numbers, never "테스트가 모두 통과했습니다". */
 export function testDoneTitle(t) {
@@ -83,11 +83,13 @@ export function projectGuidance(ctx) {
       const d = definition?.progress || { done: 0, total: 5 };
       const gate = definition?.initiation_gate || {}; const apv = gate.approval; const kick = gate.kickoff;
       const review = (definition?.needs_review || []).filter((k) => k !== 'APPROVAL');
+      // K1: an approved definition that changed needs the customer's approval again — not a generic re-check
+      if (review.length && apv && apv.status !== 'TODO') return out('INIT_REAPPROVE', '변경 내용을 고객에게 다시 승인받으세요', `승인 후 바뀐 항목 ${review.length}개가 있습니다. 바뀐 내용을 고객에게 다시 승인받으세요. 승인된 기준이 이후 요구사항·변경·검수의 판단 기준입니다.`, '승인 후 바뀐 기준은 다시 합의해야 이후 분쟁을 막을 수 있습니다.', act('승인 다시 기록 →', u('/definition?activity=APPROVAL')), act('프로젝트 정의 확인 →', u('/definition')), '다시 승인받으면 요구사항을 정리합니다.');
       if (review.length) return out('INIT_REVIEW', '수정된 정의 항목을 다시 확인하세요', `완료 후 내용이 바뀐 항목 ${review.length}개가 있습니다. 정의는 요구사항·일정·검수의 기준이므로 바뀐 내용을 다시 확인해야 이후 판단이 어긋나지 않습니다.`, '프로젝트 정의는 요구사항·일정의 기준이 되므로 변경 후 다시 확인해야 합니다.', act('프로젝트 정의 확인 →', u('/definition')), null, '정의가 확정되면 요구사항을 정리합니다.');
       if (d.done < d.total) return out('INIT_DEFINE', d.done === 0 ? '프로젝트의 목표와 범위를 정의하세요' : `프로젝트 정의를 마저 완료하세요 (${d.done}/${d.total})`, '초기에 목표·성공 기준, 수행·제외 범위, 이해관계자, 주요 일정과 운영 방식을 확정해야 이후 단계에서 방향성이 흔들리지 않습니다.', '착수 단계에서 정한 기준이 이후 요구사항, 일정, 검수의 판단 기준이 됩니다.', act(d.done === 0 ? '프로젝트 정의 시작 →' : '프로젝트 정의 이어서 작성 →', u('/definition')), null, '정의가 완료되면 요구사항을 등록합니다.');
       // 착수 gate (Phase 1 v2): 정의 5개 → 착수보고회 → 승인. INIT_DONE only after 승인 (or a recorded 승인 전 진행 사유).
       const plan = act('사업수행계획서 내려받기', `/api/workspaces/${project.workspace_id}/projects/${project.id}/charter/export?format=pdf`);
-      if (apv && apv.status === 'REAPPROVAL') return out('INIT_REAPPROVE', '바뀐 착수 내용을 고객에게 다시 확인받으세요', '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 승인된 기준이 이후 요구사항·변경·검수의 판단 기준입니다.', '승인 후 바뀐 기준은 다시 합의해야 이후 분쟁을 막을 수 있습니다.', act('승인 다시 기록 →', u('/definition?activity=APPROVAL')), plan, '다시 승인받으면 요구사항을 정리합니다.');
+      if (apv && apv.status === 'REAPPROVAL') return out('INIT_REAPPROVE', '변경 내용을 고객에게 다시 승인받으세요', '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 승인된 기준이 이후 요구사항·변경·검수의 판단 기준입니다.', '승인 후 바뀐 기준은 다시 합의해야 이후 분쟁을 막을 수 있습니다.', act('승인 다시 기록 →', u('/definition?activity=APPROVAL')), plan, '다시 승인받으면 요구사항을 정리합니다.');
       if (apv && apv.status === 'TODO' && !apv.bypass) {
         if (kick && kick.status === 'TODO') return out('INIT_KICKOFF', '착수보고회를 준비하고 진행하세요', '착수보고회는 고객과 수행팀이 같은 목표·범위·일정을 처음 공식적으로 확인하는 자리입니다. 순서: 사업수행계획서 초안을 내려받아 착수보고회 전에 고객에게 보내고 → 착수보고회에서 발표 → 승인을 받습니다.', '착수보고회에서 목표·범위·일정을 공식적으로 확인해야 이후 단계의 기준이 생깁니다.', act('착수보고회 준비 →', u('/definition?activity=KICKOFF')), plan, '착수보고회 후 착수 결과를 승인받습니다.');
         return out('INIT_APPROVE', '착수 결과를 고객에게 승인받으세요', '승인된 목표·범위가 이후 요구사항·변경·검수의 기준이 됩니다. 사업수행계획서를 보내고, 승인 회신을 받으면 기록하세요.', '고객이 승인한 착수 결과가 이후 요구사항·변경·검수의 기준이 됩니다.', act('승인 기록 →', u('/definition?activity=APPROVAL')), plan, '승인을 받으면 요구사항을 정리합니다.');
@@ -163,6 +165,9 @@ export function projectGuidance(ctx) {
       if (n(chg.approved_unimplemented)) open.push(`미반영 변경 ${chg.approved_unimplemented}건`);
       // US-3: before 오픈 the remaining items are decided in the 오픈 dialog (처리 or 운영 이관); after 오픈 they are recorded → no warning
       if (open.length && !goLiveDone(phase)) return out('GO_LIVE_OPEN', '오픈 전 남은 항목을 정리하세요', `${open.join(' · ')}. 오픈할 때 남은 항목을 하나씩 처리하거나 운영 이관으로 넘깁니다. 운영 이관한 항목은 07에서 이어서 볼 수 있습니다.`, '남은 항목은 처리하거나 운영 이관으로 넘겨야 오픈과 함께 사라지지 않습니다.', act(n(iss.active) ? '열린 이슈 처리 →' : n(tst.last_fail) ? '실패 테스트 조치 →' : '변경 반영 확인 →', u(n(iss.active) ? '/issues' : n(tst.last_fail) ? '/tests?last_result=FAIL' : '/changes?status=APPROVED')), act('오픈 완료 처리', u('?golive=1')), '정리가 끝나면 전환 계획·교육·오픈을 진행합니다.');
+      // K25: after 오픈 the headline says so (with what was handed over) and points at 07
+      if (goLiveDone(phase)) { const nc = goLive && Array.isArray(goLive.carryovers) ? goLive.carryovers.length : 0;
+        return out('TRANSITION_RUN', `오픈 완료${nc ? ` · 운영 이관 ${nc}건` : ''}`, `오픈을 기록했습니다.${nc ? ` 운영 이관한 ${nc}건은 07 운영 단계에서 이어서 봅니다.` : ''} 남은 전환 업무를 정리하고 운영 및 유지보수 단계로 넘어가세요.`, '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('현황 보기 →', u('/overview')), actCta ? move : null, nextPhaseText); }
       return out('TRANSITION_RUN', '검수가 승인되었습니다 — 전환과 오픈을 진행하세요', '검수가 승인되었습니다. 전환 계획·데이터 마이그레이션·사용자 교육을 마치고 오픈 후 안정화까지 기록해 두면 운영 이관이 매끄러워집니다.', '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('현황 보기 →', u('/overview')), actCta ? null : move ? act('현황 보기 →', u('/overview')) : null, nextPhaseText);
     }
     case 'OPERATIONS': {
