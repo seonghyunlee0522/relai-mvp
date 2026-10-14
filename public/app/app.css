@@ -2745,7 +2745,18 @@ body:has(.scrim) #main .btn--primary,
   .gtable--wbs tbody tr td[data-label="계획 시작"]::after{content:'–';margin-left:2px;color:var(--text-3)}
   .gtable--wbs tbody tr td[data-label="계획 종료"]{order:4}
   .gtable--wbs tbody tr td[data-label="상태"]{order:5}
-  .gtable--wbs tbody tr.is-ms td[data-label="계획 시작"]{display:none}
+  .gtable--wbs tbody tr.is-ms td[data-label="계획 시작"]{display:none!important}
+  /* Q17-2: line 2 = 담당자 · 시작–종료 · 상태 fits 375 — controls size to their value, 계정 없음/계획 변경 stay in the drawer */
+  .gtable--wbs tbody tr{column-gap:6px}
+  .gtable--wbs tbody tr td .cell{field-sizing:content}
+  .gtable--wbs tbody tr td[data-label="담당자"] .cellwrap{max-width:84px;vertical-align:middle}
+  .gtable--wbs tbody tr td[data-label="담당자"] .cell{max-width:84px;text-overflow:ellipsis}
+  .gtable--wbs tbody tr td[data-label="담당자"]{display:flex!important;align-items:center;white-space:nowrap}
+  .gtable--wbs .wnoacct,.gtable--wbs .wshift{display:none}
+  .gtable--wbs tbody tr td[data-label="계획 종료"],.gtable--wbs tbody tr td[data-label="상태"]{display:flex!important;align-items:center;white-space:nowrap}
+  .gtable--wbs .wdep{white-space:nowrap;flex:none}
+  .gtable--wbs tbody tr td[data-label="계획 시작"]{margin-right:0}
+  .gtable--wbs tbody tr td[data-label="계획 시작"]::after{margin-left:6px}
   .gtable--wbs tbody tr td[data-label="담당자"]::after{content:'·';margin-left:8px;color:var(--text-3)}
   .gtable--wbs tbody tr td[data-label="상태"]::before{content:'·';margin-right:8px;color:var(--text-3)}
   /* K22: coverage rows = REQ-ID + 제목 / 검증 상태 + 할 일; tabs on one line */
