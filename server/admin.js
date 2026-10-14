@@ -158,6 +158,7 @@ export async function getWorkspace(db, id) {
 
 /* ---------- audit ---------- */
 const SUMMARY = {
+  REFUND_PAYMENT: (m) => `결제 환불 ₩${Number(m.amount || 0).toLocaleString('ko-KR')}${m.reason ? ` — ${m.reason}` : ''}`,
   SUSPEND_USER: (m) => `사용자 ${m.email || ''} 정지${m.reason ? ` — ${m.reason}` : ''}${m.sole_owner_of?.length ? ` (단독 OWNER Workspace ${m.sole_owner_of.length}개)` : ''}`,
   REACTIVATE_USER: (m) => `사용자 ${m.email || ''} 정지 해제${m.reason ? ` — ${m.reason}` : ''}`,
   SUSPEND_WORKSPACE: (m) => `Workspace '${m.name || ''}' 정지${m.reason ? ` — ${m.reason}` : ''}`,

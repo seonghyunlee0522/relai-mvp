@@ -50,6 +50,7 @@ export const migrations = [
     await db.run(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT CHECK (project_type IN ('NEW_BUILD','ENHANCEMENT','TRANSITION','OTHER'))`);
   } },
   { version: 25, name: 'Billing (Phase 10): subscriptions, payments, billing_events, subscription_events — tables in schema.sql; plan limits enforced by billing/limits.js', up() {} },
+  { version: 26, name: 'NicePay billing: billing_orders (server-side prices) + subscriptions.seats/billing_cycle/auto_renew/renewal_reminded_for/founding_until/billing_key_enc — DDL in schema.sql', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

@@ -349,8 +349,11 @@ p{margin:0}
 
 .reveal{opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s}
 .reveal.is-in{opacity:1;transform:none}
-/* pricing (Phase 10) — limits mirror server/plans.js; prices stay placeholders until plans.js price_monthly is set */
-.pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,380px));gap:20px;justify-content:center}
+/* pricing — prices and limits mirror server/plans.js (VAT excluded) */
+.pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,360px));gap:20px;justify-content:center}
+@media (max-width:1020px){.pgrid{grid-template-columns:minmax(0,420px)}}
+.plan__s{margin-top:-10px;font-size:13px;color:var(--muted)}
+.pricing__offer{margin:0 auto 22px;text-align:center;font-size:14.5px;color:var(--blue-deep)}
 .plan{background:#fff;border:1px solid var(--border);border-radius:14px;padding:30px 28px;display:flex;flex-direction:column;gap:18px;box-shadow:var(--sh-card)}
 .plan--team{border-color:var(--border-blue);box-shadow:var(--sh-hover)}
 .plan__n{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue-deep)}
@@ -747,15 +750,17 @@ p{margin:0}
       <h2 class="h2">작게 시작하고,<br>팀이 커지면 Team으로.</h2>
       <p class="lead" style="margin-top:18px">Free로 프로젝트 하나를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 Team 플랜으로 한도 없이 사용하세요.</p>
     </div>
+    <p class="pricing__offer reveal"><b>파운딩 고객 혜택</b> · 선착순 10개 팀, 첫 1년 <b>40% 할인</b></p>
+    <!-- 가격은 server/plans.js(PLANS · FOUNDING_OFFER)와 같은 값이어야 한다 -->
     <div class="pgrid reveal">
       <div class="plan">
         <div class="plan__n">Free</div>
-        <div class="plan__p">₩0 <small>/ 월</small></div>
+        <div class="plan__p" data-price="FREE">₩0 <small>/ 월</small></div>
         <p class="plan__d">한 프로젝트로 RELAI의 흐름을 경험해 보세요.</p>
         <ul>
           <li>진행 중 프로젝트 1개</li>
           <li>멤버 3명</li>
-          <li>요구사항 10개 · WBS 30개</li>
+          <li>요구사항 50개 · WBS 100개</li>
           <li>주간보고 월 8건</li>
           <li>What’s Next · Lifecycle 가이드 전체</li>
         </ul>
@@ -763,20 +768,32 @@ p{margin:0}
       </div>
       <div class="plan plan--team">
         <div class="plan__n">Team</div>
-        <!-- 가격 확정 시 server/plans.js의 price_monthly와 같은 값으로 교체 -->
-        <div class="plan__p plan__p--tbd" data-price="TEAM">가격 확정 예정</div>
+        <div class="plan__p" data-price="TEAM">₩15,000 <small>/ 사용자 · 월</small></div>
+        <p class="plan__s">연간 결제 기준 · 월 결제 시 ₩19,000 · 최소 3명</p>
         <p class="plan__d">여러 프로젝트와 팀을 한 Workspace에서 운영하는 팀을 위한 플랜.</p>
         <ul>
-          <li>프로젝트 · 멤버 무제한</li>
-          <li>요구사항 · WBS 무제한</li>
+          <li>프로젝트 · 요구사항 · WBS 무제한</li>
           <li>주간보고 무제한</li>
+          <li>구매한 좌석 수만큼 멤버</li>
           <li>Free의 모든 기능</li>
-          <li>Workspace OWNER가 언제든 해지 (기간 종료까지 이용)</li>
+          <li>카드 결제 · 자동 결제 없음 (기간 종료 전 연장 안내)</li>
         </ul>
         <a href="/signup" class="btn btn--primary btn--block" data-auth="start" data-loc="pricing_team">무료로 시작 후 업그레이드</a>
       </div>
+      <div class="plan">
+        <div class="plan__n">Enterprise</div>
+        <div class="plan__p" data-price="ENTERPRISE">₩25,000~ <small>/ 사용자 · 월</small></div>
+        <p class="plan__s">조직 규모·요구사항에 맞춘 견적</p>
+        <p class="plan__d">여러 조직과 대규모 프로젝트를 운영하는 기업을 위한 플랜.</p>
+        <ul>
+          <li>Team의 모든 기능</li>
+          <li>계약·세금계산서 기반 결제</li>
+          <li>도입 지원 · 운영 문의 우선 대응</li>
+        </ul>
+        <a href="mailto:enj.shlee@gmail.com?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" class="btn btn--secondary btn--block" data-loc="pricing_enterprise">도입 문의</a>
+      </div>
     </div>
-    <p class="pricing__note reveal">Team 가격과 결제 수단은 확정되는 대로 안내합니다. 한도를 넘으면 기존 데이터는 그대로 두고 새 항목 추가만 제한됩니다.</p>
+    <p class="pricing__note reveal">모든 가격은 부가세(VAT) 별도입니다. 한도를 넘으면 기존 데이터는 그대로 두고 새 항목 추가만 제한됩니다.</p>
   </div>
 </section>
 

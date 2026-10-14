@@ -1119,6 +1119,45 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_provider_sub ON subscriptions(provider, provider_subscription_id) WHERE provider_subscription_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status, updated_at);
+-- Seat-priced plans + NicePay (billing-nicepay, migration v26). One-time (일반결제) purchases set auto_renew = false: the plan
+-- ends at current_period_end with no renewal. billing_key_enc holds the NicePay billing key (bid, 정기결제) AES-GCM encrypted
+-- with INTEGRATION_ENCRYPTION_KEY; it is never returned by any API.
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS seats INTEGER;                 -- TEAM member limit (NULL = unlimited, legacy rows)
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS billing_cycle TEXT;            -- ANNUAL | MONTHLY
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS auto_renew boolean NOT NULL DEFAULT true;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS renewal_reminded_for timestamptz;   -- current_period_end the 7-day reminder was sent for
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS founding_until timestamptz;    -- founding offer discount applies to purchases before this
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS billing_key_enc TEXT;
+
+-- Checkout orders: the server-side price of every payment. The provider is only ever asked to charge order.amount, and every
+-- approval / notification is checked against it (amount verification). id is the provider orderId.
+CREATE TABLE IF NOT EXISTS billing_orders (
+  id               TEXT PRIMARY KEY,
+  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id          TEXT REFERENCES users(id) ON DELETE SET NULL,
+  provider         TEXT NOT NULL,
+  kind             TEXT NOT NULL CHECK (kind IN ('ONE_TIME','RECURRING_FIRST','RECURRING_RENEWAL')),
+  plan             TEXT NOT NULL,
+  cycle            TEXT NOT NULL CHECK (cycle IN ('ANNUAL','MONTHLY')),
+  seats            INTEGER NOT NULL,
+  months           INTEGER NOT NULL,
+  unit_price       INTEGER NOT NULL,                 -- per seat per month, VAT excluded
+  list_amount      INTEGER NOT NULL,                 -- unit_price × seats × months
+  discount_amount  INTEGER NOT NULL DEFAULT 0,       -- founding offer
+  supply_amount    INTEGER NOT NULL,                 -- list − discount (공급가액)
+  vat_amount       INTEGER NOT NULL,
+  amount           INTEGER NOT NULL,                 -- charged: supply + VAT
+  founding         boolean NOT NULL DEFAULT false,
+  goods_name       TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PAID','FAILED','REFUNDED')),
+  provider_tid     TEXT,
+  failure_code     TEXT,
+  failure_message  TEXT,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  paid_at          timestamptz,
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_billing_orders_ws ON billing_orders(workspace_id, created_at);
 
 CREATE TABLE IF NOT EXISTS billing_events (
   id                TEXT PRIMARY KEY,

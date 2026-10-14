@@ -44,7 +44,7 @@ test('provider interface: fake implements createCheckout/handleWebhook/cancel; r
   assert.equal(providerFromEnv({ NODE_ENV: 'production' }), null);
   assert.equal(providerFromEnv({ NODE_ENV: 'production', BILLING_PROVIDER: 'fake' }), null);
   assert.throws(() => providerFromEnv({ BILLING_PROVIDER: 'nope' }), /unknown BILLING_PROVIDER/);
-  assert.equal(LATEST_VERSION, 25);
+  assert.equal(LATEST_VERSION, 26);
 });
 
 test('FREE limits: projects / requirements / WBS / weekly reports / members answer 402 plan_limit_reached with the limit payload', async () => {
@@ -60,16 +60,16 @@ test('FREE limits: projects / requirements / WBS / weekly reports / members answ
   const p3 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '세 번째' })); assert.equal(p3.status, 201);
   assert.equal((await A.c('POST', `${A.purl}/unarchive`, {})).status, 402);
   const P = `/api/workspaces/${A.w}/projects/${p3.json.project.id}`;
-  // requirements: 10
-  for (let i = 0; i < 10; i++) assert.equal((await A.c('POST', `${P}/requirements`, { title: `R${i}` })).status, 201);
-  const r11 = await A.c('POST', `${P}/requirements`, { title: 'R10' });
-  assert.equal(r11.status, 402); assert.equal(r11.json.error.limit.dimension, 'requirements'); assert.equal(r11.json.error.limit.used, 10);
-  // WBS: 30 (duplicate goes through the same check)
+  // requirements: 50
+  for (let i = 0; i < 50; i++) assert.equal((await A.c('POST', `${P}/requirements`, { title: `R${i}` })).status, 201);
+  const r11 = await A.c('POST', `${P}/requirements`, { title: 'R50' });
+  assert.equal(r11.status, 402); assert.equal(r11.json.error.limit.dimension, 'requirements'); assert.equal(r11.json.error.limit.used, 50);
+  // WBS: 100 (duplicate goes through the same check)
   let last;
-  for (let i = 0; i < 30; i++) { last = await A.c('POST', `${P}/wbs`, { title: `W${i}`, item_type: 'TASK' }); assert.equal(last.status, 201, JSON.stringify(last.json)); }
-  assert.equal((await A.c('POST', `${P}/wbs`, { title: 'W30', item_type: 'TASK' })).json.error.limit.dimension, 'wbs');
+  for (let i = 0; i < 100; i++) { last = await A.c('POST', `${P}/wbs`, { title: `W${i}`, item_type: 'TASK' }); assert.equal(last.status, 201, JSON.stringify(last.json)); }
+  assert.equal((await A.c('POST', `${P}/wbs`, { title: 'W100', item_type: 'TASK' })).json.error.limit.dimension, 'wbs');
   assert.equal((await A.c('POST', `${P}/wbs/${last.json.item.id}/duplicate`, {})).status, 402);
-  assert.equal((await db.get(`SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?`, [p3.json.project.id])).n, 30);
+  assert.equal((await db.get(`SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?`, [p3.json.project.id])).n, 100);
   // weekly reports: 8 per month
   for (let i = 0; i < 8; i++) assert.equal((await A.c('POST', `${P}/weekly-reports/generate`, { period_start: '2026-10-05', period_end: '2026-10-11' })).status, 201);
   assert.equal((await A.c('POST', `${P}/weekly-reports/generate`, { period_start: '2026-10-05', period_end: '2026-10-11' })).status, 402);
@@ -82,7 +82,7 @@ test('FREE limits: projects / requirements / WBS / weekly reports / members answ
   // the customer billing summary reflects all of it
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
   assert.equal(b.plan, 'FREE'); assert.equal(b.subscription, null); assert.equal(b.can_manage, true); assert.equal(b.provider_available, true);
-  assert.deepEqual(b.usage.dims.map((d) => [d.key, d.used, d.limit]), [['projects', 1, 1], ['members', 3, 3], ['requirements', 10, 10], ['wbs', 30, 30], ['weekly_reports', 8, 8]]);
+  assert.deepEqual(b.usage.dims.map((d) => [d.key, d.used, d.limit]), [['projects', 1, 1], ['members', 3, 3], ['requirements', 50, 50], ['wbs', 100, 100], ['weekly_reports', 8, 8]]);
   server.close();
 });
 
@@ -110,7 +110,7 @@ test('webhooks: signed + idempotent; activation lifts limits; payment failure �
   // TEAM: limits lifted
   assert.equal(await effectivePlan(db, A.w), 'TEAM');
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }))).status, 201);
-  for (let i = 0; i < 11; i++) assert.equal((await A.c('POST', A.req, { title: `R${i}` })).status, 201);
+  for (let i = 0; i < 51; i++) assert.equal((await A.c('POST', A.req, { title: `R${i}` })).status, 201);
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
   assert.equal(b.plan, 'TEAM'); assert.equal(b.subscription.payment_method_summary, '신한 ****1234'); assert.ok(!('provider_customer_id' in b.subscription));
   assert.equal(b.usage.dims.find((d) => d.key === 'requirements').limit, null);
@@ -124,7 +124,7 @@ test('webhooks: signed + idempotent; activation lifts limits; payment failure �
   await db.run(`UPDATE subscriptions SET grace_period_end = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'FREE');
   assert.equal((await A.c('POST', A.req, { title: 'over' })).status, 402);
-  assert.equal((await db.get(`SELECT COUNT(*) n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ?`, [A.w])).n, 11);
+  assert.equal((await db.get(`SELECT COUNT(*) n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ?`, [A.w])).n, 51);
   // recovery payment → ACTIVE again; expiry → FREE; a late failure after expiry is recorded but ignored
   assert.equal((await deliver(provider.signedEvent('payment.succeeded', { subscription_id: `sub_${A.w}`, ...period(), payment: { amount: 49000, status: 'PAID', provider_tid: 'tid_renew_2' } }))).json.status, 'ACTIVE');
   assert.equal(await effectivePlan(db, A.w), 'TEAM');
@@ -190,5 +190,29 @@ test('admin console lights up from real billing rows: TEAM workspace, usage plan
   const pays = (await ops('GET', '/api/admin/payments')).json;
   assert.equal(pays.total, 1); assert.ok(!JSON.stringify(pays).includes(`tid_act_${A.w}`));
   assert.ok(!JSON.stringify(w).includes('cus_1'));
+  server.close();
+});
+
+test('orders through the fake provider: server-priced checkout, paid event verified against the order amount, months extend the period, cancel runs outside the transaction', async () => {
+  const provider = createFakeProvider();
+  let lockedDuringCancel = null;
+  const { db, server, client, deliver } = await boot({ provider: { ...provider, async cancel(args) { lockedDuringCancel = (await db.get(`SELECT COUNT(*) n FROM pg_locks l JOIN pg_class c ON c.oid = l.relation WHERE c.relname = 'subscriptions' AND l.mode = 'RowShareLock'`)).n; return provider.cancel(args); } } });
+  const A = await setup(client, 'a@x.com', '김가나');
+  const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3 });
+  assert.equal(co.status, 201); assert.equal(co.json.order.amount, Math.round(57000 * 0.6) + Math.round(57000 * 0.6 * 0.1));
+  const orderId = co.json.order.id;
+  const paid = (amount, tid) => provider.signedEvent('subscription.activated', { order_id: orderId, payment: { amount, status: 'PAID', provider_tid: tid, moid: orderId } });
+  assert.equal((await deliver(paid(1000, 'tid_low'))).json.reason, 'amount_mismatch');
+  assert.equal(await effectivePlan(db, A.w), 'FREE');
+  const co2 = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3 });
+  const ok = provider.signedEvent('subscription.activated', { order_id: co2.json.order.id, payment: { amount: co2.json.order.amount, status: 'PAID', provider_tid: 'tid_ok', moid: co2.json.order.id } });
+  assert.equal((await deliver(ok)).json.status, 'ACTIVE');
+  const s = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [A.w]);
+  assert.equal(s.auto_renew, false); assert.equal(s.seats, 3); assert.ok(Math.abs((new Date(s.current_period_end) - Date.now()) / 86400e3 - 30.5) < 2);
+  assert.equal((await db.get('SELECT status FROM billing_orders WHERE id = ?', [co2.json.order.id])).status, 'PAID');
+  // a renewing subscription: cancel calls the provider with no subscription row lock held
+  await db.run(`UPDATE subscriptions SET auto_renew = true WHERE workspace_id = ?`, [A.w]);
+  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/cancel`, {})).status, 200);
+  assert.equal(lockedDuringCancel, 0);
   server.close();
 });

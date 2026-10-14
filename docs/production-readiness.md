@@ -20,7 +20,13 @@
 | `DB_POOL_MAX` | | 인스턴스당 풀 크기, 기본 10. 인스턴스 수 × 풀 ≤ PostgreSQL `max_connections` − 여유분 |
 | `APP_TIMEZONE` | | 기본 Asia/Seoul |
 | `TEST_DATABASE_URL` | 테스트 | 기본 `postgres://postgres@127.0.0.1:5432/relai_test` |
-| `BILLING_PROVIDER` | | 결제 Provider 이름(`server/billing/provider.js` 레지스트리). 미설정 시 개발=`fake`, production=결제 비활성(checkout 503) |
+| `BILLING_PROVIDER` | | 결제 Provider 이름(`server/billing/provider.js` 레지스트리: `fake` · `nicepay`). 미설정 시 개발=`fake`, production=결제 비활성(checkout 503) |
+| `NICEPAY_CLIENT_KEY` | nicepay | NicePay 클라이언트 키(clientId). 샌드박스 `S…`, 운영 `R…`. Vercel Production에만 운영 키 |
+| `NICEPAY_SECRET_KEY` | nicepay | NicePay 시크릿 키. 서명 검증·Basic 인증·카드정보 암호화에 사용. 로그·응답에 절대 노출하지 않는다 |
+| `NICEPAY_MODE` | nicepay | `live`면 `api.nicepay.co.kr`, 그 외(기본)는 `sandbox-api.nicepay.co.kr`. 키 접두사(S/R)와 모드가 다르면 결제가 비활성화된다(부팅은 정상) |
+| `NICEPAY_RECURRING_ENABLED` | | `true`면 정기결제(빌키) 경로를 연다. 기본 `false` (NicePay 정기결제 심사 완료 전까지) |
+| `NICEPAY_SDK_URL` | | 결제창 JS SDK URL 재정의(기본 `https://pay.nicepay.co.kr/v1/js/`) |
+| `CRON_SECRET` | 결제 운영 | `GET /api/billing/cron/daily` 인증(`Authorization: Bearer …`, Vercel Cron이 자동 첨부). 미설정 시 503 |
 | `FAKE_BILLING_SECRET` | | fake Provider Webhook HMAC 키(개발/테스트용) |
 | `BILLING_ALLOW_FAKE` | | `1`이면 production에서도 fake Provider 허용(스테이징 전용) |
 | `PLAN_LIMITS` | | `off`면 Plan 한도 강제 해제(레거시 테스트 전용). 운영에서는 설정하지 않는다 |
@@ -88,6 +94,17 @@ DATABASE_URL=postgres://…/relai node scripts/migrate-sqlite-to-postgres.js --s
 - `POST /api/billing/webhook/:provider` — `createApp`에서 JSON 파서·CSRF·인증보다 먼저 `express.raw`로 등록, 전용 IP rate limiter(300/분). 서명 실패 400, 중복 200 `{duplicate:true}`.
 - Provider 인터페이스 `server/billing/provider.js`: `createCheckout / handleWebhook / cancel`. Provider는 자기 Webhook을 정규화 이벤트(`subscription.activated`, `payment.succeeded`, `payment.failed`, `subscription.canceled`, `subscription.expired`)로 바꿔 돌려준다. 실제 Provider는 미선정 → fake만 등록.
 - 상태 전이는 `server/billing/subscriptions.js transition()` 한 곳. 유효 플랜: ACTIVE(해지 예약 + 기간 종료 시 FREE) · PAST_DUE는 `grace_period_end`(실패 후 7일)까지 유지 · CANCELED/EXPIRED는 FREE.
+**NicePay (billing-nicepay, migration v26)**:
+- 가격은 `server/plans.js` 한 곳(부가세 별도): FREE ₩0 · TEAM ₩15,000/석/월 연간 선결제 또는 ₩19,000/석 1개월, 최소 3석 · ENTERPRISE ₩25,000~/석 영업 문의. 파운딩: 선착순 10개 Workspace 첫 1년 40% 할인. 결제 금액 = 공급가액 + 부가세 10%.
+- 서버 가격: checkout이 `billing_orders` 행(좌석·기간·할인·VAT·합계)을 만들고, 결제창·승인·웹훅 모두 이 `amount`와 대조한다(금액 위변조 방지). 클라이언트가 보낸 금액은 쓰지 않는다.
+- 기본 경로 = 일반결제(서버 승인): `/api/billing/nicepay/pay/:orderId`(결제창) → NicePay가 `/api/billing/nicepay/return`으로 POST → 인증 서명 `sha256(authToken+clientId+amount+secretKey)`·금액·clientId 검증 → 승인 `POST /v1/payments/{tid}` → 응답 서명 `sha256(tid+amount+ediDate+secretKey)`·금액·orderId 검증 → `subscription.activated`(이벤트 id `paid:<tid>`, 웹훅과 같은 id라 한 번만 반영). 승인 응답이 끊기면 망취소, 반영 실패 시 자동 환불.
+- 일반결제는 자동 갱신 없음(`auto_renew=false`): `current_period_end`만 연장(남은 기간에 이어서), 기간이 끝나면 FREE. 만료 7일 전 OWNER에게 연장 안내 메일(`GET /api/billing/cron/daily`, Vercel Cron 매일 00:00 UTC).
+- TEAM 멤버 한도 = 구매 좌석 수(`subscriptions.seats`).
+- 정기결제(빌키): `NICEPAY_RECURRING_ENABLED=true`일 때만. 카드정보는 AES 암호화(encData)로 NicePay에만 전달하고 저장하지 않는다. 빌키는 `INTEGRATION_ENCRYPTION_KEY`로 암호화해 `subscriptions.billing_key_enc`에만 둔다. 갱신 청구는 같은 cron, 실패 시 PAST_DUE + 7일 유예, 하루 1회 재시도. OWNER 해지 시 빌키 삭제.
+- 환불: `POST /api/billing/admin/payments/:id/refund {reason}`(SYSTEM_ADMIN) → NicePay 전체 취소 → 결제 REFUNDED, 이용 기간에서 해당 주문 개월 수 차감(남는 기간이 없으면 즉시 CANCELED). Audit `REFUND_PAYMENT`.
+- OWNER 해지(`requestCancel`)는 Provider 호출을 DB 트랜잭션 밖에서 한다(확인 → provider.cancel → 잠금·재확인·전이).
+- NicePay 웹훅은 `200 text/html "OK"`로 응답해야 성공 처리된다(`provider.webhookAck`).
+
 - Plan 한도(`server/billing/limits.js`): 생성 서비스 함수(요구사항·WBS·주간보고·멤버 추가/초대/수락·프로젝트 생성/보관 해제)에서 검사 → 402 `plan_limit_reached` `{limit:{dimension,label,used,limit,plan,adding}, upgrade:{plan,url}}`. 트랜잭션 안에서는 workspace 행을 `FOR UPDATE`로 잠가 동시 생성이 마지막 자리를 함께 통과하지 못한다. 다운그레이드 시 데이터는 지우지 않고 새 생성만 막는다.
 
 ## 9. 운영 엔드포인트
