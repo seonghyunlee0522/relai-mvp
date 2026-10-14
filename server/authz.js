@@ -7,6 +7,7 @@
  *
  * There is no per-project permission model: every workspace member can work inside every project of the workspace.
  */
+import { assertWithinLimit } from './billing/limits.js';
 export const ROLES = ['OWNER', 'ADMIN', 'MEMBER'];
 export const POLICY = {
   project_manage: ['OWNER', 'ADMIN'],      // create / edit / archive projects
@@ -42,6 +43,7 @@ export async function addMember(db, workspaceId, email, role, actorRole) {
   const user = await db.get('SELECT id, name, email FROM users WHERE email = ?', [String(email || '').trim().toLowerCase()]);
   if (!user) return { error: 'user_not_found' };
   if (await db.get('SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [workspaceId, user.id])) return { error: 'already_member' };
+  await assertWithinLimit(db, workspaceId, 'members');   // plan limit (402)
   await db.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,?)', [workspaceId, user.id, role]);
   return { user };
 }

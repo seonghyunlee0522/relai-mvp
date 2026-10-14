@@ -53,5 +53,7 @@ Workspace Home(프로젝트별 상황 카드 · 우선순위 · `GET …/project
 
 Admin Console(운영자 권한·정지 정책·Audit·Billing 연동 계약): `docs/admin-console.md` — 운영자 부여: `node scripts/grant-system-admin.js <email>`
 
+Billing(Phase 10, `server/billing/`): `GET /api/workspaces/:wid/billing`(플랜·구독·사용량, 멤버 누구나) · `POST …/billing/checkout` {plan:'TEAM'} · `POST …/billing/cancel`(OWNER) · `POST /api/billing/webhook/:provider`(서명 검증·멱등) · Plan 한도 초과 시 402 `plan_limit_reached` → 앱이 업그레이드 안내를 띄움 · 랜딩 `#pricing` · 설계/환경변수: `docs/production-readiness.md` §2·§8
+
 ## Deploy on Vercel
 `api/index.js` wraps the Express app as one serverless function and `vercel.json` rewrites every path to it (static files are served by Express, same as elsewhere). Import the GitHub repo in Vercel (preset **Other**, root `./`, no build command) and set the environment variables: `DATABASE_URL` (Postgres, e.g. Neon — use the direct/non-pooled URL), `NODE_ENV=production`, `SESSION_SECRET`, `INTEGRATION_ENCRYPTION_KEY` (`openssl rand -hex 32`), `APP_BASE_URL` (the https Vercel URL), `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` (with `fake`, invitation e-mails are silently not delivered — the boot log warns), `AI_ENABLED=false` unless a provider key is set. `server/index.js` remains the entry for long-running hosts.

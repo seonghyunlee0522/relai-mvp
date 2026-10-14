@@ -13,6 +13,7 @@ import { ValidationError } from './validate.js';
 import { DEFAULT_PLAN, PLANS } from './plans.js';
 import { workspaceUsage, workspacesNearLimit } from './usage.js';
 import { billingDashboard, workspaceSubscription } from './billing-admin.js';
+import { GRANTS_PLAN_SQL } from './billing/subscriptions.js';
 
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
 export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
@@ -73,7 +74,8 @@ export async function getUser(db, id) {
   if (!u) return null;
   const workspaces = await db.all(`SELECT w.id, w.name, w.status, m.role, m.created_at AS joined_at,
       (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status != 'ARCHIVED') AS project_count,
-      (SELECT COUNT(*) FROM workspace_members o WHERE o.workspace_id = w.id AND o.role = 'OWNER') AS owner_count
+      (SELECT COUNT(*) FROM workspace_members o WHERE o.workspace_id = w.id AND o.role = 'OWNER') AS owner_count,
+      COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key
     FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? ORDER BY m.created_at`, [id]);
   // Basic activity only: logins and project create/archive events (dates + workspace, no project content/names).
   const activity = await db.all(`SELECT 'PROJECT_CREATED' AS type, p.created_at AS at, w.name AS workspace_name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.created_by = ?
@@ -85,7 +87,7 @@ export async function getUser(db, id) {
   const invitations = await db.all(`SELECT i.id, i.type, i.status, i.workspace_name, w.name AS target_workspace_name, i.role, i.created_at, i.accepted_at FROM invitations i LEFT JOIN workspaces w ON w.id = i.workspace_id WHERE i.email = ? OR i.accepted_by = ? ORDER BY i.created_at DESC LIMIT 20`, [u.email, id]);
   return {
     user: shapeUser(u), identities, invitations,
-    workspaces: workspaces.map((w) => ({ ...w, plan: DEFAULT_PLAN, plan_label: PLANS[DEFAULT_PLAN].label, sole_owner: w.role === 'OWNER' && Number(w.owner_count) === 1 })),
+    workspaces: workspaces.map(({ plan_key, ...w }) => ({ ...w, plan: plan_key, plan_label: PLANS[plan_key]?.label || plan_key, sole_owner: w.role === 'OWNER' && Number(w.owner_count) === 1 })),
     activity: activity.slice(0, 10),
     audit: audit.items,
   };
@@ -106,14 +108,16 @@ const WS_COLS = `w.id, w.name, w.status, w.created_at, w.suspended_at,
     COALESCE((SELECT MAX(r.updated_at) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id), w.created_at),
     COALESCE((SELECT MAX(x.updated_at) FROM wbs_items x JOIN projects p ON p.id = x.project_id WHERE p.workspace_id = w.id), w.created_at),
     COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id), w.created_at),
-    COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at`;
+    COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at,
+  COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key`;
 // "Owner" column = the earliest OWNER member (the creator unless ownership was transferred); the LATERAL join keeps it one query.
 const WS_FROM = `FROM workspaces w LEFT JOIN LATERAL (SELECT u.id, u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id
   WHERE m.workspace_id = w.id AND m.role = 'OWNER' ORDER BY m.created_at, u.email LIMIT 1) o ON true`;
 const WS_SORTS = { created: 'w.created_at DESC', activity: 'last_activity_at DESC', name: 'w.name', members: 'member_count DESC', projects: 'project_count DESC' };
 const shapeWorkspace = (r) => {
   const act = activationState({ has_owner: Boolean(r.owner_id), projects: Number(r.project_count) || 0, defined_projects: Number(r.defined_projects) || 0, activated_projects: Number(r.activated_projects) || 0, last_login: r.last_login_at, last_active_at: r.last_activity_at });
-  return { ...r, plan: DEFAULT_PLAN, plan_label: PLANS[DEFAULT_PLAN].label, activation: { state: act.state, label: act.label, tone: act.tone } };
+  const plan = PLANS[r.plan_key] ? r.plan_key : DEFAULT_PLAN;
+  return { ...r, plan, plan_label: PLANS[plan].label, activation: { state: act.state, label: act.label, tone: act.tone } };
 };
 
 export async function listWorkspaces(db, q = {}) {
@@ -138,14 +142,13 @@ export async function getWorkspace(db, id) {
       UNION ALL SELECT 'WEEKLY_REPORT', wr.created_at FROM weekly_reports wr JOIN projects p ON p.id = wr.project_id WHERE p.workspace_id = ?) x
     ORDER BY at DESC LIMIT 15`, [id, id, id, id]);
   const subscription = await workspaceSubscription(db, id);
-  const planKey = subscription?.plan && PLANS[subscription.plan] ? subscription.plan : DEFAULT_PLAN;
-  const usage = await workspaceUsage(db, id, planKey);
+  const usage = await workspaceUsage(db, id);   // effective plan (a PAST_DUE subscription past its grace period is FREE again)
   const audit = await listAudit(db, { target_type: 'WORKSPACE', target_id: id, size: 20 });
   const owners = members.filter((m) => m.role === 'OWNER');
   const invitations = await db.all(`SELECT i.id, i.email, i.role, i.status, i.expires_at, i.created_at, i.accepted_at, u.name AS invited_by_name, (SELECT d.status FROM email_deliveries d WHERE d.invitation_id = i.id ORDER BY d.created_at DESC LIMIT 1) AS last_email_status FROM invitations i LEFT JOIN users u ON u.id = i.invited_by WHERE i.workspace_id = ? ORDER BY i.created_at DESC LIMIT 50`, [id]);
   const origin = await db.get(`SELECT i.id, i.email, u.name AS invited_by_name, i.accepted_at FROM invitations i LEFT JOIN users u ON u.id = i.invited_by WHERE i.accepted_workspace_id = ? AND i.type = 'WORKSPACE_CREATE'`, [id]);
   return {
-    workspace: { ...shapeWorkspace(w), plan: planKey, plan_label: PLANS[planKey].label },
+    workspace: { ...shapeWorkspace(w), plan: usage.plan, plan_label: usage.plan_label },
     owners, members, projects, invitations: invitations.map((i) => (i.status === 'PENDING' && new Date(i.expires_at) < new Date() ? { ...i, status: 'EXPIRED' } : i)), origin_invitation: origin || null,
     subscription,                                   // null until Billing exists
     usage, activity, audit: audit.items,

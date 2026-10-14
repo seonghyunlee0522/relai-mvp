@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
+import { assertWithinLimit } from './billing/limits.js';
 import { newToken, sha256 } from './security.js';
 import { writeAudit } from './admin.js';
 import { emailConfig } from './email/config.js';
@@ -109,6 +110,7 @@ export async function createMemberInvite(db, { workspaceId, email, role }, actor
   if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 Workspace에서는 초대할 수 없습니다.');
   const member = await db.get('SELECT 1 FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND u.email = ?', [workspaceId, em]);
   if (member) throw new InviteError(409, 'already_member', '이미 Workspace 멤버입니다.');
+  await assertWithinLimit(db, workspaceId, 'members');   // no invite when the plan has no free seat (acceptance re-checks)
   const dup = await db.get(`SELECT id FROM invitations WHERE type = 'WORKSPACE_MEMBER' AND workspace_id = ? AND email = ? AND status = 'PENDING' AND expires_at >= now()`, [workspaceId, em]);
   if (dup) throw new InviteError(409, 'invite_pending', '이미 초대가 진행 중입니다. 재발송을 사용하세요.', { invitation_id: dup.id });
   await db.run(`UPDATE invitations SET status = 'EXPIRED', updated_at = now() WHERE type = 'WORKSPACE_MEMBER' AND workspace_id = ? AND email = ? AND status = 'PENDING' AND expires_at < now()`, [workspaceId, em]);
@@ -170,7 +172,10 @@ export async function acceptWorkspaceMemberInvite(db, invitationId, user) {
   if (!ws) throw new InviteError(410, 'workspace_gone', 'Workspace가 더 이상 존재하지 않습니다.');
   if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 Workspace의 초대는 수락할 수 없습니다.');
   const existing = await db.get('SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [ws.id, user.id]);
-  if (!existing) await db.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,?)', [ws.id, user.id, inv.role || 'MEMBER']);
+  if (!existing) {
+    await assertWithinLimit(db, ws.id, 'members');   // plan limit (402): the invite stays PENDING so it can be accepted after an upgrade
+    await db.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,?)', [ws.id, user.id, inv.role || 'MEMBER']);
+  }
   await db.run(`UPDATE invitations SET status = 'ACCEPTED', accepted_by = ?, accepted_at = now(), accepted_workspace_id = ?, updated_at = now() WHERE id = ?`, [user.id, ws.id, inv.id]);
   await writeAudit(db, { adminUserId: user.id, action: 'WORKSPACE_INVITE_ACCEPTED', targetType: 'INVITATION', targetId: inv.id, metadata: { email: inv.email, workspace_id: ws.id, workspace_name: ws.name, role: inv.role }, actorKind: 'USER' });
   return { workspaceId: ws.id, type: inv.type, already_member: Boolean(existing) };

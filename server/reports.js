@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import { now, str } from './common.js';
 import { ValidationError } from './validate.js';
+import { assertWithinLimit } from './billing/limits.js';
 import { loadGuide } from './guide.js';
 import * as M from './metrics.js';
 import { projectHealth, STATUS_LABEL } from './health.js';
@@ -180,6 +181,7 @@ export const listReports = async (db, projectId) => (await db.all(`SELECT ${COLS
 export const getReport = async (db, projectId, id) => parse((await db.get(`SELECT ${COLS}, structured_content, rendered_content FROM weekly_reports WHERE project_id = ? AND id = ?`, [projectId, id])));
 
 export async function generateReport(db, project, period, userId) {
+  await assertWithinLimit(db, project.workspace_id, 'weekly_reports');   // plan limit (402), per calendar month
   const data = (await buildReportData(db, project, period));
   const id = randomUUID(); const ts = now();
   const title = `${project.name} 주간보고 (${period.period_start} ~ ${period.period_end})`;

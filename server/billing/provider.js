@@ -1,0 +1,79 @@
+/**
+ * Payment provider interface (Phase 10 Billing). The provider choice is still open, so the product talks to this
+ * interface only; a real adapter (Toss Payments, NICEPAY, Stripe, …) implements the same three methods and is registered
+ * in `PROVIDERS`. No provider SDK or key lives in this repository yet.
+ *
+ *   createCheckout({ workspace, plan, customer, successUrl, cancelUrl }) → { session_id, checkout_url }
+ *   handleWebhook({ rawBody: Buffer, headers })                         → normalized event (below); throws BillingError(400) on a bad signature
+ *   cancel({ subscription })                                            → { ok: true } (cancellation at period end on the provider side)
+ *
+ * Normalized event (what subscriptions.processWebhookEvent consumes):
+ *   { id: provider event id (idempotency key), type: one of EVENT_TYPES, workspace_id?, provider_subscription_id?,
+ *     provider_customer_id?, plan?, period_start?, period_end?, payment_method_summary?, immediate? (cancel),
+ *     payment?: { amount, currency, status: 'PAID'|'FAILED', provider_tid, moid, provider_result_code, failure_code, failure_message },
+ *     payload: the provider's body as stored in billing_events.payload (strip card data / billing keys before returning it) }
+ */
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+
+export class BillingError extends Error {
+  constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+}
+
+const REQUIRED = ['createCheckout', 'handleWebhook', 'cancel'];
+/** Throws if `p` does not implement the interface. */
+export function assertProvider(p) {
+  for (const m of REQUIRED) if (typeof p?.[m] !== 'function') throw new Error(`billing provider "${p?.name}" is missing ${m}()`);
+  return p;
+}
+
+/**
+ * Fake provider for tests and local development. Checkout returns a local URL; webhooks are JSON signed with
+ * HMAC-SHA256(secret, rawBody) in `x-fake-signature`. `signedEvent()` builds such a delivery for tests.
+ */
+export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET || 'fake-billing-secret' } = {}) {
+  const sign = (raw) => createHmac('sha256', secret).update(raw).digest('hex');
+  const calls = { checkout: [], cancel: [] };
+  return assertProvider({
+    name: 'fake',
+    calls,
+    async createCheckout({ workspace, plan, successUrl }) {
+      const session_id = `fake_cs_${randomUUID()}`;
+      calls.checkout.push({ session_id, workspace_id: workspace.id, plan });
+      const url = new URL(successUrl || '/app/settings', 'http://local');
+      url.searchParams.set('checkout', 'fake'); url.searchParams.set('session', session_id);
+      return { session_id, checkout_url: `${url.pathname}${url.search}#billing` };
+    },
+    async handleWebhook({ rawBody, headers }) {
+      const got = Buffer.from(String(headers['x-fake-signature'] || ''), 'utf8');
+      const want = Buffer.from(sign(rawBody), 'utf8');
+      if (got.length !== want.length || !timingSafeEqual(got, want)) throw new BillingError(400, 'invalid_signature', '서명이 올바르지 않습니다.');
+      let body;
+      try { body = JSON.parse(rawBody.toString('utf8')); } catch { throw new BillingError(400, 'bad_payload', '잘못된 요청입니다.'); }
+      if (!body?.id || !body?.type) throw new BillingError(400, 'bad_payload', '잘못된 요청입니다.');
+      const d = body.data || {};
+      return { id: body.id, type: body.type, workspace_id: d.workspace_id, provider_subscription_id: d.subscription_id, provider_customer_id: d.customer_id,
+        plan: d.plan, period_start: d.period_start, period_end: d.period_end, payment_method_summary: d.payment_method_summary, immediate: Boolean(d.immediate),
+        payment: d.payment || undefined, payload: body };
+    },
+    async cancel({ subscription }) { calls.cancel.push(subscription.id); return { ok: true }; },
+    /** Test helper: a signed webhook delivery { body (string), headers }. */
+    signedEvent(type, data = {}, id = `evt_${randomUUID()}`) {
+      const body = JSON.stringify({ id, type, data });
+      return { id, body, headers: { 'Content-Type': 'application/json', 'x-fake-signature': sign(Buffer.from(body)) } };
+    },
+  });
+}
+
+/**
+ * Provider registry. `BILLING_PROVIDER` picks one; unset means "fake" outside production and "no billing" in production
+ * (checkout answers 503 billing_unavailable) until a real adapter is added here.
+ */
+const PROVIDERS = { fake: () => createFakeProvider() };
+export function providerFromEnv(env = process.env) {
+  const name = env.BILLING_PROVIDER || (env.NODE_ENV === 'production' ? '' : 'fake');
+  if (!name) return null;
+  if (name === 'fake' && env.NODE_ENV === 'production' && env.BILLING_ALLOW_FAKE !== '1') return null;
+  const make = PROVIDERS[name];
+  if (!make) throw new Error(`unknown BILLING_PROVIDER "${name}"`);
+  return assertProvider(make());
+}

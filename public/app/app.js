@@ -19,6 +19,7 @@ import { changesPage } from './changes/page.js';
 import { raidPage } from './raid/page.js';
 import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
+import './shared/upgrade.js';   // 402 plan_limit_reached → upgrade prompt (Phase 10)
 import { adminShell } from './admin/shell.js';
 import { adminDashboardPage } from './admin/dashboard.js';
 import { adminUsersPage, adminUserPage } from './admin/users.js';
