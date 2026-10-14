@@ -371,6 +371,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         }
         // Phase 6 US-3: 오픈 completes only through the 오픈 dialog (오픈일 + 남은 항목 운영 이관 — POST …/go-live)
         if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'GO_LIVE') return fail(res, 409, 'go_live_required', '오픈은 오픈 완료 처리에서 오픈일과 남은 항목을 정해 완료합니다.');
+        // Phase 6 US-2: 검수 completes only when the whole scope is accepted (no hand-marking 1건 검수 as 완료)
+        if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'ACCEPTANCE' && !Q.acceptanceGateMet(await Q.acceptanceStats(db, project.id))) return fail(res, 409, 'acceptance_required', '범위 내 요구사항이 모두 승인된 검수에 들어가야 완료됩니다. 검수에서 고객 승인을 기록하세요.');
         if (st && st.phase_key === 'REQUIREMENTS' && st.step_key === RB.STEP_KEY) {
           const m = await RB.loadBaseline(db, project);
           if (m.missing.length || !m.counts.in_scope) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 요구사항 기준선 승인에서 승인 기록을 입력하세요.');

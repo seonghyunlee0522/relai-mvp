@@ -134,9 +134,17 @@ export const migrations = [
         VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 0, st.importance, st.linked_feature_type]);
     }
   } },
-  { version: 37, name: 'Phase 6 전환 및 오픈: acceptances.customer_approval, project_definitions.go_live, activity_checklist_items.owner_user_id / owner_stakeholder_id (schema.sql) + 06 ACCEPTANCE 설명·완료 기준 (범위 전체 검수) + WEEKLY_REPORT (주간보고 작성·공유) added to every project\'s 06 right before GO_LIVE as TODO', async up(db) {
+  { version: 37, name: 'Phase 6 전환 및 오픈: acceptances.customer_approval, project_definitions.go_live, activity_checklist_items.owner_user_id / owner_stakeholder_id (schema.sql) + 06 ACCEPTANCE 설명·완료 기준 (범위 전체 검수) + WEEKLY_REPORT (주간보고 작성·공유) added to every project\'s 06 right before GO_LIVE as TODO + stored old copy (Go-Live → 오픈, Issue/Fail → 이슈/실패) refreshed unless PM-edited', async up(db) {
     await db.run(`UPDATE project_steps SET description = ?, completion_criteria = ?, updated_at = now()
       WHERE step_key = 'ACCEPTANCE' AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'TRANSITION_GO_LIVE')`, [ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA]);
+    // Acceptance MUST (J-A3 rule): stored old English copy → Korean, only where it still equals the old template text (PM-edited text stays).
+    const gl = PHASE_BY_KEY.TRANSITION_GO_LIVE.steps.find((x) => x.key === 'GO_LIVE'); const is = PHASE_BY_KEY.DEVELOPMENT.steps.find((x) => x.key === 'ISSUES');
+    const inPhase = (k) => `project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = '${k}')`;
+    await db.run(`UPDATE project_steps SET title = ?, updated_at = now() WHERE step_key = 'GO_LIVE' AND title = 'Go-Live' AND ${inPhase('TRANSITION_GO_LIVE')}`, [gl.title]);
+    await db.run(`UPDATE project_steps SET description = ?, updated_at = now() WHERE step_key = 'GO_LIVE' AND description IN (?, ?) AND ${inPhase('TRANSITION_GO_LIVE')}`,
+      [gl.description, '계획한 시점에 서비스를 오픈합니다. 오픈 전 열려 있는 Issue, Fail 테스트, 미반영 변경을 확인합니다.', '계획한 시점에 서비스를 오픈합니다. 오픈 전 열려 있는 이슈, 실패 테스트, 미반영 변경을 확인합니다.']);
+    await db.run(`UPDATE project_steps SET description = ?, updated_at = now() WHERE step_key = 'ISSUES' AND description = '진행을 막거나 늦추는 문제를 Issue로 기록하고 처리합니다.' AND ${inPhase('DEVELOPMENT')}`, [is.description]);
+    await db.run(`UPDATE project_steps SET completion_criteria = ?, updated_at = now() WHERE step_key = 'ISSUES' AND completion_criteria = '열려 있는 Issue가 없습니다.' AND ${inPhase('DEVELOPMENT')}`, [is.completion_criteria]);
     const st = PHASE_BY_KEY.TRANSITION_GO_LIVE.steps.find((x) => x.key === 'WEEKLY_REPORT');
     for (const ph of await db.all(`SELECT id FROM project_phases WHERE phase_key = 'TRANSITION_GO_LIVE'`)) {
       if (await db.get(`SELECT 1 FROM project_steps WHERE project_phase_id = ? AND step_key = 'WEEKLY_REPORT'`, [ph.id])) continue;

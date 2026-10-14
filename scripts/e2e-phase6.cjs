@@ -155,6 +155,18 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   await page.click('#apv-save'); await toastText(page, /승인 기록을 추가/);
   const oldNow = (await api('GET', `${A.P}/acceptances/${old.id}`)).json.acceptance;
   check('US-1 승인 기록 추가: 상태 그대로 ACCEPTED + 기록 · 이해관계자 추가', oldNow.status === 'ACCEPTED' && oldNow.customer_approval.recorded && oldNow.stakeholders.some((x) => x.name === '최현업'));
+  // Q15-4: a recorded approval shows 승인 기록 수정 (never a silent overwrite via 추가); 이력 keeps the old record line
+  await page.waitForSelector('[data-accapv] [data-acc-apv-edit]');
+  check('Q15-4 기록 있음 → "승인 기록 수정" (추가 버튼 없음)', /승인 기록 수정/.test(await page.textContent('[data-accapv]')) && !(await page.$('[data-acc-apv-add]')));
+  await page.click('[data-acc-apv-edit]'); await page.waitForSelector('[data-approval-drawer]');
+  check('Q15-4 수정 Drawer는 기존 기록으로 채워짐', (await page.inputValue('[data-af="evidence"]')) === '회신 메일');
+  await page.fill('[data-af="evidence"]', '회신 메일 (재확인)'); await page.check('[data-af="method"][value="SIGNED"]');
+  await page.click('#apv-save'); await toastText(page, /승인 기록을 수정/);
+  const oldEd = (await api('GET', `${A.P}/acceptances/${old.id}`)).json.acceptance;
+  const edRow = oldEd.history.find((h) => h.action_type === 'CUSTOMER_APPROVAL' && h.old_value);
+  check('Q15-4 수정 저장 → 서명본 수령, 이력에 이전 기록 줄 유지', oldEd.customer_approval.method === 'SIGNED' && edRow && /이메일 회신/.test(edRow.old_value), edRow && edRow.old_value);
+  await page.click('#drawer [data-dtab="hist"]').catch(() => {});
+  check('Q15-4 이력 화면 "고객 승인 기록 수정"', /고객 승인 기록 수정/.test(await page.textContent('#drawer')));
   await api('POST', `${A.P}/acceptances/${old.id}/archive`, {});
 
   /* ---------- US-2 검수는 범위 전체를 덮는다 ---------- */

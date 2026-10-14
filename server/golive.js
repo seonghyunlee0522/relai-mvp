@@ -8,14 +8,13 @@
  *
  * 운영 이관 is a one-line memo carried into 07 (count + list), never a ticket: no owner, no due date, no workflow.
  */
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { todayKst } from '../public/app/shared/kst-date.js';
 import { updateStep } from './guide.js';
 import { updateWbs } from './wbs.js';
 import { ensureRow } from './definition.js';
 
 const now = () => new Date().toISOString();
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 export const CARRYOVER_TYPES = ['ISSUE', 'TEST', 'CR', 'ACCEPTANCE'];
 export const CARRYOVER_LABEL = { ISSUE: '이슈', TEST: '테스트', CR: '변경 요청', ACCEPTANCE: '검수' };
 const NOTE_MAX = 200;

@@ -72,6 +72,11 @@ test('US-1 검수 승인: 4 fields or 422; saved record + ACCEPTED in one go; vi
   assert.ok(x.history.some((h) => h.action_type === 'CUSTOMER_APPROVAL' && /오지현/.test(h.new_value)));
   const list = (await A.c('GET', acc(A))).json.items;
   assert.equal(list[0].customer_approval.recorded, true);
+  // 승인 기록 수정 (Q15-4): an existing record is replaced, and 이력 keeps the old record line (old → new)
+  r = await A.c('PATCH', acc(A, `/${a.id}/customer-approval`), { customer_approval: { ...APV, method: 'EMAIL', evidence: '회신 메일' } });
+  assert.equal(r.status, 200); assert.equal(r.json.acceptance.customer_approval.method_label, '이메일 회신'); assert.equal(r.json.acceptance.status, 'ACCEPTED');
+  const ed = r.json.acceptance.history.find((h) => h.action_type === 'CUSTOMER_APPROVAL' && h.old_value);
+  assert.ok(ed, 'edit row has old_value'); assert.match(ed.old_value, /서명본 수령/); assert.match(ed.new_value, /이메일 회신/);
   // 승인 기록 추가: only on ACCEPTED; status unchanged; a directly entered approver joins 이해관계자
   const old = (await A.c('POST', acc(A), { title: '예전 검수' })).json.acceptance;
   assert.equal((await A.c('PATCH', acc(A, `/${old.id}/customer-approval`), { customer_approval: APV })).status, 409, 'DRAFT → use 승인');
@@ -286,6 +291,15 @@ test('migration 37: ACCEPTANCE texts, WEEKLY_REPORT inserted once right before G
   const a = (await A.c('POST', acc(A), { title: '예전 검수', requirements: [r0.id] })).json.acceptance;
   await db.run(`UPDATE acceptances SET status = 'ACCEPTED', accepted_at = now() WHERE id = ?`, [a.id]);
   await toPhase(A, 'OPERATIONS');
+  // stored old template copy (projects created before Phase 6) + a second project whose PM edited the copy
+  const OLD_GL = '계획한 시점에 서비스를 오픈합니다. 오픈 전 열려 있는 Issue, Fail 테스트, 미반영 변경을 확인합니다.';
+  const OLD_IS = '진행을 막거나 늦추는 문제를 Issue로 기록하고 처리합니다.';
+  await db.run(`UPDATE project_steps SET title = 'Go-Live', description = ? WHERE step_key = 'GO_LIVE'`, [OLD_GL]);
+  await db.run(`UPDATE project_steps SET description = ?, completion_criteria = '열려 있는 Issue가 없습니다.' WHERE step_key = 'ISSUES'`, [OLD_IS]);
+  const B = await setup(client, 'b@x.com');
+  const bPh = (k) => `project_phase_id IN (SELECT id FROM project_phases WHERE project_id = '${B.p.id}' AND phase_key = '${k}')`;
+  await db.run(`UPDATE project_steps SET title = 'Go-Live (1차 오픈)', description = 'PM 메모: Issue 0건 확인' WHERE step_key = 'GO_LIVE' AND ${bPh('TRANSITION_GO_LIVE')}`);
+  await db.run(`UPDATE project_steps SET description = 'PM이 고친 Issue로 기록 문구' WHERE step_key = 'ISSUES' AND ${bPh('DEVELOPMENT')}`);
   const m37 = migrations.find((m) => m.version === 37); assert.ok(m37); assert.equal(migrations[migrations.length - 1].version, 37);
   await m37.up(db); await m37.up(db);
   const steps = await db.all(`SELECT s.step_key, s.importance, s.status, s.completion_criteria FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id
@@ -293,6 +307,16 @@ test('migration 37: ACCEPTANCE texts, WEEKLY_REPORT inserted once right before G
   assert.deepEqual(steps.map((s) => s.step_key), ['ACCEPTANCE', 'CUTOVER_PLAN', 'DATA_MIGRATION', 'TRAINING', 'WEEKLY_REPORT', 'GO_LIVE', 'STABILIZE']);
   assert.equal(steps[0].completion_criteria, '범위 내 확정 요구사항이 모두 승인된 검수에 들어 있습니다.');
   assert.equal(steps[4].importance, 'RECOMMENDED'); assert.equal(steps[4].status, 'TODO');
+  const copy = async (pid, phase, key) => db.get(`SELECT s.title, s.description, s.completion_criteria FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id
+    WHERE p.project_id = ? AND p.phase_key = ? AND s.step_key = ?`, [pid, phase, key]);
+  const gl = PHASE_BY_KEY.TRANSITION_GO_LIVE.steps.find((x) => x.key === 'GO_LIVE'); const is = PHASE_BY_KEY.DEVELOPMENT.steps.find((x) => x.key === 'ISSUES');
+  let c = await copy(A.p.id, 'TRANSITION_GO_LIVE', 'GO_LIVE');
+  assert.equal(c.title, '오픈'); assert.equal(c.description, gl.description); assert.match(c.description, /열린 이슈, 실패 테스트/);
+  c = await copy(A.p.id, 'DEVELOPMENT', 'ISSUES');
+  assert.equal(c.description, is.description); assert.match(c.description, /이슈로 기록/); assert.equal(c.completion_criteria, '열려 있는 이슈가 없습니다.');
+  c = await copy(B.p.id, 'TRANSITION_GO_LIVE', 'GO_LIVE');
+  assert.equal(c.title, 'Go-Live (1차 오픈)', 'PM-edited title kept'); assert.equal(c.description, 'PM 메모: Issue 0건 확인', 'PM-edited description kept');
+  assert.equal((await copy(B.p.id, 'DEVELOPMENT', 'ISSUES')).description, 'PM이 고친 Issue로 기록 문구');
   const G = await g(A);
   assert.equal(G.project.current_phase, 'OPERATIONS');
   assert.equal(G.phases.find((x) => x.phase_key === 'TRANSITION_GO_LIVE').display_state, 'gap');
@@ -309,5 +333,44 @@ test('regression: 04 CR approval still 422 / saves; 01 approval record still sav
   const r = await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve', customer_approval: APV });
   assert.equal(r.json.change.status, 'APPROVED'); assert.equal(r.json.change.customer_approval.recorded, true);
   assert.equal((await A.c('PUT', `${A.purl}/definition`, { approval: APV })).status, 200);
+  server.close();
+});
+
+/* ---------- Acceptance fixes (QA Job 15) ---------- */
+test('Q15-1 impossible calendar dates (2026-02-30) are refused: 오픈일, 검수 승인일, WBS date', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client); await stakeholders(A);
+  await toPhase(A, 'TRANSITION_GO_LIVE');
+  let r = await A.c('POST', `${A.purl}/go-live`, { date: '2026-02-30', carryovers: [] });
+  assert.ok([400, 422].includes(r.status), `go-live 2026-02-30 → ${r.status}`);
+  const a = (await A.c('POST', acc(A), { title: '검수' })).json.acceptance;
+  await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'submit' });
+  r = await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'accept', customer_approval: { ...APV, date: '2025-02-29' } });
+  assert.ok([400, 422].includes(r.status), `승인일 2025-02-29 → ${r.status}`);
+  r = await A.c('POST', `${A.purl}/wbs`, { item_type: 'MILESTONE', title: 'M', milestone_date: '2026-04-31' });
+  assert.equal(r.status, 400, 'WBS 2026-04-31');
+  assert.equal((await A.c('POST', `${A.purl}/wbs`, { item_type: 'MILESTONE', title: 'M', milestone_date: '2028-02-29' })).status, 201, 'leap day ok');
+  server.close();
+});
+
+test('Q15-2 PATCH ACCEPTANCE → COMPLETED is 409 until the whole scope is accepted', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client); await stakeholders(A);
+  const R = await reqs(A, 2);
+  await toPhase(A, 'TRANSITION_GO_LIVE');
+  const sid = step(await g(A), 'ACCEPTANCE').id;
+  let r = await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'COMPLETED' });
+  assert.equal(r.status, 409); assert.equal(r.json.error.code, 'acceptance_required');
+  const a1 = (await A.c('POST', acc(A), { title: '1차', requirements: [R[0].id] })).json.acceptance;
+  await A.c('POST', acc(A, `/${a1.id}/transition`), { action: 'submit' });
+  await A.c('POST', acc(A, `/${a1.id}/transition`), { action: 'accept', customer_approval: APV });
+  r = await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'COMPLETED' });
+  assert.equal(r.status, 409, '1/2 accepted → still refused');
+  assert.notEqual(step(await g(A), 'ACCEPTANCE').state, 'COMPLETED');
+  const a2 = (await A.c('POST', acc(A), { title: '2차', requirements: [R[1].id] })).json.acceptance;
+  await A.c('POST', acc(A, `/${a2.id}/transition`), { action: 'submit' });
+  await A.c('POST', acc(A, `/${a2.id}/transition`), { action: 'accept', customer_approval: APV });
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'COMPLETED' })).status, 200, '2/2 → allowed');
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'TODO' })).status, 200, 'reopening is not guarded');
   server.close();
 });

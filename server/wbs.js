@@ -3,7 +3,7 @@
  * Relationships are id-based; wbs_code is display-only and recomputed after every structural change.
  */
 import { randomUUID } from 'node:crypto';
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { assertWithinLimit } from './billing/limits.js';
 import { linkCountsByWbs, linksForWbs, traceStats } from './trace.js';
 import { linkedRaid } from './raid.js';
@@ -26,7 +26,6 @@ export const todayStr = () => new Intl.DateTimeFormat('en-CA', { timeZone: proce
 
 const now = () => new Date().toISOString();
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 const dateOrNull = (v) => (v === undefined ? undefined : v === null || v === '' ? null : v);
 
 /** Lifecycle V2 (§17): a work item may be tagged with the lifecycle phase it belongs to. */

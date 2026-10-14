@@ -106,7 +106,7 @@ test('checklist API: CRUD, defaults, validation, scoping, derived state', async 
 });
 
 test('end to end: 06 전환·오픈 and 07 운영 can be completed (checklists + 완료 처리), project closes', async () => {
-  const { server, client } = await boot();
+  const { server, client, db } = await boot();
   const A = await setup(client, 'e2e@x.com');
   let g = (await A.c('GET', A.purl)).json;
   // jump to 06 (moving ahead with open activities is allowed)
@@ -116,8 +116,10 @@ test('end to end: 06 전환·오픈 and 07 운영 can be completed (checklists +
   // REQUIRED manual activities still cannot be skipped
   assert.equal((await A.c('PATCH', `${A.purl}/steps/${step(g, 'GO_LIVE').id}`, { status: 'SKIPPED' })).status, 409);
 
-  // ACCEPTANCE is data-driven (검수 screen); mark it by hand here to isolate 06's manual activities
-  await A.c('PATCH', `${A.purl}/steps/${step(g, 'ACCEPTANCE').id}`, { status: 'COMPLETED' });
+  // ACCEPTANCE is data-driven (검수 screen; hand-marking is 409 until the scope is accepted): seed one accepted 검수 to isolate 06's manual activities
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${step(g, 'ACCEPTANCE').id}`, { status: 'COMPLETED' })).status, 409);
+  const acc = (await A.c('POST', `${A.purl}/acceptances`, { title: '검수' })).json.acceptance;
+  await db.run(`UPDATE acceptances SET status = 'ACCEPTED', accepted_at = now() WHERE id = ?`, [acc.id]);
   g = (await A.c('GET', A.purl)).json;
   // guidance points at the first open REQUIRED activity's checklist
   assert.equal(g.guidance.rule, 'TRANSITION_RUN');
