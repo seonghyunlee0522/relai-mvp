@@ -7,6 +7,8 @@ import { ValidationError } from './validate.js';
 import { nextDisplayId, formatDisplayId, reserveProjectSequence, resolveLinkTarget, ensureNoDuplicate, linkLabel } from './common.js';
 import { createIssue, updateEntity } from './raid.js';
 import { todayKst } from '../public/app/shared/kst-date.js';
+import * as D from './definition.js';
+import { customerApprovalView, approvalRequired } from './changes.js';
 
 export const TC_STATUSES = ['DRAFT', 'READY', 'BLOCKED', 'COMPLETED'];
 export const TC_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
@@ -328,7 +330,8 @@ export async function listAcceptances(db, project, q = {}) {
   // test summary per acceptance (one query for all)
   const tr = (await db.all(`SELECT l.acceptance_id, ${LAST} AS last_result FROM acceptance_links l JOIN test_cases t ON t.id = l.target_id WHERE l.project_id = ? AND l.target_type = 'TEST' AND t.archived_at IS NULL`, [project.id]));
   const by = new Map(); for (const r of tr) { if (!by.has(r.acceptance_id)) by.set(r.acceptance_id, []); by.get(r.acceptance_id).push(r.last_result); }
-  return rows.map((a) => ({ ...a, test_summary: summarizeResults(by.get(a.id) || []) }));
+  const sh = rows.length ? await stakeholdersOf(db, project.id) : [];
+  return rows.map((a) => ({ ...a, customer_approval: accApprovalView(a.customer_approval, sh), test_summary: summarizeResults(by.get(a.id) || []) }));
 }
 export async function acceptanceStats(db, projectId) {
   const s = (await db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((status = 'DRAFT')::int), 0) AS draft, COALESCE(SUM((status = 'REQUESTED')::int), 0) AS requested,
@@ -338,7 +341,50 @@ export async function acceptanceStats(db, projectId) {
       COUNT(DISTINCT CASE WHEN l.target_type = 'TEST' AND ${LAST} = 'FAIL' THEN l.target_id END) AS target_fail_tests
     FROM acceptance_links l JOIN acceptances a ON a.id = l.acceptance_id LEFT JOIN test_cases t ON t.id = l.target_id AND l.target_type = 'TEST'
     WHERE l.project_id = ? AND a.archived_at IS NULL AND a.status IN ('DRAFT','REQUESTED','REWORK_REQUIRED')`, [projectId]));
-  return { ...s, in_progress: s.requested + s.rework, target_requirements: t.target_requirements, target_fail_tests: t.target_fail_tests };
+  // Phase 6 US-2: 06 ACCEPTANCE = every in-scope CONFIRMED requirement sits in at least one ACCEPTED 검수 (1차 + 2차 add up)
+  const c = (await db.get(`SELECT COUNT(*) AS scope_target, COALESCE(SUM(${IN_ACCEPTED('r')}::int), 0) AS scope_accepted
+    FROM requirements r WHERE ${SCOPE_REQ('r')}`, [projectId]));
+  const rest = (await db.get(`SELECT COUNT(DISTINCT tl.test_case_id) AS n FROM requirements r JOIN test_links tl ON tl.target_type = 'REQUIREMENT' AND tl.target_id = r.id
+    JOIN test_cases t ON t.id = tl.test_case_id AND t.archived_at IS NULL WHERE ${SCOPE_REQ('r')} AND NOT ${IN_ACCEPTED('r')}`, [projectId]));
+  const scope_target = Number(c.scope_target) || 0; const scope_accepted = Number(c.scope_accepted) || 0;
+  return { ...s, in_progress: s.requested + s.rework, target_requirements: t.target_requirements, target_fail_tests: t.target_fail_tests,
+    scope_target, scope_accepted, scope_remaining: scope_target - scope_accepted, scope_remaining_tests: Number(rest.n) || 0 };
+}
+/** 범위 내 확정 요구사항 (보관 안 됨) of one project — the 06 검수 target. */
+const SCOPE_REQ = (r) => `${r}.project_id = ? AND ${r}.archived_at IS NULL AND ${r}.scope = 'IN_SCOPE' AND ${r}.status = 'CONFIRMED'`;
+const IN_ACCEPTED = (r) => `(EXISTS (SELECT 1 FROM acceptance_links l JOIN acceptances a ON a.id = l.acceptance_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = ${r}.id AND a.status = 'ACCEPTED' AND a.archived_at IS NULL))`;
+/** US-2 `범위 전체로 만들기`: in-scope confirmed requirements not yet in an ACCEPTED 검수 + the live tests linked to them. */
+export async function scopeAllTargets(db, projectId) {
+  const requirements = (await db.all(`SELECT r.id FROM requirements r WHERE ${SCOPE_REQ('r')} AND NOT ${IN_ACCEPTED('r')} ORDER BY r.sequence_number`, [projectId])).map((x) => x.id);
+  const tests = requirements.length ? (await db.all(`SELECT DISTINCT t.id, t.sequence_number FROM test_links tl JOIN test_cases t ON t.id = tl.test_case_id AND t.archived_at IS NULL
+    WHERE tl.target_type = 'REQUIREMENT' AND tl.target_id IN (${requirements.map(() => '?').join(',')}) ORDER BY t.sequence_number`, requirements)).map((x) => x.id) : [];
+  return { requirements, tests };
+}
+
+/* ---------- 고객 승인 기록 (Phase 6 US-1) — the 01·02·04 approval record reused for 검수 ---------- */
+export const ACC_APPROVAL_METHODS = D.REQ_APPROVAL_METHODS;
+const parseObj = (v) => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
+/** The CR display model + who recorded it: list/Drawer "✓ 승인 · 10/20 · 오지현 고객 PM · 서명본 수령 (기록: 정하늘)". */
+export function accApprovalView(raw, stakeholders) {
+  const o = typeof raw === 'string' ? parseObj(raw) : raw || {};
+  return { ...customerApprovalView(o, stakeholders), recorded_by_name: o.recorded_by_name || '' };
+}
+/** Validate + store (all 4 fields required → 422 customer_approval_required). A directly entered approver joins 01 이해관계자 (고객사). */
+export async function saveAcceptanceApproval(db, project, acc, body, userId, ts = now()) {
+  if (!body || typeof body !== 'object') throw approvalRequired({}, null);
+  const { add_to_stakeholders: addSh, ...a } = D.cleanApproval(body, ACC_APPROVAL_METHODS);   // 400 on a bad / future date or unknown method
+  const stakeholders = await stakeholdersOf(db, project.id);
+  const err = approvalRequired(a, D.approverOf({ stakeholders }, a)); if (err) throw err;
+  if (!a.approver_id && a.approver_name && addSh) {
+    const sh = D.approverStakeholder(project, a, `검수 승인 (${acc.display_id})`);
+    await D.appendStakeholder(db, project, sh, userId); a.approver_id = sh.id;
+  }
+  if (a.approver_id) { a.approver_name = ''; a.approver_title = ''; }
+  a.recorded_by = userId; a.recorded_by_name = (await db.get('SELECT name FROM users WHERE id = ?', [userId]))?.name || '';
+  await db.run('UPDATE acceptances SET customer_approval = ?, updated_at = ? WHERE id = ?', [JSON.stringify(a), ts, acc.id]);
+  const view = accApprovalView(a, await stakeholdersOf(db, project.id));
+  await addHistory(db, 'ACCEPTANCE', acc.id, 'CUSTOMER_APPROVAL', { field: 'customer_approval', newValue: view.summary }, userId, ts);
+  return view;
 }
 export async function getAcceptance(db, project, id) {
   const a = (await db.get(`SELECT ${ACC_COLS}, u.name AS created_by_name FROM acceptances a LEFT JOIN users u ON u.id = a.created_by WHERE a.project_id = ? AND a.id = ?`, [project.id, id]));
@@ -350,7 +396,13 @@ export async function getAcceptance(db, project, id) {
       (SELECT i.display_id FROM issues i JOIN test_executions e ON e.id = i.source_test_execution_id WHERE e.test_case_id = t.id AND i.archived_at IS NULL AND i.status NOT IN ('RESOLVED','CLOSED') ORDER BY e.execution_number DESC LIMIT 1) AS open_issue
     FROM acceptance_links l JOIN test_cases t ON t.id = l.target_id WHERE l.acceptance_id = ? AND l.target_type = 'TEST' ORDER BY t.sequence_number`, [id]));
   const live = tests.filter((t) => !t.archived_at);
-  return { ...a, requirements: reqs, tests, test_summary: summarizeResults(live.map((t) => t.last_result)), history: (await history(db, 'ACCEPTANCE', id)) };
+  // US-1 "검수받을 내용" card: 요구사항 · 테스트 통과 · 테스트 제외(05 사유) · 열린 이슈 (project-wide; warn colour only, never blocks)
+  const ex = (await db.get(`SELECT COUNT(*) AS n FROM acceptance_links l JOIN requirements r ON r.id = l.target_id WHERE l.acceptance_id = ? AND l.target_type = 'REQUIREMENT'
+    AND r.archived_at IS NULL AND COALESCE(r.test_exclusion_reason, '') <> ''`, [id]));
+  const oi = (await db.get(`SELECT COUNT(*) AS n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED')`, [project.id]));
+  const scope_card = { requirements: reqs.filter((r) => !r.archived_at).length, tests_pass: live.filter((t) => t.last_result === 'PASS').length, excluded: Number(ex.n) || 0, open_issues: Number(oi.n) || 0 };
+  const sh = await stakeholdersOf(db, project.id);
+  return { ...a, customer_approval: accApprovalView(a.customer_approval, sh), stakeholders: sh, scope_card, requirements: reqs, tests, test_summary: summarizeResults(live.map((t) => t.last_result)), history: (await history(db, 'ACCEPTANCE', id)) };
 }
 export async function createAcceptance(db, project, input, userId) {
   const { sequence: seq, display_id } = (await nextDisplayId(db, project.id, 'ACCEPTANCE')); const id = randomUUID(); const ts = now();
@@ -366,11 +418,13 @@ export async function updateAcceptance(db, existing, input, userId) {
   (await db.run(`UPDATE acceptances SET ${sets.join(', ')} WHERE id = ?`, [...vals]));
   return changed;
 }
-export async function transitionAcceptance(db, existing, action, { note }, userId) {
+/** accept = 고객 승인 기록 + REQUESTED → ACCEPTED in one transaction (Phase 6 US-1); without the 4 approval fields → 422 customer_approval_required. */
+export async function transitionAcceptance(db, existing, action, { note, customerApproval, project = null }, userId) {
   const t = ACC_TRANSITIONS[action]; if (!t) return { error: 'bad_action' };
   const [from, to] = t; if (existing.status !== from) return { error: 'invalid_transition', from: existing.status, to };
   if ((action === 'reject' || action === 'rework') && !str(note)) throw new ValidationError({ decision_note: action === 'reject' ? '반려 사유를 입력해 주세요.' : '보완이 필요한 내용을 입력해 주세요.' });
   const ts = now(); const sets = ['status = ?', 'updated_at = ?']; const vals = [to, ts];
+  if (action === 'accept') await saveAcceptanceApproval(db, project || { id: existing.project_id }, existing, customerApproval, userId, ts);
   if (to === 'REQUESTED') { sets.push('requested_at = ?'); vals.push(ts); }
   if (action === 'accept') { sets.push('accepted_at = ?'); vals.push(ts); }
   if (action === 'reject') { sets.push('rejected_at = ?'); vals.push(ts); }

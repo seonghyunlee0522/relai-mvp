@@ -18,6 +18,7 @@ import { bindCoach } from '../onboarding/ui.js';
 import { ob } from '../onboarding/state.js';
 import { josa, pickJosa } from '../shared/josa.js';
 import { noApprovalLine, bindPlanMenu } from './initiation.js';
+import { goLiveDialog, carryoverDialog } from './golive.js';
 
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
 /** /api/… hrefs (사업수행계획서 내려받기) are downloads, not SPA routes. */
@@ -66,7 +67,8 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
       // Data-driven activities complete on their work screen; manual ones (no data signal) are completed here.
       if (a.manual && (isCurrent || markable)) {
         const open = a.checklist && a.checklist.total ? a.checklist.total - a.checklist.done : 0;
-        acts.push(html`<button type="button" class="link linkbtn np__act np__done" data-step="${a.id}" data-status="COMPLETED" data-title="${a.title}" data-open="${open}" title="이 업무를 완료한 것으로 기록합니다">✓ 완료 처리</button>`);
+        acts.push(a.go_live ? html`<button type="button" class="link linkbtn np__act np__done" data-golive title="오픈일과 남은 항목(처리 / 운영 이관)을 정하고 오픈을 기록합니다">✓ 완료 처리</button>`   // Phase 6 US-3: the 오픈 dialog
+          : html`<button type="button" class="link linkbtn np__act np__done" data-step="${a.id}" data-status="COMPLETED" data-title="${a.title}" data-open="${open}" title="이 업무를 완료한 것으로 기록합니다">✓ 완료 처리</button>`);
       }
       if (a.importance !== 'REQUIRED' && a.linked_feature_type !== 'definition') acts.push(html`<button type="button" class="link linkbtn np__act np__skip" data-step="${a.id}" data-status="SKIPPED" data-title="${a.title}" title="이번 프로젝트에서는 수행하지 않는 업무로 기록합니다">↷ 건너뛰기</button>`);
     }
@@ -79,6 +81,7 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
       <span class="np__purpose">${a.description}</span>
       ${raw(a.text && ((GATE_KEYS.has(a.step_key) && a.state !== 'NOT_STARTED') || a.row_text) ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}" data-row-text>${a.text}</span>` : '')}
       ${raw(a.hint ? html`<span class="np__hint">${a.hint}</span>` : '')}
+      ${raw(a.links && !archived ? html`<span class="np__links" data-row-links>${raw(a.links.map((l) => html`<a class="link" href="${l.href}" data-link>${l.label}</a>`).join(''))}</span>` : '')}
       ${raw(a.import_ms && !archived ? html`<span class="np__imp">${a.import_ms.text} <button type="button" class="btn btn--secondary btn--xs" data-import-ms>가져오기</button></span>` : '')}
     </div>
     <span class="badge badge--st is-${cls}">${stLabel}</span>
@@ -132,12 +135,13 @@ const phasePanel = (g, p, archived) => {
 
 export async function nextPage(id, main = $('#main')) {
   // BUG-001: strip ?created=1 / ?move=next right away (not after the awaits), so a navigation made meanwhile is never overwritten.
-  { const qp0 = new URLSearchParams(location.search); nextPage._flag = qp0.get('created') === '1' ? `created:${id}` : qp0.get('move') === 'next' ? `move:${id}` : null; if (nextPage._flag) history.replaceState(null, '', `/app/projects/${id}`); }
+  { const qp0 = new URLSearchParams(location.search); nextPage._flag = qp0.get('created') === '1' ? `created:${id}` : qp0.get('move') === 'next' ? `move:${id}` : qp0.get('golive') === '1' ? `golive:${id}` : qp0.get('carryovers') === '1' ? `carry:${id}` : null; if (nextPage._flag) history.replaceState(null, '', `/app/projects/${id}`); }
   let g = await api('GET', wsApi(`/${id}`));
   const p = g.project;
   document.title = `지금 할 일 — ${p.name} — RELAI`;
   const archived = p.status === 'ARCHIVED';
-  const created = nextPage._flag === `created:${id}`; const moveNext = nextPage._flag === `move:${id}`; nextPage._flag = null;
+  const created = nextPage._flag === `created:${id}`; const moveNext = nextPage._flag === `move:${id}`;
+  let pendingGoLive = nextPage._flag === `golive:${id}`; let pendingCarry = nextPage._flag === `carry:${id}`; nextPage._flag = null;   // Phase 6: guide CTA '오픈 완료 처리' · 07 '오픈 때 운영으로 넘긴 항목'
   await ob.get();
   let pendingMove = moveNext && !archived;
   const viewKey = new URLSearchParams(location.search).get('phase');   // stepper click on another phase → that phase's activity list
@@ -170,7 +174,13 @@ export async function nextPage(id, main = $('#main')) {
       try { const r = await api('POST', wsApi(`/${id}/wbs/milestones/from-key-dates`), {}); g = await api('GET', wsApi(`/${id}`)); draw(); toast(r.created ? `마일스톤 ${r.created}건을 가져왔습니다.` : '이미 같은 마일스톤이 있습니다.'); }
       catch (err) { toast(err.message); b.disabled = false; }
     });
+    // Phase 6 US-3: 오픈 = the 오픈 dialog (오픈일 + 남은 항목 처리 / 운영 이관), never a plain 완료 처리
+    const openGoLive = async () => { const r = await goLiveDialog(id); if (r) { g = r; toast(`오픈을 기록했습니다.${r.go_live && r.go_live.carryovers.length ? ` 운영 이관 ${r.go_live.carryovers.length}건` : ''}`); draw(); } };
+    main.querySelectorAll('[data-golive]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); openGoLive(); }; });
+    main.querySelectorAll('.rg__warn a[href$="?carryovers=1"]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); e.stopPropagation(); carryoverDialog(g); }; });
     bindCoach(main);
+    if (pendingGoLive && !archived) { pendingGoLive = false; openGoLive(); }
+    if (pendingCarry) { pendingCarry = false; carryoverDialog(g); }
     if (pendingMove && g.next_phase) { pendingMove = false; move(); }
   };
   draw();

@@ -1287,3 +1287,9 @@ ALTER TABLE requirements ADD COLUMN IF NOT EXISTS test_exclusion_reason TEXT;   
 ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS performer_user_id TEXT;         -- US-4: 수행자 = RELAI 사용자 …
 ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS performer_stakeholder_id TEXT;  --       … or 01 이해관계자 id (팀원 / 고객사), no FK
 ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS performed_on date;              --       수행일 (NULL → executed_at 날짜로 표시)
+
+/* ---------- Phase 6 (06 전환 및 오픈) ---------- */
+ALTER TABLE acceptances ADD COLUMN IF NOT EXISTS customer_approval TEXT NOT NULL DEFAULT '{}';       -- US-1: 고객 승인 기록 (same JSON shape as project_definitions.approval + recorded_by)
+ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS go_live TEXT NOT NULL DEFAULT '{}';         -- US-3: 오픈 기록 {date, carryovers:[{type,id,display_id,title,note}], by, by_name, at}
+ALTER TABLE activity_checklist_items ADD COLUMN IF NOT EXISTS owner_user_id TEXT;                    -- US-6: 담당 = RELAI 사용자 …
+ALTER TABLE activity_checklist_items ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;             --       … or 01 이해관계자 id (팀원 / 고객사), no FK; else the free-text owner

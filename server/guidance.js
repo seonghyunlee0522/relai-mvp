@@ -15,7 +15,7 @@
  * `why` stays a one-line rationale used by tests/reports; `title` is the imperative headline.
  */
 import { DEFAULT_PHASES, PHASE_BY_KEY } from './templates/default-phases.js';
-import { testPlanProgressText, defectIssuesText } from './activities.js';
+import { testPlanProgressText, defectIssuesText, accScopeText } from './activities.js';
 import { josa } from '../public/app/shared/josa.js';
 
 const n = (v) => Number(v) || 0;
@@ -36,8 +36,11 @@ export function testDoneTitle(t) {
   return `요구사항 ${n(t.target)}건 검증 완료 · ${tests}${n(t.excluded) ? ` · 제외 ${n(t.excluded)}건` : ''}`;
 }
 
+/** 06: the GO_LIVE activity is recorded (오픈 완료). */
+const goLiveDone = (phase) => Array.isArray(phase && phase.steps) && phase.steps.some((a) => a.step_key === 'GO_LIVE' && a.state === 'COMPLETED');
+
 export function projectGuidance(ctx) {
-  const { project, phase, next_phase: nextPhase, definition, stats = {}, overdue_tasks = 0 } = ctx;
+  const { project, phase, next_phase: nextPhase, definition, stats = {}, overdue_tasks = 0, go_live: goLive = null } = ctx;
   const u = (p = '') => `/app/projects/${project.id}${p}`;
   const req = stats.requirements || {}; const wbs = stats.wbs || {}; const tst = stats.tests || {}; const acc = stats.acceptances || {}; const iss = stats.issues || {}; const chg = stats.changes || {};
   const key = phase ? phase.phase_key || phase.key : project.current_phase;
@@ -60,8 +63,10 @@ export function projectGuidance(ctx) {
   if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope) && key !== 'INITIATION' && key !== 'REQUIREMENTS' && key !== 'TESTING') warnings.push(`미확정 요구사항 ${n(req.in_scope) - n(req.in_scope_confirmed)}건`);
   // Phase 5 C1: in 05 the unconfirmed in-scope requirements are named with what confirming does (never blocks)
   if (key === 'TESTING' && n(tst.in_scope_unconfirmed)) warnLink(unconfirmedTestText(tst.in_scope_unconfirmed), u(UNCONFIRMED_HREF));
-  if (n(iss.critical) && key !== 'DEVELOPMENT') warnings.push(`심각한 Issue ${iss.critical}건`);
-  if (n(chg.approved_unimplemented) && key !== 'DEVELOPMENT') warnings.push(`승인 후 미반영 변경 ${chg.approved_unimplemented}건`);
+  if (n(iss.critical) && key !== 'DEVELOPMENT') warnings.push(`심각한 이슈 ${iss.critical}건`);
+  // Phase 6 US-7: in 06 the open issues stand next to the unapplied changes on one warn line (never blocks)
+  if (key === 'TRANSITION_GO_LIVE') { const w = [n(iss.active) ? `열린 이슈 ${iss.active}건` : '', n(chg.approved_unimplemented) ? `승인 후 미반영 변경 ${chg.approved_unimplemented}건` : ''].filter(Boolean).join(' · '); if (w && !goLiveDone(phase)) warnings.push(w); }
+  else if (n(chg.approved_unimplemented) - n(goLive && goLive.approved_crs_carried) > 0 && key !== 'DEVELOPMENT') warnings.push(`승인 후 미반영 변경 ${n(chg.approved_unimplemented) - n(goLive && goLive.approved_crs_carried)}건`);   // CRs handed over at 오픈 are recorded
 
   switch (key) {
     case 'INITIATION': {
@@ -139,16 +144,22 @@ export function projectGuidance(ctx) {
         if (n(acc.rework)) return out('ACC_REWORK', '보완 요청된 검수를 처리하세요', `보완 필요 ${acc.rework}건이 있습니다. 보완 후 재요청해야 검수를 확정하고 오픈 일정을 지킬 수 있습니다.`, '보완 후 재요청해야 검수를 확정할 수 있습니다.', act('보완 처리 →', u('/tests?tab=acceptance&status=REWORK_REQUIRED')), null, '모든 검수가 승인되면 전환을 준비합니다.');
         if (n(acc.requested)) return out('ACC_PENDING', '검수 결과를 기록하세요', `검수 요청 ${acc.requested}건이 고객 확인을 기다립니다. 승인·반려·보완 결과를 기록해야 미완료 항목을 빠짐없이 정리할 수 있습니다.`, '검수 결과(승인/반려/보완)를 기록해야 미완료 항목을 정리할 수 있습니다.', act('검수 결과 기록 →', u('/tests?tab=acceptance&status=REQUESTED')), null, '검수가 모두 승인되면 전환을 준비합니다.');
         if (n(acc.draft)) return out('ACC_DRAFT', '작성 중인 검수를 요청하세요', `작성 중 검수 ${acc.draft}건이 있습니다. 검수를 요청해야 고객 확인 절차가 시작되고 오픈 일정이 확정됩니다.`, '검수 요청이 있어야 고객 확인 절차가 시작됩니다.', act('검수 요청 →', u('/tests?tab=acceptance&status=DRAFT')), null, '검수 결과를 기록합니다.');
+        // Phase 6 US-2: one approved 검수 is not the whole scope — 1차·2차 검수가 범위 내 요구사항을 모두 덮어야 끝납니다
+        if (n(acc.scope_target) && n(acc.scope_accepted) < n(acc.scope_target)) return out('ACC_SCOPE', '검수가 범위 전체를 덮도록 나머지를 검수받으세요', `${accScopeText(acc)}. 나머지 ${n(acc.scope_target) - n(acc.scope_accepted)}건을 검수에 묶어 고객 승인을 받아야 검수가 끝납니다.`, '범위 내 요구사항이 모두 승인된 검수에 들어가야 잔금 청구의 근거가 됩니다.', act('검수 범위 보기', u('/tests?tab=acceptance&new=1')), null, '검수가 범위 전체를 덮으면 전환과 오픈을 진행합니다.');
       }
       const open = [];
       if (n(iss.active)) open.push(`열린 이슈 ${iss.active}건`);
       if (n(tst.last_fail)) open.push(`실패 테스트 ${tst.last_fail}건`);
       if (n(chg.approved_unimplemented)) open.push(`미반영 변경 ${chg.approved_unimplemented}건`);
-      if (open.length) return out('GO_LIVE_OPEN', '오픈 전 미완료 항목을 정리하세요', `${open.join(' · ')}. 남은 항목을 정리하거나 운영 이관 항목으로 기록해야 안정적으로 오픈할 수 있습니다.`, '남은 항목을 정리하거나 운영 이관 항목으로 기록해야 안정적으로 오픈할 수 있습니다.', act(n(iss.active) ? '열린 이슈 처리 →' : n(tst.last_fail) ? 'Fail 테스트 조치 →' : '변경 반영 확인 →', u(n(iss.active) ? '/issues' : n(tst.last_fail) ? '/tests?last_result=FAIL' : '/changes?status=APPROVED')), null, '정리가 끝나면 전환 계획·교육·오픈를 진행합니다.');
+      // US-3: before 오픈 the remaining items are decided in the 오픈 dialog (처리 or 운영 이관); after 오픈 they are recorded → no warning
+      if (open.length && !goLiveDone(phase)) return out('GO_LIVE_OPEN', '오픈 전 남은 항목을 정리하세요', `${open.join(' · ')}. 오픈할 때 남은 항목을 하나씩 처리하거나 운영 이관으로 넘깁니다. 운영 이관한 항목은 07에서 이어서 볼 수 있습니다.`, '남은 항목은 처리하거나 운영 이관으로 넘겨야 오픈과 함께 사라지지 않습니다.', act(n(iss.active) ? '열린 이슈 처리 →' : n(tst.last_fail) ? '실패 테스트 조치 →' : '변경 반영 확인 →', u(n(iss.active) ? '/issues' : n(tst.last_fail) ? '/tests?last_result=FAIL' : '/changes?status=APPROVED')), act('오픈 완료 처리', u('?golive=1')), '정리가 끝나면 전환 계획·교육·오픈을 진행합니다.');
       return out('TRANSITION_RUN', '검수가 승인되었습니다 — 전환과 오픈을 진행하세요', '검수가 승인되었습니다. 전환 계획·데이터 마이그레이션·사용자 교육을 마치고 오픈 후 안정화까지 기록해 두면 운영 이관이 매끄러워집니다.', '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('현황 보기 →', u('/overview')), actCta ? null : move ? act('현황 보기 →', u('/overview')) : null, nextPhaseText);
     }
     case 'OPERATIONS': {
-      if (n(iss.active)) return out('OPS_ISSUES', '운영 이관 전 열린 이슈를 정리하세요', `열린 이슈 ${iss.active}건이 남아 있습니다. 해결하거나 운영 이관 대상으로 기록해 두어야 운영 단계에서 책임이 비지 않습니다.`, '남은 이슈는 해결하거나 운영 이관 대상으로 기록해야 합니다.', act('이슈 처리 →', u('/issues')), act('현황 보기 →', u('/overview')), '운영 이관과 종료 정리를 진행합니다.');
+      // Phase 6 US-3: first line = what 오픈 handed over (표시만 — 07 spec turns it into work); carried issues are not 'unrecorded' any more
+      if (goLive && goLive.carryovers && goLive.carryovers.length) { const t = `오픈 때 운영으로 넘긴 항목 ${goLive.carryovers.length}건`; warnings.unshift(t); warningLinks[t] = u('?carryovers=1'); }   // always the first line
+      const fresh = n(iss.active) - n(goLive && goLive.open_issues_carried);
+      if (fresh > 0) return out('OPS_ISSUES', '오픈 뒤 열린 이슈를 정리하세요', `${goLive ? '오픈 뒤 새로 열린' : '열린'} 이슈 ${fresh}건이 남아 있습니다. 해결하거나 담당을 정해 두어야 운영 단계에서 책임이 비지 않습니다.`, '남은 이슈는 해결하거나 운영 담당을 정해야 합니다.', act('이슈 처리 →', u('/issues')), act('현황 보기 →', u('/overview')), '운영 이관과 종료 정리를 진행합니다.');
       return out('OPS_HANDOVER', '운영 이관과 종료 정리를 진행하세요', '운영 인수인계·유지보수 체계·SLA·정기 배포 계획을 정리해 두면 운영 단계와 다음 프로젝트에서 같은 기준을 재사용할 수 있습니다.', '종료 정리(결과 공유, 운영 이관)를 남겨야 운영 단계와 다음 프로젝트에서 재사용할 수 있습니다.', actCta || act('현황 보기 →', u('/overview')), act('주간보고 보기 →', u('/reports')), null);
     }
     default:

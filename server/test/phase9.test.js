@@ -182,7 +182,7 @@ test('weekly report: default period, generate (structured + sections + markdown)
   const cr = await A.cr({ title: 'CR approved' }); await A.c('PATCH', `${A.purl}/changes/${cr.id}`, { schedule_impact_days: 2 }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } });
   const t1 = await A.tc({ title: 'T pass' }); await A.c('POST', `${A.purl}/tests/${t1.id}/executions`, { result: 'PASS' });
   const t2 = await A.tc({ title: 'T fail' }); await A.c('POST', `${A.purl}/tests/${t2.id}/executions`, { result: 'FAIL' });
-  const a1 = await A.acc({ title: 'Acc accepted', requirements: [r1.id] }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'accept' });
+  const a1 = await A.acc({ title: 'Acc accepted', requirements: [r1.id] }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'accept', customer_approval: { approver_name: '고객 담당', date: '2026-01-05', method: 'EMAIL', evidence: '회신 메일' } });
 
   const list0 = await A.c('GET', `${A.purl}/weekly-reports`); assert.equal(list0.status, 200); assert.deepEqual(list0.json.items, []); assert.ok(list0.json.default_period.period_start);
   const period = { period_start: ymd(-3), period_end: ymd(0) };

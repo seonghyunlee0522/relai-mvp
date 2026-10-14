@@ -19,6 +19,7 @@ import { projectGuidance } from './guidance.js';
 import { loadBaseline } from './req-baseline.js';
 import { weeklyReportState } from './reports.js';
 import { PHASE_BY_KEY } from './templates/default-phases.js';
+import { goLiveOf } from './golive.js';
 
 const n = (v) => Number(v) || 0;
 
@@ -30,11 +31,23 @@ export async function guidanceContext(db, project) {
   const reqBaseline = (await loadBaseline(db, project, { stats: stats.requirements }));   // 02 요구사항 기준선 승인 (Phase 2)
   const traits = { data_migration: project.data_migration, has_external_integration: project.has_external_integration };
   const keyDatesPending = project.current_phase === 'ANALYSIS_DESIGN' ? (await pendingKeyDates(db, project)) : [];   // 03 MILESTONES: 01 주요 일정 가져오기 suggestion (US-4)
+  const goLive = (await goLiveOf(db, project.id));   // Phase 6 US-3: 오픈 기록 (오픈일 · 운영 이관)
+  const later = ['TRANSITION_GO_LIVE', 'OPERATIONS'].includes(project.current_phase);
+  const dataReqs = later && project.data_migration === 'YES' ? (await db.all(`SELECT id, display_id, title FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND type = 'DATA' ORDER BY sequence_number LIMIT 5`, [project.id])) : [];   // US-4
   const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections, req_baseline: reqBaseline }, traits, overdue_tasks: overdue, key_dates_pending: keyDatesPending,
-    weekly_report: (await weeklyReportState(db, project.id)) }));   // 04 WEEKLY_REPORT (US-3)
+    weekly_report: (await weeklyReportState(db, project.id)), go_live: goLive, data_requirements: dataReqs }));   // 04 WEEKLY_REPORT (US-3)
   const scopeOut = (def.definition.scope_out || []).map((x) => x.text).filter(Boolean);   // Charter 제외 범위 → 02 범위 확정 hint
-  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats, overdue_tasks: overdue });
-  return { stats, def, overdue, guide, guidance, reqBaseline };
+  const goLiveCtx = later && goLive ? { ...goLive, ...(await carriedStillOpen(db, project.id, goLive)) } : null;
+  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats, overdue_tasks: overdue, go_live: goLiveCtx });
+  return { stats, def, overdue, guide, guidance, reqBaseline, goLive };
+}
+
+/** Issues / approved CRs carried into 07 at 오픈 that are still open — they are recorded already, not a new warning. */
+async function carriedStillOpen(db, projectId, gl) {
+  const ids = (t) => gl.carryovers.filter((c) => c.type === t).map((c) => c.id);
+  const cnt = async (sql, list) => (list.length ? n((await db.get(`${sql} AND id IN (${list.map(() => '?').join(',')})`, [projectId, ...list])).n) : 0);
+  return { open_issues_carried: await cnt(`SELECT COUNT(*) n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED')`, ids('ISSUE')),
+    approved_crs_carried: await cnt(`SELECT COUNT(*) n FROM change_requests WHERE project_id = ? AND archived_at IS NULL AND status = 'APPROVED'`, ids('CR')) };
 }
 
 /**

@@ -15,10 +15,12 @@ import { state } from '../core/state.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 import { md } from '../shared/kst-date.js';
 import { term } from '../project/initiation.js';
+import { carryIndex, carryTag } from '../project/golive.js';
 
 export async function changesPage(id) {
   const main = $('#main');
   const [g, ai, { members }] = await Promise.all([api('GET', wsApi(`/${id}`)), aiStatus(id), api('GET', `/api/workspaces/${state.workspace.id}/members`)]);
+  const carry = carryIndex(g);   // Phase 6 US-3: 운영 이관 (오픈 기록)
   const p = g.project;
   const archived = p.status === 'ARCHIVED';
   document.title = `변경 요청 — ${p.name} — RELAI`;
@@ -70,7 +72,7 @@ export async function changesPage(id) {
           <thead><tr><th>ID</th><th>제목</th><th>상태</th><th>우선순위</th><th>요청자</th><th class="num">관련 요구사항</th><th class="num">일정 영향</th><th class="num">비용 영향</th><th>수정일</th></tr></thead>
           <tbody>${raw(rows.map((c) => html`<tr class="${sel && sel.id === c.id ? 'is-sel' : ''} ${c.archived_at ? 'is-arch' : ''}" data-row="${c.id}">
             <td class="mono">${c.display_id}</td>
-            <td class="ttl"><span>${c.title}</span>${raw(c.impact_count ? html`<small title="영향 WBS ${c.impact_count}개">WBS ${c.impact_count}</small>` : '')}${raw(c.archived_at ? '<small>보관됨</small>' : '')}</td>
+            <td class="ttl"><span>${c.title}</span>${raw(c.impact_count ? html`<small title="영향 WBS ${c.impact_count}개">WBS ${c.impact_count}</small>` : '')}${raw(c.archived_at ? '<small>보관됨</small>' : '')}${raw(carryTag(carry, 'CR', c.id))}</td>
             <td>${raw(statusChip(CR_STATUS, CR_STATUS_CHIP, c.status))}${raw(apvLine(c, true))}</td>
             <td>${raw(prText(c.priority, CR_PRIORITY))}</td>
             <td>${c.requester_organization || c.requester_name || raw('<span class="dim">-</span>')}${raw(c.requester_organization && c.requester_name ? html`<small class="dim" style="margin-left:6px">${c.requester_name}</small>` : '')}</td>
@@ -220,6 +222,7 @@ export async function changesPage(id) {
     return html`${raw(drawerHead(c.display_id, statusChip(CR_STATUS, CR_STATUS_CHIP, st), { archived: Boolean(c.archived_at) }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: '영향 범위', count: liveReq.length + liveImp.length }, { key: 'hist', label: '변경 이력', count: c.history.length }], dtab))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
+      ${raw(carry[`CR:${c.id}`] !== undefined ? html`<p class="carryline" data-carryline><span class="carry" style="margin-left:0">운영 이관</span> · ${carry[`CR:${c.id}`]}</p>` : '')}
       <input class="dtitle" data-field="title" value="${c.title}" maxlength="200" ${fieldsRo ? 'disabled' : ''} aria-label="제목">
       ${raw(decision())}
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${fieldsRo ? 'disabled' : ''}>${c.description}</textarea>

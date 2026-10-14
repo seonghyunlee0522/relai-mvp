@@ -205,7 +205,8 @@ test('acceptances: ACC-001, transitions, decision note, links, test summary, lis
   assert.equal((await tr('accept')).status, 409);
   r = await tr('resubmit'); assert.equal(r.json.acceptance.status, 'REQUESTED');
   assert.equal((await tr('reject')).status, 400);
-  r = await tr('accept'); assert.equal(r.json.acceptance.status, 'ACCEPTED'); assert.ok(r.json.acceptance.accepted_at);
+  assert.equal((await tr('accept')).status, 422);   // Phase 6 US-1: 고객 승인 기록 required
+  r = await tr('accept', { customer_approval: { approver_name: '고객 담당', date: '2026-01-05', method: 'EMAIL', evidence: '회신 메일' } }); assert.equal(r.json.acceptance.status, 'ACCEPTED'); assert.ok(r.json.acceptance.accepted_at);
   assert.equal((await tr('submit')).status, 409);
   assert.ok(r.json.acceptance.history.filter((h) => h.action_type === 'STATUS_CHANGED').length >= 4);
   // reject path on ACC-002

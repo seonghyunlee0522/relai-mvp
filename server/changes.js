@@ -44,7 +44,7 @@ export function customerApprovalView(raw, stakeholders) {
   return { ...a, recorded, approver: who, method_label: CR_APPROVAL_METHODS[a.method] || '', summary: recorded ? parts.join(' · ') : '' };
 }
 /** 422 customer_approval_required — keyed like the shared form (approval.approver · approval.date · approval.method · approval.evidence). */
-function approvalRequired(a, who) {
+export function approvalRequired(a, who) {
   const f = {};
   if (!who) f['approval.approver'] = a.approver_id ? '선택한 승인자가 이해관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.';
   if (!a.date) f['approval.date'] = '승인일을 입력하세요.';

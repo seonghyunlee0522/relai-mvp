@@ -164,6 +164,10 @@ function weeklyReport(ctx) {
   if (wr.state === 'DRAFT') return prog('초안 작성 중', act('이어서 작성', `${ru}/${wr.report_id}`), { row_action: true, row_text: true });
   return none('이번 주 주간보고를 만드세요', act('주간보고 만들기', `${ru}?new=week`), { row_action: true, row_text: true });
 }
+/** 06 ACCEPTANCE progress line (US-2). */
+export const accScopeText = (a) => `범위 내 요구사항 ${n(a.scope_target)}건 중 ${n(a.scope_accepted)}건이 승인된 검수에 들어 있습니다`;
+/** '10/20' from a YYYY-MM-DD date. */
+const mdYmd = (d) => { const m = /^\d{4}-(\d{2})-(\d{2})/.exec(d || ''); return m ? `${Number(m[1])}/${Number(m[2])}` : ''; };
 /** '10/14' (Korea time) from an ISO timestamp. */
 const mdOf = (iso) => { if (!iso) return ''; const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit' }).format(new Date(iso)); const [m, dd] = d.split('-'); return `${Number(m)}/${Number(dd)}`; };
 
@@ -202,25 +206,33 @@ function transition(key, ctx) {
   const u = (qs = '') => `/app/projects/${ctx.pid}/tests?tab=acceptance${qs ? '&' + qs.replace(/^\?/, '') : ''}`;
   switch (key) {
     case 'ACCEPTANCE': {
+      // Phase 6 US-2: 완료 = 범위 내 확정 요구사항이 모두 승인된 검수에 들어 있음 (1차·2차 검수는 합계). No such requirement → every 검수 approved (as before).
+      const tgt = n(a.scope_target); const scope = tgt ? ` ${accScopeText(a)}.` : '';
+      if (tgt && n(a.scope_accepted) >= tgt) return ok(`범위 내 요구사항 ${tgt}건이 모두 승인된 검수에 들어 있습니다.`, act('검수 결과 보기 →', u('?status=ACCEPTED')));
       if (n(a.total) === 0) return none('아직 검수 항목이 없습니다. 검수 대상 요구사항과 테스트를 묶어 검수를 요청하세요.', act('검수 항목 작성 →', u('?new=1')));
-      if (n(a.rework)) return prog(`보완 필요 ${a.rework}건이 있습니다.`, act('보완 처리 →', u('?status=REWORK_REQUIRED')), { crit: true });
-      if (n(a.requested)) return prog(`검수 요청 ${a.requested}건이 고객 확인을 기다립니다.`, act('검수 결과 기록 →', u('?status=REQUESTED')));
-      if (n(a.draft)) return prog(`작성 중 검수 ${a.draft}건이 있습니다.`, act('검수 요청 →', u('?status=DRAFT')));
+      if (n(a.rework)) return prog(`보완 필요 ${a.rework}건이 있습니다.${scope}`, act('보완 처리 →', u('?status=REWORK_REQUIRED')), { crit: true });
+      if (n(a.requested)) return prog(`검수 요청 ${a.requested}건이 고객 확인을 기다립니다.${scope}`, act('검수 결과 기록 →', u('?status=REQUESTED')));
+      if (n(a.draft)) return prog(`작성 중 검수 ${a.draft}건이 있습니다.${scope}`, act('검수 요청 →', u('?status=DRAFT')));
+      if (tgt) return prog(`${accScopeText(a)}.`, act('검수 범위 보기', u('?new=1')), { row_text: true });
       if (n(a.rejected) && !n(a.accepted)) return prog(`반려된 검수 ${a.rejected}건이 있습니다.`, act('검수 보기 →', u('?status=REJECTED')));
       return ok(`검수 ${a.accepted}건이 모두 승인되었습니다.`, act('검수 결과 보기 →', u('?status=ACCEPTED')));
     }
+    case 'WEEKLY_REPORT': return weeklyReport(ctx);   // Phase 6 US-5
     case 'GO_LIVE': {
+      // Phase 6 US-3: 오픈 completes only through the 오픈 dialog (오픈일 + 남은 항목 처리 / 운영 이관); the stored record wins
+      const gl = ctx.go_live;
+      if (gl && gl.date) return ok(`오픈 ${mdYmd(gl.date)}${gl.carryovers.length ? ` · 운영 이관 ${gl.carryovers.length}건` : ''}`, null, { row_text: true });
       const open = [];
       if (n(is.active)) open.push(`열린 이슈 ${is.active}건`);
       if (n(t.last_fail)) open.push(`실패 테스트 ${t.last_fail}건`);
       if (n(a.requested) + n(a.rework)) open.push(`미완료 검수 ${n(a.requested) + n(a.rework)}건`);
       if (n(c.approved_unimplemented)) open.push(`미반영 변경 ${c.approved_unimplemented}건`);
-      return open.length ? manual(`오픈 전 확인: ${open.join(' · ')}`, act(n(is.active) ? '열린 이슈 확인 →' : n(t.last_fail) ? 'Fail 테스트 확인 →' : '확인 →', n(is.active) ? `/app/projects/${ctx.pid}/issues` : n(t.last_fail) ? `/app/projects/${ctx.pid}/tests?last_result=FAIL` : `/app/projects/${ctx.pid}/overview`))
-        : manual('오픈을 막는 미완료 항목이 없습니다. 오픈 후 완료 처리하세요.', cl(ctx, key));
+      return open.length ? manual(`오픈 전에 정할 항목: ${open.join(' · ')} — 오픈할 때 처리하거나 운영 이관으로 넘깁니다.`, act(n(is.active) ? '열린 이슈 확인 →' : n(t.last_fail) ? '실패 테스트 확인' : '확인 →', n(is.active) ? `/app/projects/${ctx.pid}/issues` : n(t.last_fail) ? `/app/projects/${ctx.pid}/tests?last_result=FAIL` : `/app/projects/${ctx.pid}/overview`))
+        : manual('오픈을 막는 미완료 항목이 없습니다. 오픈하면 완료 처리에서 오픈일을 기록하세요.', act('오픈 완료 처리', `/app/projects/${ctx.pid}?golive=1`));
     }
     case 'STABILIZE': return n(is.active) ? manual(`열린 이슈 ${is.active}건을 모니터링 중입니다.`, act('이슈 처리 →', `/app/projects/${ctx.pid}/issues`)) : manual('오픈 후 발생하는 문제를 이슈로 기록하고 처리합니다.', cl(ctx, key));
     case 'CUTOVER_PLAN': return manual('전환 순서, 일정, 담당, 롤백 기준을 체크리스트로 정리합니다.', cl(ctx, key));
-    case 'DATA_MIGRATION': return manual('이관 대상 분석, 매핑, 리허설, 본 이관과 검증을 수행합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
+    case 'DATA_MIGRATION': return manual(ctx.traits && ctx.traits.data_migration === 'YES' ? '이관 대상 분석, 매핑, 리허설, 본 이관과 검증을 수행합니다. 프로젝트 특성이 데이터 이관 있음이라 필수입니다.' : '이관 대상 분석, 매핑, 리허설, 본 이관과 검증을 수행합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
     case 'TRAINING': return manual('사용자·운영자 교육과 매뉴얼 전달을 체크리스트로 관리합니다.', cl(ctx, key));
     default: return manual('');
   }
@@ -246,6 +258,14 @@ export function interfaceEmphasis(traits) {
   return parts.length ? `(프로젝트 특성: ${parts.join('·')} 있음)` : null;
 }
 
+/** Phase 6 US-4: 06 DATA_MIGRATION importance is computed from the project trait on every read (stored value untouched):
+ * 데이터 이관 있음 → 필수 · 미정 → 권장 · 없음 → 선택. The REQUIRED gate (gate_met) and the 건너뛰기 check use the same value. */
+const DM_IMPORTANCE = { YES: 'REQUIRED', TBD: 'RECOMMENDED', NO: 'OPTIONAL' };
+export function effectiveImportance(phaseKey, stepKey, stored, traits) {
+  if (phaseKey === 'TRANSITION_GO_LIVE' && stepKey === 'DATA_MIGRATION' && traits && DM_IMPORTANCE[traits.data_migration]) return DM_IMPORTANCE[traits.data_migration];
+  return stored;
+}
+
 const RULES = { INITIATION: initiation, REQUIREMENTS: requirements, ANALYSIS_DESIGN: analysisDesign, DEVELOPMENT: development, TESTING: testing, TRANSITION_GO_LIVE: transition, OPERATIONS: operations };
 
 /** Live state of one stored step: a manual mark wins; otherwise the derived state; a note on a manual activity means it is in progress. */
@@ -269,9 +289,14 @@ export function activityStates(phaseKey, steps, ctx) {
     const r0 = rule ? rule(s.step_key, ctx) : manual(s.completion_criteria);
     const hasList = CHECKLIST_STEP_KEYS.has(s.step_key);
     const list = hasList && ctx.checklists ? ctx.checklists[s.id] || { total: 0, done: 0 } : null;
-    const r = hasList ? checklistDerived(r0, list) : r0;
+    let r = hasList ? checklistDerived(r0, list) : r0;
+    // 오픈 never completes from its checklist alone — only the 오픈 dialog records it (US-3)
+    if (s.step_key === 'GO_LIVE' && phaseKey === 'TRANSITION_GO_LIVE' && r.derived === 'COMPLETED' && r0.derived === null) r = { ...r, derived: 'IN_PROGRESS', text: `${r.text} · 오픈 완료 처리가 남았습니다` };
     const state = r.reopen ? 'IN_PROGRESS' : resolveState(s, r.derived);   // reopen: stored 완료 no longer holds (승인 후 변경 → 다시 승인 필요)
-    let importance = s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL'); let description = s.description;
+    let importance = effectiveImportance(phaseKey, s.step_key, s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL'), ctx.traits); let description = s.description;
+    // US-4: 이관 있음 → the in-scope DATA requirements as links at the end of the row
+    const links = phaseKey === 'TRANSITION_GO_LIVE' && s.step_key === 'DATA_MIGRATION' && importance === 'REQUIRED' && Array.isArray(ctx.data_requirements)
+      ? ctx.data_requirements.map((q) => ({ label: `${q.display_id} ${q.title}`, href: `/app/projects/${ctx.pid}/requirements?sel=${q.id}` })) : null;
     const emph = phaseKey === 'REQUIREMENTS' && s.step_key === 'INTERFACE' && importance === 'OPTIONAL' ? interfaceEmphasis(ctx.traits) : null;
     if (emph) { importance = 'RECOMMENDED'; description = `${description} ${emph}`; }
     return { ...s, description, importance, importance_label: IMPORTANCE_LABEL[importance],
@@ -279,7 +304,7 @@ export function activityStates(phaseKey, steps, ctx) {
       hint: state === 'COMPLETED' && r.hint ? r.hint : null, import_ms: state === 'NOT_STARTED' && r.import_ms ? { count: r.import_ms, text: r.text } : null,
       cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, row_action: Boolean(r.row_action) && state !== 'COMPLETED' && state !== 'SKIPPED', row_text: Boolean(r.row_text), crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
       // manual = no data signal decides this activity: What's Next offers 완료 처리 for it (checklist ones too — a hand mark wins)
-      manual: r0.derived === null, checklist: list };
+      manual: r0.derived === null, checklist: list, links: links && links.length ? links : null, go_live: s.step_key === 'GO_LIVE' && phaseKey === 'TRANSITION_GO_LIVE' };
   });
 }
 

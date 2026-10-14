@@ -14,6 +14,9 @@
 export const TEST_PLAN_TITLE = '요구사항별 테스트 준비';
 export const TEST_PLAN_DESCRIPTION = '범위 내 확정 요구사항마다 테스트를 연결합니다. 테스트 대신 다른 방법으로 확인한다면 제외 사유를 남깁니다.';
 export const TEST_PLAN_CRITERIA = '범위 내 요구사항이 모두 테스트와 연결되었거나 제외 사유가 있습니다.';
+/** 06 ACCEPTANCE (Phase 6 US-2): 완료 = 범위 내 확정 요구사항이 모두 승인된 검수에 들어 있음. Migration 37 copies these into existing projects. */
+export const ACCEPTANCE_DESCRIPTION = '범위 내 확정 요구사항을 검수에 묶어 고객 검수를 요청하고, 고객 승인(누가·언제·어떻게)을 기록합니다. 1차·2차로 나눠도 합계로 판단합니다.';
+export const ACCEPTANCE_CRITERIA = '범위 내 확정 요구사항이 모두 승인된 검수에 들어 있습니다.';
 export const DEFAULT_TEMPLATE_KEY = 'LIFECYCLE_V2';
 
 export const IMPORTANCE = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
@@ -93,13 +96,14 @@ export const DEFAULT_PHASES = [
     ],
   },
   {
-    key: 'TRANSITION_GO_LIVE', name: '전환 및 오픈', short: '전환·오픈', en: 'Transition & 오픈',
+    key: 'TRANSITION_GO_LIVE', name: '전환 및 오픈', short: '전환·오픈', en: 'Transition & Go-Live',
     description: '검수로 인수 승인을 받고, 전환 계획·데이터 마이그레이션·교육을 거쳐 서비스를 오픈하고 안정화합니다.',
     steps: [
-      A('ACCEPTANCE', '검수 / 인수 승인', '검수 대상 요구사항과 테스트를 묶어 고객 검수를 요청하고 승인·보완 결과를 확정합니다. 전환 및 오픈으로 넘어가는 첫 관문입니다.', '검수 항목이 모두 승인되었습니다.', 'REQUIRED', 'acceptance'),
+      A('ACCEPTANCE', '검수 / 인수 승인', ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA, 'REQUIRED', 'acceptance'),   // Phase 6 US-2 (migration 37)
       A('CUTOVER_PLAN', '전환 계획 수립', '운영 환경 전환 순서, 일정, 담당, 롤백 기준을 정리합니다.', '전환 계획이 정리되어 있습니다.', 'REQUIRED', null),
       A('DATA_MIGRATION', '데이터 마이그레이션', '이관 대상 데이터의 매핑, 리허설, 본 이관과 검증을 수행합니다.', '데이터 이관과 검증이 완료되어 있습니다.', 'OPTIONAL', null),
       A('TRAINING', '사용자 교육 / 매뉴얼', '사용자와 운영자에게 안내 자료를 전달하고 필요한 교육을 진행합니다.', '교육 또는 매뉴얼 전달이 완료되어 있습니다.', 'RECOMMENDED', null),
+      A('WEEKLY_REPORT', '주간보고 작성·공유', '매주 진행·지연·이슈·변경을 정리해 고객에게 보냅니다. 데이터로 초안이 만들어집니다.', '이번 주 주간보고가 확정되어 있습니다.', 'RECOMMENDED', 'reports'),   // Phase 6 US-5 (migration 37)
       A('GO_LIVE', '오픈', '계획한 시점에 서비스를 오픈합니다. 오픈 전 열려 있는 이슈, 실패 테스트, 미반영 변경을 확인합니다.', '서비스가 오픈되어 사용자가 접근할 수 있습니다.', 'REQUIRED', null),
       A('STABILIZE', '안정화', '오픈 후 문제를 모니터링하고 긴급 조치 사항을 정리합니다.', '안정화 기간의 이슈가 정리되어 있습니다.', 'RECOMMENDED', 'issues'),
     ],

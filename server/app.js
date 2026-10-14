@@ -9,6 +9,9 @@ import {
 import { parseSignup, parseProject, ValidationError } from './validate.js';
 import { ensurePhases, loadGuide, updateStep, transitionTo } from './guide.js';
 import * as CL from './checklists.js';
+import * as GL from './golive.js';
+import { todayKst } from '../public/app/shared/kst-date.js';
+import { effectiveImportance } from './activities.js';
 import * as D from './definition.js';
 import { buildProjectCharter } from './charter.js';
 import { buildPlanMarkdown, PLAN_TITLE } from './charter-export.js';
@@ -308,8 +311,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
    * guidanceContext() (home.js) is shared with the Workspace Home cards so both screens show the same Next Action. */
   const guideContext = (project) => guidanceContext(db, project);
   const guideResponse = async (project, pre = null) => {
-    const { stats, def, guide, guidance } = pre || (await guideContext(project));
-    return { project, ...guide, ...stats, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
+    const { stats, def, guide, guidance, goLive } = pre || (await guideContext(project));
+    // go_live (Phase 6 US-3): 오픈 기록 — the grey 운영 이관 tags on lists read it
+    return { project, ...guide, ...stats, go_live: goLive || null, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
       definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, scope_out: (def.definition.scope_out || []).map((x) => x.text).filter(Boolean), sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
@@ -356,8 +360,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (status !== undefined) {
       if (!['TODO', 'COMPLETED', 'SKIPPED'].includes(status)) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { status: '상태 값이 올바르지 않습니다.' } });
       if (status === 'SKIPPED') {   // REQUIRED activities cannot be skipped (importance ↔ skippable kept loosely coupled: an is_skippable column can override later)
-        const st = (await db.get(`SELECT s.importance FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
-        if (st && st.importance === 'REQUIRED') return fail(res, 409, 'not_skippable', '필수 업무는 건너뛸 수 없습니다.');
+        const st = (await db.get(`SELECT s.importance, s.step_key, p.phase_key FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
+        if (st && effectiveImportance(st.phase_key, st.step_key, st.importance, project) === 'REQUIRED') return fail(res, 409, 'not_skippable', '필수 업무는 건너뛸 수 없습니다.');
       }
       if (status === 'COMPLETED') {   // 01 착수 결과 승인 · 02 요구사항 기준선 승인 complete only with an approval record (their own 완료 처리 routes)
         const st = (await db.get(`SELECT s.step_key, p.phase_key FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
@@ -365,6 +369,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
           const sec = (await D.loadDefinition(db, project)).sections.find((x) => x.key === 'APPROVAL');
           if (sec && !sec.ready) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 착수 결과 승인에서 승인 기록을 입력하세요.');
         }
+        // Phase 6 US-3: 오픈 completes only through the 오픈 dialog (오픈일 + 남은 항목 운영 이관 — POST …/go-live)
+        if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'GO_LIVE') return fail(res, 409, 'go_live_required', '오픈은 오픈 완료 처리에서 오픈일과 남은 항목을 정해 완료합니다.');
         if (st && st.phase_key === 'REQUIREMENTS' && st.step_key === RB.STEP_KEY) {
           const m = await RB.loadBaseline(db, project);
           if (m.missing.length || !m.counts.in_scope) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 요구사항 기준선 승인에서 승인 기록을 입력하세요.');
@@ -382,6 +388,19 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.json({ step, ...(await guideResponse(project)) });
   }));
 
+  /* ---------- 06 오픈 (Phase 6 US-3; server/golive.js) ---------- */
+  app.get(`${base}/:pid/go-live`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json({ open_items: await GL.openItems(db, project.id), checklist_open: await GL.openChecklistItems(db, project.id), go_live: await GL.goLiveOf(db, project.id), today: todayKst() });
+  }));
+  app.post(`${base}/:pid/go-live`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const r = await tx(db, (d) => GL.recordGoLive(d, project, req.body || {}, req.user.id));
+    if (r.error === 'not_found') return fail(res, 404, 'not_found', '오픈 업무를 찾을 수 없습니다.');
+    if (r.error === 'already_live') return fail(res, 409, 'already_live', '이미 오픈 완료로 기록되어 있습니다.');
+    res.json({ go_live: r.go_live, milestone: r.milestone, ...(await guideResponse(project)) });
+  }));
+
   /* ---------- activity checklists (06 전환·오픈 · 07 운영; server/checklists.js) ---------- */
   const badItem = (res, errors) => fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: errors });
   const loadChecklistStep = async (req, res, project) => {
@@ -393,7 +412,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(`${base}/:pid/checklists`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
-    res.json({ items: await CL.listItems(db, project.id) });
+    res.json({ items: await CL.listItems(db, project.id), owners: await Q.performerOptions(db, project, (await SK.ownerOptions(db, project)).team) });   // US-6 담당 picker groups
   }));
   app.post(`${base}/:pid/steps/:sid/checklist`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
@@ -401,6 +420,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const { fields, errors } = CL.parseItem(req.body || {});
     if (Object.keys(errors).length) return badItem(res, errors);
     const step = await loadChecklistStep(req, res, project); if (!step) return;
+    if (!(await CL.ownerValid(db, project, fields))) return badItem(res, { owner_ref: '담당은 이 Workspace 멤버나 01 이해관계자 중에서 고르세요.' });
     res.status(201).json({ item: await CL.createItem(db, project.id, step, fields, req.user.id) });
   }));
   app.post(`${base}/:pid/steps/:sid/checklist/defaults`, guard, wrap(async (req, res) => {
@@ -416,6 +436,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const { fields, errors } = CL.parseItem(req.body || {}, { partial: true });
     if (Object.keys(errors).length) return badItem(res, errors);
     if (!Object.keys(fields).length) return fail(res, 400, 'validation_error', '변경할 내용이 없습니다.');
+    if (!(await CL.ownerValid(db, project, fields))) return badItem(res, { owner_ref: '담당은 이 Workspace 멤버나 01 이해관계자 중에서 고르세요.' });
     const item = await CL.updateItem(db, project.id, req.params.iid, fields, req.user.id);
     if (!item) return fail(res, 404, 'not_found', '체크리스트 항목을 찾을 수 없습니다.');
     res.json({ item });
@@ -1162,6 +1183,12 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const input = Q.parseAcceptance(req.body);
     const id = (await tx(db, async (db) => { const aid = (await Q.createAcceptance(db, project, input, req.user.id));
       for (const rid of Array.isArray(req.body?.requirements) ? req.body.requirements : []) { const o = (await Q.addAcceptanceLink(db, project, { id: aid }, 'REQUIREMENT', String(rid), req.user.id)); if (o.error) throw new ValidationError({ requirements: '요구사항을 찾을 수 없습니다.' }); }
+      if (req.body?.scope_all === true) {   // Phase 6 US-2 `범위 전체로 만들기`: every in-scope confirmed requirement not yet in an ACCEPTED 검수 + its tests
+        const tg = (await Q.scopeAllTargets(db, project.id));
+        const have = new Set((await db.all('SELECT target_id FROM acceptance_links WHERE acceptance_id = ?', [aid])).map((x) => x.target_id));
+        for (const rid of tg.requirements) if (!have.has(rid)) (await Q.addAcceptanceLink(db, project, { id: aid }, 'REQUIREMENT', rid, req.user.id));
+        for (const tid of tg.tests) (await Q.addAcceptanceLink(db, project, { id: aid }, 'TEST', tid, req.user.id));
+      }
       return aid; }));
     res.status(201).json((await aResp(project, id)));
   }));
@@ -1173,9 +1200,16 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
   app.post(`${abase}/:aid/transition`, guard, wrap(async (req, res) => {
     const ctx = (await aMutable(req, res)); if (!ctx) return;
-    const r = (await tx(db, async (db) => (await Q.transitionAcceptance(db, ctx.a, String(req.body?.action || ''), { note: req.body?.decision_note }, req.user.id))));
+    const r = (await tx(db, async (db) => (await Q.transitionAcceptance(db, ctx.a, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id))));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
     if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${r.from})에서는 이 작업을 할 수 없습니다.`);
+    res.json((await aResp(ctx.project, ctx.a.id)));
+  }));
+  /* Phase 6 US-1: 승인 기록 추가 — an ACCEPTED 검수 without a customer record gets one; the status never changes (same as the Phase 4 CR). */
+  app.patch(`${abase}/:aid/customer-approval`, guard, wrap(async (req, res) => {
+    const ctx = (await aMutable(req, res)); if (!ctx) return;
+    if (ctx.a.status !== 'ACCEPTED') return fail(res, 409, 'invalid_transition', '요청된 검수는 승인 버튼으로 고객 승인을 기록하세요.');
+    (await tx(db, async (db) => (await Q.saveAcceptanceApproval(db, ctx.project, ctx.a, req.body?.customer_approval, req.user.id))));
     res.json((await aResp(ctx.project, ctx.a.id)));
   }));
   app.post(`${abase}/:aid/archive`, guard, wrap(async (req, res) => { const ctx = (await aMutable(req, res)); if (!ctx) return; (await tx(db, async (db) => (await Q.archiveAcceptance(db, ctx.a, req.user.id)))); res.json((await aResp(ctx.project, ctx.a.id))); }));

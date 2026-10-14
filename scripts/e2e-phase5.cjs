@@ -267,7 +267,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   await page.goto(`${B.url}?phase=DEVELOPMENT`); await page.waitForSelector('.np--other');
   check('migration 36: 04 영역에는 없음', !/테스트 준비 미완료/.test(await page.textContent('.np--other')));
   await shot('10-past-05-gap.png');
-  if (DB) check('migration 36 recorded in schema_migrations', sql('SELECT MAX(version) FROM schema_migrations') === '36');
+  if (DB) check('migration 36 recorded in schema_migrations', Number(sql('SELECT MAX(version) FROM schema_migrations')) >= 36);   // later phases add 37+
 
   /* ---------- 375px ---------- */
   const m = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'ko-KR', storageState: await ctx.storageState() });

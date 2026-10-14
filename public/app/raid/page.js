@@ -12,10 +12,12 @@ import { statusChip } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
 import * as OP from '../shared/owner-picker.js';
+import { carryIndex, carryTag } from '../project/golive.js';
 
 export async function raidPage(id) {
   const main = $('#main');
   const g = await api('GET', wsApi(`/${id}`));
+  const carry = carryIndex(g);   // Phase 6 US-3: 운영 이관 (오픈 기록)
   const p = g.project;
   const archived = p.status === 'ARCHIVED';
   const { members } = await api('GET', `/api/workspaces/${state.workspace.id}/members`);
@@ -85,7 +87,7 @@ export async function raidPage(id) {
   const issueTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>심각도</th><th>상태</th><th>담당자</th><th>기한</th><th class="num">관련 WBS</th><th>수정일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
-      <td class="ttl"><span>${x.title}</span>${raw(x.source_risk_display_id ? html`<small title="원본 리스크">${x.source_risk_display_id}</small>` : '')}${raw(x.source_test_execution_id ? '<small title="테스트 실패에서 등록">테스트 실패</small>' : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
+      <td class="ttl"><span>${x.title}</span>${raw(x.source_risk_display_id ? html`<small title="원본 리스크">${x.source_risk_display_id}</small>` : '')}${raw(x.source_test_execution_id ? '<small title="테스트 실패에서 등록">테스트 실패</small>' : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}${raw(carryTag(carry, 'ISSUE', x.id))}</td>
       <td>${raw(sevBadge(x.severity))}</td><td>${raw(statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status))}</td>
       <td>${x.owner_name || raw('<span class="dim">-</span>')}${raw(OP.noAcct(x))}</td>
       <td class="${x.is_overdue ? 'is-overdue' : ''}">${raw(dcell(x.due_date))}${raw(x.is_overdue ? ' <small class="over">지남</small>' : '')}</td>
@@ -165,6 +167,7 @@ export async function raidPage(id) {
     return html`${raw(drawerHead(x.display_id, statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status) + sevBadge(x.severity) + (x.is_overdue ? '<span class="chip chip--hold">기한 지남</span>' : ''), { archived: Boolean(x.archived_at) }))}
     ${raw(detailTabs(x))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
+      ${raw(carry[`ISSUE:${x.id}`] !== undefined ? html`<p class="carryline" data-carryline><span class="carry" style="margin-left:0">운영 이관</span> · ${carry[`ISSUE:${x.id}`]}</p>` : '')}
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro ? 'disabled' : ''} aria-label="제목">
       ${raw(x.source_risk_id ? html`<p class="srcline">원본 리스크 · <a class="link" href="/app/projects/${p.id}/issues?tab=risks&sel=${x.source_risk_id}" data-link>${x.source_risk_display_id} ${x.source_risk_title}</a></p>` : '')}
       ${raw(x.source_test_id ? html`<p class="srcline">원본 테스트 · <a class="link" href="/app/projects/${p.id}/tests?sel=${x.source_test_id}" data-link>${x.source_test_label}</a> 실행 실패</p>` : '')}

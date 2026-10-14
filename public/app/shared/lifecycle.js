@@ -72,7 +72,7 @@ export const PHASE_ITEMS = {
     CL(pid, 'cutover', '전환 계획', 'CUTOVER_PLAN'),
     CL(pid, 'migration', '데이터 마이그레이션', 'DATA_MIGRATION'),
     CL(pid, 'training', '사용자 교육 / 매뉴얼', 'TRAINING'),
-    CL(pid, 'go-live', 'Go-Live', 'GO_LIVE'),
+    CL(pid, 'go-live', '오픈', 'GO_LIVE'),
     CL(pid, 'stabilize', '안정화', 'STABILIZE'),
   ],
   OPERATIONS: (pid) => [

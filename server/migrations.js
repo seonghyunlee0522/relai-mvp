@@ -8,7 +8,7 @@
  */
 import { ensurePhases, resetPhases } from './guide.js';
 import { randomUUID } from 'node:crypto';
-import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA } from './templates/default-phases.js';
+import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA, ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA } from './templates/default-phases.js';
 
 export const migrations = [
   { version: 1, name: 'projects.current_phase template-based (SQLite era)', up() {} },
@@ -125,6 +125,19 @@ export const migrations = [
       if (await db.get(`SELECT 1 FROM project_steps WHERE project_phase_id = ? AND step_key = 'WEEKLY_REPORT'`, [ph.id])) continue;
       const d = await db.get(`SELECT sequence FROM project_steps WHERE project_phase_id = ? AND step_key = 'DEFECTS'`, [ph.id]);
       const seq = d ? Number(d.sequence) + 1 : Number((await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM project_steps WHERE project_phase_id = ?', [ph.id])).n);
+      await db.run('UPDATE project_steps SET sequence = sequence + 1 WHERE project_phase_id = ? AND sequence >= ?', [ph.id, seq]);
+      await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 0, st.importance, st.linked_feature_type]);
+    }
+  } },
+  { version: 37, name: 'Phase 6 전환 및 오픈: acceptances.customer_approval, project_definitions.go_live, activity_checklist_items.owner_user_id / owner_stakeholder_id (schema.sql) + 06 ACCEPTANCE 설명·완료 기준 (범위 전체 검수) + WEEKLY_REPORT (주간보고 작성·공유) added to every project\'s 06 right before GO_LIVE as TODO', async up(db) {
+    await db.run(`UPDATE project_steps SET description = ?, completion_criteria = ?, updated_at = now()
+      WHERE step_key = 'ACCEPTANCE' AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'TRANSITION_GO_LIVE')`, [ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA]);
+    const st = PHASE_BY_KEY.TRANSITION_GO_LIVE.steps.find((x) => x.key === 'WEEKLY_REPORT');
+    for (const ph of await db.all(`SELECT id FROM project_phases WHERE phase_key = 'TRANSITION_GO_LIVE'`)) {
+      if (await db.get(`SELECT 1 FROM project_steps WHERE project_phase_id = ? AND step_key = 'WEEKLY_REPORT'`, [ph.id])) continue;
+      const gl = await db.get(`SELECT sequence FROM project_steps WHERE project_phase_id = ? AND step_key = 'GO_LIVE'`, [ph.id]);
+      const seq = gl ? Number(gl.sequence) : Number((await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM project_steps WHERE project_phase_id = ?', [ph.id])).n);
       await db.run('UPDATE project_steps SET sequence = sequence + 1 WHERE project_phase_id = ? AND sequence >= ?', [ph.id, seq]);
       await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 0, st.importance, st.linked_feature_type]);

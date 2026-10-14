@@ -66,7 +66,7 @@ export const PHASE_INTRO = {
   ANALYSIS_DESIGN: { what: '요구사항을 실행 가능한 작업(WBS)으로 구체화하고 담당자·일정·선후관계를 설계합니다.', outputs: ['WBS', '요구사항–WBS 연결', '담당자·일정·마일스톤'] },
   DEVELOPMENT: { what: '실행 계획대로 진행하면서 진척, 지연, Issue, 변경 요청을 관리합니다.', outputs: ['진행 현황', 'Issue', '변경 요청'] },
   TESTING: { what: '요구사항이 실제 시스템에 올바르게 구현되었는지 테스트로 검증하고 결함을 조치합니다.', outputs: ['Test Case', '실행 결과', 'Fail → Issue'] },
-  TRANSITION_GO_LIVE: { what: '검수로 인수 승인을 받고 전환·교육·오픈·안정화를 진행합니다.', outputs: ['검수 승인', '전환 계획', 'Go-Live'] },
+  TRANSITION_GO_LIVE: { what: '검수로 인수 승인을 받고 전환·교육·오픈·안정화를 진행합니다.', outputs: ['검수 승인', '전환 계획', '오픈'] },
   OPERATIONS: { what: '운영 조직에 이관하고 유지보수 체계와 종료 사항을 정리합니다.', outputs: ['운영 이관', '종료 정리'] },
 };
 export function phaseIntro(phaseKey, phaseName) {

@@ -68,7 +68,7 @@ export function exceptions(g, pid) {
     ['RISK', 'High 이상 Risk', n(rs.high_or_critical), u('/issues?tab=risks&risk_level=HIGH,CRITICAL'), 'crit', rs.critical ? `Critical ${rs.critical}건` : ''],
     ['OVERDUE', '지연 작업', n(w.overdue_tasks), u('/wbs?f=overdue'), 'crit', ''],
     ['MILESTONE', '지난 마일스톤', n(w.overdue_milestones), u('/wbs?view=gantt'), 'crit', ''],
-    ['FAIL', 'Fail 테스트', n(t.last_fail), u('/tests?last_result=FAIL'), 'crit', ''],
+    ['FAIL', '실패 테스트', n(t.last_fail), u('/tests?last_result=FAIL'), 'crit', ''],
     ['REWORK', '보완 필요 검수', n(a.rework), u('/tests?tab=acceptance&status=REWORK_REQUIRED'), 'warn', ''],
     ['CHANGE_APPROVED', '승인 후 미반영 변경', n(c.approved_unimplemented), u('/changes?status=APPROVED'), 'warn', ''],
     ['CHANGE_REVIEW', '검토 중 변경', n(c.under_review), u('/changes?status=UNDER_REVIEW'), 'warn', ''],

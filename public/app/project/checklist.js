@@ -1,6 +1,6 @@
 /* 06 전환·오픈 · 07 운영 — per-activity checklist (…/checklist?activity=KEY).
  *
- *   Activities with no dedicated work screen (전환 계획, 데이터 마이그레이션, 교육, Go-Live, 안정화, 운영 이관, 유지보수, SLA,
+ *   Activities with no dedicated work screen (전환 계획, 데이터 마이그레이션, 교육, 오픈, 안정화, 운영 이관, 유지보수, SLA,
  *   정기 배포, 종료 정리) are worked through a checklist: 항목 · 담당 · 기한 · 완료 · 메모. The activity's state derives from it
  *   on the server (activities.js): all items done → 완료, otherwise 진행 중. 완료 처리 / 건너뛰기 / 되돌리기 and the activity
  *   memo are the same stored marks What's Next uses (PATCH …/steps/:sid). Inputs save on change; no separate save button. */
@@ -9,6 +9,8 @@ import { $, html, raw, no2, todayLocal } from '../core/dom.js';
 import { projectHead } from './guide.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
+import { state } from '../core/state.js';
+import { goLiveDialog } from './golive.js';
 
 const PHASES = ['TRANSITION_GO_LIVE', 'OPERATIONS'];
 /** Activities of a phase that carry a checklist: manual ones the server pointed at this screen. */
@@ -18,7 +20,9 @@ const stCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ?
 export async function checklistPage(id) {
   const main = $('#main');
   const qs = new URLSearchParams(location.search);
-  let [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/checklists`))]);
+  let [g, r, mem] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/checklists`)), api('GET', `/api/workspaces/${state.workspace.id}/members`).catch(() => ({ members: [] }))]);
+  const members = mem.members || [];
+  const textMode = new Set();   // rows switched to 직접 입력 before anything is typed
   const p = g.project; const ro = p.status === 'ARCHIVED';
   let actKey = qs.get('activity');
 
@@ -33,13 +37,29 @@ export async function checklistPage(id) {
     return cur ? { ...cur, siblings: listActs(cur.ph) } : null;
   };
 
+  /* US-6 담당 = 담당자 선택기: RELAI 사용자 / 팀원 (계정 없음) / 고객사 (Phase 5 수행자 groups) + 직접 입력… (the old free text stays as is) */
+  const refOf = (it) => (it.owner_user_id ? `u:${it.owner_user_id}` : it.owner_stakeholder_id ? `s:${it.owner_stakeholder_id}` : it.owner || textMode.has(it.id) ? '__text' : '');
+  const ownerOpts = (cur, missing = '') => {
+    const o = r.owners || { team: [], clients: [] };
+    const grp = (label, list) => (list.length ? html`<optgroup label="${label}">${raw(list.map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join(''))}</optgroup>` : '');
+    return html`<option value="">담당 없음</option>${raw(grp('RELAI 사용자', members.map((m) => [`u:${m.id}`, m.name])))}${raw(grp('팀원 (계정 없음)', (o.team || []).map((t) => [`s:${t.id}`, `${t.name} · 팀원`])))}${raw(grp('고객사', (o.clients || []).map((t) => [`s:${t.id}`, `${t.name} · 고객사`])))}
+      ${raw(missing ? html`<option value="${cur}" selected>${missing}</option>` : '')}<option value="__text" ${cur === '__text' ? 'selected' : ''}>직접 입력…</option>`;
+  };
+  const ownerCell = (it, dis) => {
+    if (ro) return html`<span>${it.owner_display || '-'}${raw(it.owner_org ? html` <small class="dim">· ${it.owner_org}</small>` : '')}</span>`;
+    const cur = refOf(it);
+    const known = !/^[us]:/.test(cur) || members.some((m) => `u:${m.id}` === cur) || [...((r.owners || {}).team || []), ...((r.owners || {}).clients || [])].some((t) => `s:${t.id}` === cur);
+    return html`<div class="clk__own"><select class="select select--sm clk__in" data-own="${it.id}" aria-label="담당" ${dis}>${raw(ownerOpts(cur, known ? '' : it.owner_display || '(삭제된 담당자)'))}</select>
+      ${raw(cur === '__text' ? html`<input class="input clk__in" data-f="owner" value="${it.owner}" maxlength="100" placeholder="담당 (직접 입력)" ${dis} aria-label="담당 직접 입력">` : '')}</div>`;
+  };
+
   const itemRow = (it) => {
     const overdue = !it.done && it.due_date && it.due_date < todayLocal();
     const dis = ro ? 'disabled' : '';
     return html`<tr class="clk__row ${it.done ? 'is-done' : ''}" data-item="${it.id}">
       <td class="clk__ck"><input type="checkbox" data-f="done" ${it.done ? 'checked' : ''} ${dis} aria-label="완료"></td>
       <td><input class="input clk__in" data-f="title" value="${it.title}" maxlength="200" ${dis} aria-label="항목"></td>
-      <td><input class="input clk__in" data-f="owner" value="${it.owner}" maxlength="100" placeholder="담당" ${dis} aria-label="담당"></td>
+      <td>${raw(ownerCell(it, dis))}</td>
       <td><input class="input clk__in clk__date ${overdue ? 'is-overdue' : ''}" type="date" data-f="due_date" value="${it.due_date || ''}" ${dis} aria-label="기한" title="${overdue ? '기한이 지났습니다' : ''}"></td>
       <td><input class="input clk__in" data-f="note" value="${it.note}" maxlength="2000" placeholder="메모" ${dis} aria-label="메모"></td>
       <td class="clk__x">${raw(ro ? '' : html`<button type="button" class="link linkbtn clk__del" data-del="${it.id}" title="항목 삭제" aria-label="항목 삭제">✕</button>`)}</td>
@@ -81,7 +101,7 @@ export async function checklistPage(id) {
             ${raw(ro ? '' : '<button type="button" class="btn btn--secondary btn--sm" data-defaults>기본 항목으로 시작</button>')}</div>`)}
         ${raw(ro ? '' : html`<form class="clk__add" data-add autocomplete="off">
           <input class="input" name="title" maxlength="200" placeholder="새 항목" aria-label="새 항목" required>
-          <input class="input clk__w-owner" name="owner" maxlength="100" placeholder="담당" aria-label="담당">
+          <span class="clk__w-owner clk__own"><select class="select" name="owner_ref" aria-label="담당" data-add-own>${raw(ownerOpts(''))}</select><input class="input" name="owner" maxlength="100" placeholder="담당 (직접 입력)" aria-label="담당 직접 입력" hidden></span>
           <input class="input clk__w-due" type="date" name="due_date" aria-label="기한">
           <button type="submit" class="btn btn--secondary btn--sm">+ 추가</button></form>`)}
         <div class="clk__memo"><label for="clkMemo">업무 메모</label>
@@ -94,6 +114,7 @@ export async function checklistPage(id) {
   };
 
   const reload = async () => { [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/checklists`))]); draw(); };
+  const onGoLive = (a) => a.step_key === 'GO_LIVE' && a.importance === 'REQUIRED' && (g.phases || []).some((ph) => ph.phase_key === 'TRANSITION_GO_LIVE' && ph.steps.some((x) => x.id === a.id));
   const run = async (el, fn) => { if (el) el.disabled = true; try { await fn(); } catch (e) { toast(e.message); if (el) el.disabled = false; } };
 
   const bind = (a) => {
@@ -110,10 +131,19 @@ export async function checklistPage(id) {
     main.querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => run(b, async () => {
       await api('DELETE', wsApi(`/${id}/checklist/${b.dataset.del}`)); await reload();
     }); });
+    main.querySelectorAll('[data-own]').forEach((sel) => { sel.onchange = () => {
+      const iid = sel.dataset.own;
+      if (sel.value === '__text') { textMode.add(iid); draw(); const t = main.querySelector(`[data-item="${iid}"] [data-f="owner"]`); if (t) t.focus(); return; }
+      textMode.delete(iid);
+      run(null, async () => { await api('PATCH', wsApi(`/${id}/checklist/${iid}`), { owner_ref: sel.value }); await reload(); });
+    }; });
     const add = main.querySelector('[data-add]');
+    const addOwn = main.querySelector('[data-add-own]');
+    if (addOwn) addOwn.onchange = () => { const t = add.querySelector('[name=owner]'); t.hidden = addOwn.value !== '__text'; if (!t.hidden) t.focus(); };
     if (add) add.onsubmit = (e) => { e.preventDefault(); const fd = new FormData(add); const btn = add.querySelector('button');
+      const ref = fd.get('owner_ref') || ''; const ownerBody = ref === '__text' ? { owner: fd.get('owner') || '' } : ref ? { owner_ref: ref } : {};
       run(btn, async () => {
-        await api('POST', wsApi(`/${id}/steps/${a.id}/checklist`), { title: fd.get('title'), owner: fd.get('owner'), due_date: fd.get('due_date') || null });
+        await api('POST', wsApi(`/${id}/steps/${a.id}/checklist`), { title: fd.get('title'), ...ownerBody, due_date: fd.get('due_date') || null });
         await reload(); const t = main.querySelector('[data-add] [name=title]'); if (t) t.focus();
       }); };
     const defs = main.querySelector('[data-defaults]');
@@ -122,6 +152,8 @@ export async function checklistPage(id) {
     if (memo) memo.onclick = () => run(memo, async () => { await api('PATCH', wsApi(`/${id}/steps/${a.id}`), { note: $('#clkMemo').value }); toast('메모를 저장했습니다.'); await reload(); });
     main.querySelectorAll('[data-mark]').forEach((b) => { b.onclick = async () => {
       const status = b.dataset.mark;
+      // Phase 6 US-3: 오픈 is completed through the 오픈 dialog (오픈일 + 남은 항목 처리 / 운영 이관)
+      if (status === 'COMPLETED' && onGoLive(a)) { const res = await goLiveDialog(id); if (res) { toast('오픈을 기록했습니다.'); await reload(); } return; }
       const open = r.items.filter((it) => it.step_id === a.id && !it.done).length;
       if (status === 'COMPLETED' && open && !(await confirmDialog({ title: '이 업무를 완료 처리할까요?', body: `완료되지 않은 체크리스트 항목 ${open}건이 남아 있습니다. 그래도 완료로 기록합니다.`, confirm: '완료 처리' }))) return;
       if (status === 'SKIPPED' && !(await confirmDialog({ title: '이 업무를 건너뛸까요?', body: `'${a.title}'은(는) 이번 프로젝트에서 수행하지 않는 것으로 기록됩니다. 나중에 다시 시작할 수 있습니다.`, confirm: '건너뛰기' }))) return;

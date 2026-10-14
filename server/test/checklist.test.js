@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { boot, setup } from './api-helpers.js';
 import { activityStates, checklistDerived } from '../activities.js';
 import { CHECKLIST_TEMPLATES } from '../templates/default-phases.js';
+import { todayKst } from '../../public/app/shared/kst-date.js';
 
 const phase = (g, key) => g.phases.find((p) => p.phase_key === key);
 const step = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key === key);
@@ -127,7 +128,9 @@ test('end to end: 06 전환·오픈 and 07 운영 can be completed (checklists +
   const cutUrl = `${A.purl}/steps/${step(g, 'CUTOVER_PLAN').id}/checklist`;
   const items = (await A.c('POST', `${cutUrl}/defaults`, {})).json.items;
   for (const it of items) await A.c('PATCH', `${A.purl}/checklist/${it.id}`, { done: true });
-  g = (await A.c('PATCH', `${A.purl}/steps/${step(g, 'GO_LIVE').id}`, { status: 'COMPLETED' })).json;
+  // Phase 6 US-3: 오픈 completes through the 오픈 dialog (POST …/go-live), never by a plain 완료 처리
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${step(g, 'GO_LIVE').id}`, { status: 'COMPLETED' })).status, 409);
+  g = (await A.c('POST', `${A.purl}/go-live`, { date: todayKst(), carryovers: [] })).json;
   assert.equal(step(g, 'CUTOVER_PLAN').state, 'COMPLETED');
   assert.equal(step(g, 'GO_LIVE').state, 'COMPLETED');
   assert.equal(phase(g, 'TRANSITION_GO_LIVE').summary.gate_met, true);
