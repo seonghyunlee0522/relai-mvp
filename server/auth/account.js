@@ -45,11 +45,14 @@ export async function recordLogin(db, { userId, method, req }) {
   await db.run('INSERT INTO login_records (id, user_id, method, ip, user_agent) VALUES (?,?,?,?,?)', [randomUUID(), userId, method, String(req?.ip || '').slice(0, 64) || null, ua]);
 }
 
-/** A paid plan that is still running and not set to end — deleting would keep charging (or strand) the customer. */
+/**
+ * A paid plan that renews and is not set to end — deleting would keep charging the customer. One-time (일반결제) purchases
+ * (auto_renew = false) never charge again and cannot be canceled, so they do not block; the prepaid period simply ends.
+ */
 async function runningSubscription(db, workspaceId) {
   if ((await effectivePlan(db, workspaceId)) === 'FREE') return null;
   const s = await getSubscription(db, workspaceId);
-  return s && !s.cancel_at_period_end ? s : null;
+  return s && s.auto_renew !== false && !s.cancel_at_period_end ? s : null;
 }
 
 /** Soft delete. Caller runs inside tx and has checked permission + subscription. */

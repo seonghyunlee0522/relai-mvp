@@ -150,6 +150,9 @@ test('checkout and cancel: OWNER only, provider called, cancel keeps TEAM until 
   assert.equal((await M.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM' })).status, 403);
   assert.equal((await Ad.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM' })).status, 403);
   assert.equal((await M.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing.can_manage, false);
+  const unverified = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM' });
+  assert.equal(unverified.status, 403); assert.equal(unverified.json.error.code, 'email_unverified');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'FREE' })).status, 400);
   const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM' });
   assert.equal(co.status, 201); assert.match(co.json.checkout_url, /^\/app\/settings\?checkout=fake&session=fake_cs_/);
@@ -168,6 +171,7 @@ test('checkout and cancel: OWNER only, provider called, cancel keeps TEAM until 
 
   const none = await boot({ provider: null });
   const B = await setup(none.client, 'b@x.com', '박나다');
+  await none.db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');
   assert.equal((await B.c('POST', `/api/workspaces/${B.w}/billing/checkout`, { plan: 'TEAM' })).status, 503);
   assert.equal((await B.c('GET', `/api/workspaces/${B.w}/billing`)).json.billing.provider_available, false);
   assert.equal((await fetch(`http://127.0.0.1:${none.server.address().port}/api/billing/webhook/fake`, { method: 'POST', body: '{}' })).status, 404);
@@ -199,6 +203,7 @@ test('orders through the fake provider: server-priced checkout, paid event verif
   let lockedDuringCancel = null;
   const { db, server, client, deliver } = await boot({ provider: { ...provider, async cancel(args) { lockedDuringCancel = (await db.get(`SELECT COUNT(*) n FROM pg_locks l JOIN pg_class c ON c.oid = l.relation WHERE c.relname = 'subscriptions' AND l.mode = 'RowShareLock'`)).n; return provider.cancel(args); } } });
   const A = await setup(client, 'a@x.com', '김가나');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3 });
   assert.equal(co.status, 201); assert.equal(co.json.order.amount, Math.round(57000 * 0.6) + Math.round(57000 * 0.6 * 0.1));
   const orderId = co.json.order.id;

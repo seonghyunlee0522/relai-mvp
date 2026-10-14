@@ -191,9 +191,9 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   app.get('/api/billing/:provider/pay/:oid', wrap(async (req, res) => {
     if (!provider?.payWindowParams || req.params.provider !== provider.name) return fail(res, 404, 'not_found', '찾을 수 없습니다.');
     if (!req.user) return res.redirect(`/login?next=${encodeURIComponent('/app/settings#billing')}`);
-    if (!req.user.email_verified_at) return requireVerifiedEmail(fail)(req, res);
     const order = await getOrder(db, req.params.oid);
     if (!order || order.user_id !== req.user.id || order.provider !== provider.name) return fail(res, 404, 'not_found', '주문을 찾을 수 없습니다.');
+    if (!req.user.email_verified_at) return requireVerifiedEmail(fail)(req, res);
     if (order.status === 'PAID') return res.redirect(settingsUrl('success'));
     if (order.status !== 'PENDING' || isExpired(order)) return res.redirect(settingsUrl('failed', 'order_closed'));
     const base = emailConfig().appBaseUrl || `${req.protocol}://${req.get('host')}`;

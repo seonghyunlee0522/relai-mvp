@@ -152,6 +152,7 @@ test('NicePay unit: config/mode guard, signature formulas, return verification (
 test('one-time checkout: order priced on the server, pay page, signed return → approve → TEAM for 12 months; replay/webhook idempotent; tampering refused', async () => {
   const { db, server, client, np, returnPost, windowResult, webhook } = await boot();
   const A = await setup(client, 'a@x.com', '김가나');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   const M = await addMember(client, A, 'm@x.com', '멤버');
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
   assert.equal(b.checkout.can_purchase, true); assert.equal(b.checkout.founding_eligible, true); assert.equal(b.checkout.min_seats, 3);
@@ -239,6 +240,7 @@ test('approval network failure → net cancel, order failed; refund by operator 
   const { db, server, client, np, returnPost, windowResult } = await boot();
   const mail = fakeEmailProvider(); setEmailProvider(mail);
   const A = await setup(client, 'a@x.com', '김가나');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   const buy = async (cycle) => { const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle, seats: 3 }); return db.get('SELECT * FROM billing_orders WHERE id = ?', [co.json.session_id]); };
   np.st.approveThrows = true;
   const o1 = await buy('ANNUAL');
@@ -298,6 +300,7 @@ test('founding offer: only the first 10 paying workspaces', async () => {
 test('recurring (정기결제) is off by default; when enabled: billing key, first charge, daily renewal charge, decline → PAST_DUE, cancel expires the key', async () => {
   const off = await boot();
   const A0 = await setup(off.client, 'z@x.com', '정기');
+  await off.db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   const card = { number: '1234-5678-9012-3456', expiry: '12/29', id_no: '800101', password2: '12' };
   assert.equal((await A0.c('POST', `/api/workspaces/${A0.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card })).status, 404);
   assert.equal(off.np.calls.length, 0);
@@ -305,6 +308,7 @@ test('recurring (정기결제) is off by default; when enabled: billing key, fir
 
   const { db, server, client, np } = await boot({ NICEPAY_RECURRING_ENABLED: 'true' });
   const A = await setup(client, 'a@x.com', '김가나');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing.checkout.recurring_available, true);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card: { ...card, number: '12' } })).status, 400);
   const r = await A.c('POST', `/api/workspaces/${A.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card });
