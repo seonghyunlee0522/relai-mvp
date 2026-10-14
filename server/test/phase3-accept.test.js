@@ -44,6 +44,8 @@ test('J-A1: the WBS skeleton milestones follow the same rule (past key date → 
   server.close();
 });
 
+/** = shared/owner-picker.js teamFor (that module needs the DOM). */
+const teamFor = (team, cur = '') => (team || []).filter((t) => !t.member || `s:${t.id}` === cur);
 test('J-A2: a stakeholder with the same name as a workspace member is not offered again as 팀원 (계정 없음); one already assigned stays', async () => {
   const { server, client } = await boot();
   const A = await setup(client);   // member 홍길동
@@ -51,14 +53,16 @@ test('J-A2: a stakeholder with the same name as a workspace member is not offere
     { id: 'sh-me', name: '홍길동', org_type: 'OWN', role: 'PM' }, { id: 'sh-dev', name: '박협력', org_type: 'PARTNER', role: '개발' }] });
   await to03(A);
   let w = (await A.c('GET', A.wbs)).json;
-  assert.deepEqual(w.owners.team.map((t) => t.id), ['sh-dev']); assert.equal(w.owners.stakeholders_total, 2);
+  assert.deepEqual(w.owners.team.filter((t) => !t.member).map((t) => t.id), ['sh-dev']); assert.equal(w.owners.stakeholders_total, 2);
+  assert.deepEqual(teamFor(w.owners.team).map((t) => t.id), ['sh-dev']);   // K13: the picker hides the member duplicate…
   // a task assigned before the fix keeps its (now hidden) stakeholder visible in the picker
   const t = (await A.c('POST', A.wbs, { title: '설계' })).json.item;
   await A.c('PUT', `${A.purl}/definition`, { stakeholders: [{ id: 'sh-old', name: '김옛날', org_type: 'OWN', role: 'PL' }, { id: 'sh-dev', name: '박협력', org_type: 'PARTNER', role: '개발' }] });
   assert.equal((await A.c('PATCH', `${A.wbs}/${t.id}`, { owner_stakeholder_id: 'sh-old' })).status, 200);
   await A.c('PUT', `${A.purl}/definition`, { stakeholders: [{ id: 'sh-old', name: '홍길동', org_type: 'OWN', role: 'PL' }, { id: 'sh-dev', name: '박협력', org_type: 'PARTNER', role: '개발' }] });
   w = (await A.c('GET', A.wbs)).json;
-  assert.deepEqual(w.owners.team.map((t2) => t2.id).sort(), ['sh-dev', 'sh-old']);
+  assert.deepEqual(teamFor(w.owners.team, 's:sh-old').map((t2) => t2.id).sort(), ['sh-dev', 'sh-old']);   // …except on the item that already has them
+  assert.deepEqual(teamFor(w.owners.team, '').map((t2) => t2.id), ['sh-dev']);                             // K13: other items do not see the duplicate
   server.close();
 });
 

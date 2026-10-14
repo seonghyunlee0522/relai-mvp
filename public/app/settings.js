@@ -8,7 +8,9 @@ import { usageBars, fmtDay } from './admin/ui.js';
 
 const qp0 = () => new URLSearchParams(location.search);
 const unverified = () => state.user?.email_verified === false;   // server refuses checkout/invitations until the e-mail is verified
-const VERIFY_HINT = '이메일 인증 후 이용할 수 있습니다. 상단 배너에서 인증 메일을 다시 받을 수 있습니다.';
+const VERIFY_HINT = '이메일 인증 후 사용할 수 있습니다.';
+/** K24: the disabled 결제하기 / 멤버 초대 hint carries its own `인증 메일 다시 받기` (the top banner can be hidden). */
+const verifyHint = (id, style = '') => html`<span class="hint" id="${id}"${raw(style ? ` style="${style}"` : '')}>${VERIFY_HINT} <button type="button" class="link linkbtn" data-verify-again>인증 메일 다시 받기</button></span>`;
 const ROLE = { OWNER: '소유자', ADMIN: '관리자', MEMBER: '멤버' };
 const ROLE_DESC = { OWNER: '모든 기능 · 멤버/설정/결제 관리', ADMIN: '프로젝트 생성·관리 · 멤버/설정 관리 (결제 불가)', MEMBER: '프로젝트 업무 수행 (멤버/설정/결제 불가)' };
 
@@ -51,7 +53,7 @@ export async function settingsPage(main = $('#main')) {
         <label class="dim" style="display:flex;align-items:center;gap:6px">사용자 수 (소유자 포함) <input class="input input--sm" name="users" type="number" min="${co.min_users}" max="${co.max_users}" step="1" value="${Math.max(co.min_users, billing.subscription?.seats || 0)}" style="width:84px"></label></div>
       <p class="hint" style="margin-top:6px">Workspace ${won(co.base_monthly)}/월 (소유자 ${co.included_users}명 포함) + 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월</p>
       <p class="hint" id="bill-quote" style="margin-top:8px">금액 계산 중…</p>
-      <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay"${raw(unverified() ? ' disabled' : '')}>결제하기</button>${raw(unverified() ? html`<span class="hint" id="bill-verify">${VERIFY_HINT}</span>` : '')}</div>
+      <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay"${raw(unverified() ? ' disabled' : '')}>결제하기</button>${raw(unverified() ? verifyHint('bill-verify') : '')}</div>
       <p class="hint">가격은 부가세 별도이며 결제 시 부가세 10%가 더해집니다. 현재 멤버 수(${co.min_users}명) 이상으로 구매해 주세요 · 자동 결제되지 않습니다.${co.sandbox ? ' (테스트 결제 환경)' : ''}</p>
       ${raw(co.recurring_available && !extend ? html`<details style="margin-top:10px"><summary class="link">카드 등록 후 자동 결제(정기결제)로 구독</summary><div class="inline-form" style="gap:8px;flex-wrap:wrap;margin-top:8px">
         <input class="input input--sm" name="number" placeholder="카드번호" autocomplete="cc-number" inputmode="numeric"><input class="input input--sm" name="expiry" placeholder="MM/YY" autocomplete="cc-exp" style="width:80px">
@@ -85,7 +87,7 @@ export async function settingsPage(main = $('#main')) {
   // Pending invitations (OWNER/ADMIN only) — Phase 13
   let invites = []; const loadInvites = async () => { if (!perm.member_manage) return; try { invites = (await api('GET', `/api/workspaces/${wid}/invitations`)).all.filter((i) => i.status === 'PENDING' || i.status === 'EXPIRED').slice(0, 50); } catch { invites = []; } };
   await loadInvites();
-  const inviteTable = () => !perm.member_manage ? '' : html`<div class="panel" style="margin-top:20px"><div class="panel__h">초대 대기 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${invites.filter((i) => i.status === 'PENDING').length}</em><span class="panel__sp"></span><button class="btn btn--secondary btn--sm" id="invite-btn" data-tour-id="invite-members"${raw(unverified() ? html` disabled title="${VERIFY_HINT}"` : '')}>멤버 초대</button></div>${raw(unverified() ? html`<p class="hint" id="invite-verify" style="padding:0 20px">${VERIFY_HINT}</p>` : '')}
+  const inviteTable = () => !perm.member_manage ? '' : html`<div class="panel" style="margin-top:20px"><div class="panel__h">초대 대기 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${invites.filter((i) => i.status === 'PENDING').length}</em><span class="panel__sp"></span><button class="btn btn--secondary btn--sm" id="invite-btn" data-tour-id="invite-members"${raw(unverified() ? html` disabled title="${VERIFY_HINT}"` : '')}>멤버 초대</button></div>${raw(unverified() ? html`<p style="padding:0 20px">${raw(verifyHint('invite-verify'))}</p>` : '')}
       <div class="rtable-wrap--in"><table class="rtable rtable--raid" style="margin:0" id="invtbl"><thead><tr><th>이메일</th><th>역할</th><th>초대한 사람</th><th>만료</th><th>상태</th><th>메일</th><th></th></tr></thead>
       <tbody>${raw(invites.length ? invites.map((i) => html`<tr data-inv="${i.id}">
         <td class="mono">${i.email}</td><td>${ROLE[i.role] || i.role}</td><td class="dim">${i.invited_by_name || '-'}</td><td class="dim">${fmtShort(i.expires_at)}</td><td>${raw(inviteStatusChip(i.status))}</td>
@@ -137,7 +139,7 @@ export async function settingsPage(main = $('#main')) {
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });
     const ib = $('#invite-btn'); if (ib) ib.onclick = async () => {
       const roles = [['MEMBER', 'Member — 프로젝트 업무 수행']]; if (workspace.role === 'OWNER') roles.push(['ADMIN', 'Admin — 프로젝트·멤버·설정 관리']);
-      const r = await formDialog({ title: '멤버 초대', body: html`초대 메일을 보냅니다. 초대받은 사람은 같은 이메일로 가입하거나 로그인한 뒤 수락하면 <b>${workspace.name}</b>${/workspace$/i.test(workspace.name.trim()) ? '' : ' Workspace'}에 참여합니다. (유효기간 7일)`, confirm: '초대 메일 보내기',
+      const r = await formDialog({ title: '멤버 초대', body: html`초대 메일을 보냅니다. 초대받은 사람은 같은 이메일로 가입하거나 로그인한 뒤 수락하면 <b>${workspace.name}</b>${/(workspace|워크스페이스)$/i.test(workspace.name.trim()) ? '' : ' 워크스페이스'}에 참여합니다. (유효기간 7일)`, confirm: '초대 메일 보내기',
         fields: [{ name: 'email', label: '이메일', type: 'email', required: true, placeholder: 'teammate@company.com' }, { name: 'role', label: '역할', type: 'select', options: roles, value: 'MEMBER' }],
         submit: (v) => api('POST', `/api/workspaces/${wid}/invitations`, { email: v.email.trim(), role: v.role }) });
       if (!r) return;
@@ -177,7 +179,13 @@ export async function settingsPage(main = $('#main')) {
         submit: (v) => api('DELETE', `/api/workspaces/${wid}`, { confirm_name: v.confirm_name, password: v.password }) });
       if (r) { toast('Workspace를 삭제했습니다.'); location.href = '/app'; }
     };
-    const wsf = $('#wsf'); if (wsf) wsf.onsubmit = async (e) => { e.preventDefault(); try { const r = await api('PATCH', `/api/workspaces/${wid}`, { name: wsf.name.value.trim() }); state.workspace.name = r.workspace.name; toast('Workspace 이름을 저장했습니다.'); } catch (err) { toast(err.fields?.name || err.message); } };
+    main.querySelectorAll('[data-verify-again]').forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { const r = await api('POST', '/api/auth/email/resend', {}); b.textContent = r.already_verified ? '이미 인증되었습니다' : '메일을 보냈습니다'; }
+      catch (err) { b.disabled = false; b.textContent = err.code === 'rate_limited' ? '잠시 후 다시 시도해 주세요' : '다시 시도'; }
+    });
+    // K5 (B11): renaming also updates the local copy, so the invite dialog reads the new name without a reload
+    const wsf = $('#wsf'); if (wsf) wsf.onsubmit = async (e) => { e.preventDefault(); try { const r = await api('PATCH', `/api/workspaces/${wid}`, { name: wsf.name.value.trim() }); state.workspace.name = r.workspace.name; workspace.name = r.workspace.name; toast('워크스페이스 이름을 저장했습니다.'); } catch (err) { toast(err.fields?.name || err.message); } };
     const addm = $('#addm'); if (addm) addm.onsubmit = async (e) => { e.preventDefault(); $('#adderr').textContent = ''; try { const r = await api('POST', `/api/workspaces/${wid}/members`, { email: addm.email.value, role: addm.role.value }); toast('멤버를 추가했습니다.'); draw(r.members); } catch (err) { $('#adderr').textContent = err.message; } };
     main.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = async () => { try { const r = await api('PATCH', `/api/workspaces/${wid}/members/${sel.dataset.role}`, { role: sel.value }); toast('역할을 변경했습니다.'); draw(r.members); } catch (err) { toast(err.message); draw(members); } });
     main.querySelectorAll('[data-remove]').forEach((b) => b.onclick = async () => { const m = members.find((x) => x.id === b.dataset.remove); if (!(await confirmDialog({ title: `${m.name}님을 Workspace에서 제거할까요?`, body: '제거된 멤버는 이 Workspace의 프로젝트에 접근할 수 없습니다. 이미 작성한 데이터는 유지됩니다.', confirm: '제거', danger: true }))) return; try { const r = await api('DELETE', `/api/workspaces/${wid}/members/${m.id}`); toast('멤버를 제거했습니다.'); draw(r.members); } catch (err) { toast(err.message); } });

@@ -8,6 +8,7 @@ import { api, wsApi } from '../core/api.js';
 import { $, html, raw, no2, todayLocal } from '../core/dom.js';
 import { projectHead } from './guide.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
+import { teamFor } from '../shared/owner-picker.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { state } from '../core/state.js';
 import { goLiveDialog } from './golive.js';
@@ -42,7 +43,7 @@ export async function checklistPage(id) {
   const ownerOpts = (cur, missing = '') => {
     const o = r.owners || { team: [], clients: [] };
     const grp = (label, list) => (list.length ? html`<optgroup label="${label}">${raw(list.map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join(''))}</optgroup>` : '');
-    return html`<option value="">담당 없음</option>${raw(grp('RELAI 사용자', members.map((m) => [`u:${m.id}`, m.name])))}${raw(grp('팀원 (계정 없음)', (o.team || []).map((t) => [`s:${t.id}`, `${t.name} · 팀원`])))}${raw(grp('고객사', (o.clients || []).map((t) => [`s:${t.id}`, `${t.name} · 고객사`])))}
+    return html`<option value="">담당 없음</option>${raw(grp('RELAI 사용자', members.map((m) => [`u:${m.id}`, m.name])))}${raw(grp('팀원 (계정 없음)', teamFor(o.team, cur).map((t) => [`s:${t.id}`, `${t.name} · 팀원`])))}${raw(grp('고객사', (o.clients || []).map((t) => [`s:${t.id}`, `${t.name} · 고객사`])))}
       ${raw(missing ? html`<option value="${cur}" selected>${missing}</option>` : '')}<option value="__text" ${cur === '__text' ? 'selected' : ''}>직접 입력…</option>`;
   };
   const ownerCell = (it, dis) => {

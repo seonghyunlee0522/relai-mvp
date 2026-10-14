@@ -123,7 +123,8 @@ export async function buildReportData(db, project, { period_start: s, period_end
     attention.push({ kind: 'REVIEWING_REQUIREMENT', type: 'REQUIREMENT', priority: 10, severity: 'warn', decision: true, id: r.id, display_id: r.display_id, title: r.title, meta: '검토 중 요구사항 (범위 내)', href: `requirements?sel=${r.id}` });
 
   // Phase 4 US-1: end dates pushed later in the period through the delay-reason dialog (or Excel) — one line per push, reason included
-  const scheduleChanges = (await db.all(`SELECT w.wbs_code AS display_id, w.title, h.old_value AS before, h.new_value AS after, h.note, (h.changed_at)::date AS at
+  const scheduleChanges = (await db.all(`SELECT w.id AS wbs_id, w.wbs_code AS display_id, w.title, h.old_value AS before, h.new_value AS after, h.note, (h.changed_at)::date AS at,
+      (w.original_planned_end_date)::text AS orig, (CASE WHEN w.item_type = 'MILESTONE' THEN w.milestone_date ELSE w.planned_end_date END)::text AS cur
     FROM wbs_history h JOIN wbs_items w ON w.id = h.wbs_item_id
     WHERE w.project_id = ? AND w.archived_at IS NULL AND h.action_type = 'UPDATED' AND h.field_name IN ('planned_end_date','milestone_date') AND h.note IS NOT NULL
       AND h.old_value IS NOT NULL AND h.new_value > h.old_value AND ${IN_PERIOD('h.changed_at')} ORDER BY h.changed_at, h.seq`, [pid, s, e]))
@@ -146,11 +147,18 @@ const md = (d) => (d ? d.slice(5).replace('-', '/') : '-');
 const EVENT = { COMPLETED: '완료', CONFIRMED: '확정', RESOLVED: '해결', CLOSED: '종료', APPROVED: '승인', IMPLEMENTED: '반영 완료', PASS: '통과', ACCEPTED: '검수 승인' };
 const TYPE_KO = { WBS: 'WBS', REQUIREMENT: '요구사항', ISSUE: '이슈', CHANGE: '변경', TEST: '테스트', ACCEPTANCE: '검수', RISK: '리스크' };
 
-/** US-1 '일정' lines: "이번 주 일정 변경 N건 (총 +M일)" + one line per push (작업명 · +일 · 사유). Nothing when there was none. */
+/** US-1 '일정' lines: "이번 주 일정 변경 N건 (최초 계획 대비 총 +M일)" + one line per push (작업명 · +일 · 최초 계획 대비 +N일 · 사유). Nothing when there was none.
+ * K12: the total is the net change of each task against its first plan (a pull-back in the same week counts), not the sum of every push. */
+const signed = (n) => `${n >= 0 ? '+' : ''}${n}일`;
 export function scheduleLines(list) {
   if (!list || !list.length) return [];
-  const total = list.reduce((a, x) => a + (Number(x.days) || 0), 0);
-  return [`- 일정: 이번 주 일정 변경 ${list.length}건 (총 +${total}일)`, ...list.map((x) => `  - ${x.display_id} ${x.title} · +${x.days}일 · ${x.note}`)];
+  const first = new Map();   // per task: first plan = original_planned_end_date, else the end before its first push in the list
+  for (const x of list) { const k = x.wbs_id || x.display_id; if (!first.has(k)) first.set(k, { from: x.orig || x.before, to: x.cur || null }); }
+  const net = (k) => { const f = first.get(k); return f && f.from && f.to ? diffDays(f.from, f.to) : null; };
+  const nets = [...first.keys()].map(net);
+  const total = nets.every((v) => v !== null) ? nets.reduce((a, v) => a + v, 0) : list.reduce((a, x) => a + (Number(x.days) || 0), 0);
+  return [`- 일정: 이번 주 일정 변경 ${list.length}건 (최초 계획 대비 총 ${signed(total)})`,
+    ...list.map((x) => { const d = net(x.wbs_id || x.display_id); return `  - ${x.display_id} ${x.title} · +${x.days}일${d === null ? '' : ` · 최초 계획 대비 ${signed(d)}`} · ${x.note}`; })];
 }
 
 export function sectionsFromData(d) {

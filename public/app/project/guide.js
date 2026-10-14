@@ -61,12 +61,12 @@ export async function moveToPhase(pid, g, target, { next = false } = {}) {
   const cfg = cur && target.sequence > cur.sequence ? APPROVAL_GATES[cur.phase_key] : null;
   const apv = cfg ? gateStep(g, cur.phase_key, cfg.step) : null;
   const gate = apv && apv.state !== 'COMPLETED';
+  let bypass = null;
   if (gate) {
     const r = await approvalGateDialog(cfg);
     if (!r) return false;
     if (r === 'record') { navigate(cfg.record(pid)); return false; }
-    try { await api('PATCH', wsApi(`/${pid}/steps/${apv.id}`), { note: bypassNote(apv.note, r.reason, cfg) }); }
-    catch (e) { toast(e.message); return false; }
+    bypass = r.reason;   // K16: written only after the move succeeds — cancelling the next dialog leaves no "[… 전 진행]" line
   }
   // the general dialog lists the other open REQUIRED activities (the approval gate step already handled above)
   const openReq = acts.filter((s) => s.importance === 'REQUIRED' && s.state !== 'COMPLETED' && s.state !== 'SKIPPED' && !(gate && s.step_key === cfg.step));
@@ -89,6 +89,8 @@ export async function moveToPhase(pid, g, target, { next = false } = {}) {
       body: `현재 단계가 ${cur ? cur.name : '-'}에서 ${josa(target.name, '으로')} 바뀝니다. 각 단계의 업무 상태와 메모는 그대로 유지됩니다.`, confirm: '현재 단계로 변경' });
   }
   if (!ok) return false;
-  try { await api('POST', wsApi(`/${pid}/phases/${target.id}/activate`), { reason: next ? 'NEXT' : 'MANUAL' }); toast(`현재 단계가 ${josa(target.name, '으로')} 변경되었습니다.`); return true; }
+  try { await api('POST', wsApi(`/${pid}/phases/${target.id}/activate`), { reason: next ? 'NEXT' : 'MANUAL' }); }
   catch (e) { toast(e.message); return false; }
+  if (bypass !== null) { try { await api('PATCH', wsApi(`/${pid}/steps/${apv.id}`), { note: bypassNote(apv.note, bypass, cfg) }); } catch (e) { toast(e.message); return true; } }
+  toast(`현재 단계가 ${josa(target.name, '으로')} 변경되었습니다.`); return true;
 }

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, setup } from './api-helpers.js';
 import { migrations, LEGACY_RESET_NOTE } from '../migrations.js';
+import { scheduleLines } from '../reports.js';
 
 const g = async (A) => (await A.c('GET', A.purl)).json;
 const stepId = async (db, pid, phase, key) => (await db.get(`SELECT s.id FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE p.project_id = ? AND p.phase_key = ? AND s.step_key = ?`, [pid, phase, key])).id;
@@ -42,4 +43,15 @@ test('K32 migration 39: legacy hand-✓ 검수/오픈/인수/종료 with no reco
   const close = G.phases.find((p) => p.phase_key === 'OPERATIONS').steps.find((s) => s.step_key === 'CLOSE');
   assert.notEqual(close.state, 'COMPLETED');
   server.close();
+});
+
+/* ---------- K12 weekly report 일정: net change against the first plan ---------- */
+test('K12 scheduleLines: a push then a pull-back in the same week → each line shows 최초 계획 대비, total is the net change', () => {
+  const L = scheduleLines([
+    { wbs_id: 'w1', display_id: '1.1', title: '로그인', before: '2026-10-10', after: '2026-10-20', days: 10, note: '지연', orig: '2026-10-10', cur: '2026-10-13' },
+    { wbs_id: 'w2', display_id: '1.2', title: '목록', before: '2026-10-12', after: '2026-10-14', days: 2, note: '검토', orig: '2026-10-12', cur: '2026-10-14' },
+  ]);
+  assert.equal(L[0], '- 일정: 이번 주 일정 변경 2건 (최초 계획 대비 총 +5일)');
+  assert.equal(L[1], '  - 1.1 로그인 · +10일 · 최초 계획 대비 +3일 · 지연');
+  assert.equal(L[2], '  - 1.2 목록 · +2일 · 최초 계획 대비 +2일 · 검토');
 });

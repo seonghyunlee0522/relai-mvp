@@ -123,8 +123,8 @@ test('US-1 weekly report: "이번 주 일정 변경 1건 (총 +7일)" + reason l
   assert.equal((await patch(A, t.id, { planned_end_date: d(12), delay_reason: '고객 계정 발급 지연' })).status, 200);
   r = await A.c('POST', `${A.purl}/weekly-reports/generate`, { period_start: wk.start, period_end: wk.end });
   const md = r.json.report.rendered_content;
-  assert.match(md, /- 일정: 이번 주 일정 변경 1건 \(총 \+7일\)/);
-  assert.match(md, /로그인 화면 · \+7일 · 고객 계정 발급 지연/);
+  assert.match(md, /- 일정: 이번 주 일정 변경 1건 \(최초 계획 대비 총 \+7일\)/);
+  assert.match(md, /로그인 화면 · \+7일 · 최초 계획 대비 \+7일 · 고객 계정 발급 지연/);
   assert.deepEqual(scheduleLines([]), []);
   // US-7: no English labels in the report body
   for (const en of ['Schedule', 'Scope', 'Coverage', 'Severity', 'Critical', 'Blocked', 'Resolution', 'Owner']) assert.doesNotMatch(md, new RegExp(en), en);

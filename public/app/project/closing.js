@@ -11,6 +11,7 @@ import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { state } from '../core/state.js';
 import { todayKst, md } from '../shared/kst-date.js';
+import { teamFor } from '../shared/owner-picker.js';
 import { confirmDialog, promptDialog, toast } from '../shared/dialogs.js';
 import { term } from './initiation.js';
 
@@ -28,7 +29,7 @@ const grp = (label, list, cur) => (list.length ? html`<optgroup label="${label}"
 const personOptions = (members, owners, cur) => {
   const o = owners || {}; const lab = (t) => (t.role ? `${t.name} · ${t.role}` : t.name);
   return grp('고객사', (o.clients || []).map((t) => [`s:${t.id}`, `${lab(t)}${t.org ? ` (${t.org})` : ''}`]), cur)
-    + grp('RELAI 사용자', members.map((m) => [`u:${m.id}`, m.name]), cur) + grp('팀원 (계정 없음)', (o.team || []).map((t) => [`s:${t.id}`, lab(t)]), cur);
+    + grp('RELAI 사용자', members.map((m) => [`u:${m.id}`, m.name]), cur) + grp('팀원 (계정 없음)', teamFor(o.team, cur).map((t) => [`s:${t.id}`, lab(t)]), cur);
 };
 
 export function handoverDialog(pid) {

@@ -4,10 +4,12 @@
 import { html, raw } from '../core/dom.js';
 
 export const ownerKey = (it) => (it.owner_user_id ? `u:${it.owner_user_id}` : it.owner_stakeholder_id ? `s:${it.owner_stakeholder_id}` : '');
+/** K13: 팀원 (계정 없음) minus a stakeholder who is also a workspace member (flag `member`), unless THIS item already has them (`cur`). */
+export const teamFor = (team, cur = '') => (team || []).filter((t) => !t.member || `s:${t.id}` === cur);
 const teamLabel = (t) => (t.role ? `${t.name} · ${t.role}` : t.name);
 /** 미지정 · <optgroup RELAI 사용자> · <optgroup 팀원 (계정 없음)>. A deleted stakeholder still shows as the current value. short: name only (grid cells). */
 export function ownerChoices(members, owners, cur = '', short = false) {
-  const team = (owners.team || []).map((t) => [`s:${t.id}`, short ? t.name : teamLabel(t)]);
+  const team = teamFor(owners.team, cur).map((t) => [`s:${t.id}`, short ? t.name : teamLabel(t)]);
   if (/^s:/.test(cur) && !team.some(([v]) => v === cur)) team.push([cur, '(삭제된 담당자)']);
   return [['', '미지정'], { group: 'RELAI 사용자', options: members.map((m) => [`u:${m.id}`, m.name]) }, { group: '팀원 (계정 없음)', options: team }];
 }
@@ -19,12 +21,12 @@ export const noAcct = (it) => (it.owner_no_account ? html`<small class="wnoacct"
 export const teamHint = (owners, pid, archived) => ((owners.stakeholders_total || 0) <= 1 && !archived ? html`<p class="whint">팀원을 01 착수 › 이해관계자에 추가하면 계정 없이 담당자로 지정할 수 있습니다. <a class="link" href="/app/projects/${pid}/definition?activity=STAKEHOLDERS" data-link>이해관계자 추가 →</a></p>` : '');
 /** 수행자 picker (Phase 5 US-4): the same picker plus 고객사 이해관계자, no 미지정 — groups RELAI 사용자 / 팀원 (계정 없음) / 고객사.
  * `performers` = the API's { team, clients }. Values 'u:<user id>' · 's:<stakeholder id>'. */
-export function performerChoices(members, performers) {
+export function performerChoices(members, performers, cur = '') {
   const p = performers || {}; const lab = (t) => (t.role ? `${t.name} · ${t.role}` : t.name);
-  return [{ group: 'RELAI 사용자', options: members.map((m) => [`u:${m.id}`, m.name]) }, { group: '팀원 (계정 없음)', options: (p.team || []).map((t) => [`s:${t.id}`, lab(t)]) },
+  return [{ group: 'RELAI 사용자', options: members.map((m) => [`u:${m.id}`, m.name]) }, { group: '팀원 (계정 없음)', options: teamFor(p.team, cur).map((t) => [`s:${t.id}`, lab(t)]) },
     { group: '고객사', options: (p.clients || []).map((t) => [`s:${t.id}`, `${lab(t)}${t.org ? ` (${t.org})` : ''}`]) }];
 }
-export const performerOptions = (members, performers, cur) => performerChoices(members, performers).map((o) => (o.options.length
+export const performerOptions = (members, performers, cur) => performerChoices(members, performers, cur).map((o) => (o.options.length
   ? html`<optgroup label="${o.group}">${raw(o.options.map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join(''))}</optgroup>` : '')).join('');
 /** "{execution body} → { performer_user_id | performer_stakeholder_id }" from one picker value. */
 export const performerBody = (v) => (/^s:/.test(v || '') ? { performer_stakeholder_id: v.slice(2) } : /^u:/.test(v || '') ? { performer_user_id: v.slice(2) } : {});

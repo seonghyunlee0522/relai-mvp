@@ -73,6 +73,7 @@ export async function wbsPage(id) {
   const loadSel = async (iid) => { sel = iid ? (await api('GET', wApi(`/${iid}`))).item : null; jiraDetail = null; setParam('sel', iid); };
 
   /** Visible rows after search / filters / collapse (a match shows together with its ancestors), plus the inline ghost row. */
+  let matched = 0;
   const visible = () => {
     const m = byId(); const f = quick(); const q = (params().get('q') || '').trim().toLowerCase();
     const owner = params().get('owner') || ''; const cst = params().get('cst') || '';
@@ -98,6 +99,7 @@ export async function wbsPage(id) {
         let cur = it; while (cur) { keep.add(cur.id); cur = cur.parent_id ? m.get(cur.parent_id) : null; }
       }
     }
+    matched = keep ? keep.size : items.length;   // K11: footer counts every matching item (folded children too), the same rule as the 전체 항목 chip
     const out = []; const hidden = new Set();
     for (const it of items) {
       if (it.parent_id && (hidden.has(it.parent_id) || collapsed.has(it.parent_id))) { hidden.add(it.id); continue; }
@@ -164,7 +166,7 @@ export async function wbsPage(id) {
     return true;
   };
   const grid = createGrid({
-    key: 'wbs.tree', rowId: (r) => r.id, paginate: false, sortable: false,
+    key: 'wbs.tree', rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched,
     rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
     canEdit: editable, activeId: () => (sel ? sel.id : null), onOpen: (iid) => { if (iid !== GHOST) openDetail(iid); },
     onSelect: (s) => bulk.update(s.size),
