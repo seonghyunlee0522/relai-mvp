@@ -358,6 +358,17 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         const st = (await db.get(`SELECT s.importance FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
         if (st && st.importance === 'REQUIRED') return fail(res, 409, 'not_skippable', '필수 업무는 건너뛸 수 없습니다.');
       }
+      if (status === 'COMPLETED') {   // 01 착수 결과 승인 · 02 요구사항 기준선 승인 complete only with an approval record (their own 완료 처리 routes)
+        const st = (await db.get(`SELECT s.step_key, p.phase_key FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
+        if (st && st.phase_key === 'INITIATION' && st.step_key === 'APPROVAL') {
+          const sec = (await D.loadDefinition(db, project)).sections.find((x) => x.key === 'APPROVAL');
+          if (sec && !sec.ready) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 착수 결과 승인에서 승인 기록을 입력하세요.');
+        }
+        if (st && st.phase_key === 'REQUIREMENTS' && st.step_key === RB.STEP_KEY) {
+          const m = await RB.loadBaseline(db, project);
+          if (m.missing.length || !m.counts.in_scope) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 요구사항 기준선 승인에서 승인 기록을 입력하세요.');
+        }
+      }
       fields.status = status;
     }
     if (note !== undefined) {

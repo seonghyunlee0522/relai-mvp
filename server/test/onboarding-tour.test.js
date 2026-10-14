@@ -126,7 +126,7 @@ test('guidance engine (pure rules, Lifecycle V2): INITIATION / REQUIREMENTS / AN
   r = g({ ...RQ, stats: { requirements: { total: 0 } } }); assert.equal(r.rule, 'REQ_EMPTY'); assert.equal(r.primary_action.label, '요구사항 입력 시작 →'); assert.equal(r.primary_action.href, '/app/projects/p1/requirements?new=1'); assert.equal(r.secondary_action, null, 'Excel import is chosen inside Requirements, not from What’s Next');
   r = g({ ...RQ, stats: { requirements: { total: 3, type_unspecified: 2 } } }); assert.equal(r.rule, 'REQ_CLASSIFY'); assert.equal(r.primary_action.label, '요구사항 분류 →');
   r = g({ ...RQ, stats: { requirements: { total: 3, type_unspecified: 0, scope_undecided: 1 } } }); assert.equal(r.rule, 'REQ_SCOPE');
-  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 0, type_unspecified: 0, priority_unspecified: 0, scope_undecided: 0 } } }); assert.equal(r.rule, 'REQ_CONFIRM'); assert.equal(r.primary_action.label, '승인 기록 →');   // Phase 2 US-4(7): 승인 기록 confirms the rest
+  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 0, type_unspecified: 0, priority_unspecified: 0, scope_undecided: 0 } } }); assert.equal(r.rule, 'REQ_CONFIRM'); assert.equal(r.primary_action.label, '승인 기록하기');   // Phase 2 US-4(7): 승인 기록 confirms the rest
   r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 3 }, wbs: { tasks: 0 } } }); assert.equal(r.rule, 'REQ_DONE'); assert.equal(r.primary_action.href, '/app/projects/p1?move=next');
   // ANALYSIS_DESIGN: WBS empty → trace → assign → plan → done
   const AD = { phase: { phase_key: 'ANALYSIS_DESIGN', name: '분석·설계', sequence: 3 }, next_phase: { name: '구현', sequence: 4 } };

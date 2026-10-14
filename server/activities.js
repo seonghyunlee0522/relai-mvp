@@ -67,11 +67,11 @@ function requirements(key, ctx) {
       if (n(r.total) === 0) return dep;
       if (n(r.in_scope) === 0) return none('범위 내 요구사항이 아직 없습니다.', act('범위 결정 →', u('?scope=UNDECIDED')));
       // Phase 2 US-4(7): no separate bulk-confirm — 승인 기록 confirms the rest in the same save (BASELINE_APPROVAL Drawer)
-      if (n(r.in_scope_confirmed) < n(r.in_scope)) return prog(`범위 내 ${r.in_scope}건 중 ${r.in_scope_confirmed}건이 확정되었습니다.`, act('승인 기록 →', u('?approval=1')));
+      if (n(r.in_scope_confirmed) < n(r.in_scope)) return prog(`범위 내 ${r.in_scope}건 중 ${r.in_scope_confirmed}건이 확정되었습니다.`, act('승인 기록하기', u('?approval=1')));
       return ok('범위 내 요구사항이 모두 확정되었습니다.', act('확정 요구사항 보기 →', u('?scope=IN_SCOPE&status=CONFIRMED')));
     }
     case 'BASELINE_APPROVAL': {   // 요구사항 기준선 승인 (Phase 2 US-1): completes only from the Drawer (승인 기록), never by hand on What's Next
-      const b = ctx.definition && ctx.definition.req_baseline; const go = act('승인 기록 →', u('?approval=1'));
+      const b = ctx.definition && ctx.definition.req_baseline; const go = act('승인 기록하기', u('?approval=1'));
       if (n(r.total) === 0) return dep;
       if (b && b.status === 'COMPLETED') return ok(b.summary || '고객 승인이 기록되었습니다.', null);
       if (b && b.bypass) return prog('승인 전 진행 · 사유 있음', go);

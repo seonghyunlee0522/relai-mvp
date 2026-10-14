@@ -61,6 +61,8 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   /* ---------- US-4/5: 02 screen hints ---------- */
   await page.goto(reqUrl); await page.waitForSelector('.rtool');
   check('US-4(4) no WBS 이동 banner in 02', !(await page.$('[data-tour-id="req-next"]')));
+  // P-1: WBS 연결 안내 · KPI 'WBS 미연결 (범위 내)' · 표의 'WBS 없음' 칩 only from 03
+  check('P-1 02: no WBS 연결 안내, KPI or 없음 chip', !/WBS와 연결하는 것이 목표입니다/.test(await page.textContent('main')) && !/WBS 미연결/.test(await page.textContent('#kstrip')) && !(await page.$('.chip--hold')));
   check('US-2 toolbar has 요구사항 정의서 ▾', Boolean(await page.$('[data-reqdoc-menu]')));
   await shot('01-requirements-02.png');
   await page.goto(`${reqUrl}?scope=UNDECIDED`); await page.waitForSelector('.rtool');
@@ -83,7 +85,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await api('PATCH', `${R}/${ocr.id}`, { scope: 'OUT_OF_SCOPE' });
   await page.reload(); await page.waitForSelector('.rg');
   const guide = await page.textContent('.rg');
-  check('US-4(7) REQ_CONFIRM copy + 승인 기록 →', /요구사항 정의서를 고객에게 보내 검토받으세요\. 승인 회신을 받으면 승인 기록에서 한 번에 확정됩니다\./.test(guide) && /승인 기록 →/.test(guide));
+  check('US-4(7) REQ_CONFIRM copy + 승인 기록하기', /요구사항 정의서를 고객에게 보내 검토받으세요\. 승인 회신을 받으면 승인 기록에서 한 번에 확정됩니다\./.test(guide) && /승인 기록하기/.test(guide));
   await shot('03-whats-next-02.png');
   await page.goto(`${BASE}/app`); await page.waitForSelector('main');
   await page.waitForTimeout(800);
@@ -222,6 +224,8 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await page.goto(`${reqUrl}?new=1`); await page.waitForSelector('#cf');
   await page.fill('#c-title', '전자서명 연동'); await page.selectOption('#cf [name="scope"]', 'IN_SCOPE'); await page.click('#cf button[type="submit"]:not([data-more])');
   check('US-3 add 범위 내 after approval → dialog', await dialogShown('[data-dialog="req-change"]'));
+  const addDlg = await page.$eval('[data-dialog="req-change"]', (d) => ({ body: d.querySelector('.dialog__b').textContent.trim(), btns: [...d.querySelectorAll('button')].map((b) => b.textContent.trim()), primary: d.querySelector('.btn--primary').textContent.trim() }));
+  check('J-1 add dialog copy + [취소] [그냥 추가] [변경 요청 만들기]', addDlg.body === '고객이 새로 요청한 요구사항이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 원래 승인 범위에 있었는데 빠뜨린 것이면 그냥 추가해도 됩니다.' && addDlg.btns.join('|') === '취소|그냥 추가|변경 요청 만들기' && addDlg.primary === '변경 요청 만들기', JSON.stringify(addDlg));
   n0 = crCount();
   await page.click('[data-dialog="req-change"] [data-v="cr"]'); await page.waitForTimeout(800);
   check('US-3 add → CR draft only, no requirement', crCount() === n0 + 1 && !(await api('GET', `${R}?q=전자서명`)).json.requirements.length);
@@ -237,11 +241,16 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   // 03: WBS banner back
   await page.goto(reqUrl); await page.waitForSelector('.rtool');
   check('US-4(4) WBS banner from 03', Boolean(await page.$('[data-tour-id="req-next"]')));
+  check('P-1 03: KPI WBS 미연결 + 없음 chip shown', /WBS 미연결 \(범위 내\)/.test(await page.textContent('#kstrip')) && Boolean(await page.$('.chip--hold')));
   await page.goto(`${reqUrl}?sel=${r1.id}`); await page.waitForSelector('#drawer .dtitle'); await page.click('[data-dtab="links"]');
   check('US-4(4) Delivery Trace from 03', Boolean(await page.$('#drawer .trace')));
 
   /* ---------- US-1: bypass with a reason (second project) ---------- */
   const B = await mkProject('사유 기록 프로젝트');
+  // Q6-2: 0 범위 내 → empty line, 완료 처리 disabled, API refuses
+  await page.goto(`${BASE}/app/projects/${B.p.id}/requirements?approval=1`); await page.waitForSelector('[data-approval-drawer]');
+  check('Q6-2 empty baseline: empty line + 완료 처리 disabled', Boolean(await page.$('[data-apv-empty]')) && await page.$eval('[data-apv="complete"]', (b) => b.disabled));
+  check('Q6-2 empty baseline: API 400', (await api('POST', `${B.P}/requirements/baseline/complete`, { approval: { approver_id: 's1', date: '2026-09-10', method: 'EMAIL', evidence: '메일' }, confirm_unconfirmed: true })).status === 400);
   await api('POST', `${B.P}/requirements`, { title: 'R1', scope: 'IN_SCOPE', status: 'CONFIRMED', type: 'FUNCTIONAL', priority: 'HIGH' });
   await page.goto(`${BASE}/app/projects/${B.p.id}`); await page.waitForSelector('.np__list');
   await gatePath('What\'s Next button (사유 입력)', async () => { await page.click('#next, [data-move-next]'); });

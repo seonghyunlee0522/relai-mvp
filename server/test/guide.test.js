@@ -90,6 +90,8 @@ test('transitions: next with REQUIRED gate met → COMPLETED; incomplete → sta
   const { server, client } = await boot();
   const { c, url } = await userWithProject(client);
   let g = (await c('GET', url)).json;
+  // 착수 결과 승인 completes only with an approval record (Q6-6), so record one first
+  assert.equal((await c('PUT', `${url}/definition`, { approval: { approver_name: '김고객', approver_title: '부장', date: '2026-01-10', method: 'EMAIL', evidence: '승인 메일' } })).status, 200);
   for (const s of g.phases[0].steps.filter((x) => x.importance === 'REQUIRED')) await c('PATCH', `${url}/steps/${s.id}`, { status: 'COMPLETED' });   // RECOMMENDED may stay open
   g = (await c('POST', `${url}/phases/${g.phases[1].id}/activate`, { reason: 'NEXT' })).json;
   assert.equal(g.project.current_phase, 'REQUIREMENTS');

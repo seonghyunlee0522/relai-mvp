@@ -5,7 +5,7 @@
  *   - after 요구사항 기준선 승인: adding a new requirement as 범위 내
  * Skipped when the requirement already has an APPROVED change request (approved_cr_count, one read with the row).
  * [변경 요청 만들기] leaves the requirement untouched and creates one DRAFT change request through the existing CR API, linked to the
- * requirement(s), with the proposal (필드별 변경 전 → 후) as its description. [단순 수정으로 저장] saves as before; [취소] saves nothing. */
+ * requirement(s), with the proposal (필드별 변경 전 → 후) as its description. [단순 수정으로 저장] (adding: [그냥 추가]) saves as before; [취소] saves nothing. */
 import { api, wsApi } from '../core/api.js';
 import { $, html } from '../core/dom.js';
 import { toastAction } from '../shared/dialogs.js';
@@ -19,8 +19,8 @@ export function changePromptDialog({ adding = false } = {}) {
   return new Promise((resolve) => {
     const el = document.createElement('div'); el.className = 'scrim';
     el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cgT" data-dialog="req-change" tabindex="-1"><h3 id="cgT">${adding ? '승인된 기준선에 요구사항을 추가하려 합니다' : '확정된 요구사항을 바꾸려 합니다'}</h3>
-      <div class="dialog__b">고객 요청으로 내용이 바뀌는 것이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 오타·표현 수정이면 그냥 저장해도 됩니다.</div>
-      <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="save">단순 수정으로 저장</button><button class="btn btn--primary" data-v="cr">변경 요청 만들기</button></div></div>`;
+      <div class="dialog__b">${adding ? '고객이 새로 요청한 요구사항이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 원래 승인 범위에 있었는데 빠뜨린 것이면 그냥 추가해도 됩니다.' : '고객 요청으로 내용이 바뀌는 것이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 오타·표현 수정이면 그냥 저장해도 됩니다.'}</div>
+      <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="save">${adding ? '그냥 추가' : '단순 수정으로 저장'}</button><button class="btn btn--primary" data-v="cr">변경 요청 만들기</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };
     el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; } done(b.dataset.v === 'cancel' ? null : b.dataset.v); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });

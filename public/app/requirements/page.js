@@ -26,7 +26,7 @@ export async function requirementsPage(id) {
   const main = $('#main');
   let [g, members, ai, baseline] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers(), aiStatus(id), api('GET', wsApi(`/${id}/requirements/baseline`)).then((x) => x.baseline).catch(() => null)]);
   const p = g.project;
-  // WBS guidance (이동 배너 · Delivery Trace) belongs to 03 분석·설계 onward (Phase 2 US-4)
+  // WBS guidance (이동 배너 · 연결 안내 · Delivery Trace · KPI 'WBS 미연결' · 표의 'WBS 없음' 칩) belongs to 03 분석·설계 onward (Phase 2 US-4, P-1)
   const wbsPhase = () => Boolean(g.current_phase && g.current_phase.sequence >= 3);
   const archived = p.status === 'ARCHIVED';
   document.title = `Requirements — ${p.name} — RELAI`;
@@ -85,7 +85,7 @@ export async function requirementsPage(id) {
       { key: 'type', label: '유형', width: 104, sort: (r) => REQ_TYPE[r.type], edit: { type: 'select', field: 'type', options: REQ_TYPE }, render: (r) => REQ_TYPE[r.type] },
       { key: 'owner', label: 'Owner', width: 128, sort: (r) => r.owner_name || '', edit: { type: 'select', field: 'owner_user_id', options: ownerPairs, value: (r) => r.owner_user_id || '', prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : '') },
         render: (r) => (r.owner_name ? html`<span class="cellwrap"><i class="av">${[...r.owner_name][0]}</i>${r.owner_name}</span>` : dim()) },
-      { key: 'wbs', label: 'WBS', width: 64, align: 'right', sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? String(r.linked_wbs_count) : (r.scope === 'IN_SCOPE' && !r.archived_at ? '<span class="chip chip--hold">없음</span>' : dim())) },
+      { key: 'wbs', label: 'WBS', width: 64, align: 'right', sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? String(r.linked_wbs_count) : (r.scope === 'IN_SCOPE' && !r.archived_at && wbsPhase() ? '<span class="chip chip--hold">없음</span>' : dim())) },
       { key: 'ac', label: '완료 조건', width: 80, align: 'right', sort: (r) => r.criteria_count, render: (r) => (r.criteria_count ? String(r.criteria_count) : dim()) },
       { key: 'requester_name', label: '요청자', width: 110, hidden: true, sort: (r) => r.requester_name || '', render: (r) => r.requester_name || dim() },
       { key: 'requester_organization', label: '요청자 소속', width: 120, hidden: true, sort: (r) => r.requester_organization || '', render: (r) => r.requester_organization || dim() },
@@ -167,7 +167,7 @@ export async function requirementsPage(id) {
   const kpiHtml = () => html`<button type="button" class="kchip" data-kf=""><b>${summary.total}</b>전체</button>
     <button type="button" class="kchip" data-kf="status=CONFIRMED"><b>${summary.confirmed}</b>확정</button>
     <button type="button" class="kchip ${summary.scope_undecided ? 'is-warn' : ''}" data-kf="scope=UNDECIDED"><b>${summary.scope_undecided}</b>범위 미결정</button>
-    <button type="button" class="kchip ${summary.in_scope_unlinked ? 'is-warn' : ''}" data-kf="scope=IN_SCOPE&link=unlinked"><b>${summary.in_scope_unlinked}</b>WBS 미연결 (범위 내)</button>`;
+    ${raw(wbsPhase() ? html`<button type="button" class="kchip ${summary.in_scope_unlinked ? 'is-warn' : ''}" data-kf="scope=IN_SCOPE&link=unlinked"><b>${summary.in_scope_unlinked}</b>WBS 미연결 (범위 내)</button>` : '')}`;
   const paintKpi = () => { const k = $('#kstrip'); if (k) k.innerHTML = kpiHtml(); };
 
   const draw = () => {
@@ -176,7 +176,7 @@ export async function requirementsPage(id) {
       ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED' ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : '')}
       ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived && wbsPhase() ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
-      ${raw(summary.total ? coachMark('REQ_TRACE_INTRO') : '')}
+      ${raw(summary.total && wbsPhase() ? coachMark('REQ_TRACE_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 History에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
       <div class="rtool">
         <div class="seg" role="tablist"><button class="${rview() === 'list' ? 'is-on' : ''}" data-rview="list" role="tab">요구사항 목록</button><button class="${rview() === 'trace' ? 'is-on' : ''}" data-rview="trace" role="tab">Traceability</button></div>
@@ -327,6 +327,7 @@ export async function requirementsPage(id) {
     const b = baseline; const d = $('#drawer'); if (!b || !d) return;
     if (!bw) bw = { add_to_stakeholders: true, ...b.approval };
     const done = b.status === 'COMPLETED'; const lock = archived || done; const c = b.counts; const unconf = c.in_scope_unconfirmed;
+    const empty = !done && !c.in_scope;   // nothing in scope → no baseline to approve (Q6-2; the API refuses too)
     const methods = Object.entries(b.methods);
     d.className = 'drawer drawer--lg'; d.dataset.mode = 'approval';
     d.innerHTML = html`<div class="drawer__h"><b>요구사항 기준선 승인(고객)</b>${raw(done ? '<span class="chip chip--done">승인 기록됨</span>' : '')}<button class="drawer__x" id="dclose" aria-label="닫기" style="margin-left:auto">×</button></div>
@@ -335,13 +336,13 @@ export async function requirementsPage(id) {
         ${raw(!done && b.bypass ? html`<div class="notice notice--soft">승인 전 진행 — 사유: ${b.bypass.reason} (${[b.bypass.date, b.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
         ${raw(done ? html`<div class="notice">고객 승인이 기록되었습니다 · ${b.summary}</div>` : '')}
         <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(reqDocMenu('요구사항 정의서 내려받기'))}</div>
-          <dl><div><dt>범위 내</dt><dd data-apv-in>${c.in_scope}건 (확정 ${c.in_scope_confirmed}건)</dd></div><div><dt>범위 외</dt><dd>${c.out_of_scope}건</dd></div></dl></div>
+          <dl><div><dt>범위 내</dt><dd data-apv-in>${c.in_scope}건 (확정 ${c.in_scope_confirmed}건)</dd></div><div><dt>범위 외</dt><dd>${c.out_of_scope}건</dd></div></dl>${raw(empty ? '<p class="hint" data-apv-empty style="margin:6px 0 0">아직 범위 내 요구사항이 없습니다. 요구사항을 등록하고 범위 내로 분류한 뒤 승인을 기록하세요.</p>' : '')}</div>
         <div class="wd__form">${raw(approvalFields(bw, { people: b.stakeholders, methods, disabled: lock, approverHint: '<small class="dim">고객 PM 또는 요구사항 승인 권한자</small>', evidencePh: "예: 2026-11-20 이수진 차장 회신 메일 '요구사항 정의서 v1.0 승인'" }))}</div>
         ${raw(!lock && unconf ? html`<label class="toggle apv__confirm"><input type="checkbox" id="apv-confirm" ${confirmAll ? 'checked' : ''}> 범위 내 미확정 ${unconf}건을 함께 확정합니다</label>` : '')}
         <div class="apv__block" id="apv-block" role="alert" hidden></div>
         <p class="hint">승인자·승인일·승인 방법·근거가 있어야 완료 처리할 수 있습니다. 승인 이후 확정된 요구사항을 바꾸면 변경 요청으로 처리하도록 안내합니다.</p>
       </div>
-      ${raw(archived ? '' : html`<div class="drawer__f"><span class="wd__stat hint" id="apv-stat"></span><span style="display:flex;gap:8px;margin-left:auto">${raw(done ? '<button type="button" class="btn btn--ghost btn--sm" data-apv="reopen">완료 취소</button>' : '<button type="button" class="btn btn--secondary btn--sm" data-apv="save">임시저장</button><button type="button" class="btn btn--primary btn--sm" data-apv="complete">완료 처리</button>')}</span></div>`)}`;
+      ${raw(archived ? '' : html`<div class="drawer__f"><span class="wd__stat hint" id="apv-stat"></span><span style="display:flex;gap:8px;margin-left:auto">${raw(done ? '<button type="button" class="btn btn--ghost btn--sm" data-apv="reopen">완료 취소</button>' : html`<button type="button" class="btn btn--secondary btn--sm" data-apv="save">임시저장</button><button type="button" class="btn btn--primary btn--sm" data-apv="complete" ${empty ? 'disabled' : ''}>완료 처리</button>`)}</span></div>`)}`;
     bindApproval();
   };
   const bindApproval = () => {
