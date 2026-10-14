@@ -15,6 +15,8 @@
  * `why` stays a one-line rationale used by tests/reports; `title` is the imperative headline.
  */
 import { DEFAULT_PHASES, PHASE_BY_KEY } from './templates/default-phases.js';
+import { testPlanProgressText, defectIssuesText } from './activities.js';
+import { josa } from '../public/app/shared/josa.js';
 
 const n = (v) => Number(v) || 0;
 
@@ -23,6 +25,16 @@ export const PHASE_INTRO = Object.fromEntries(DEFAULT_PHASES.map((p) => [p.key, 
 
 /** "착수 때 제외하기로 한 것: A, B. 여기에 해당하는 요구사항은 '범위 외'로 두세요." (Charter 제외 범위; hidden when empty) */
 export const scopeOutHint = (list) => (list && list.length ? `착수 때 제외하기로 한 것: ${list.join(', ')}. 여기에 해당하는 요구사항은 '범위 외'로 두세요.` : '');
+
+/** Phase 5 C1 — 05 guide + 커버리지 탭 head (one text, one link: 요구사항 화면 미확정 필터). */
+export const UNCONFIRMED_HREF = '/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED';
+export const unconfirmedTestText = (k) => `확정되지 않은 범위 내 요구사항 ${k}건 — 확정하면 테스트 대상에 들어갑니다`;
+/** 05 완료 가이드 제목 (US-1): real numbers, never "테스트가 모두 통과했습니다". */
+export function testDoneTitle(t) {
+  const total = n(t.total); const pass = n(t.last_pass);
+  const tests = pass === total ? `테스트 ${total}건 모두 통과` : `테스트 ${total}건 중 ${pass}건 통과 · 막힘 ${n(t.last_blocked)}건`;
+  return `요구사항 ${n(t.target)}건 검증 완료 · ${tests}${n(t.excluded) ? ` · 제외 ${n(t.excluded)}건` : ''}`;
+}
 
 export function projectGuidance(ctx) {
   const { project, phase, next_phase: nextPhase, definition, stats = {}, overdue_tasks = 0 } = ctx;
@@ -45,7 +57,9 @@ export function projectGuidance(ctx) {
 
   // Cross-phase warnings (guidance, never gates)
   if (n(req.total) && n(req.scope_undecided) && key !== 'REQUIREMENTS') warnings.push(`범위가 결정되지 않은 요구사항 ${req.scope_undecided}건`);
-  if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope) && key !== 'INITIATION' && key !== 'REQUIREMENTS') warnings.push(`미확정 요구사항 ${n(req.in_scope) - n(req.in_scope_confirmed)}건`);
+  if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope) && key !== 'INITIATION' && key !== 'REQUIREMENTS' && key !== 'TESTING') warnings.push(`미확정 요구사항 ${n(req.in_scope) - n(req.in_scope_confirmed)}건`);
+  // Phase 5 C1: in 05 the unconfirmed in-scope requirements are named with what confirming does (never blocks)
+  if (key === 'TESTING' && n(tst.in_scope_unconfirmed)) warnLink(unconfirmedTestText(tst.in_scope_unconfirmed), u(UNCONFIRMED_HREF));
   if (n(iss.critical) && key !== 'DEVELOPMENT') warnings.push(`심각한 Issue ${iss.critical}건`);
   if (n(chg.approved_unimplemented) && key !== 'DEVELOPMENT') warnings.push(`승인 후 미반영 변경 ${chg.approved_unimplemented}건`);
 
@@ -108,11 +122,14 @@ export function projectGuidance(ctx) {
       return out('DEV_STATUS', '작업 진행 상태를 갱신하세요', `완료 ${devDone}/${devTotal}건 · 진행 중 ${n(wbs.in_progress)}건 · 진척률 ${n(wbs.progress)}%. 계획 대비 실제 진행을 주기적으로 기록해야 지연을 조기에 발견할 수 있습니다.`, '계획 대비 실제 진행을 주기적으로 기록해야 지연을 조기에 발견할 수 있습니다.', act('진행 상태 갱신 →', u('/wbs?ctx=monitor')), null, nextPhase ? `구현이 마무리되면 ${nextPhase.name} 단계로 이동합니다.` : null);
     }
     case 'TESTING': {
-      if (n(tst.total) === 0) return out('TEST_EMPTY', '테스트 계획을 세우고 케이스를 작성하세요', '범위 내 요구사항을 기준으로 검증 항목을 정해 두면 구현 결과가 요구사항을 충족하는지 객관적으로 판단하고 검수를 요청할 수 있습니다.', '구현 결과가 요구사항을 충족하는지 검증해야 검수를 요청할 수 있습니다.', act('테스트 케이스 작성 →', u('/tests?new=1')), act('Coverage 보기 →', u('/tests?tab=coverage')), '테스트를 실행하고 결과를 기록합니다.');
-      if (n(tst.last_fail)) return out('TEST_FAIL', '실패한 테스트를 조치하세요', `최근 결과가 실패인 테스트 ${tst.last_fail}건이 있습니다. 실패을 이슈로 연결해 조치하고 재실행해야 검수 전에 품질을 확보할 수 있습니다.`, 'Fail은 이슈로 등록해 조치 담당자를 정하고, 조치 후 다시 실행해야 합니다.', act('결함 조치 →', u('/tests?last_result=FAIL')), act('이슈 보기 →', u('/issues')), '모든 테스트가 Pass하면 검수를 준비합니다.');
-      if (n(tst.executed) < n(tst.total)) return out('TEST_RUN', '테스트를 실행하고 결과를 기록하세요', `테스트 ${tst.total}건 중 ${tst.executed}건이 실행되었습니다. 실행 결과가 쌓여야 품질 상태를 근거 있게 판단할 수 있습니다.`, '실행 결과가 있어야 품질 상태를 판단할 수 있습니다.', act('테스트 실행 →', u('/tests?last_result=NOT_RUN')), null, '실행이 끝나면 실패을 정리합니다.');
-      if (n(tst.in_scope_untested)) warnings.push(`테스트가 연결되지 않은 범위 내 요구사항 ${tst.in_scope_untested}건`);
-      return out('TEST_DONE', '테스트가 모두 통과했습니다', '테스트가 모두 통과했습니다. 오픈 전에 완료 기준과 미해결 항목을 점검하면 예상치 못한 이슈를 줄이고 안정적으로 마무리할 수 있습니다.', '검수는 전환 및 오픈으로 넘어가는 첫 관문입니다.', move || act('검수 항목 작성 →', u('/tests?tab=acceptance&new=1')), move ? act('테스트 결과 보기 →', u('/tests')) : null, nextPhaseText);
+      // Phase 5: every in-scope confirmed requirement gets a test or a 제외 사유 (US-1) · defects end only when test-born issues are closed (US-2)
+      const gen = act('요구사항별 테스트 만들기', u('/tests?tab=coverage&generate=1'));
+      if (n(tst.total) === 0) return out('TEST_EMPTY', '요구사항마다 테스트를 준비하세요', n(tst.in_scope_untested) ? `범위 내 요구사항 ${tst.in_scope_untested}건에 테스트를 1건씩 만들어 드립니다. 기대 결과는 요구사항의 완료 조건으로 채웁니다. 요구사항마다 검증해야 검수에서 빠진 기능이 나오지 않습니다.` : '범위 내 확정 요구사항을 기준으로 테스트를 만들어야 구현 결과가 요구사항을 충족하는지 근거 있게 판단할 수 있습니다.', '구현 결과가 요구사항을 충족하는지 요구사항마다 테스트로 확인해야 고객 검수 전에 빠진 검증이 없습니다.', n(tst.in_scope_untested) ? gen : act('테스트 케이스 작성 →', u('/tests?new=1')), n(tst.in_scope_untested) ? act('직접 추가 · Excel로 가져오기', u('/tests?new=1')) : null, '테스트를 실행하고 결과를 기록합니다.');
+      if (n(tst.in_scope_untested)) return out('TEST_PLAN', '테스트가 없는 요구사항을 정리하세요', `${testPlanProgressText(tst)}. 테스트가 아직 없는 ${tst.in_scope_untested}건은 테스트를 만들거나, 다른 방법으로 확인한다면 제외 사유를 남기세요.`, '범위 내 요구사항마다 테스트 또는 제외 사유가 있어야 05가 끝납니다.', gen, act('커버리지 보기', u('/tests?tab=coverage')), '테스트를 실행하고 결과를 기록합니다.');
+      if (n(tst.last_fail)) return out('TEST_FAIL', '실패한 테스트를 조치하세요', `최근 결과가 실패인 테스트 ${tst.last_fail}건이 있습니다. ${josa('실패', '를')} 이슈로 연결해 조치하고 재실행해야 검수 전에 품질을 확보할 수 있습니다.`, '실패는 이슈로 등록해 조치 담당자를 정하고, 조치 후 다시 실행해야 합니다.', act('결함 조치 →', u('/tests?last_result=FAIL')), act('이슈 보기 →', u('/issues?source=TEST')), '모든 테스트가 통과하면 검수를 준비합니다.');
+      if (n(tst.fail_issues_open)) return out('TEST_DEFECT_OPEN', '결함 이슈를 해결로 바꾸세요', `실패 테스트 0건 · ${defectIssuesText(tst)}. 재시험에 통과했다면 이슈를 해결로 바꿔야 결함 조치가 끝납니다.`, '테스트에서 등록한 이슈가 닫혀야 결함 조치가 끝납니다.', act('결함 이슈 보기', u('/issues?source=TEST')), null, '결함이 정리되면 검수를 준비합니다.');
+      if (n(tst.executed) < n(tst.total)) return out('TEST_RUN', '테스트를 실행하고 결과를 기록하세요', `테스트 ${tst.total}건 중 ${tst.executed}건이 실행되었습니다. 실행 결과가 쌓여야 품질 상태를 근거 있게 판단할 수 있습니다.`, '실행 결과가 있어야 품질 상태를 판단할 수 있습니다.', act('테스트 실행 →', u('/tests?last_result=NOT_RUN')), null, `실행이 끝나면 ${josa('실패', '를')} 정리합니다.`);
+      return out('TEST_DONE', testDoneTitle(tst), '요구사항 기준 검증이 끝났습니다. 오픈 전에 완료 기준과 미해결 항목을 점검하면 예상치 못한 이슈를 줄이고 안정적으로 마무리할 수 있습니다.', '검수는 전환 및 오픈으로 넘어가는 첫 관문입니다.', move || act('검수 항목 작성 →', u('/tests?tab=acceptance&new=1')), move ? act('테스트 결과 보기 →', u('/tests')) : null, nextPhaseText);
     }
     case 'TRANSITION_GO_LIVE': {
       // 검수 rules apply until the ACCEPTANCE activity is complete (from data, or marked by hand when 검수 happened outside RELAI)

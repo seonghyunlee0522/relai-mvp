@@ -47,7 +47,7 @@ test('DEVELOPMENT / TESTING: red flags (overdue, fail, blocked) are IN_PROGRESS 
   assert.equal(by.DELAYS.state, 'IN_PROGRESS'); assert.equal(by.DELAYS.crit, true);
   assert.equal(by.ISSUES.state, 'IN_PROGRESS'); assert.equal(by.ISSUES.crit, true); assert.equal(by.ISSUES.cta.href, '/app/projects/p1/issues?status=BLOCKED');
   assert.equal(by.CHANGES.state, 'NOT_STARTED'); assert.equal(by.DECISIONS.state, 'NOT_STARTED');
-  a = activityStates('TESTING', stepsOf('TESTING'), ctx({ tests: { total: 3, executed: 3, last_fail: 1, in_scope: 3, in_scope_tested: 3, in_scope_untested: 0, coverage: 100 } }));
+  a = activityStates('TESTING', stepsOf('TESTING'), ctx({ tests: { total: 3, executed: 3, last_fail: 1, in_scope: 3, in_scope_tested: 3, in_scope_untested: 0, target: 3, target_tested: 3, excluded: 0, coverage: 100 } }));
   by = Object.fromEntries(a.map((x) => [x.step_key, x]));
   assert.equal(by.TEST_PLAN.state, 'COMPLETED'); assert.equal(by.RUN.state, 'COMPLETED'); assert.equal(by.DEFECTS.state, 'IN_PROGRESS'); assert.equal(by.DEFECTS.crit, true);
 });

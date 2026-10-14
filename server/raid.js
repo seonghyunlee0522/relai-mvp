@@ -105,7 +105,8 @@ function listWhere(type, q, vals) {
   const where = ['x.project_id = ?'];
   if (q.include_archived !== '1') where.push('x.archived_at IS NULL');
   const multi = (k, list) => { if (!q[k]) return; const v = String(q[k]).split(',').filter((s) => list.includes(s)); if (v.length) { where.push(`x.${k} IN (${v.map(() => '?').join(',')})`); vals.push(...v); } };
-  if (type === 'ISSUE') { multi('status', ISSUE_STATUSES); multi('severity', SEVERITIES); if (q.overdue === '1') where.push(`x.due_date IS NOT NULL AND x.due_date < ${TODAY} AND x.status NOT IN ('RESOLVED','CLOSED')`); }
+  if (type === 'ISSUE') { multi('status', ISSUE_STATUSES); multi('severity', SEVERITIES); if (q.overdue === '1') where.push(`x.due_date IS NOT NULL AND x.due_date < ${TODAY} AND x.status NOT IN ('RESOLVED','CLOSED')`);
+    if (q.source === 'TEST') where.push(`x.source_test_execution_id IS NOT NULL AND x.status NOT IN ('RESOLVED','CLOSED')`); }   // Phase 5 US-2: 처리 중 결함 이슈
   else { multi('status', RISK_STATUSES); multi('probability', LEVELS3); multi('impact', LEVELS3); multi('risk_level', RISK_LEVELS); multi('response_strategy', STRATEGIES); if (q.review === '1') where.push(`x.review_date IS NOT NULL AND x.review_date < ${TODAY} AND x.status NOT IN ('CLOSED','MATERIALIZED')`); }
   if (q.owner === 'none') where.push(type === 'ISSUE' ? 'x.owner_user_id IS NULL AND x.owner_stakeholder_id IS NULL' : 'x.owner_user_id IS NULL');
   else if (q.owner && type === 'ISSUE' && /^s:./.test(String(q.owner))) { where.push('x.owner_stakeholder_id = ?'); vals.push(String(q.owner).slice(2)); }

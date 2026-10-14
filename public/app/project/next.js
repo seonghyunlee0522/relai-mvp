@@ -100,7 +100,7 @@ const otherPhasePanel = (g, ph, archived) => {
       <span class="np__remain ${passed && !s.required_open ? 'is-good' : ''}">${remain}</span>
     </div>
     <p class="np__d">${ph.description}</p>
-    ${raw(ph.phase_key === 'INITIATION' || ph.phase_key === 'REQUIREMENTS' ? noApprovalLine(g, ph.phase_key) : '')}
+    ${raw(ph.phase_key === 'INITIATION' || ph.phase_key === 'REQUIREMENTS' || ph.phase_key === 'TESTING' ? noApprovalLine(g, ph.phase_key) : '')}
     <ol class="np__list ${hasActs ? '' : 'np__list--noacts'}">${raw(rows)}</ol>
     <div class="np__f"><span class="np__msg">${raw(cur ? html`현재 단계는 <b>${no2(cur.sequence)} ${cur.name}</b>입니다.` : '')}</span>
       <a class="link np__back" href="/app/projects/${g.project.id}" data-link>현재 단계 업무 보기 →</a></div>

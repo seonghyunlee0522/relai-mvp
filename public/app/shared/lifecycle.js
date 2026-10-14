@@ -63,9 +63,9 @@ export const PHASE_ITEMS = {
     { key: 'dev-tasks', label: '실행 작업', enabled: false },
   ],
   TESTING: (pid) => [
-    { key: 'test-plan', label: '테스트 계획', href: P(pid, '/tests?tab=coverage'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'tab', 'coverage') },
-    { key: 'tests', label: 'Tests', href: P(pid, '/tests'), match: (path, qs) => isPath(path, pid, '/tests') && !qs.get('tab') && !q(qs, 'last_result', 'FAIL') },
-    { key: 'defects', label: 'Defects', href: P(pid, '/tests?last_result=FAIL'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'last_result', 'FAIL') },
+    { key: 'test-plan', label: '요구사항 커버리지', href: P(pid, '/tests?tab=coverage'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'tab', 'coverage') },
+    { key: 'tests', label: '테스트', href: P(pid, '/tests'), match: (path, qs) => isPath(path, pid, '/tests') && !qs.get('tab') && !q(qs, 'last_result', 'FAIL') },
+    { key: 'defects', label: '결함', href: P(pid, '/tests?last_result=FAIL'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'last_result', 'FAIL') },
   ],
   TRANSITION_GO_LIVE: (pid) => [
     { key: 'acceptance', label: '검수 / 인수 승인', href: P(pid, '/tests?tab=acceptance'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'tab', 'acceptance') },

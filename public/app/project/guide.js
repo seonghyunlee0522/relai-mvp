@@ -52,7 +52,7 @@ export async function moveToPhase(pid, g, target, { next = false } = {}) {
     const r = await approvalGateDialog(cfg);
     if (!r) return false;
     if (r === 'record') { navigate(cfg.record(pid)); return false; }
-    try { await api('PATCH', wsApi(`/${pid}/steps/${apv.id}`), { note: bypassNote(apv.note, r.reason) }); }
+    try { await api('PATCH', wsApi(`/${pid}/steps/${apv.id}`), { note: bypassNote(apv.note, r.reason, cfg) }); }
     catch (e) { toast(e.message); return false; }
   }
   // the general dialog lists the other open REQUIRED activities (the approval gate step already handled above)

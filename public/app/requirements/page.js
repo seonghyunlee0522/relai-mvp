@@ -438,7 +438,7 @@ export async function requirementsPage(id) {
       ...(r.jira && r.jira.total ? [{ label: 'Jira', value: `${r.jira.done}/${r.jira.total} Done`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
       { label: '변경 요청', value: r.changes ? r.changes.length : 0, href: `${u}/changes?requirement=${r.id}`, tone: r.changes && r.changes.length ? '' : 'muted' },
       { label: '이슈', value: issues, sub: risks ? `리스크 ${risks}` : '', href: `${u}/issues?requirement=${r.id}`, tone: issues ? 'warn' : 'muted' },
-      { label: 'Tests', value: t.total, sub: t.total ? `${t.pass} Pass · ${t.fail} Fail` : '', href: `${u}/tests?requirement=${r.id}`, tone: t.fail ? 'crit' : t.total && t.verification === 'VERIFIED' ? 'ok' : t.total ? '' : 'muted' },
+      { label: '테스트', value: t.total, sub: t.total ? `통과 ${t.pass} · 실패 ${t.fail}` : r.test_exclusion_reason ? '테스트 제외' : '', href: `${u}/tests?requirement=${r.id}`, tone: t.fail ? 'crit' : t.total && t.verification === 'VERIFIED' ? 'ok' : t.total ? '' : 'muted' },
       { label: 'Acceptance', value: acc ? ACC_STATUS[acc.status] : '-', sub: acc ? acc.display_id : '', href: acc ? `${u}/tests?tab=acceptance&sel=${acc.id}` : `${u}/tests?tab=acceptance&requirement=${r.id}`, tone: acc ? (acc.status === 'ACCEPTED' ? 'ok' : acc.status === 'REWORK_REQUIRED' || acc.status === 'REJECTED' ? 'crit' : '') : 'muted' },
     ]);
   };
@@ -463,6 +463,8 @@ export async function requirementsPage(id) {
     switch (h.action_type) {
       case 'CREATED': return html`<b>${r.display_id}</b> 생성`;
       case 'ARCHIVED': return html`보관 처리`;
+      case 'TEST_EXCLUDED': return html`테스트 제외 <q>${h.new_value}</q>`;   // Phase 5 US-1
+      case 'TEST_EXCLUSION_CANCELLED': return html`테스트 제외 취소 <q>${h.old_value}</q>`;
       case 'CRITERION_ADDED': return html`완료 조건 추가 <q>${h.new_value}</q>`;
       case 'CRITERION_UPDATED': return html`완료 조건 수정 <q>${h.old_value}</q> → <q>${h.new_value}</q>`;
       case 'CRITERION_REMOVED': return html`완료 조건 삭제 <q>${h.old_value}</q>`;

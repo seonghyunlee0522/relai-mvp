@@ -260,7 +260,7 @@ test('migration 35: originals backfilled for projects at/after 04 (value before 
   // legacy shape: no originals, no WEEKLY_REPORT step
   await db.run('UPDATE wbs_items SET original_planned_end_date = NULL');
   await db.run(`DELETE FROM project_steps WHERE step_key = 'WEEKLY_REPORT'`);
-  const m35 = migrations.find((m) => m.version === 35); assert.ok(m35); assert.equal(migrations[migrations.length - 1].version, 35);
+  const m35 = migrations.find((m) => m.version === 35); assert.ok(m35); assert.ok(migrations[migrations.length - 1].version >= 35);
   await m35.up(db); await m35.up(db);
   const orig = async (id) => (await db.get('SELECT original_planned_end_date AS o FROM wbs_items WHERE id = ?', [id])).o;
   assert.equal(await orig(t1.id), d(7), 'last end date recorded before 04 entry');

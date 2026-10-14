@@ -5,7 +5,8 @@
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
 import { nextDisplayId, formatDisplayId, reserveProjectSequence, resolveLinkTarget, ensureNoDuplicate, linkLabel } from './common.js';
-import { createIssue } from './raid.js';
+import { createIssue, updateEntity } from './raid.js';
+import { todayKst } from '../public/app/shared/kst-date.js';
 
 export const TC_STATUSES = ['DRAFT', 'READY', 'BLOCKED', 'COMPLETED'];
 export const TC_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
@@ -19,6 +20,15 @@ const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && 
 const addHistory = async (db, type, id, action, { field = null, oldValue = null, newValue = null } = {}, userId, ts = now()) =>
   (await db.run('INSERT INTO qa_history (id, entity_type, entity_id, action_type, field_name, old_value, new_value, changed_by, changed_at) VALUES (?,?,?,?,?,?,?,?,?)', [randomUUID(), type, id, action, field, oldValue, newValue, userId, ts]));
 const history = async (db, type, id) => (await db.all(`SELECT h.*, u.name AS changed_by_name FROM qa_history h LEFT JOIN users u ON u.id = h.changed_by WHERE h.entity_type = ? AND h.entity_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [type, id]));
+
+const ORG_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
+const stakeholdersOf = async (db, projectId) => { const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]); try { const v = r ? JSON.parse(r.stakeholders) : []; return Array.isArray(v) ? v : []; } catch { return []; } };
+/** US-4 수행자 picker groups: 팀원 (계정 없음) = the Phase 3 owner list; 고객사 = 01 이해관계자 with 조직 구분 고객사. */
+export async function performerOptions(db, project, team) {
+  const all = await stakeholdersOf(db, project.id);
+  return { team, clients: all.filter((x) => x.org_type === 'CLIENT' && x.name).map((x) => ({ id: x.id, name: x.name, role: x.role || '', org: x.org || '' })) };
+}
+export const isProjectStakeholder = async (db, projectId, id) => (await stakeholdersOf(db, projectId)).some((x) => x.id === id && x.name);
 
 /* ---------- domain: verification status from a list of latest results ---------- */
 /** results: array of last_result values (null = never run). UNLINKED | FAILED | VERIFIED | IN_PROGRESS */
@@ -50,14 +60,24 @@ export function parseTest(b = {}, { partial = false } = {}) {
   if (Object.keys(f).length) throw new ValidationError(f);
   return out;
 }
-export function parseExecution(b = {}) {
+export function parseExecution(b = {}, today = todayKst()) {
   const f = {}; const result = b.result;
-  if (!['PASS', 'FAIL', 'BLOCKED'].includes(result)) f.result = '결과는 PASS / FAIL / BLOCKED 중 하나여야 합니다.';
+  if (!['PASS', 'FAIL', 'BLOCKED'].includes(result)) f.result = '결과는 통과 / 실패 / 막힘 중 하나여야 합니다.';
   const actual_result = str(b.actual_result); const note = str(b.note);
   if (actual_result.length > 5000) f.actual_result = '실제 결과는 5,000자 이내로 입력해 주세요.';
   if (note.length > 2000) f.note = '메모는 2,000자 이내로 입력해 주세요.';
-  if (Object.keys(f).length) throw new ValidationError(f);
-  return { result, actual_result, note };
+  // Phase 5 US-4: 수행자 (RELAI 사용자 · 팀원 · 고객사) + 수행일 (default today KST, never in the future)
+  const performer_user_id = b.performer_user_id ? String(b.performer_user_id) : null;
+  const performer_stakeholder_id = b.performer_stakeholder_id ? String(b.performer_stakeholder_id) : null;
+  if (performer_user_id && performer_stakeholder_id) f.performer = '수행자는 한 명만 지정할 수 있습니다.';
+  let performed_on = b.performed_on ? String(b.performed_on) : null;
+  if (performed_on && !isDate(performed_on)) f.performed_on = '날짜 형식이 올바르지 않습니다.';
+  else if (performed_on && performed_on > today) f.performed_on = '수행일은 오늘 이후 날짜로 정할 수 없습니다.';
+  if (!performed_on) performed_on = today;
+  const ids = b.resolve_issue_ids === undefined || b.resolve_issue_ids === null ? [] : b.resolve_issue_ids;
+  if (!Array.isArray(ids) || ids.length > 20) f.resolve_issue_ids = '해결할 이슈 목록 형식이 올바르지 않습니다.';
+  if (Object.keys(f).length) { const e = new ValidationError(f); if (f.performed_on) { e.status = 422; e.code = 'invalid_performed_on'; e.message = f.performed_on; } throw e; }
+  return { result, actual_result, note, performer_user_id, performer_stakeholder_id, performed_on, resolve_issue_ids: [...new Set(ids.map(String))] };
 }
 export function parseAcceptance(b = {}, { partial = false } = {}) {
   const f = {}; const out = {};
@@ -100,17 +120,27 @@ export async function testStats(db, projectId) {
       COALESCE(SUM((EXISTS (SELECT 1 FROM test_executions e WHERE e.test_case_id = t.id))::int), 0) AS executed,
       COALESCE(SUM((${LAST} = 'PASS')::int), 0) AS last_pass, COALESCE(SUM((${LAST} = 'FAIL')::int), 0) AS last_fail, COALESCE(SUM((${LAST} = 'BLOCKED')::int), 0) AS last_blocked
     FROM test_cases t WHERE t.project_id = ? AND t.archived_at IS NULL`, [projectId]));
+  // Phase 5 US-1: the 05 TEST_PLAN target = in-scope CONFIRMED requirements; each needs a live test OR a 테스트 제외 사유 (Jim Q1: 확정만 셈)
   const c = (await db.get(`SELECT COUNT(*) AS in_scope,
-      COALESCE(SUM((EXISTS (SELECT 1 FROM test_links l JOIN test_cases tc ON tc.id = l.test_case_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = r.id AND tc.archived_at IS NULL))::int), 0) AS in_scope_tested
-    FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE'`, [projectId]));
-  const fi = (await db.get(`SELECT COUNT(*) AS n FROM issues i WHERE i.project_id = ? AND i.archived_at IS NULL AND i.source_test_execution_id IS NOT NULL AND i.status NOT IN ('RESOLVED','CLOSED')`, [projectId])).n;
-  return { ...t, in_scope: c.in_scope, in_scope_tested: c.in_scope_tested, in_scope_untested: c.in_scope - c.in_scope_tested,
-    coverage: c.in_scope ? Math.round((c.in_scope_tested / c.in_scope) * 100) : null, fail_issues_open: fi };
+      COALESCE(SUM(x.tested::int), 0) AS in_scope_tested,
+      COALESCE(SUM((x.status = 'CONFIRMED')::int), 0) AS target,
+      COALESCE(SUM((x.status = 'CONFIRMED' AND x.tested)::int), 0) AS target_tested,
+      COALESCE(SUM((x.status = 'CONFIRMED' AND NOT x.tested AND x.excluded)::int), 0) AS excluded,
+      COALESCE(SUM((x.status = 'CONFIRMED' AND NOT x.tested AND NOT x.excluded)::int), 0) AS untested,
+      COALESCE(SUM((x.status <> 'CONFIRMED')::int), 0) AS unconfirmed
+    FROM (SELECT r.status, COALESCE(TRIM(r.test_exclusion_reason), '') <> '' AS excluded,
+        EXISTS (SELECT 1 FROM test_links l JOIN test_cases tc ON tc.id = l.test_case_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = r.id AND tc.archived_at IS NULL) AS tested
+      FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE') x`, [projectId]));
+  // US-2: issues raised from a test execution that are still open (해결·종료 아님) keep 결함 조치 open
+  const fi = (await db.all(`SELECT i.display_id FROM issues i WHERE i.project_id = ? AND i.archived_at IS NULL AND i.source_test_execution_id IS NOT NULL AND i.status NOT IN ('RESOLVED','CLOSED') ORDER BY i.sequence_number`, [projectId])).map((r) => r.display_id);
+  return { ...t, in_scope: c.in_scope, in_scope_tested: c.in_scope_tested, in_scope_untested: c.untested,
+    target: c.target, target_tested: c.target_tested, excluded: c.excluded, in_scope_unconfirmed: c.unconfirmed,
+    coverage: c.in_scope ? Math.round((c.in_scope_tested / c.in_scope) * 100) : null, fail_issues_open: fi.length, fail_issue_ids: fi };
 }
 
 /** Coverage view: every active IN_SCOPE requirement with its latest-result summary (one query for links, grouped in JS). */
 export async function coverage(db, projectId) {
-  const reqs = (await db.all(`SELECT id, display_id, title, status, scope FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' ORDER BY sequence_number`, [projectId]));
+  const reqs = (await db.all(`SELECT id, display_id, title, status, scope, test_exclusion_reason FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' ORDER BY sequence_number`, [projectId]));
   const rows = (await db.all(`SELECT l.target_id AS requirement_id, t.id, t.display_id, t.title, t.status, ${LAST} AS last_result
     FROM test_links l JOIN test_cases t ON t.id = l.test_case_id WHERE l.project_id = ? AND l.target_type = 'REQUIREMENT' AND t.archived_at IS NULL ORDER BY t.sequence_number`, [projectId]));
   const by = new Map(); for (const r of rows) { if (!by.has(r.requirement_id)) by.set(r.requirement_id, []); by.get(r.requirement_id).push(r); }
@@ -131,9 +161,15 @@ export async function getTest(db, project, id) {
       CASE l.target_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements x WHERE x.id = l.target_id) ELSE (SELECT title FROM wbs_items x WHERE x.id = l.target_id) END AS title,
       CASE l.target_type WHEN 'REQUIREMENT' THEN (SELECT archived_at FROM requirements x WHERE x.id = l.target_id) ELSE (SELECT archived_at FROM wbs_items x WHERE x.id = l.target_id) END AS archived_at
     FROM test_links l WHERE l.test_case_id = ? ORDER BY l.target_type, code`, [id]));
-  const executions = (await db.all(`SELECT e.*, u.name AS executed_by_name, (SELECT display_id FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_display_id,
+  const executions = (await db.all(`SELECT e.*, u.name AS executed_by_name, pu.name AS performer_user_name, (SELECT display_id FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_display_id,
       (SELECT id FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_id, (SELECT status FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_status
-    FROM test_executions e LEFT JOIN users u ON u.id = e.executed_by WHERE e.test_case_id = ? ORDER BY e.execution_number DESC`, [id]));
+    FROM test_executions e LEFT JOIN users u ON u.id = e.executed_by LEFT JOIN users pu ON pu.id = e.performer_user_id WHERE e.test_case_id = ? ORDER BY e.execution_number DESC`, [id]));
+  // US-4: 수행자 이해관계자 → "이름(고객사)" from 01 (no FK; a deleted one shows as 삭제된 수행자)
+  if (executions.some((e) => e.performer_stakeholder_id)) {
+    const sh = await stakeholdersOf(db, project.id);
+    for (const e of executions) if (e.performer_stakeholder_id) { const x = sh.find((v) => v.id === e.performer_stakeholder_id); e.performer_name = x ? x.name : '(삭제된 수행자)'; e.performer_org = x ? ORG_LABEL[x.org_type] || '' : ''; }
+  }
+  for (const e of executions) if (!e.performer_stakeholder_id) { e.performer_name = e.performer_user_name || e.executed_by_name || ''; e.performer_org = ''; }
   const acceptances = (await db.all(`SELECT a.id, a.display_id, a.title, a.status FROM acceptance_links l JOIN acceptances a ON a.id = l.acceptance_id WHERE l.target_type = 'TEST' AND l.target_id = ? AND a.archived_at IS NULL`, [id]));
   return { ...parseSteps(t), links: { requirements: links.filter((l) => l.target_type === 'REQUIREMENT'), wbs: links.filter((l) => l.target_type === 'WBS') }, executions, acceptances, history: (await history(db, 'TEST', id)) };
 }
@@ -171,15 +207,82 @@ export async function archiveTest(db, existing, userId) {
   const ts = now(); (await db.run('UPDATE test_cases SET archived_at = ?, updated_at = ? WHERE id = ?', [ts, ts, existing.id]));
   (await addHistory(db, 'TEST', existing.id, 'ARCHIVED', {}, userId, ts)); return true;
 }
-/** Append an execution; execution_number = max+1 inside the caller's IMMEDIATE transaction. */
+/** Append an execution; execution_number = max+1 inside the caller's IMMEDIATE transaction.
+ * Phase 5: 수행자 defaults to the recorder (기록한 사람 = executed_by stays as is). A PASS may resolve the test's open defect issues
+ * (US-2 체크박스): status → 해결, resolution "재시험 통과 (TC-003 #2): {실제 결과}". */
 export async function addExecution(db, test, input, userId) {
   const n = (await db.get('SELECT COALESCE(MAX(execution_number), 0) + 1 AS n FROM test_executions WHERE test_case_id = ?', [test.id])).n;
   const id = randomUUID(); const ts = now();
-  (await db.run('INSERT INTO test_executions (id, test_case_id, execution_number, result, actual_result, note, executed_by, executed_at, created_at) VALUES (?,?,?,?,?,?,?,?,?)', [id, test.id, n, input.result, input.actual_result, input.note, userId, ts, ts]));
+  const pu = input.performer_stakeholder_id ? null : input.performer_user_id || userId;
+  (await db.run(`INSERT INTO test_executions (id, test_case_id, execution_number, result, actual_result, note, executed_by, executed_at, created_at, performer_user_id, performer_stakeholder_id, performed_on)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, [id, test.id, n, input.result, input.actual_result, input.note, userId, ts, ts, pu, input.performer_stakeholder_id || null, input.performed_on || todayKst()]));
   (await addHistory(db, 'TEST', test.id, 'EXECUTED', { field: `#${n}`, newValue: input.result }, userId, ts));
   (await db.run('UPDATE test_cases SET updated_at = ? WHERE id = ?', [ts, test.id]));
-  return { id, execution_number: n };
+  const resolved = [];
+  if (input.result === 'PASS') for (const iid of input.resolve_issue_ids || []) {
+    const iss = (await db.get(`SELECT i.* FROM issues i JOIN test_executions e ON e.id = i.source_test_execution_id
+      WHERE i.id = ? AND e.test_case_id = ? AND i.archived_at IS NULL AND i.status NOT IN ('RESOLVED','CLOSED')`, [iid, test.id]));
+    if (!iss) continue;
+    const text = `재시험 통과 (${test.display_id} #${n})${input.actual_result ? `: ${input.actual_result}` : ''}`;
+    (await updateEntity(db, 'ISSUE', iss, { status: 'RESOLVED', resolution: iss.resolution ? `${iss.resolution}\n${text}` : text }, userId));
+    resolved.push(iss.display_id);
+  }
+  if (resolved.length) (await addHistory(db, 'TEST', test.id, 'ISSUE_RESOLVED', { field: `#${n}`, newValue: resolved.join(', ') }, userId, ts));
+  return { id, execution_number: n, resolved };
 }
+
+/* ---------- Phase 5 US-1: 요구사항별 테스트 만들기 (rule-based, like the Phase 3 WBS skeleton — not AI) ---------- */
+export const FROM_REQ_SOURCE = '요구사항에서 생성';
+/** In-scope CONFIRMED requirements with neither a live test nor a 테스트 제외 사유 — one test each. */
+export async function untestedRequirements(db, projectId) {
+  const reqs = (await db.all(`SELECT r.id, r.display_id, r.title, r.description FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE' AND r.status = 'CONFIRMED'
+      AND COALESCE(TRIM(r.test_exclusion_reason), '') = ''
+      AND NOT EXISTS (SELECT 1 FROM test_links l JOIN test_cases tc ON tc.id = l.test_case_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = r.id AND tc.archived_at IS NULL)
+    ORDER BY r.sequence_number`, [projectId]));
+  const crit = reqs.length ? (await db.all(`SELECT requirement_id, content FROM requirement_criteria WHERE requirement_id IN (${reqs.map(() => '?').join(',')}) ORDER BY sequence`, reqs.map((r) => r.id))) : [];
+  return reqs.map((r) => ({ ...r, criteria: crit.filter((c) => c.requirement_id === r.id).map((c) => c.content.trim()).filter(Boolean) }));
+}
+/** Test fields for one requirement: 제목 "{REQ-ID} {제목} 확인", 기대 결과 = 완료 조건 (줄마다) or the description, 상태 준비됨. */
+export const testFromRequirement = (r) => ({
+  title: `${r.display_id} ${r.title} 확인`.slice(0, 200),
+  expected_result: (r.criteria.length ? r.criteria.map((c) => (r.criteria.length > 1 ? `- ${c}` : c)).join('\n') : (r.description || '').trim()).slice(0, 2000),
+  status: 'READY', priority: 'MEDIUM',
+});
+export async function fromRequirementsPreview(db, project) {
+  const list = await untestedRequirements(db, project.id);
+  return { count: list.length, items: list.map((r) => ({ requirement_id: r.id, display_id: r.display_id, title: testFromRequirement(r).title })) };
+}
+/** One transaction (caller): creates + links every test. Returns the new ids ([] → caller answers 409). */
+export async function createFromRequirements(db, project, userId) {
+  const list = await untestedRequirements(db, project.id); const ids = [];
+  for (const r of list) {
+    const id = await createTest(db, project, testFromRequirement(r), userId);
+    (await addHistory(db, 'TEST', id, 'GENERATED', { field: 'REQUIREMENT', newValue: FROM_REQ_SOURCE }, userId));
+    (await db.run('INSERT INTO test_links (id, project_id, test_case_id, target_type, target_id, created_by) VALUES (?,?,?,?,?,?)', [randomUUID(), project.id, id, 'REQUIREMENT', r.id, userId]));
+    (await addHistory(db, 'TEST', id, 'LINKED', { field: 'REQUIREMENT', newValue: `${r.display_id} ${r.title}` }, userId));
+    ids.push(id);
+  }
+  return ids;
+}
+
+/* ---------- Phase 5 US-1: 테스트 제외 (requirement-level, 사유 필수) ---------- */
+/** reason: non-blank text → 제외 · null → 제외 취소. Blank text → 422. History on the requirement ("테스트 제외" / "제외 취소"). */
+export async function setTestExclusion(db, requirement, reason, userId) {
+  let next = null;
+  if (reason !== null && reason !== undefined) {
+    next = str(reason);
+    const bad = !next ? '테스트하지 않는 이유를 적어 주세요.' : next.length > 500 ? '사유는 500자 이내로 입력해 주세요.' : null;
+    if (bad) { const e = new ValidationError({ reason: bad }); e.status = 422; e.code = 'exclusion_reason_required'; e.message = bad; throw e; }
+  }
+  const prev = requirement.test_exclusion_reason || null;
+  if ((prev || null) === next) return false;
+  const ts = now();
+  (await db.run('UPDATE requirements SET test_exclusion_reason = ?, updated_at = ? WHERE id = ?', [next, ts, requirement.id]));
+  (await db.run('INSERT INTO requirement_history (id, requirement_id, action_type, field_name, old_value, new_value, changed_by, changed_at) VALUES (?,?,?,?,?,?,?,?)',
+    [randomUUID(), requirement.id, next ? 'TEST_EXCLUDED' : 'TEST_EXCLUSION_CANCELLED', 'test_exclusion_reason', prev, next, userId, ts]));
+  return true;
+}
+
 export async function addTestLink(db, project, test, targetType, targetId, userId) {
   const t = (await resolveLinkTarget(db, project, targetType, targetId, ['REQUIREMENT', 'WBS'])); if (t.error) return t;
   (await ensureNoDuplicate(db, 'test_links', 'test_case_id = ? AND target_type = ? AND target_id = ?', [test.id, targetType, t.row.id]));

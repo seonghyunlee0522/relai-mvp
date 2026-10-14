@@ -25,7 +25,7 @@ export async function raidPage(id) {
   const isIssue = () => tab() === 'issues';
   const xApi = (s = '') => wsApi(`/${id}/${tab()}${s}`);
   const key = () => (isIssue() ? 'issue' : 'risk');
-  const ISSUE_F = ['status', 'severity', 'owner', 'wbs', 'requirement', 'change', 'overdue'];
+  const ISSUE_F = ['status', 'severity', 'owner', 'wbs', 'requirement', 'change', 'overdue', 'source'];
   const RISK_F = ['status', 'probability', 'impact', 'risk_level', 'owner', 'response_strategy', 'wbs', 'requirement', 'change', 'review'];
   const filterKeys = () => (isIssue() ? ISSUE_F : RISK_F);
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys()]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
@@ -41,7 +41,7 @@ export async function raidPage(id) {
   const FILTER_DEFS = (I) => [{ key: 'q', label: '검색' }, { key: 'status', label: '상태', map: I ? ISSUE_STATUS : RISK_STATUS }, { key: 'severity', label: '심각도', map: SEVERITY }, { key: 'risk_level', label: '등급', map: RISK_LEVEL },
     { key: 'probability', label: '발생 가능성', map: LEVEL3 }, { key: 'impact', label: '영향도', map: LEVEL3 }, { key: 'response_strategy', label: '전략', map: STRATEGY }, { key: 'owner', label: '담당자', map: { ...ownerMap, ...teamMap(), none: '미지정' } },
     { key: 'wbs', label: 'WBS', format: () => '선택 항목' }, { key: 'requirement', label: '요구사항', format: () => '선택 항목' }, { key: 'change', label: '변경 요청', format: () => '선택 항목' },
-    { key: 'overdue', label: '기한 지남', format: () => '예' }, { key: 'review', label: '검토 필요', format: () => '예' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
+    { key: 'overdue', label: '기한 지남', format: () => '예' }, { key: 'source', label: '처리 중 결함 이슈', format: () => '테스트에서 등록' }, { key: 'review', label: '검토 필요', format: () => '예' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const ownerOpts = (cur, blank = '미지정') => html`<option value="">${blank}</option>` + members.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
   const dcell = (d) => (d ? html`${fmtShort(d)}` : '<span class="dim">-</span>');
   document.title = `이슈·리스크 — ${p.name} — RELAI`;

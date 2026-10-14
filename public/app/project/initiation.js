@@ -29,6 +29,9 @@ export const TERMS = {
   wbs_milestone: ['마일스톤', '고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'],
   gantt: ['Gantt', '작업의 시작일·종료일을 막대로 그린 일정표'],
   skeleton: ['WBS 뼈대', '요구사항과 꼭 필요한 시험·오픈 작업을 넣은 기본 작업 목록'],
+  // 05 시험 only (Phase 5 US-7)
+  coverage: ['커버리지', '범위 내 요구사항 중 테스트가 연결된 비율'],
+  uat: ['UAT', '고객 현업이 직접 확인하는 인수 테스트'],
   scope: ['범위 내 / 범위 외', '범위 내는 이번 계약에서 만드는 것, 범위 외는 이번에는 하지 않기로 한 것. 범위 외를 나중에 하려면 변경 요청으로 추가합니다'],
 };
 /** Small "?" with a tooltip (hover / focus). */
@@ -68,7 +71,13 @@ export const APPROVAL_GATES = {
   REQUIREMENTS: { step: 'BASELINE_APPROVAL', record: (pid) => `/app/projects/${pid}/requirements?approval=1`,
     title: '고객 승인 없이 분석·설계 단계로 넘어가려 합니다',
     body: "요구사항 기준선을 고객이 승인하지 않은 채 진행하면, 설계·개발 중 '이건 요청한 적 없다/빠졌다'는 다툼이 생기기 쉽습니다. 요구사항 정의서를 보내 승인을 먼저 받으세요." },
+  // Phase 5 US-1: 05 → 06 with 요구사항별 테스트 준비 open — same dialog, test wording
+  TESTING: { step: 'TEST_PLAN', record: (pid) => `/app/projects/${pid}/tests?tab=coverage`,
+    title: '테스트가 없는 요구사항이 있는 채로 전환 및 오픈 단계로 넘어가려 합니다',
+    body: '범위 내 요구사항 중 테스트도 제외 사유도 없는 것이 있습니다. 검증하지 않은 요구사항은 고객 검수에서 빠진 기능으로 드러나기 쉽습니다. 테스트를 만들거나, 다른 방법으로 확인한다면 제외 사유를 남기세요.',
+    recordLabel: '테스트 준비하러 가기', reasonLabel: '테스트 준비 없이 진행하는 이유', placeholder: '예: 고객 일정상 06 검수에서 남은 요구사항을 함께 확인', tag: '[테스트 준비 전 진행]' },
 };
+const gateTag = (gate) => gate.tag || '[승인 전 진행]';
 /**
  * The phase-leaving soft gate dialog. Resolves 'record' (go to 승인 기록), { reason } (proceed, reason required) or null (cancel).
  * The caller writes the reason to the gate step note as "[승인 전 진행] 사유 · 날짜 · 이름".
@@ -78,15 +87,15 @@ export function approvalGateDialog(gate = APPROVAL_GATES.INITIATION) {
     const el = document.createElement('div'); el.className = 'scrim';
     el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="agT" data-dialog="approval-gate"><h3 id="agT">${gate.title}</h3>
       <div class="dialog__b">${gate.body}</div>
-      <div class="field"><label for="ag-in">승인 없이 진행하는 이유 <span class="req">*</span></label><input class="input" id="ag-in" maxlength="200" placeholder="예: 고객 PM 휴가로 승인 회신이 다음 주 예정"><div class="err" id="ag-err"></div></div>
-      <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="proceed">이유 남기고 진행</button><button class="btn btn--primary" data-v="record">승인 기록하러 가기</button></div></div>`;
+      <div class="field"><label for="ag-in">${gate.reasonLabel || '승인 없이 진행하는 이유'} <span class="req">*</span></label><input class="input" id="ag-in" maxlength="200" placeholder="${gate.placeholder || '예: 고객 PM 휴가로 승인 회신이 다음 주 예정'}"><div class="err" id="ag-err"></div></div>
+      <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="proceed">이유 남기고 진행</button><button class="btn btn--primary" data-v="record">${gate.recordLabel || '승인 기록하러 가기'}</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; }
       if (b.dataset.v === 'cancel') return done(null);
       if (b.dataset.v === 'record') return done('record');
       const v = $('#ag-in', el).value.trim();
-      if (!v) { $('#ag-err', el).textContent = '승인 없이 진행하는 이유를 입력해 주세요.'; $('#ag-in', el).focus(); return; }
+      if (!v) { $('#ag-err', el).textContent = `${gate.reasonLabel || '승인 없이 진행하는 이유'}를 입력해 주세요.`; $('#ag-in', el).focus(); return; }
       done({ reason: v });
     });
     el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); if (e.key === 'Enter' && e.target.id === 'ag-in') { e.preventDefault(); el.querySelector('[data-v="proceed"]').click(); } });
@@ -94,19 +103,20 @@ export function approvalGateDialog(gate = APPROVAL_GATES.INITIATION) {
   });
 }
 /** "[승인 전 진행] 사유 · 2026-10-15 · 홍길동" appended to the existing note. */
-export const bypassNote = (prev, reason) => {
+export const bypassNote = (prev, reason, gate = null) => {
   const d = new Date(); const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const line = `[승인 전 진행] ${reason.replace(/\s*·\s*/g, ', ')} · ${ymd} · ${(state.user && state.user.name) || ''}`;
+  const line = `${gate ? gateTag(gate) : '[승인 전 진행]'} ${reason.replace(/\s*·\s*/g, ', ')} · ${ymd} · ${(state.user && state.user.name) || ''}`;
   return prev ? `${prev}\n${line}` : line;
 };
 export const gateStep = (g, phaseKey, stepKey) => { const ph = (g.phases || []).find((x) => x.phase_key === phaseKey); return ph ? (ph.steps || []).find((s) => s.step_key === stepKey) || null : null; };
 export const approvalStep = (g) => gateStep(g, 'INITIATION', 'APPROVAL');
 /** Pre-31 / already-advanced projects: "착수 승인 기록 없음" once, on the 01 screen and the 01 area of What's Next only (spec D3). */
-const NO_APPROVAL = { INITIATION: '착수 승인 기록 없음 — 고객 승인을 받았다면 착수 결과 승인에 기록해 두세요.', REQUIREMENTS: '기준선 승인 기록 없음 — 고객 승인을 받았다면 요구사항 기준선 승인에 기록해 두세요.' };
+const NO_APPROVAL = { INITIATION: '착수 승인 기록 없음 — 고객 승인을 받았다면 착수 결과 승인에 기록해 두세요.', REQUIREMENTS: '기준선 승인 기록 없음 — 고객 승인을 받았다면 요구사항 기준선 승인에 기록해 두세요.',
+  TESTING: '테스트 준비 미완료 — 범위 내 요구사항에 테스트를 연결하거나 제외 사유를 남겨 두세요.' };   // Phase 5: 05를 이미 지난 프로젝트 (05 영역에만)
 /** 02 (Phase 2): the same line once, in the 02 area of What's Next, for projects already past 02 without a baseline approval. */
 export const noApprovalLine = (g, phaseKey = 'INITIATION') => {
   const ph = (g.phases || []).find((x) => x.phase_key === phaseKey); const cfg = APPROVAL_GATES[phaseKey]; const st = cfg ? gateStep(g, phaseKey, cfg.step) : null;
-  if (!ph || ph.is_current || !ph.is_passed || !st || st.state === 'COMPLETED' || /\[승인 전 진행\]/.test(st.note || '')) return '';
+  if (!ph || ph.is_current || !ph.is_passed || !st || st.state === 'COMPLETED' || (st.note || '').includes(gateTag(cfg))) return '';
   return `<p class="np__noapv"><i class="st st--warn" aria-hidden="true">!</i>${NO_APPROVAL[phaseKey]}</p>`;
 };
 export { raw };

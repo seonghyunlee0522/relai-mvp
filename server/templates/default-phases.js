@@ -10,6 +10,10 @@
  * importance: REQUIRED (gate for moving on) · RECOMMENDED · OPTIONAL
  * feature:    which work screen the activity is done in (requirements | wbs | tests | acceptance | issues | changes | definition)
  */
+/** 05 TEST_PLAN (Phase 5 US-1): 필수 — every in-scope confirmed requirement has a test or a 테스트 제외 사유. Migration 36 copies these into existing projects. */
+export const TEST_PLAN_TITLE = '요구사항별 테스트 준비';
+export const TEST_PLAN_DESCRIPTION = '범위 내 확정 요구사항마다 테스트를 연결합니다. 테스트 대신 다른 방법으로 확인한다면 제외 사유를 남깁니다.';
+export const TEST_PLAN_CRITERIA = '범위 내 요구사항이 모두 테스트와 연결되었거나 제외 사유가 있습니다.';
 export const DEFAULT_TEMPLATE_KEY = 'LIFECYCLE_V2';
 
 export const IMPORTANCE = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
@@ -80,10 +84,11 @@ export const DEFAULT_PHASES = [
     key: 'TESTING', name: '시험', short: '시험', en: 'Testing',
     description: '요구사항이 실제 시스템에 올바르게 구현되었는지 테스트로 검증하고 결함을 조치합니다.',
     steps: [
-      A('TEST_PLAN', '테스트 범위 정의', '범위 내 요구사항을 기준으로 무엇을 어떤 기준으로 검증할지 정합니다.', '범위 내 요구사항이 모두 테스트와 연결되어 있습니다.', 'RECOMMENDED', 'tests'),
+      A('TEST_PLAN', TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA, 'REQUIRED', 'tests'),   // Phase 5 US-1 (migration 36)
       A('CASES', '테스트 케이스 작성', '요구사항을 기준으로 테스트 케이스를 준비합니다.', '테스트 케이스가 1건 이상 등록되어 있습니다.', 'REQUIRED', 'tests'),
-      A('RUN', '테스트 수행', '준비한 케이스대로 테스트를 실행하고 결과(Pass/Fail/Blocked)를 기록합니다.', '모든 테스트 케이스가 실행되었습니다.', 'REQUIRED', 'tests'),
-      A('DEFECTS', '결함 조치', 'Fail 테스트를 이슈로 등록해 조치하고, 조치 후 다시 실행해 Pass로 바꿉니다.', '최근 결과가 실패인 테스트가 없습니다.', 'REQUIRED', 'tests'),
+      A('RUN', '테스트 수행', '준비한 케이스대로 테스트를 실행하고 결과(통과/실패/막힘)를 기록합니다.', '모든 테스트 케이스가 실행되었습니다.', 'REQUIRED', 'tests'),
+      A('DEFECTS', '결함 조치', '실패한 테스트를 이슈로 등록해 조치하고, 조치 후 다시 실행해 통과로 바꿉니다.', '최근 결과가 실패인 테스트가 없고, 테스트에서 등록한 이슈가 모두 해결되었습니다.', 'REQUIRED', 'tests'),   // Phase 5 US-2
+      A('WEEKLY_REPORT', '주간보고 작성·공유', '매주 진행·지연·이슈·변경을 정리해 고객에게 보냅니다. 데이터로 초안이 만들어집니다.', '이번 주 주간보고가 확정되어 있습니다.', 'RECOMMENDED', 'reports'),   // Phase 5 US-6 (migration 36)
       A('NON_FUNCTIONAL', '성능 · 보안 테스트', '성능, 보안, 마이그레이션 검증 등 비기능 테스트를 수행합니다.', '비기능 테스트 결과가 기록되어 있습니다.', 'OPTIONAL', 'tests'),
     ],
   },

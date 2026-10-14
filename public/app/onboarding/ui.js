@@ -44,7 +44,7 @@ export const COACH = {
   REQ_TRACE_INTRO: { title: '요구사항–WBS 연결', body: '요구사항을 열어 WBS 작업을 연결하면 어떤 작업이 어떤 요구사항을 수행하는지 추적할 수 있습니다. 확정된 요구사항은 모두 WBS와 연결하는 것이 목표입니다.' },
   CHANGE_REQUEST_INTRO: { title: '변경 요청', body: '확정된 요구사항을 바꾸거나 추가하는 요청은 변경 요청으로 기록하고, 영향받는 요구사항·WBS와 일정 영향을 함께 관리합니다. 승인된 변경은 WBS에 반영한 뒤 "반영 완료"로 닫습니다.' },
   ISSUE_RISK_INTRO: { title: '이슈와 리스크', body: 'Issue는 이미 발생해 진행을 막는 문제, 리스크는 아직 발생하지 않았지만 영향을 줄 수 있는 위험입니다. 담당자·기한·심각도를 정해 두면 현황의 확인 필요 목록에 자동으로 올라옵니다.' },
-  TESTING_INTRO: { title: '테스트', body: '요구사항을 기준으로 테스트 항목을 만들고 실행 결과(Pass/Fail/Blocked)를 기록합니다. Fail은 바로 Issue로 등록할 수 있고, Coverage 탭에서 테스트가 없는 요구사항을 확인합니다.' },
+  TESTING_INTRO: { title: '테스트', body: '범위 내 요구사항마다 테스트를 만들고 실행 결과(통과/실패/막힘)를 기록합니다. 실패는 바로 이슈로 등록할 수 있고, 요구사항 커버리지 탭에서 테스트가 없는 요구사항을 확인합니다.' },
   ACCEPTANCE_INTRO: { title: '검수', body: '검수는 고객이 결과물을 확인하는 절차입니다. 대상 요구사항과 테스트를 묶어 검수를 요청하고 승인·반려·보완 결과를 기록하세요.' },
   JIRA_OPTIONAL_INTRO: { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira Issue를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 프로젝트를 계속 진행할 수 있습니다.' },
   JIRA_EXECUTION_INTRO: { title: 'Jira 실행 연결 (선택)', body: '개발팀이 Jira를 쓴다면 WBS 작업에 Jira Issue를 연결해 실행 상태를 자동으로 가져올 수 있습니다. Jira 없이도 WBS 진행률만으로 프로젝트를 진행할 수 있습니다.' },

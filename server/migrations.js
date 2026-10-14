@@ -8,7 +8,7 @@
  */
 import { ensurePhases, resetPhases } from './guide.js';
 import { randomUUID } from 'node:crypto';
-import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1 } from './templates/default-phases.js';
+import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA } from './templates/default-phases.js';
 
 export const migrations = [
   { version: 1, name: 'projects.current_phase template-based (SQLite era)', up() {} },
@@ -110,6 +110,21 @@ export const migrations = [
       if (await db.get(`SELECT 1 FROM project_steps WHERE project_phase_id = ? AND step_key = 'WEEKLY_REPORT'`, [ph.id])) continue;
       const ch = await db.get(`SELECT sequence FROM project_steps WHERE project_phase_id = ? AND step_key = 'CHANGES'`, [ph.id]);
       const seq = ch ? Number(ch.sequence) + 1 : Number((await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM project_steps WHERE project_phase_id = ?', [ph.id])).n);
+      await db.run('UPDATE project_steps SET sequence = sequence + 1 WHERE project_phase_id = ? AND sequence >= ?', [ph.id, seq]);
+      await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 0, st.importance, st.linked_feature_type]);
+    }
+  } },
+  { version: 36, name: 'Phase 5 시험: requirements.test_exclusion_reason, test_executions.performer_* / performed_on (schema.sql) + 05 TEST_PLAN → 필수 \'요구사항별 테스트 준비\' + WEEKLY_REPORT (주간보고 작성·공유) added to every project\'s 05 right after DEFECTS as TODO', async up(db) {
+    await db.run(`UPDATE project_steps SET is_required = 1, importance = 'REQUIRED', title = ?, description = ?, completion_criteria = ?, updated_at = now()
+      WHERE step_key = 'TEST_PLAN' AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'TESTING')`, [TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA]);
+    const tp = PHASE_BY_KEY.TESTING.steps; const st = tp.find((x) => x.key === 'WEEKLY_REPORT'); const df = tp.find((x) => x.key === 'DEFECTS');
+    await db.run(`UPDATE project_steps SET description = ?, completion_criteria = ?, updated_at = now() WHERE step_key = 'DEFECTS' AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'TESTING')`, [df.description, df.completion_criteria]);
+    await db.run(`UPDATE project_steps SET description = ?, updated_at = now() WHERE step_key = 'RUN' AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'TESTING')`, [tp.find((x) => x.key === 'RUN').description]);
+    for (const ph of await db.all(`SELECT id FROM project_phases WHERE phase_key = 'TESTING'`)) {
+      if (await db.get(`SELECT 1 FROM project_steps WHERE project_phase_id = ? AND step_key = 'WEEKLY_REPORT'`, [ph.id])) continue;
+      const d = await db.get(`SELECT sequence FROM project_steps WHERE project_phase_id = ? AND step_key = 'DEFECTS'`, [ph.id]);
+      const seq = d ? Number(d.sequence) + 1 : Number((await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM project_steps WHERE project_phase_id = ?', [ph.id])).n);
       await db.run('UPDATE project_steps SET sequence = sequence + 1 WHERE project_phase_id = ? AND sequence >= ?', [ph.id, seq]);
       await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 0, st.importance, st.linked_feature_type]);

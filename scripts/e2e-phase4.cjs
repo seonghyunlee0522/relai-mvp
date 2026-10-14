@@ -282,7 +282,8 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   /* ---------- US-8 Q9-2 테스트 빈 화면 ---------- */
   await page.goto(`${A.url}/tests`); await page.waitForSelector('main .empty, main .estate, main [class*="empty"]');
   const prim0 = await page.$$eval('main .btn--primary', (els) => els.filter((e) => e.offsetParent).map((e) => e.textContent.trim()));
-  check('US-8 Q9-2 테스트 0건 → one primary (첫 테스트 추가), no toolbar', prim0.length === 1 && /첫 테스트 추가/.test(prim0[0]) && !(await page.$('main .rtool')), JSON.stringify(prim0));
+  // Phase 5 US-1 replaced the label: with untested confirmed requirements the one primary is 요구사항별 테스트 만들기 (else 테스트 추가)
+  check('US-8 Q9-2 테스트 0건 → one primary (요구사항별 테스트 만들기 / 테스트 추가), no toolbar', prim0.length === 1 && /요구사항별 테스트 만들기|테스트 추가/.test(prim0[0]) && !(await page.$('main .rtool')), JSON.stringify(prim0));
   await shot('09-tests-empty.png');
   await api('POST', `${A.P}/tests`, { title: '로그인 성공' });
   await page.reload(); await page.waitForSelector('main .rtool');

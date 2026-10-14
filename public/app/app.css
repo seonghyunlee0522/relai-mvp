@@ -2597,3 +2597,34 @@ body:has(.scrim) #main .btn--primary,
   .rpl__t .rpl__d{grid-column:auto;font-size:var(--fs-xs)}
   .rpl__t .rpl__d::before{content:attr(data-label) " ";color:var(--text-3)}
 }
+
+/* ---------- Phase 5 (05 시험) ---------- */
+/* 최근 결과 = status family pill with a shape (✓ 통과 · ! 실패 · ● 막힘 · ○ 미실행); only 실패 is red */
+.res::before{margin-right:4px;font-weight:800}
+.res--pass::before{content:'✓'}.res--fail::before{content:'!'}.res--blocked::before{content:'●';font-size:.8em}.res--not_run::before{content:'○'}
+.noreq{color:var(--text-3);font-size:var(--fs-xs)}
+.tag-later{display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--border-soft);color:var(--text-3);font-size:var(--fs-xs);font-weight:600;vertical-align:middle}
+.covhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:0 0 10px}
+.covhead__n{font-size:var(--fs-md);color:var(--text-2)}.covhead__n b{color:var(--text)}.covhead__n .is-warn{color:var(--warn-fg);font-weight:700}
+.covhead__sp{flex:1}
+.covwarn{display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:var(--fs-sm);color:var(--text-2)}
+.covx{color:var(--text-3)}.covx q{quotes:none}
+.rtable tr.is-excl td{color:var(--text-3)}
+.covacts{display:inline-flex;gap:10px;white-space:nowrap}
+.dialog--sm{max-width:440px}
+.prow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){.prow{grid-template-columns:1fr}}
+.rd-resolve{display:flex;flex-direction:column;gap:4px;margin:4px 0 10px;padding:8px 10px;border-radius:var(--r-lg);background:var(--ok-bg)}
+.rd-resolve label{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm)}
+.exec__who small{color:var(--text-3)}
+.reqpick{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.reqpick .chip button{border:0;background:none;margin-left:4px;cursor:pointer;color:inherit}
+.tempty__alt{margin-top:10px;font-size:var(--fs-sm);display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap}
+.tempty__alt .linkbtn{width:auto;display:inline;padding:0}
+.tag-later{white-space:nowrap}
+@media (max-width:640px){
+  .dialog--sm .actions{flex-direction:column-reverse;align-items:stretch}.dialog--sm .actions .btn{width:100%}
+  .dialog--run .actions{position:sticky;bottom:0;background:var(--bg);padding-top:8px}
+  .empty .btn--primary.btn--lg{width:100%}
+}
+.covacts .linkbtn{width:auto}

@@ -1281,3 +1281,9 @@ CREATE INDEX IF NOT EXISTS idx_login_records_user ON login_records(user_id, crea
 /* ---------- Phase 4 (04 구현) ---------- */
 ALTER TABLE wbs_history ADD COLUMN IF NOT EXISTS note TEXT;                  -- US-1: 일정 미루기 사유 (on the planned_end_date / milestone_date UPDATED row)
 ALTER TABLE issues ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;       -- US-6: 담당자 = 01 이해관계자(당사·협력사) id, no FK (same as wbs_items)
+
+/* ---------- Phase 5 (05 시험) ---------- */
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS test_exclusion_reason TEXT;        -- US-1: 테스트 제외 사유 (counts as covered for 05 TEST_PLAN)
+ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS performer_user_id TEXT;         -- US-4: 수행자 = RELAI 사용자 …
+ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS performer_stakeholder_id TEXT;  --       … or 01 이해관계자 id (팀원 / 고객사), no FK
+ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS performed_on date;              --       수행일 (NULL → executed_at 날짜로 표시)

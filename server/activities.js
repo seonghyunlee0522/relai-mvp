@@ -152,19 +152,24 @@ function development(key, ctx) {
       return parts.length ? prog(parts.join(' · '), n(c.under_review) ? act('승인 기록하기', cu('?status=UNDER_REVIEW&approve=1')) : act('변경 요청 결정 →', cu('?status=APPROVED')), { row_text: Boolean(n(c.under_review)) })   // US-2: the approval Drawer
         : ok(`변경 요청 ${c.total}건이 모두 처리되었습니다.`, act('변경 요청 보기 →', cu()));
     }
-    case 'WEEKLY_REPORT': {   // US-3: this week (Mon–Sun, Korea time), computed on every read — next week it is open again
-      const wr = ctx.weekly_report || { state: 'NONE' }; const ru = `/app/projects/${ctx.pid}/reports`;
-      if (wr.state === 'FINAL') return ok(`✓ 이번 주 보고 확정 · ${mdOf(wr.finalized_at)}`, null, { row_text: true });
-      if (wr.state === 'DRAFT') return prog('초안 작성 중', act('이어서 작성', `${ru}/${wr.report_id}`), { row_action: true, row_text: true });
-      return none('이번 주 주간보고를 만드세요', act('주간보고 만들기', `${ru}?new=week`), { row_action: true, row_text: true });
-    }
+    case 'WEEKLY_REPORT': return weeklyReport(ctx);
     case 'DECISIONS': return manual('프로젝트 방향에 영향을 주는 결정을 메모로 기록합니다.');
     default: return manual('');
   }
 }
+/** 04 + 05 WEEKLY_REPORT (Phase 4 US-3, Phase 5 US-6): this week (Mon–Sun, Korea time), computed on every read — next week it is open again. */
+function weeklyReport(ctx) {
+  const wr = ctx.weekly_report || { state: 'NONE' }; const ru = `/app/projects/${ctx.pid}/reports`;
+  if (wr.state === 'FINAL') return ok(`✓ 이번 주 보고 확정 · ${mdOf(wr.finalized_at)}`, null, { row_text: true });
+  if (wr.state === 'DRAFT') return prog('초안 작성 중', act('이어서 작성', `${ru}/${wr.report_id}`), { row_action: true, row_text: true });
+  return none('이번 주 주간보고를 만드세요', act('주간보고 만들기', `${ru}?new=week`), { row_action: true, row_text: true });
+}
 /** '10/14' (Korea time) from an ISO timestamp. */
 const mdOf = (iso) => { if (!iso) return ''; const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit' }).format(new Date(iso)); const [m, dd] = d.split('-'); return `${Number(m)}/${Number(dd)}`; };
 
+/** 05 시험 (Phase 5): TEST_PLAN = 범위 내 확정 요구사항마다 테스트 또는 제외 사유 (US-1) · DEFECTS = 실패 0 AND 테스트에서 만든 열린 이슈 0 (US-2). */
+export const testPlanProgressText = (t) => `범위 내 요구사항 ${n(t.target)}건 중 ${n(t.target_tested)}건에 테스트가 있습니다 (제외 ${n(t.excluded)}건)`;
+export const defectIssuesText = (t) => `처리 중 결함 이슈 ${n(t.fail_issues_open)}건${(t.fail_issue_ids || []).length ? `(${t.fail_issue_ids.slice(0, 3).join(', ')}${t.fail_issue_ids.length > 3 ? '…' : ''})` : ''}`;
 function testing(key, ctx) {
   const t = ctx.stats.tests || {};
   const u = (qs = '') => `/app/projects/${ctx.pid}/tests${qs}`;
@@ -172,18 +177,21 @@ function testing(key, ctx) {
   const dep = none('먼저 테스트 케이스를 작성하세요.', null);
   switch (key) {
     case 'TEST_PLAN': {
-      if (n(t.in_scope) === 0) return none('범위 내 요구사항이 아직 없습니다.', act('요구사항 보기 →', `/app/projects/${ctx.pid}/requirements?scope=UNDECIDED`));
-      if (n(t.total) === 0) return none(`범위 내 요구사항 ${t.in_scope}건이 테스트 대상입니다.`, act('테스트 계획 작성 →', u('?tab=coverage')));
-      return n(t.in_scope_untested) ? prog(`범위 내 요구사항 ${t.in_scope}건 중 ${t.in_scope_tested}건에 테스트가 연결되었습니다. (Coverage ${t.coverage}%)`, act('미연결 요구사항 보기 →', u('?tab=coverage')))
-        : ok(`범위 내 요구사항 ${t.in_scope}건이 모두 테스트와 연결되었습니다.`, act('Coverage 보기 →', u('?tab=coverage')));
+      if (n(t.target) === 0) return none(n(t.in_scope) ? '범위 내 확정 요구사항이 아직 없습니다. 요구사항을 확정하면 테스트 대상이 됩니다.' : '범위 내 요구사항이 아직 없습니다.', act('요구사항 보기 →', `/app/projects/${ctx.pid}/requirements?scope=IN_SCOPE`));
+      if (n(t.in_scope_untested)) return (n(t.target_tested) + n(t.excluded) ? prog : none)(testPlanProgressText(t), act('요구사항별 테스트 만들기', u('?tab=coverage&generate=1')), { row_text: true });
+      return ok(`범위 내 요구사항 ${n(t.target)}건이 모두 테스트와 연결되었거나 제외 사유가 있습니다.${n(t.excluded) ? ` (제외 ${n(t.excluded)}건)` : ''}`, act('커버리지 보기', u('?tab=coverage')), { row_text: true });
     }
     case 'CASES': return n(t.total) === 0 ? empty : ok(`테스트 케이스 ${t.total}건이 등록되어 있습니다.`, act('테스트 케이스 추가 →', u('?new=1')));
     case 'RUN': return n(t.total) === 0 ? dep
       : n(t.executed) < n(t.total) ? (n(t.executed) ? prog(`${t.total}건 중 ${t.executed}건이 실행되었습니다.`, act('테스트 실행 →', u('?last_result=NOT_RUN'))) : none(`테스트 ${t.total}건이 아직 실행되지 않았습니다.`, act('테스트 실행 →', u('?last_result=NOT_RUN'))))
-      : ok(`테스트 ${t.total}건이 모두 실행되었습니다. (Pass ${n(t.last_pass)} · 실패 ${n(t.last_fail)} · Blocked ${n(t.last_blocked)})`, act('결과 보기 →', u()));
-    case 'DEFECTS': return n(t.executed) === 0 ? none('먼저 테스트를 실행하세요.', null)
-      : n(t.last_fail) ? prog(`실패 테스트 ${t.last_fail}건${n(t.fail_issues_open) ? ` · 처리 중 이슈 ${t.fail_issues_open}건` : ''}`, act('결함 조치 →', u('?last_result=FAIL')), { crit: true })
-      : ok('최근 결과가 실패인 테스트가 없습니다.', act('결과 보기 →', u()));
+      : ok(`테스트 ${t.total}건이 모두 실행되었습니다. (통과 ${n(t.last_pass)} · 실패 ${n(t.last_fail)} · 막힘 ${n(t.last_blocked)})`, act('결과 보기 →', u()));
+    case 'DEFECTS': {
+      if (n(t.executed) === 0 && n(t.fail_issues_open) === 0) return none('먼저 테스트를 실행하세요.', null);
+      if (n(t.last_fail) || n(t.fail_issues_open)) return prog(`실패 테스트 ${n(t.last_fail)}건 · ${defectIssuesText(t)}`,
+        n(t.last_fail) ? act('결함 조치 →', u('?last_result=FAIL')) : act('결함 이슈 보기', `/app/projects/${ctx.pid}/issues?source=TEST`), { crit: true, row_text: true, row_action: !n(t.last_fail) });   // the open-issue case gets its own row button (결함 이슈 보기)
+      return ok('최근 결과가 실패인 테스트가 없고, 테스트에서 등록한 이슈가 모두 해결되었습니다.', act('결과 보기 →', u()));
+    }
+    case 'WEEKLY_REPORT': return weeklyReport(ctx);
     case 'NON_FUNCTIONAL': return manual('성능·보안·마이그레이션 검증 결과를 테스트 케이스로 기록하거나 메모로 남깁니다.', act('테스트 케이스 추가 →', u('?new=1')));
     default: return manual('');
   }

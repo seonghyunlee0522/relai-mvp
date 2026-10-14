@@ -636,6 +636,16 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (r) res.json({ requirement: { ...r, jira: (await executionForRequirement(db, project.id, r.id)) } });   // read-only trace via WBS (no requirement↔Jira table)
   }));
 
+  // Phase 5 US-1: 테스트 제외 {reason} / 제외 취소 {reason: null}
+  app.patch(`${rbase}/:rid/test-exclusion`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const r = (await loadReq(req, res, project)); if (!r) return;
+    if (r.archived_at) return fail(res, 409, 'archived', '보관된 요구사항은 수정할 수 없습니다.');
+    const reason = req.body && Object.prototype.hasOwnProperty.call(req.body, 'reason') ? req.body.reason : undefined;
+    if (reason === undefined) return fail(res, 422, 'exclusion_reason_required', '테스트하지 않는 이유를 적어 주세요.', { fields: { reason: '테스트하지 않는 이유를 적어 주세요.' } });
+    const changed = (await tx(db, async (db) => (await Q.setTestExclusion(db, r, reason, req.user.id))));
+    res.json({ changed, requirement: (await R.getRequirement(db, project, r.id)), tests: (await Q.testStats(db, project.id)) });
+  }));
   app.patch(`${rbase}/:rid`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project || !mutable(res, project)) return;
@@ -1089,7 +1099,16 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const id = (await tx(db, async (db) => (await Q.createTest(db, project, input, req.user.id))));
     res.status(201).json((await tResp(project, id)));
   }));
-  app.get(`${tbase}/:tid`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const t = (await loadTest(req, res, project)); if (t) res.json((await tResp(project, t.id))); }));
+  // Phase 5 US-1: 요구사항별 테스트 만들기 (before the /:tid routes)
+  app.get(`${tbase}/from-requirements/preview`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; res.json({ preview: (await Q.fromRequirementsPreview(db, project)) }); }));
+  app.post(`${tbase}/from-requirements`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const ids = (await tx(db, async (db) => (await Q.createFromRequirements(db, project, req.user.id))));
+    if (!ids.length) return fail(res, 409, 'nothing_to_create', '테스트가 없는 범위 내 확정 요구사항이 없습니다.');
+    res.status(201).json({ created: ids.length, ids, tests: (await Q.testStats(db, project.id)) });
+  }));
+  app.get(`${tbase}/:tid`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const t = (await loadTest(req, res, project)); if (!t) return;
+    res.json({ ...(await tResp(project, t.id)), performers: (await Q.performerOptions(db, project, (await SK.ownerOptions(db, project)).team)) }); }));
   app.patch(`${tbase}/:tid`, guard, wrap(async (req, res) => {
     const ctx = (await tMutable(req, res)); if (!ctx) return;
     const input = Q.parseTest(req.body, { partial: true }); if (!(await ownerOk(req, res, input.owner_user_id))) return;
@@ -1100,6 +1119,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.post(`${tbase}/:tid/executions`, guard, wrap(async (req, res) => {
     const ctx = (await tMutable(req, res)); if (!ctx) return;
     const input = Q.parseExecution(req.body);
+    // Phase 5 US-4: 수행자 = a workspace member or a stakeholder of this project (팀원 / 고객사)
+    if (input.performer_user_id && !(await R.isWorkspaceMember(db, req.params.wid, input.performer_user_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 Workspace 멤버 또는 01 이해관계자만 지정할 수 있습니다.' } });
+    if (input.performer_stakeholder_id && !(await Q.isProjectStakeholder(db, ctx.project.id, input.performer_stakeholder_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 Workspace 멤버 또는 01 이해관계자만 지정할 수 있습니다.' } });
     const e = (await tx(db, async (db) => (await Q.addExecution(db, ctx.t, input, req.user.id))));
     res.status(201).json({ ...(await tResp(ctx.project, ctx.t.id)), execution: e });
   }));
