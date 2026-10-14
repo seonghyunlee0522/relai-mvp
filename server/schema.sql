@@ -1095,3 +1095,74 @@ CREATE TABLE IF NOT EXISTS ai_wbs_plans (
   committed_at     timestamptz
 );
 CREATE INDEX IF NOT EXISTS idx_ai_wbs_plans_project ON ai_wbs_plans(project_id, created_at);
+
+-- Phase 10 Billing: subscriptions / payments / billing_events (+ subscription_events audit trail).
+-- Column contract for the Admin Console: docs/admin-console.md §8 (billing-admin.js whitelists what it shows).
+-- Webhook idempotency: docs/production-readiness.md §8 (UNIQUE (provider, provider_event_id), processing in one transaction).
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                       TEXT PRIMARY KEY,
+  workspace_id             TEXT NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,   -- one subscription row per workspace
+  plan                     TEXT NOT NULL CHECK (plan IN ('FREE','TEAM')),
+  status                   TEXT NOT NULL CHECK (status IN ('ACTIVE','PAST_DUE','CANCELED','EXPIRED')),
+  provider                 TEXT,
+  provider_customer_id     TEXT,                    -- never exposed (not in the admin whitelist / customer API)
+  provider_subscription_id TEXT,
+  current_period_start     timestamptz,
+  current_period_end       timestamptz,
+  next_billing_at          timestamptz,
+  cancel_at_period_end     boolean NOT NULL DEFAULT false,
+  grace_period_end         timestamptz,             -- PAST_DUE keeps the plan until this moment
+  payment_method_summary   TEXT,                    -- display only, e.g. '신한 ****1234'
+  canceled_at              timestamptz,
+  created_at               timestamptz NOT NULL DEFAULT now(),
+  updated_at               timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_provider_sub ON subscriptions(provider, provider_subscription_id) WHERE provider_subscription_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status, updated_at);
+
+CREATE TABLE IF NOT EXISTS billing_events (
+  id                TEXT PRIMARY KEY,
+  provider          TEXT NOT NULL,
+  provider_event_id TEXT NOT NULL,
+  event_type        TEXT NOT NULL,
+  workspace_id      TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  subscription_id   TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
+  payload           JSONB NOT NULL DEFAULT '{}'::jsonb,   -- provider body as normalized by the adapter (no card data / billing keys)
+  result            TEXT,                                 -- APPLIED | IGNORED:<reason>
+  received_at       timestamptz NOT NULL DEFAULT now(),
+  processed_at      timestamptz,
+  UNIQUE (provider, provider_event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_billing_events_received ON billing_events(received_at);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id                   TEXT PRIMARY KEY,
+  workspace_id         TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  subscription_id      TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
+  plan                 TEXT,
+  amount               numeric(12,2),
+  currency             TEXT NOT NULL DEFAULT 'KRW',
+  status               TEXT NOT NULL CHECK (status IN ('PENDING','PAID','FAILED','REFUNDED','CANCELED')),
+  provider             TEXT NOT NULL,
+  provider_result_code TEXT,
+  provider_tid         TEXT,                     -- shown masked (last 4) by billing-admin.js
+  moid                 TEXT,
+  paid_at              timestamptz,
+  failed_at            timestamptz,
+  failure_code         TEXT,
+  failure_message      TEXT,
+  billing_event_id     TEXT REFERENCES billing_events(id) ON DELETE SET NULL,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (provider, provider_tid)
+);
+CREATE INDEX IF NOT EXISTS idx_payments_ws_created ON payments(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_payments_status_created ON payments(status, created_at);
+
+CREATE TABLE IF NOT EXISTS subscription_events (
+  id              TEXT PRIMARY KEY,
+  subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+  event_type      TEXT NOT NULL,                 -- subscription.activated | payment.failed | cancel.requested | IGNORED:<type> …
+  metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,   -- { from, to, billing_event_id }
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_events_sub ON subscription_events(subscription_id, created_at);

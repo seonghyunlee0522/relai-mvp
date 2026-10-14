@@ -37,6 +37,9 @@ import * as XL from './xlsx.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
+import { assertWithinLimit, PlanLimitError } from './billing/limits.js';
+import { providerFromEnv } from './billing/provider.js';
+import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
@@ -44,7 +47,7 @@ const PROJECT_COLS = `id, workspace_id, name, description, client_name, project_
   planned_start_date, planned_end_date, current_phase, created_by, created_at, updated_at,
   project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration`;
 
-export function createApp(db, { secureCookies = process.env.NODE_ENV === 'production', sessionSecret = process.env.SESSION_SECRET || '' } = {}) {
+export function createApp(db, { secureCookies = process.env.NODE_ENV === 'production', sessionSecret = process.env.SESSION_SECRET || '', billingProvider = providerFromEnv() } = {}) {
   const app = express();
   // __Host- prefix (production only): the browser refuses the cookie unless Secure + Path=/ + no Domain — hardening for free.
   const COOKIE = secureCookies ? '__Host-relai_sid' : 'relai_sid';
@@ -52,6 +55,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const tokenHash = (token) => sha256(sessionSecret ? `${sessionSecret}:${token}` : token);
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
+  // Billing webhook first: raw body for signature checks, outside JSON parsing / CSRF / auth (docs/production-readiness.md §8).
+  mountBillingWebhook(app, db, { provider: billingProvider, fail: (res, status, code, message) => res.status(status).json({ error: { code, message } }) });
   // 64 KB for every JSON body except the Excel import endpoints (base64 xlsx), which parse their own larger body after auth.
   const smallJson = express.json({ limit: '64kb' });
   app.use((req, res, next) => (req.method === 'POST' && BIG_JSON_PATH.test(req.path) ? next() : smallJson(req, res, next)));
@@ -256,6 +261,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const id = randomUUID();
     // Every project starts in 01 착수 as 진행 중; goals/scope/stakeholders are entered step by step in the lifecycle flow, never here.
     (await tx(db, async (db) => {
+      await assertWithinLimit(db, req.params.wid, 'projects');   // plan limit (402)
       (await db.run(`INSERT INTO projects (id, workspace_id, name, description, client_name, project_scale,
           status, planned_start_date, planned_end_date, current_phase, created_by,
           project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration)
@@ -421,7 +427,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (!existing) return fail(res, 404, 'not_found', '프로젝트를 찾을 수 없습니다.');
     if (existing.status !== 'ARCHIVED') return fail(res, 409, 'not_archived', '보관된 프로젝트가 아닙니다.');
     const back = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'COMPLETED'].includes(existing.status_before_archive) ? existing.status_before_archive : 'ACTIVE';
-    (await db.run(`UPDATE projects SET status=?, status_before_archive=NULL, updated_at=now() WHERE workspace_id=? AND id=?`, [back, req.params.wid, req.params.pid]));
+    await tx(db, async (db) => {
+      await assertWithinLimit(db, req.params.wid, 'projects');   // an unarchived project is active again
+      await db.run(`UPDATE projects SET status=?, status_before_archive=NULL, updated_at=now() WHERE workspace_id=? AND id=?`, [back, req.params.wid, req.params.pid]);
+    });
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
   }));
   // No DELETE route by design (Phase 1: archive only).
@@ -997,6 +1006,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base });   // Phase 12 integrations (Jira)
   mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin });   // Phase 13 Google sign-in + invitations
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
+  mountBillingRoutes({ app, db, guard, wrap, fail, provider: billingProvider });        // Phase 10 billing: plan summary, checkout, cancel
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };
@@ -1063,6 +1073,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);
     if (err instanceof AdminError) return fail(res, err.status, err.code, err.message);
+    if (err instanceof PlanLimitError) return fail(res, err.status, err.code, err.message, err.extra);
     if (err instanceof AiError || err instanceof CreditError) return fail(res, err.status, err.code, err.message, err.extra || {});
     const dbe = dbErrorInfo(err);
     if (dbe) { if (dbe.status >= 500) console.error('[db]', err.message); return fail(res, dbe.status, dbe.code, dbe.message); }

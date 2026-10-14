@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
+import { assertWithinLimit } from './billing/limits.js';
 import { linkCountsByWbs, linksForWbs, traceStats } from './trace.js';
 import { linkedRaid } from './raid.js';
 import { testsFor } from './testing.js';
@@ -308,6 +309,7 @@ export async function guardLeafToGroup(db, project, parent, convert, userId, { c
 }
 
 export async function createWbs(db, project, input, userId, { skipRenumber = false, skipGuard = false } = {}) {
+  await assertWithinLimit(db, project.workspace_id, 'wbs');   // plan limit (402); duplicate / import / AI commits come through here too
   if (input.parent_id) {
     const parent = (await getItem(db, project.id, input.parent_id));
     if (!parent || parent.archived_at) throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
@@ -435,6 +437,7 @@ export async function restoreWbs(db, project, existing, userId = null) {
   const all = await db.all('SELECT id, parent_id FROM wbs_items WHERE project_id = ?', [project.id]);
   let grew = true; while (grew) { grew = false; for (const r of all) if (r.parent_id && subtree.has(r.parent_id) && !subtree.has(r.id)) { subtree.add(r.id); grew = true; } }
   const ids = rows.map((r) => r.id).filter((id) => subtree.has(id));
+  await assertWithinLimit(db, project.workspace_id, 'wbs', ids.length);   // restored rows count against the plan again
   const ts = now();
   for (const id of ids) { await db.run('UPDATE wbs_items SET archived_at = NULL, updated_at = ? WHERE id = ?', [ts, id]); await addWbsHistory(db, id, 'RESTORED', {}, userId, ts); }
   await renumber(db, project.id);

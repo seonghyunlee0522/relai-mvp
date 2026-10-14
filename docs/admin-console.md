@@ -37,7 +37,7 @@
 
 ## 5. Plan / Usage
 
-`server/plans.js`가 Plan 한도의 단일 기준(FREE: Projects 1 · Members 3 · Requirements 10 · WBS 30 · 주간보고 8/월, TEAM: 무제한). Billing 전까지 모든 Workspace는 FREE이며 한도는 제품 API에서 강제되지 않는다(Billing Phase 과제). `server/usage.js`는 집계 쿼리 한 번으로 계산한다(행별 쿼리 없음).
+`server/plans.js`가 Plan 한도의 단일 기준(FREE: Projects 1 · Members 3 · Requirements 10 · WBS 30 · 주간보고 8/월, TEAM: 무제한). 한도는 제품 API에서 402 `plan_limit_reached`로 강제된다(`server/billing/limits.js`, docs/production-readiness.md §8). Workspace의 플랜은 subscription에서 계산한 유효 플랜이며 `server/usage.js`는 집계 쿼리 한 번으로 계산한다(행별 쿼리 없음, 행마다 `plan_key` 포함).
 
 ## 6. API
 
@@ -68,8 +68,10 @@ GET  /api/admin/audit?q&action&admin&target_type&target_id&page&size
 - `subscriptions`, `payments`(, `subscription_events`) 테이블이 문서화된 컬럼 계약을 만족하면 Subscriptions/Payments 목록·상세, Dashboard의 Team Workspaces/Past Due/Payment Failed KPI와 결제 실패·PAST_DUE attention, Funnel의 Paid, Workspace 상세의 Subscription·Plan이 코드 수정 없이 켜진다.
 - 계약: `subscriptions(id, workspace_id, plan, status, current_period_start, current_period_end, next_billing_at, cancel_at_period_end, grace_period_end, payment_method_summary, created_at, updated_at)`, `payments(id, workspace_id, subscription_id, plan, amount, currency, status, provider, provider_result_code, provider_tid, moid, paid_at, failed_at, failure_code, failure_message, created_at)`. 추가 컬럼(billing_key 등)은 화이트리스트 밖이라 노출되지 않는다.
 
+**완료 (billing-foundation)**: 위 테이블이 migration v25로 생성되어 콘솔이 켜진다. Plan 한도 제품 API 강제, Usage·Workspace 상세·사용자 상세의 유효 플랜 반영(PAST_DUE 유예 종료 시 FREE).
+
 **추가 작업이 필요한 것**:
-- `plans.js`의 `price_monthly` 확정(MRR은 가격이 있을 때만 계산), Plan 한도의 제품 API 강제(현재 미강제).
-- Workspace의 실제 Plan을 subscription에서 읽어 Usage 집계·정렬에 반영(지금은 FREE 고정; `usage.js`의 `planOf` 훅 지점).
+- `plans.js`의 `price_monthly` 확정(MRR은 가격이 있을 때만 계산), 랜딩 `#pricing`의 Team 가격 교체.
+- 실제 Payment Provider 어댑터(`server/billing/provider.js` 레지스트리에 추가).
 - "Subscription 재동기화", "결제 재시도" 같은 안전한 Action과 그 Audit Action 추가. Plan 강제 변경은 만들지 않는다.
 - Payment Provider별 status/provider 값 사전과 Payments 필터 옵션 정렬.

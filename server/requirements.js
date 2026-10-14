@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
+import { assertWithinLimit } from './billing/limits.js';
 import { nextDisplayId, resolveLinkTarget, formatDisplayId, reserveProjectSequence } from './common.js';
 import { listComments } from './comments.js';
 import { linkCountsByRequirement, linksForRequirement, traceStats } from './trace.js';
@@ -135,6 +136,7 @@ export async function getRequirement(db, project, id) {
 /** input.display_id (optional, `REQ-nnn`, used by the Excel import): claims that number and advances the counter past it.
  *  `reservedSequences`: numbers that explicit ids elsewhere in the same batch will claim — auto-numbering skips them. */
 export async function createRequirement(db, project, input, userId, { reservedSequences = null } = {}) {
+  await assertWithinLimit(db, project.workspace_id, 'requirements');   // plan limit (402)
   let seq; let display_id;
   const explicit = input.display_id && /^REQ-(\d{1,6})$/.exec(input.display_id);
   if (explicit) {

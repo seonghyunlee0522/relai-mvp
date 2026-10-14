@@ -194,11 +194,10 @@ test('usage: aggregation + limit %, tiers (warn ≥80, attention ≥90), sorts; 
   // dashboard
   const d = (await ops.c('GET', '/api/admin/dashboard')).json;
   assert.deepEqual([d.kpis.users, d.kpis.active_workspaces, d.kpis.projects, d.kpis.signups_7d, d.kpis.signups_today], [3, 3, 1, 3, 3]);
-  assert.deepEqual(d.funnel_7d, { registered: 3, workspace_created: 3, project_created: 1 });
+  assert.deepEqual(d.funnel_7d, { registered: 3, workspace_created: 3, project_created: 1, paid: 0 });
   assert.deepEqual(d.attention.near_limit.map((x) => x.workspace_id), [A.w]);
-  assert.equal(d.billing.implemented, false);
-  for (const k of ['mrr', 'team_workspaces', 'past_due', 'payment_failed_7d']) assert.ok(!(k in d.kpis), k);     // no fake zeros
-  assert.ok(!('paid' in d.funnel_7d) && !('payment_failed' in d.attention));
+  assert.equal(d.billing.implemented, true);                                                         // billing tables ship with Phase 10
+  assert.deepEqual([d.kpis.team_workspaces, d.kpis.past_due, d.kpis.payment_failed_7d], [0, 0, 0]);
   server.close();
 });
 
@@ -230,6 +229,7 @@ test('billing admin: absent tables → implemented:false everywhere, 404 details
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
   const A = await setup(client, 'a@x.com', '김가나');
+  await db.exec('DROP TABLE subscription_events, payments, billing_events, subscriptions CASCADE'); resetBillingCache();   // a database without the billing tables
   assert.deepEqual((await ops.c('GET', '/api/admin/subscriptions')).json.implemented, false);
   assert.deepEqual((await ops.c('GET', '/api/admin/payments')).json.items, []);
   assert.equal((await ops.c('GET', '/api/admin/subscriptions/x')).status, 404);

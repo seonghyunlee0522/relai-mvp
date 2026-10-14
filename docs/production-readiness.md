@@ -20,6 +20,10 @@
 | `DB_POOL_MAX` | | 인스턴스당 풀 크기, 기본 10. 인스턴스 수 × 풀 ≤ PostgreSQL `max_connections` − 여유분 |
 | `APP_TIMEZONE` | | 기본 Asia/Seoul |
 | `TEST_DATABASE_URL` | 테스트 | 기본 `postgres://postgres@127.0.0.1:5432/relai_test` |
+| `BILLING_PROVIDER` | | 결제 Provider 이름(`server/billing/provider.js` 레지스트리). 미설정 시 개발=`fake`, production=결제 비활성(checkout 503) |
+| `FAKE_BILLING_SECRET` | | fake Provider Webhook HMAC 키(개발/테스트용) |
+| `BILLING_ALLOW_FAKE` | | `1`이면 production에서도 fake Provider 허용(스테이징 전용) |
+| `PLAN_LIMITS` | | `off`면 Plan 한도 강제 해제(레거시 테스트 전용). 운영에서는 설정하지 않는다 |
 
 `.env`는 git에 넣지 않는다(`.gitignore`). `.env.example` 참고.
 
@@ -78,6 +82,13 @@ DATABASE_URL=postgres://…/relai node scripts/migrate-sqlite-to-postgres.js --s
 - 상태 전이는 서비스 함수 한 곳(`subscriptions.transition`)에서만 하고 `subscription_events`(또는 billing_events payload)로 감사 추적.
 - Webhook 라우트는 `requireAuth`/CSRF Origin 검사/`application/json` 강제에서 제외해야 한다(현재 `/api` 전역 미들웨어가 적용되므로 `/api/billing/webhook`은 그 앞에 등록).
 - 시간 비교(`current_period_end`, grace period)는 `now()` 기준 SQL에서 하고 클라이언트 시계를 믿지 않는다.
+
+**구현 (billing-foundation, migration v25)** — 위 규칙대로 구현됨:
+- 테이블: `subscriptions`(workspace당 1행, `UNIQUE(provider, provider_subscription_id)`), `payments`(`UNIQUE(provider, provider_tid)`), `billing_events`(`UNIQUE(provider, provider_event_id)`, `result`=APPLIED|IGNORED:<사유>), `subscription_events`(전이 감사). DDL은 `schema.sql`, 버전 기록은 `migrations.js` v25.
+- `POST /api/billing/webhook/:provider` — `createApp`에서 JSON 파서·CSRF·인증보다 먼저 `express.raw`로 등록, 전용 IP rate limiter(300/분). 서명 실패 400, 중복 200 `{duplicate:true}`.
+- Provider 인터페이스 `server/billing/provider.js`: `createCheckout / handleWebhook / cancel`. Provider는 자기 Webhook을 정규화 이벤트(`subscription.activated`, `payment.succeeded`, `payment.failed`, `subscription.canceled`, `subscription.expired`)로 바꿔 돌려준다. 실제 Provider는 미선정 → fake만 등록.
+- 상태 전이는 `server/billing/subscriptions.js transition()` 한 곳. 유효 플랜: ACTIVE(해지 예약 + 기간 종료 시 FREE) · PAST_DUE는 `grace_period_end`(실패 후 7일)까지 유지 · CANCELED/EXPIRED는 FREE.
+- Plan 한도(`server/billing/limits.js`): 생성 서비스 함수(요구사항·WBS·주간보고·멤버 추가/초대/수락·프로젝트 생성/보관 해제)에서 검사 → 402 `plan_limit_reached` `{limit:{dimension,label,used,limit,plan,adding}, upgrade:{plan,url}}`. 트랜잭션 안에서는 workspace 행을 `FOR UPDATE`로 잠가 동시 생성이 마지막 자리를 함께 통과하지 못한다. 다운그레이드 시 데이터는 지우지 않고 새 생성만 막는다.
 
 ## 9. 운영 엔드포인트
 - `GET /health` → `{status:'ok', database:'ok'}` / DB 불가 시 503 `{status:'degraded', database:'unreachable'}`. 버전·비밀 미노출.
