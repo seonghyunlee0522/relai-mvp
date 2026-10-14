@@ -3,7 +3,7 @@
 모든 경로의 BASE = `/api/workspaces/:wid/projects/:pid`. Workspace 비멤버는 404, 보관된 프로젝트에 대한 쓰기는 409(`archived`), 검증 실패는 400(`validation_error`, `fields`).
 엑셀 처리는 `exceljs`(npm 의존성)를 사용한다.
 
-## 1. 엑셀 템플릿 / 내보내기 / 가져오기 (`kind` = `requirements` | `wbs`)
+## 1. 엑셀 템플릿 / 내보내기 / 가져오기 (`kind` = `requirements` | `wbs` | `tests`)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -18,6 +18,7 @@
 * 제한: 파일 5MB(413), 데이터 2,000행(400), 필수 헤더 누락(400 `missing_columns`), xlsx가 아님/깨진 base64(400 `엑셀(.xlsx) 파일을 읽을 수 없습니다.`). JSON 본문은 import 계열 3개 경로만 8MB(인증·멤버십 확인 후 파싱), 나머지는 64KB. 초과 시 413 `payload_too_large`.
 * 열거형 셀은 한글 라벨 또는 영문 코드(대소문자 무시) 모두 허용. 담당자는 이메일 또는 정확한 이름(동명이인은 오류).
 * 요구사항 `요구사항 ID`: 비우면 자동 채번, 입력 시 `REQ-nnn` 형식이며 프로젝트에 이미 있거나(`중복된 요구사항 ID입니다.`) 파일 안에서 중복이면 오류. 입력한 번호는 카운터를 그 값 이상으로 올려 이후 자동 채번과 충돌하지 않는다.
+* 테스트(`tests`, 시트 `테스트`): 열 키 `display_id,title,description,precondition,steps,expected_result,priority,status,owner,requirements,wbs`. `테스트 ID`는 요구사항과 같은 규칙(`TC-nnn`, 중복 오류, 카운터 선점). `테스트 절차`는 한 줄에 한 단계, 앞 번호(`1.` `2)` `-`)는 지우고 `=>`(또는 `→`) 뒤는 단계별 기대 결과, 최대 50단계. `연결 요구사항`은 요구사항 ID, `연결 WBS`는 WBS Code를 쉼표로 구분(보관되지 않은 항목만) — 가져오면 test_links로 연결된다. 내보내기 파일을 그대로 다시 가져오면 기존 ID가 중복 오류로 표시된다(신규 등록 전용). 파일명 `테스트 케이스 등록 템플릿.xlsx`, `테스트 케이스_<프로젝트명>_<YYYYMMDD>.xlsx`, ASCII `test-cases-*.xlsx`.
 * WBS: `WBS Code`는 파일 내부 참조용(실제 번호는 행 순서 기준으로 `renumber()`가 다시 부여). 상위 항목은 코드에서 마지막 단계를 뺀 값(`상위 WBS`는 선택, 입력 시 일치해야 함). 마일스톤은 `종료일` 칸이 `milestone_date`, `시작일`은 비워야 한다. 선행 작업은 같은 파일의 코드, FINISH_TO_START, `addDependency`와 같은 순환 규칙(파일 순서대로 적용). 상위 항목 또는 선행 작업 행이 오류이면 해당 행도 가져오지 않는다(`상위 항목 오류로 가져오지 못했습니다.` / `선행 작업 '…'에 오류가 있어 연결할 수 없습니다.`). `parent_id`가 있으면 최상위 행이 그 아래에 생성된다.
 
 응답(preview): `{ columns: [{ key, label, required, type, options? }], rows: [{ row, values, errors, row_errors, ok }], summary: { total, ok, error }, warnings }`.

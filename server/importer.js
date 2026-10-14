@@ -8,6 +8,7 @@ import { ValidationError } from './validate.js';
 import { tx } from './db.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
+import * as Q from './testing.js';
 import { formatDisplayId } from './common.js';
 import { KINDS, normHeader, publicColumns } from './importspec.js';
 import { MAX_IMPORT_ROWS, ImportFileError, parseWorkbook, decodeBase64Xlsx, parseWorkbookRaw } from './xlsx.js';
@@ -103,6 +104,63 @@ function validateRequirements(rows, ctx) {
     try { R.parseRequirement({ title: v.title || 'x', description: v.description, requester_name: v.requester_name, requester_organization: v.requester_organization }); } catch (e) { mergeFieldErrors(errors, e, {}); }
     if (!Object.keys(errors).length) {
       o.model = { title: v.title, description: v.description, ...Object.fromEntries(Object.entries(enums).filter(([, x]) => x)), requester_name: v.requester_name, requester_organization: v.requester_organization, owner_user_id: ow.value, display_id: displayId, criteria };
+    }
+    return o;
+  });
+}
+
+/* ---------- test cases ---------- */
+async function testContext(db, project, wid) {
+  const members = await db.all('SELECT u.id, u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', [wid]);
+  const existing = new Set((await db.all('SELECT display_id FROM test_cases WHERE project_id = ?', [project.id])).map((r) => r.display_id));
+  const reqs = new Map((await db.all('SELECT id, display_id FROM requirements WHERE project_id = ? AND archived_at IS NULL', [project.id])).map((r) => [r.display_id.toUpperCase(), r.id]));
+  const wbs = new Map((await db.all('SELECT id, wbs_code FROM wbs_items WHERE project_id = ? AND archived_at IS NULL', [project.id])).map((w) => [w.wbs_code, w.id]));
+  return { members, existing, reqs, wbs };
+}
+
+/** "1. 로그인 => 메인 화면" per line → [{ instruction, expected }]. */
+export function parseStepLines(raw) {
+  return String(raw || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const body = l.replace(/^(\d{1,3}[.)]|[-•*])\s+/, '');
+    const i = body.search(/\s*(=>|→)\s*/);
+    if (i < 0) return { instruction: body, expected: '' };
+    const m = /\s*(=>|→)\s*/.exec(body.slice(i));
+    return { instruction: body.slice(0, i).trim(), expected: body.slice(i + m[0].length).trim() };
+  });
+}
+const tokens = (raw) => [...new Set(String(raw || '').split(/[,，;\n]+/).map((x) => x.trim()).filter(Boolean))];
+
+function validateTests(rows, ctx) {
+  const spec = KINDS.tests; const col = (k) => spec.columns.find((c) => c.key === k);
+  const seen = new Set();
+  return rows.map((r) => {
+    const v = r.values; const errors = {}; const o = { row: r.row, values: v, errors, row_errors: [], model: null };
+    if (!v.title) errors.title = REQUIRED;
+    const enums = {};
+    for (const k of ['priority', 'status']) { const x = resolveEnum(col(k), v[k]); if (x.error) errors[k] = x.error; else enums[k] = x.value; }
+    const ow = resolveOwner(ctx.members, v.owner); if (ow.error) errors.owner = ow.error;
+    let displayId;
+    if (v.display_id) {
+      const m = /^TC-(\d{1,6})$/i.exec(v.display_id.replace(/\s+/g, ''));
+      if (!m || Number(m[1]) < 1) errors.display_id = '테스트 ID 형식이 올바르지 않습니다. (예: TC-001)';
+      else {
+        displayId = formatDisplayId('TEST', Number(m[1]));
+        if (ctx.existing.has(displayId)) errors.display_id = '중복된 테스트 ID입니다.';
+        else if (seen.has(displayId)) errors.display_id = '파일 내에 중복된 테스트 ID입니다.';
+        seen.add(displayId);
+      }
+    }
+    const steps = parseStepLines(v.steps);
+    if (steps.length > 50) errors.steps = '테스트 절차는 최대 50단계까지 입력할 수 있습니다.';
+    else if (steps.some((s) => !s.instruction || s.instruction.length > 1000 || s.expected.length > 1000)) errors.steps = '각 단계는 1,000자 이내로 입력하고, "=>" 앞에 절차를 적어 주세요.';
+    const reqIds = []; const wbsIds = [];
+    for (const t of tokens(v.requirements)) { const id = ctx.reqs.get(t.replace(/\s+/g, '').toUpperCase()); if (!id) { errors.requirements = `요구사항 '${t}'을(를) 찾을 수 없습니다.`; break; } reqIds.push(id); }
+    for (const t of tokens(v.wbs)) { const id = ctx.wbs.get(t.replace(/\s+/g, '')); if (!id) { errors.wbs = `WBS '${t}'을(를) 찾을 수 없습니다.`; break; } wbsIds.push(id); }
+    let parsed = null;
+    try { parsed = Q.parseTest({ title: v.title || 'x', description: v.description, precondition: v.precondition, expected_result: v.expected_result, steps: errors.steps ? undefined : steps }); }
+    catch (e) { mergeFieldErrors(errors, e, {}); }
+    if (!Object.keys(errors).length) {
+      o.model = { ...parsed, title: v.title, ...Object.fromEntries(Object.entries(enums).filter(([, x]) => x)), owner_user_id: ow.value, display_id: displayId, reqIds: [...new Set(reqIds)], wbsIds: [...new Set(wbsIds)] };
     }
     return o;
   });
@@ -241,8 +299,8 @@ function sanitizeRows(rows, kind) {
   return out;
 }
 
-const loadContext = (db, project, wid, kind, parentId) => (kind === 'requirements' ? reqContext(db, project, wid) : wbsContext(db, project, wid, parentId));
-const validate = (kind, rows, ctx) => (kind === 'requirements' ? validateRequirements(rows, ctx) : validateWbs(rows, ctx));
+const loadContext = (db, project, wid, kind, parentId) => (kind === 'requirements' ? reqContext(db, project, wid) : kind === 'tests' ? testContext(db, project, wid) : wbsContext(db, project, wid, parentId));
+const validate = (kind, rows, ctx) => (kind === 'requirements' ? validateRequirements(rows, ctx) : kind === 'tests' ? validateTests(rows, ctx) : validateWbs(rows, ctx));
 const view = (o) => ({ row: o.row, values: o.values, errors: o.errors, row_errors: o.row_errors, ok: !Object.keys(o.errors).length && !o.row_errors.length });
 const summaryOf = (rows) => ({ total: rows.length, ok: rows.filter((r) => r.ok).length, error: rows.filter((r) => !r.ok).length });
 
@@ -344,6 +402,16 @@ export async function runImport(db, project, wid, kind, body, userId) {
         const id = await R.createRequirement(t, project, o.model, userId, { reservedSequences: reserved });
         created.set(i, { id, display_id: (await t.get('SELECT display_id FROM requirements WHERE id = ?', [id])).display_id });
       }
+    } else if (kind === 'tests') {
+      const reserved = new Set(validated.filter((o) => o.model?.display_id).map((o) => Number(/\d+$/.exec(o.model.display_id)[0])));
+      for (const [i, o] of validated.entries()) {
+        if (!o.model) continue;
+        const { reqIds, wbsIds, ...input } = o.model;
+        const id = await Q.createTest(t, project, input, userId, { reservedSequences: reserved });
+        for (const rid of reqIds) await Q.addTestLink(t, project, { id }, 'REQUIREMENT', rid, userId);
+        for (const wid2 of wbsIds) await Q.addTestLink(t, project, { id }, 'WBS', wid2, userId);
+        created.set(i, { id, display_id: (await t.get('SELECT display_id FROM test_cases WHERE id = ?', [id])).display_id });
+      }
     } else {
       const idx = new Map(validated.map((o, i) => [o.model?.code, i]).filter(([c]) => c !== undefined));
       const kids = new Map();   // parent index (or -1 for top level) → child indexes in file order
@@ -368,7 +436,7 @@ export async function runImport(db, project, wid, kind, body, userId) {
       }
     }
     const results = validated.map((o, i) => { const v = view(o); const c = created.get(i); return { row: o.row, ok: Boolean(c), ...(c || {}), errors: v.errors, row_errors: v.row_errors }; });
-    const summary = kind === 'requirements' ? await R.requirementStats(t, project.id) : await W.wbsStats(t, project.id);
+    const summary = kind === 'requirements' ? await R.requirementStats(t, project.id) : kind === 'tests' ? await Q.testStats(t, project.id) : await W.wbsStats(t, project.id);
     return { total: results.length, created: created.size, failed: results.length - created.size, results, summary };
   });
 }

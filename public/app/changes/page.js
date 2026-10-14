@@ -11,10 +11,11 @@ import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
+import { state } from '../core/state.js';
 
 export async function changesPage(id) {
   const main = $('#main');
-  const [g, ai] = await Promise.all([api('GET', wsApi(`/${id}`)), aiStatus(id)]);
+  const [g, ai, { members }] = await Promise.all([api('GET', wsApi(`/${id}`)), aiStatus(id), api('GET', `/api/workspaces/${state.workspace.id}/members`)]);
   const p = g.project;
   const archived = p.status === 'ARCHIVED';
   document.title = `Changes — ${p.name} — RELAI`;
@@ -112,7 +113,9 @@ export async function changesPage(id) {
     const decision = () => {
       if (st === 'DRAFT') return html`<div class="decision"><p>작성 중인 변경 요청입니다. 내용과 영향을 정리한 뒤 검토를 요청하세요.</p>${raw(ro ? '' : '<button class="btn btn--primary" data-tr="submit">검토 요청</button>')}</div>`;
       if (st === 'UNDER_REVIEW') return html`<div class="decision decision--review"><p><b>검토 중인 변경 요청입니다.</b> ${c.submitted_at ? fmtShort(c.submitted_at) + ' 검토 요청' : ''}</p>
-        ${raw(ro ? '' : html`<div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--danger" data-tr="reject">반려</button></div>`)}</div>`;
+        ${raw(c.approver_name ? html`<p class="hint">지정 승인자: <b>${c.approver_name}</b></p>` : '')}
+        ${raw(ro ? '' : c.review && !c.review.allowed ? html`<p class="hint">${c.review.reason === 'author' ? '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. Owner·Admin 또는 지정 승인자가 결정합니다.' : '승인·반려는 Owner·Admin 또는 지정 승인자만 할 수 있습니다.'}</p>`
+          : html`<div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--danger" data-tr="reject">반려</button></div>`)}</div>`;
       if (st === 'APPROVED') {
         const firstReq = liveReq[0]; const firstImp = liveImp[0];
         return html`<div class="decision decision--ok"><p><b>승인된 변경사항입니다.</b> ${c.reviewed_by_name || ''} · ${c.approved_at ? fmtShort(c.approved_at) : ''}${c.decision_note ? raw(html`<br><q>${c.decision_note}</q>`) : ''}</p>
@@ -135,7 +138,7 @@ export async function changesPage(id) {
         case 'WBS_IMPACT_ADDED': return html`영향 WBS 추가 <q>${lt(h.new_value)}</q>`;
         case 'WBS_IMPACT_UPDATED': return html`영향 유형 변경 <q>${lt(h.old_value)}</q> → <q>${lt(h.new_value)}</q>`;
         case 'WBS_IMPACT_REMOVED': return html`영향 WBS 제거 <q>${h.old_value}</q>`;
-        default: { const f = h.field_name; const L = { title: '제목', priority: 'Priority', requester_name: '요청자', requester_organization: '요청자 조직', requested_at: '요청일', schedule_impact_days: '일정 영향', effort_impact_md: '공수 영향', cost_impact: '비용 영향', relation_type: '관계 유형' };
+        default: { const f = h.field_name; const L = { title: '제목', priority: 'Priority', requester_name: '요청자', requester_organization: '요청자 조직', requested_at: '요청일', approver_user_id: '승인자', schedule_impact_days: '일정 영향', effort_impact_md: '공수 영향', cost_impact: '비용 영향', relation_type: '관계 유형' };
           const v = (x) => (x === null ? '-' : f === 'priority' ? CR_PRIORITY[x] || x : f === 'relation_type' ? lt(x) : x);
           return html`<b>${L[f] || f}</b> ${v(h.old_value)} → ${v(h.new_value)} <small>${h.changed_by_name || ''}</small>`; }
       }
@@ -152,6 +155,7 @@ export async function changesPage(id) {
         <div class="dfield"><span>요청자 조직</span><div><input class="input input--sm" data-field="requester_organization" value="${c.requester_organization}" maxlength="100" placeholder="조직" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>Priority</span><div><select class="select select--sm" data-field="priority" ${fieldsRo ? 'disabled' : ''}>${raw(opt(CR_PRIORITY, c.priority))}</select></div></div>
         <div class="dfield"><span>요청일</span><div><input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${fieldsRo ? 'disabled' : ''}></div></div>
+        <div class="dfield"><span>승인자</span><div><select class="select select--sm" data-field="approver_user_id" title="Owner·Admin 외에 이 변경 요청을 승인할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">Owner·Admin</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select></div></div>
       </div>
       <div class="dsave" id="dsave"></div>
 

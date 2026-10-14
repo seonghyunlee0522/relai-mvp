@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
 import { nextDisplayId, resolveLinkTarget, ensureNoDuplicate } from './common.js';
+import { POLICY } from './authz.js';
 
 export const CR_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
 export const CR_STATUSES = ['DRAFT', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
@@ -36,6 +37,7 @@ export function parseChange(b = {}, { partial = false } = {}) {
   for (const [k, max, label] of [['description', 5000, '설명'], ['reason', 2000, '요청 사유'], ['decision_note', 2000, '결정 메모'], ['requester_name', 100, '요청자'], ['requester_organization', 100, '요청자 조직']]) {
     if (given(k)) { out[k] = str(b[k]); if (out[k].length > max) f[k] = `${label}은(는) ${max.toLocaleString()}자 이내로 입력해 주세요.`; }
   }
+  if (given('approver_user_id')) out.approver_user_id = b.approver_user_id ? String(b.approver_user_id) : null;
   if (given('priority')) { const v = b.priority || 'MEDIUM'; if (!CR_PRIORITIES.includes(v)) f.priority = '우선순위 값이 올바르지 않습니다.'; else out.priority = v; }
   if (given('requested_at')) { const v = b.requested_at || null; if (v !== null && !isDate(v)) f.requested_at = '요청일 형식이 올바르지 않습니다.'; else out.requested_at = v; }
   const num = (k, { integer, label, unit }) => {
@@ -56,7 +58,7 @@ export const parseImpactType = (v) => { const t = v || 'SCHEDULE'; if (!IMPACT_T
 
 
 /* ---------- reads ---------- */
-const CR_COLS = `c.*, rb.name AS reviewed_by_name,
+const CR_COLS = `c.*, rb.name AS reviewed_by_name, (SELECT name FROM users ap WHERE ap.id = c.approver_user_id) AS approver_name,
   (SELECT COUNT(*) FROM change_request_requirements x JOIN requirements r ON r.id = x.requirement_id WHERE x.change_request_id = c.id AND r.archived_at IS NULL) AS requirement_count,
   (SELECT COUNT(*) FROM change_request_wbs_impacts x JOIN wbs_items w ON w.id = x.wbs_item_id WHERE x.change_request_id = c.id AND w.archived_at IS NULL) AS impact_count`;
 
@@ -135,18 +137,32 @@ export async function createChange(db, project, input, userId) {
   return id;
 }
 
-const TRACKED = ['title', 'description', 'reason', 'requester_name', 'requester_organization', 'priority', 'requested_at', 'schedule_impact_days', 'effort_impact_md', 'cost_impact', 'decision_note'];
+const TRACKED = ['title', 'description', 'reason', 'requester_name', 'requester_organization', 'priority', 'requested_at', 'schedule_impact_days', 'effort_impact_md', 'cost_impact', 'decision_note', 'approver_user_id'];
 export async function updateChange(db, existing, input, userId) {
   const ts = now(); const sets = []; const vals = []; const changed = [];
   for (const k of TRACKED) {
     if (input[k] === undefined || input[k] === existing[k]) continue;
     sets.push(`${k} = ?`); vals.push(input[k]); changed.push(k);
-    if (!['description', 'reason', 'decision_note'].includes(k)) (await addHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: input[k] }, userId, ts));
+    if (k === 'approver_user_id') {   // history shows names, not ids
+      const name = async (id) => (id ? (await db.get('SELECT name FROM users WHERE id = ?', [id]))?.name ?? null : null);
+      (await addHistory(db, existing.id, 'UPDATED', { field: k, oldValue: await name(existing[k]), newValue: await name(input[k]) }, userId, ts));
+    } else if (!['description', 'reason', 'decision_note'].includes(k)) (await addHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: input[k] }, userId, ts));
   }
   if (!sets.length) return changed;
   sets.push('updated_at = ?'); vals.push(ts, existing.id);
   (await db.run(`UPDATE change_requests SET ${sets.join(', ')} WHERE id = ?`, [...vals]));
   return changed;
+}
+
+/**
+ * Who may approve / reject. Rule: OWNER/ADMIN or the CR's designated approver, and never the member who wrote the CR
+ * (four-eyes). Exception: a workspace with a single member has nobody else to ask, so its only member may decide.
+ * Returns { allowed, reason } — reason: 'author' | 'role' | null.
+ */
+export function reviewPermission(c, { userId, role, memberCount }) {
+  if (c.created_by === userId && memberCount > 1) return { allowed: false, reason: 'author' };
+  if (POLICY.change_approve.includes(role) || (c.approver_user_id && c.approver_user_id === userId)) return { allowed: true, reason: null };
+  return { allowed: false, reason: 'role' };
 }
 
 /** Guarded workflow. Returns {error} on an invalid transition. */

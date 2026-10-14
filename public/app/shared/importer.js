@@ -9,11 +9,11 @@ import { toast } from './dialogs.js';
 const STEPS = ['파일 선택', '검증·수정', '가져오기 결과'];
 const STEPS_WBS = ['파일 선택', '열 매핑', '검증·미리보기', '가져오기 결과'];
 const MAP_LABEL = { title: 'WBS명', code: 'WBS Code', lv1: 'Lv1', lv2: 'Lv2', lv3: 'Lv3', lv4: 'Lv4', lv5: 'Lv5', owner: '담당자', start: '시작일', end: '종료일', progress: '진행률', status: '상태', description: '설명', item_type: '유형(마일스톤)' };
-const KIND_LABEL = { requirements: '요구사항', wbs: 'WBS' };
-const TEMPLATE_NAME = { requirements: '요구사항 등록 템플릿.xlsx', wbs: 'WBS 등록 템플릿.xlsx' };
+const KIND_LABEL = { requirements: '요구사항', wbs: 'WBS', tests: '테스트' };
+const TEMPLATE_NAME = { requirements: '요구사항 등록 템플릿.xlsx', wbs: 'WBS 등록 템플릿.xlsx', tests: '테스트 케이스 등록 템플릿.xlsx' };
 
 /**
- * @param {{kind:'requirements'|'wbs', base:string, parentId?:string, onDone?:()=>void}} o
+ * @param {{kind:'requirements'|'wbs'|'tests', base:string, parentId?:string, onDone?:()=>void}} o
  *   base = `/api/workspaces/:wid/projects/:pid/<kind>`
  */
 export function openImport({ kind, base, parentId, onDone = () => {} }) {
@@ -46,7 +46,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
         <span>최대 5MB · 한 번에 최대 2,000행 · 첫 번째 시트를 읽습니다</span>
         <input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></div>
       <div class="imp__tpl"><button class="btn btn--secondary" data-tpl>${TEMPLATE_NAME[kind]} 내려받기</button>
-        <span class="hint">템플릿에 입력 → 업로드 → 오류 확인·수정 → 가져오기 순서로 진행합니다. ${kind === 'wbs' ? 'WBS Code(1, 1.1, 1.2.1)로 계층이 만들어집니다.' : '요구사항 ID를 비우면 자동 채번됩니다.'}</span></div>
+        <span class="hint">템플릿에 입력 → 업로드 → 오류 확인·수정 → 가져오기 순서로 진행합니다. ${kind === 'wbs' ? 'WBS Code(1, 1.1, 1.2.1)로 계층이 만들어집니다.' : kind === 'tests' ? '테스트 ID를 비우면 자동 채번됩니다. 연결 요구사항·WBS는 ID/Code로 입력합니다.' : '요구사항 ID를 비우면 자동 채번됩니다.'}</span></div>
       <p class="hint" style="margin-top:14px">${busy ? '파일을 읽고 검증하는 중…' : ''}</p>`, '<span class="sp"></span><button class="btn btn--secondary" data-x>닫기</button>');
     const drop = el.querySelector('#drop'); const input = el.querySelector('#file');
     drop.onclick = () => input.click();

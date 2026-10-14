@@ -352,6 +352,8 @@ CREATE TABLE IF NOT EXISTS change_requests (
   UNIQUE (project_id, sequence_number)
 );
 CREATE INDEX IF NOT EXISTS idx_cr_project ON change_requests(project_id, archived_at, status);
+-- Designated approver (optional). Approve/reject: OWNER/ADMIN or this user, never the CR's author (server/changes.js reviewPermission).
+ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS approver_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS change_request_requirements (
   id                TEXT PRIMARY KEY,

@@ -9,8 +9,8 @@ import { syncAllDue, renewWebhooks } from './jira/sync.js';
 
 export async function runIntegrationJobs(db, { olderThanMinutes = Number(process.env.INTEGRATION_SYNC_STALE_MIN) || 30, limit = 50 } = {}, env = process.env) {
   const started = Date.now();
+  const webhooks = await renewWebhooks(db, env);   // first: a 30-day expiry silently stops inbound updates, and a long sync below must not starve it
   const synced = await syncAllDue(db, { olderThanMinutes, limit }, env);
-  const webhooks = await renewWebhooks(db, env);
   await db.run('DELETE FROM integration_oauth_states WHERE expires_at < now()');
   return { synced, webhooks, ms: Date.now() - started };
 }

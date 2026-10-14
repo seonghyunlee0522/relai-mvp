@@ -2,6 +2,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, fmtDT, html, raw } from '../core/dom.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
+import { download } from '../core/ui.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { projectHead } from './guide.js';
 
@@ -36,6 +37,7 @@ export async function reportPage(pid, rid, main = $('#main')) {
         <div class="doc__meta"><span class="chip ${RS[report.status][1]}">${RS[report.status][0]}</span>
           <span>보고 기간 <b>${sc.period.start} ~ ${sc.period.end}</b></span><span>생성 ${fmtDT(report.generated_at)}</span>${raw(report.finalized_at ? html`<span>확정 ${fmtDT(report.finalized_at)}</span>` : '')}<span id="dsave" class="doc__save"></span></div>
         <div class="doc__actions">
+          <button class="btn btn--secondary btn--sm" data-dl="pdf">PDF 다운로드</button><button class="btn btn--secondary btn--sm" data-dl="docx">Word 다운로드</button>
           <button class="btn btn--secondary btn--sm" id="copy-md">복사 (Markdown)</button><button class="btn btn--secondary btn--sm" id="copy-txt">복사 (텍스트)</button>
           ${raw(archived ? '' : report.status === 'DRAFT' ? '<button class="btn btn--primary btn--sm" id="finalize">보고서 확정</button>' : '<button class="btn btn--secondary btn--sm" id="reopen">다시 편집</button>')}
         </div></div>
@@ -65,6 +67,10 @@ export async function reportPage(pid, rid, main = $('#main')) {
   const bind = () => {
     bindCoach(main);
     $('#copy-md').onclick = () => copy(report.rendered_content, 'Markdown');
+    main.querySelectorAll('[data-dl]').forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { await download(wsApi(`/${pid}/weekly-reports/${rid}/export.${b.dataset.dl}`)); } catch (e) { toast(e.message); } finally { b.disabled = false; }
+    });
     $('#copy-txt').onclick = () => copy(report.plain_text, '텍스트');
     const t = $('#title'); if (t) t.onchange = () => { if (t.value.trim()) save({ title: t.value.trim() }); };
     const fit = (ta) => { ta.style.height = 'auto'; ta.style.height = Math.max(72, ta.scrollHeight + 4) + 'px'; };

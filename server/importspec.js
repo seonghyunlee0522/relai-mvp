@@ -4,6 +4,7 @@
  */
 import { REQ_TYPES, REQ_PRIORITIES, REQ_SCOPES, REQ_STATUSES } from './requirements.js';
 import { WBS_STATUSES } from './wbs.js';
+import { TC_STATUSES, TC_PRIORITIES } from './testing.js';
 
 const opts = (codes, labels, aliases = null) => codes.map((value) => ({ value, label: labels[value], ...(aliases && aliases[value] ? { aliases: aliases[value] } : {}) }));
 
@@ -14,9 +15,15 @@ export const LABELS = {
   status: { DRAFT: '작성 중', REVIEWING: '검토 중', CONFIRMED: '확정', ON_HOLD: '보류', REJECTED: '반려' },
   item_type: { SUMMARY: '상위 항목', TASK: '작업', MILESTONE: '마일스톤' },
   wbs_status: { NOT_STARTED: '시작 전', IN_PROGRESS: '진행 중', COMPLETED: '완료', ON_HOLD: '보류' },
+  tc_status: { DRAFT: '작성 중', READY: '준비됨', BLOCKED: 'Blocked', COMPLETED: '완료' },
+  tc_priority: { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' },
 };
 /* UX-006: the WBS screen labels statuses 예정/진행중/지연; accept those spellings in imports as well. */
-export const ALIASES = { wbs_status: { NOT_STARTED: ['예정', '시작전', '미착수'], IN_PROGRESS: ['진행중', '진행'], COMPLETED: ['완료됨', '종료'], ON_HOLD: ['중단', '대기'] } };
+export const ALIASES = {
+  wbs_status: { NOT_STARTED: ['예정', '시작전', '미착수'], IN_PROGRESS: ['진행중', '진행'], COMPLETED: ['완료됨', '종료'], ON_HOLD: ['중단', '대기'] },
+  tc_status: { DRAFT: ['작성중', '초안'], READY: ['준비', 'Ready'], BLOCKED: ['차단', '차단됨'], COMPLETED: ['완료됨', '종료'] },
+  tc_priority: { HIGH: ['상', '높음'], MEDIUM: ['중', '보통'], LOW: ['하', '낮음'] },
+};
 
 export const KINDS = {
   requirements: {
@@ -56,6 +63,27 @@ export const KINDS = {
       { key: 'status', label: '상태', required: false, type: 'enum', width: 12, options: opts(WBS_STATUSES, LABELS.wbs_status, ALIASES.wbs_status), hint: '시작 전 / 진행 중 / 완료 / 보류. 비우면 시작 전', examples: ['시작 전', '진행 중'] },
       { key: 'progress', label: '진행률', required: false, type: 'number', width: 10, hint: '0~100 정수, 작업에만 입력', examples: ['0', '50', '100'] },
       { key: 'predecessors', label: '선행 작업', required: false, type: 'text', width: 18, hint: '같은 파일의 WBS Code를 쉼표로 구분 (종료 후 시작 관계)', examples: ['1.1', '1.1, 1.2'] },
+    ],
+  },
+  tests: {
+    key: 'tests',
+    sheet: '테스트',
+    names: { template: '테스트 케이스 등록 템플릿', export: '테스트 케이스', ascii: 'test-cases' },
+    requiredHeaders: ['title'],
+    columns: [
+      { key: 'display_id', label: '테스트 ID', required: false, type: 'text', width: 12,
+        hint: '비워 두면 자동 채번합니다. 직접 입력 시 TC-001 형식이며 프로젝트 내에 이미 있는 ID는 사용할 수 없습니다.', examples: ['TC-010', '(비움)'] },
+      { key: 'title', label: '테스트명', required: true, type: 'text', width: 34, hint: '200자 이내', examples: ['SSO 로그인 성공', '잘못된 비밀번호 입력 시 오류 안내'] },
+      { key: 'description', label: '설명', required: false, type: 'multiline', width: 40, hint: '5,000자 이내', examples: ['사내 계정으로 로그인하는 정상 흐름'] },
+      { key: 'precondition', label: '사전 조건', required: false, type: 'multiline', width: 30, hint: '2,000자 이내', examples: ['테스트 계정이 등록되어 있다.'] },
+      { key: 'steps', label: '테스트 절차', required: false, type: 'multiline', width: 50,
+        hint: '한 줄에 한 단계(Alt+Enter로 줄바꿈), 최대 50단계. 단계별 기대 결과는 "=>" 뒤에 적습니다. 앞의 번호(1. 2.)는 자동으로 지웁니다.', examples: ['1. 로그인 화면 접속\n2. 계정 입력 후 로그인 => 메인 화면으로 이동'] },
+      { key: 'expected_result', label: '기대 결과', required: false, type: 'multiline', width: 34, hint: '2,000자 이내', examples: ['메인 화면이 표시된다.'] },
+      { key: 'priority', label: '우선순위', required: false, type: 'enum', width: 11, options: opts(TC_PRIORITIES, LABELS.tc_priority, ALIASES.tc_priority), hint: '목록에서 선택. 비우면 Medium', examples: ['High', 'Medium', 'Low'] },
+      { key: 'status', label: '상태', required: false, type: 'enum', width: 11, options: opts(TC_STATUSES, LABELS.tc_status, ALIASES.tc_status), hint: '목록에서 선택. 비우면 작성 중', examples: ['작성 중', '준비됨'] },
+      { key: 'owner', label: '담당자', required: false, type: 'owner', width: 20, hint: 'Workspace 멤버의 이메일 또는 이름(정확히 일치)', examples: ['hong@company.com', '홍길동'] },
+      { key: 'requirements', label: '연결 요구사항', required: false, type: 'text', width: 18, hint: '이 프로젝트의 요구사항 ID를 쉼표로 구분', examples: ['REQ-001', 'REQ-001, REQ-004'] },
+      { key: 'wbs', label: '연결 WBS', required: false, type: 'text', width: 14, hint: '이 프로젝트의 WBS Code를 쉼표로 구분', examples: ['1.2', '1.2, 2.1'] },
     ],
   },
 };

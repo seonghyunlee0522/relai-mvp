@@ -51,6 +51,7 @@ export const migrations = [
   } },
   { version: 25, name: 'Billing (Phase 10): subscriptions, payments, billing_events, subscription_events — tables in schema.sql; plan limits enforced by billing/limits.js', up() {} },
   { version: 26, name: 'auth hardening: auth_tokens (password reset / e-mail verification, hashed, single use), rate_limits (shared limiter for serverless)', up() {} },
+  { version: 27, name: 'change_requests.approver_user_id (designated approver; self-approval blocked)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

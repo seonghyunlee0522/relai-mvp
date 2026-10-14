@@ -12,6 +12,8 @@ import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
 import { statusChip, prText } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
+import { download } from '../core/ui.js';
+import { openImport } from '../shared/importer.js';
 
 export async function testsPage(id) {
   const main = $('#main');
@@ -72,6 +74,8 @@ export async function testsPage(id) {
         : html`${raw(filterSelect('status', 'Status', ACC_STATUS, q.get('status')))}`)}
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         <span class="rtool__sp"></span>
+        ${raw(T === 'cases' ? html`<span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
+          <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>` : '')}
         ${raw(archived ? '' : html`<button class="btn btn--primary btn--sm" id="add">+ ${T === 'cases' ? '테스트 추가' : '검수 만들기'}</button>`)}
       </div>
       ${raw(appliedFilters(q, FILTER_DEFS(T)))}`)}
@@ -273,6 +277,18 @@ export async function testsPage(id) {
     main.querySelectorAll('[data-f]').forEach((sl) => sl.onchange = async () => { setParam(sl.dataset.f, sl.value); await load(); draw(); });
     const ar = $('#arch'); if (ar) ar.onchange = async () => { setParam('archived', ar.checked ? '1' : ''); await load(); draw(); };
     bindFilterClears(main, { setParam, keys: ['q', ...filterKeys(), 'archived'], reload: async () => { await load(); draw(); } });
+    const xb = $('#xl-btn'); const xp = $('#xl-pop');
+    if (xb && xp) {
+      xb.onclick = (e) => { e.stopPropagation(); const open = xp.hidden; document.querySelectorAll('.gpop').forEach((x) => { x.hidden = true; }); xp.hidden = !open; };
+      xp.onclick = async (e) => {
+        const b = e.target.closest('[data-xl]'); if (!b) return; xp.hidden = true;
+        try {
+          if (b.dataset.xl === 'import') openImport({ kind: 'tests', base: tApi(), onDone: async () => { await load(); draw(); } });
+          else if (b.dataset.xl === 'template') await download(tApi('/template.xlsx'), { filename: '테스트 케이스 등록 템플릿.xlsx' });
+          else await download(tApi('/export.xlsx'));
+        } catch (err) { toast(err.message); }
+      };
+    }
     for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; draftSteps = []; setParam('sel', ''); setParam('new', '1'); draw(); $('#c-title').focus(); }; }
     main.querySelectorAll('[data-row]').forEach((tr) => tr.onclick = async () => { creating = false; dtab = 'info'; setParam('new', ''); await loadSel(tr.dataset.row); draw(); });
     main.querySelectorAll('[data-stop]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));

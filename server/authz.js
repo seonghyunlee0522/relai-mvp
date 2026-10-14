@@ -16,6 +16,7 @@ export const POLICY = {
   workspace_settings: ['OWNER', 'ADMIN'],  // rename etc.
   billing: ['OWNER'],                      // Phase 10: upgrade, payment method, cancel, resume, plan change
   workspace_delete: ['OWNER'],
+  change_approve: ['OWNER', 'ADMIN'],      // approve / reject change requests (plus the CR's designated approver; never its author)
   integration_manage: ['OWNER', 'ADMIN'],   // Phase 12: connect / disconnect external integrations (Jira). MEMBERs still link/create issues inside mapped projects.
 };
 
