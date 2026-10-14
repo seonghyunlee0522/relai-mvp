@@ -15,7 +15,7 @@ import { state } from '../core/state.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 import { md } from '../shared/kst-date.js';
 import { term } from '../project/initiation.js';
-import { carryIndex, carryTag } from '../project/golive.js';
+import { carryIndex, carryTag, carryLine } from '../project/golive.js';
 
 export async function changesPage(id) {
   const main = $('#main');
@@ -222,7 +222,7 @@ export async function changesPage(id) {
     return html`${raw(drawerHead(c.display_id, statusChip(CR_STATUS, CR_STATUS_CHIP, st), { archived: Boolean(c.archived_at) }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: '영향 범위', count: liveReq.length + liveImp.length }, { key: 'hist', label: '변경 이력', count: c.history.length }], dtab))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
-      ${raw(carry[`CR:${c.id}`] !== undefined ? html`<p class="carryline" data-carryline><span class="carry" style="margin-left:0">운영 이관</span> · ${carry[`CR:${c.id}`]}</p>` : '')}
+      ${raw(carryLine(carry, 'CR', c.id))}
       <input class="dtitle" data-field="title" value="${c.title}" maxlength="200" ${fieldsRo ? 'disabled' : ''} aria-label="제목">
       ${raw(decision())}
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${fieldsRo ? 'disabled' : ''}>${c.description}</textarea>

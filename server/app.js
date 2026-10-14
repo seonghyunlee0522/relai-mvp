@@ -29,6 +29,7 @@ import * as Q from './testing.js';
 import * as M from './metrics.js';
 import * as H from './health.js';
 import * as WR from './reports.js';
+import * as CLS from './closing.js';
 import { mountCronRoutes } from './cron-routes.js';
 import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, mountReportExportRoutes, mountTestRoutes, BIG_JSON_PATH } from './routes-extra.js';
 import { ImportFileError } from './xlsx.js';
@@ -59,7 +60,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
 const PROJECT_COLS = `id, workspace_id, name, description, client_name, project_scale, status,
   planned_start_date, planned_end_date, current_phase, created_by, created_at, updated_at,
-  project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration`;
+  project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration, closed_on, warranty_end_on`;
 
 export function createApp(db, { secureCookies = process.env.NODE_ENV === 'production', sessionSecret = process.env.SESSION_SECRET || '', billingProvider = providerFromEnv() } = {}) {
   const app = express();
@@ -311,9 +312,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
    * guidanceContext() (home.js) is shared with the Workspace Home cards so both screens show the same Next Action. */
   const guideContext = (project) => guidanceContext(db, project);
   const guideResponse = async (project, pre = null) => {
-    const { stats, def, guide, guidance, goLive } = pre || (await guideContext(project));
-    // go_live (Phase 6 US-3): 오픈 기록 — the grey 운영 이관 tags on lists read it
-    return { project, ...guide, ...stats, go_live: goLive || null, kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
+    const { stats, def, guide, guidance, goLive, handover, completionReport } = pre || (await guideContext(project));
+    // go_live (Phase 6 US-3): 오픈 기록 — the grey 운영 이관 tags on lists read it. Phase 7: 운영 인수 · 완료보고서 · 앞 단계 미완료 필수 (06→07 dialog)
+    return { project, ...guide, ...stats, go_live: goLive ? { ...goLive, carryovers: await CLS.carryoversView(db, project.id, goLive) } : null,
+      handover: handover || null, completion_report: completionReport || null, prior_gaps: CLS.priorGaps(guide.phases), kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
       definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, scope_out: (def.definition.scope_out || []).map((x) => x.text).filter(Boolean), sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
@@ -371,6 +373,21 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         }
         // Phase 6 US-3: 오픈 completes only through the 오픈 dialog (오픈일 + 남은 항목 운영 이관 — POST …/go-live)
         if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'GO_LIVE') return fail(res, 409, 'go_live_required', '오픈은 오픈 완료 처리에서 오픈일과 남은 항목을 정해 완료합니다.');
+        // Phase 7 US-3: 운영 인수 = 인수자 · 인수일 (+ 운영 이관 담당) — the same record as POST …/handover
+        if (st && st.phase_key === 'OPERATIONS' && st.step_key === 'HANDOVER') {
+          if (!req.body.handover || typeof req.body.handover !== 'object') return fail(res, 422, 'handover_required', '인수자와 인수일을 입력해야 운영 인수를 완료할 수 있습니다.', { fields: { receiver: '인수자를 고르세요.', date: '인수일을 입력하세요.' } });
+          const r = await tx(db, (d) => CLS.recordHandover(d, project, req.body.handover, req.user.id));
+          if (r.error) return fail(res, 404, 'not_found', '할 일을 찾을 수 없습니다.');
+          return res.json({ step: await CLS.handoverStep(db, project.id), handover: r.handover, owner_counts: r.counts, ...(await guideResponse(project)) });
+        }
+        // Phase 7 US-1: CLOSE = 완료보고서 확정; written outside RELAI → 완료 처리 + 사유 (required)
+        if (st && st.phase_key === 'OPERATIONS' && st.step_key === 'CLOSE' && (await WR.completionState(db, project.id)).state !== 'FINAL') {
+          const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+          if (!reason) return fail(res, 422, 'reason_required', '완료보고서 없이 완료 처리하려면 사유를 입력하세요. (예: 고객사 양식으로 완료보고서를 작성해 전달함)', { fields: { reason: '사유를 입력하세요.' } });
+          if (reason.length > 500) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { reason: '사유는 500자 이내로 입력해 주세요.' } });
+          const prev = (await db.get('SELECT note FROM project_steps WHERE id = ?', [req.params.sid]))?.note || '';
+          fields.note = `${prev ? `${prev}\n` : ''}[외부 완료보고서] ${reason} · ${todayKst()} · ${req.user.name || ''}`;
+        }
         if (st && st.phase_key === 'REQUIREMENTS' && st.step_key === RB.STEP_KEY) {
           const m = await RB.loadBaseline(db, project);
           if (m.missing.length || !m.counts.in_scope) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 요구사항 기준선 승인에서 승인 기록을 입력하세요.');
@@ -399,6 +416,38 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '오픈 업무를 찾을 수 없습니다.');
     if (r.error === 'already_live') return fail(res, 409, 'already_live', '이미 오픈 완료로 기록되어 있습니다.');
     res.json({ go_live: r.go_live, milestone: r.milestone, ...(await guideResponse(project)) });
+  }));
+
+  /* ---------- 07 운영 및 유지보수 (Phase 7; server/closing.js) ---------- */
+  app.get(`${base}/:pid/handover`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json({ handover: await CLS.handoverOf(db, project.id), carryovers: await CLS.carryoversView(db, project.id), owners: await Q.performerOptions(db, project, (await SK.ownerOptions(db, project)).team), today: todayKst() });
+  }));
+  app.post(`${base}/:pid/handover`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const r = await tx(db, (d) => CLS.recordHandover(d, project, req.body || {}, req.user.id));
+    if (r.error) return fail(res, 404, 'not_found', '운영 이관 업무를 찾을 수 없습니다.');
+    res.json({ handover: r.handover, owner_counts: r.counts, ...(await guideResponse(project)) });
+  }));
+  app.patch(`${base}/:pid/carryovers/owners`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const r = await tx(db, (d) => CLS.saveCarryoverOwners(d, project, (req.body || {}).owners));
+    if (r.error) return fail(res, 409, 'no_go_live', '오픈 기록이 없어 운영 이관 항목이 없습니다.');
+    res.json({ owner_counts: r.counts, ...(await guideResponse(project)) });
+  }));
+  app.post(`${base}/:pid/close`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const ops = (await guideContext(project)).guide.phases.find((p) => p.phase_key === 'OPERATIONS');
+    const r = await tx(db, (d) => CLS.closeProject(d, project, req.body || {}, req.user.id, ops));
+    if (r.error === 'already_closed') return fail(res, 409, 'already_closed', '이미 종료된 프로젝트입니다.');
+    if (r.error === 'gate') return fail(res, 409, 'close_gate', '07 필수 업무(운영 이관 / 인수인계 · 프로젝트 종료 정리)를 모두 마쳐야 프로젝트를 종료할 수 있습니다.');
+    res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
+  }));
+  app.post(`${base}/:pid/reopen`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const r = await tx(db, (d) => CLS.reopenProject(d, project, req.user.id));
+    if (r.error) return fail(res, 409, 'not_closed', '종료된 프로젝트가 아닙니다.');
+    res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
   }));
 
   /* ---------- activity checklists (06 전환·오픈 · 07 운영; server/checklists.js) ---------- */
@@ -1248,6 +1297,19 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const period = WR.parsePeriod(req.body || {});
     const id = (await tx(db, async (db) => (await WR.generateReport(db, project, period, req.user.id))));
     res.status(201).json((await rResp(project, id)));
+  }));
+  // Phase 7 US-1: 완료보고서 — one per project (an existing one is opened, never duplicated); made from 07 운영 및 유지보수
+  app.post(`${wrbase}/completion`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const cur = await WR.completionOf(db, project.id);
+    if (cur) return res.json({ ...(await rResp(project, cur.id)), existing: true });
+    if (project.current_phase !== 'OPERATIONS' && project.status !== 'COMPLETED') return fail(res, 409, 'not_operations', '완료보고서는 07 운영 단계에서 만들 수 있습니다.');
+    const { guide, goLive } = await guideContext(project);
+    const extra = { gaps: CLS.priorGaps(guide.phases), goLive, carryovers: await CLS.carryoversView(db, project.id, goLive), handover: await CLS.handoverOf(db, project.id), acceptances: await WR.acceptedApprovals(db, project.id) };
+    let out;
+    try { out = await tx(db, (d) => WR.generateCompletion(d, project, req.user.id, extra)); }
+    catch (e) { if (e && e.code === '23505') { const c = await WR.completionOf(db, project.id); return res.json({ ...(await rResp(project, c.id)), existing: true }); } throw e; }
+    res.status(out.existing ? 200 : 201).json({ ...(await rResp(project, out.id)), existing: out.existing });
   }));
   mountReportExportRoutes({ app, db, guard, wrap, fail, loadProject, wrbase });   // PDF / Word download
   app.get(`${wrbase}/:rid`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const r = (await loadReport(req, res, project)); if (r) res.json((await rResp(project, r.id))); }));

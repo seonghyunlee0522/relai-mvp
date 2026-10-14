@@ -193,8 +193,9 @@ export function mountReportExportRoutes({ app, db, guard, wrap, fail, loadProjec
       const project = await loadProject(req, res); if (!project) return;
       const report = await WR.getReport(db, project.id, req.params.rid);
       if (!report) return fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.');
-      const name = `${safeName(project.name, 'project')}_주간보고_${report.period_start}_${report.period_end}`;
-      sendXlsx(res, await f.render(report), `weekly-report-${report.period_start}.${ext}`, `${name}.${ext}`, f.mime);
+      const done = report.report_type === 'COMPLETION';   // Phase 7 US-1: 완료보고서 uses the same export
+      const name = done ? `${safeName(project.name, 'project')}_완료보고서` : `${safeName(project.name, 'project')}_주간보고_${report.period_start}_${report.period_end}`;
+      sendXlsx(res, await f.render(report), done ? `completion-report.${ext}` : `weekly-report-${report.period_start}.${ext}`, `${name}.${ext}`, f.mime);
     }));
   }
 }

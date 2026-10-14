@@ -19,6 +19,7 @@ import { ob } from '../onboarding/state.js';
 import { josa, pickJosa } from '../shared/josa.js';
 import { noApprovalLine, bindPlanMenu } from './initiation.js';
 import { goLiveDialog, carryoverDialog } from './golive.js';
+import { handoverDialog, closeDialog, closeManual, closeReady, closedPanel, reopenProject } from './closing.js';
 
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
 /** /api/… hrefs (사업수행계획서 내려받기) are downloads, not SPA routes. */
@@ -68,6 +69,8 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
       if (a.manual && (isCurrent || markable)) {
         const open = a.checklist && a.checklist.total ? a.checklist.total - a.checklist.done : 0;
         acts.push(a.go_live ? html`<button type="button" class="link linkbtn np__act np__done" data-golive title="오픈일과 남은 항목(처리 / 운영 이관)을 정하고 오픈을 기록합니다">✓ 완료 처리</button>`   // Phase 6 US-3: the 오픈 dialog
+          : a.handover ? html`<button type="button" class="link linkbtn np__act np__done" data-handover title="인수자·인수일과 운영 이관 항목의 운영 담당을 기록합니다">✓ 완료 처리</button>`   // Phase 7 US-3
+          : a.close ? html`<button type="button" class="link linkbtn np__act np__done" data-close-manual="${a.id}" title="완료보고서를 RELAI 밖에서 작성했다면 사유를 남기고 완료합니다">✓ 완료 처리</button>`   // Phase 7 US-1
           : html`<button type="button" class="link linkbtn np__act np__done" data-step="${a.id}" data-status="COMPLETED" data-title="${a.title}" data-open="${open}" title="이 업무를 완료한 것으로 기록합니다">✓ 완료 처리</button>`);
       }
       if (a.importance !== 'REQUIRED' && a.linked_feature_type !== 'definition') acts.push(html`<button type="button" class="link linkbtn np__act np__skip" data-step="${a.id}" data-status="SKIPPED" data-title="${a.title}" title="이번 프로젝트에서는 수행하지 않는 업무로 기록합니다">↷ 건너뛰기</button>`);
@@ -135,24 +138,25 @@ const phasePanel = (g, p, archived) => {
 
 export async function nextPage(id, main = $('#main')) {
   // BUG-001: strip ?created=1 / ?move=next right away (not after the awaits), so a navigation made meanwhile is never overwritten.
-  { const qp0 = new URLSearchParams(location.search); nextPage._flag = qp0.get('created') === '1' ? `created:${id}` : qp0.get('move') === 'next' ? `move:${id}` : qp0.get('golive') === '1' ? `golive:${id}` : qp0.get('carryovers') === '1' ? `carry:${id}` : null; if (nextPage._flag) history.replaceState(null, '', `/app/projects/${id}`); }
+  { const qp0 = new URLSearchParams(location.search); nextPage._flag = qp0.get('created') === '1' ? `created:${id}` : qp0.get('move') === 'next' ? `move:${id}` : qp0.get('golive') === '1' ? `golive:${id}` : qp0.get('carryovers') === '1' ? `carry:${id}` : qp0.get('handover') === '1' ? `handover:${id}` : qp0.get('close') === '1' ? `close:${id}` : null; if (nextPage._flag) history.replaceState(null, '', `/app/projects/${id}`); }
   let g = await api('GET', wsApi(`/${id}`));
   const p = g.project;
   document.title = `지금 할 일 — ${p.name} — RELAI`;
   const archived = p.status === 'ARCHIVED';
   const created = nextPage._flag === `created:${id}`; const moveNext = nextPage._flag === `move:${id}`;
-  let pendingGoLive = nextPage._flag === `golive:${id}`; let pendingCarry = nextPage._flag === `carry:${id}`; nextPage._flag = null;   // Phase 6: guide CTA '오픈 완료 처리' · 07 '오픈 때 운영으로 넘긴 항목'
+  let pendingGoLive = nextPage._flag === `golive:${id}`; let pendingCarry = nextPage._flag === `carry:${id}`;
+  let pendingHandover = nextPage._flag === `handover:${id}`; let pendingClose = nextPage._flag === `close:${id}`; nextPage._flag = null;   // Phase 7: 인수 완료 처리 · 프로젝트 종료   // Phase 6: guide CTA '오픈 완료 처리' · 07 '오픈 때 운영으로 넘긴 항목'
   await ob.get();
   let pendingMove = moveNext && !archived;
   const viewKey = new URLSearchParams(location.search).get('phase');   // stepper click on another phase → that phase's activity list
-  const draw = () => {
+  const draw = async () => {
     const view = viewKey ? (g.phases || []).find((x) => x.phase_key === viewKey && !x.is_current) : null;
     main.innerHTML = html`<div class="page page--wide page--flow page--guide nx">
-      ${raw(projectHead(p, g, { tab: 'next' }))}
+      ${raw(projectHead(g.project, g, { tab: 'next' }))}
       ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 단계와 업무는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(phaseStepper(g, p.id, view ? view.phase_key : null))}
-      ${raw(view ? '' : guideCard(g, p, archived, created))}
-      ${raw(view ? otherPhasePanel(g, view, archived) : phasePanel(g, p, archived))}
+      ${raw(view ? '' : g.project.status === 'COMPLETED' ? closedPanel(g) : guideCard(g, p, archived, created))}
+      ${raw(view ? otherPhasePanel(g, view, archived) : g.project.status === 'COMPLETED' ? html`<details class="closed__ph"><summary>단계 업무 보기</summary>${raw(phasePanel(g, p, archived))}</details>` : phasePanel(g, p, archived))}
     </div>`;
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { g = await api('GET', wsApi(`/${id}`)); draw(); } };
     const nb = $('#next'); if (nb) nb.onclick = move;
@@ -178,7 +182,16 @@ export async function nextPage(id, main = $('#main')) {
     const openGoLive = async () => { const r = await goLiveDialog(id); if (r) { g = r; toast(`오픈을 기록했습니다.${r.go_live && r.go_live.carryovers.length ? ` 운영 이관 ${r.go_live.carryovers.length}건` : ''}`); draw(); } };
     main.querySelectorAll('[data-golive]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); openGoLive(); }; });
     main.querySelectorAll('.rg__warn a[href$="?carryovers=1"]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); e.stopPropagation(); carryoverDialog(g); }; });
+    // Phase 7: 운영 인수 dialog (row 완료 처리 · guide CTA · '운영 이관 N건 · 담당 지정' line) → then 종료 when 07 is done
+    const askClose = async () => { if (g.project.status !== 'COMPLETED' && closeReady(g)) { const r = await closeDialog(id, g); if (r) { g = r; draw(); } } };
+    const openHandover = async () => { const r = await handoverDialog(id); if (!r) return; g = await api('GET', wsApi(`/${id}`)); if (!r.saved_owners) toast(`운영 인수를 기록했습니다.${r.owner_counts && r.owner_counts.tbd ? ` 운영 담당 미정 ${r.owner_counts.tbd}건` : ''}`); draw(); if (!r.saved_owners) askClose(); };
+    main.querySelectorAll('[data-handover]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); openHandover(); }; });
+    main.querySelectorAll('.rg__warn a[href$="?handover=1"]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openHandover(); }; });
+    main.querySelectorAll('[data-close-manual]').forEach((b) => { b.onclick = async (e) => { e.stopPropagation(); const r = await closeManual(id, b.dataset.closeManual); if (r) { g = r; draw(); askClose(); } }; });
+    const ro = main.querySelector('[data-reopen]'); if (ro) ro.onclick = async () => { const r = await reopenProject(id); if (r) { g = r; draw(); } };
     bindCoach(main);
+    if (pendingHandover && !archived) { pendingHandover = false; openHandover(); }
+    if (pendingClose && !archived) { pendingClose = false; const r = await closeDialog(id, g); if (r) { g = r; draw(); } }
     if (pendingGoLive && !archived) { pendingGoLive = false; openGoLive(); }
     if (pendingCarry) { pendingCarry = false; carryoverDialog(g); }
     if (pendingMove && g.next_phase) { pendingMove = false; move(); }

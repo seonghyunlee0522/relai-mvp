@@ -12,7 +12,13 @@ import { helpButton } from '../onboarding/ui.js';
 import { mountLnb } from './lnb.js';
 import { josa } from '../shared/josa.js';
 import { navigate } from '../core/router.js';
+import { md } from '../shared/kst-date.js';
 import { approvalGateDialog, APPROVAL_GATES, gateStep, bypassNote } from './initiation.js';
+
+/** Status pill. Phase 7 US-2: a closed project reads `✓ 완료 · 10/30` (ok family) — never the same shape as 보관됨. */
+export const statusPill = (p) => (p.status === 'COMPLETED' && p.closed_on
+  ? html`<span class="chip chip--done wsh__done" data-closed-pill>✓ 완료 · ${md(String(p.closed_on).slice(0, 10))}</span>`
+  : html`<span class="chip ${STATUS_CHIP[p.status] || ''}">${STATUS[p.status]}</span>`);
 
 /**
  * Project Workspace header (sticky) — also mounts the project LNB into the shell sidebar.
@@ -28,7 +34,7 @@ export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
     <div class="wsh__row">
       <button type="button" class="wsh__menu" data-ws-menu aria-label="메뉴 열기" title="메뉴">☰</button>
       <a class="wsh__name" href="/app/projects/${p.id}" data-link title="${p.name}">${p.name}</a>
-      <span class="chip ${STATUS_CHIP[p.status] || ''}">${STATUS[p.status]}</span>
+      ${raw(statusPill(p))}
       ${raw(cur && tab !== 'next' ? html`<a class="wsh__phase" href="/app/projects/${p.id}" data-link title="현재 단계 ${no2(cur.sequence)} ${cur.name} · 지금 할 일">${no2(cur.sequence)} ${cur.name}</a>` : '')}
       ${raw(title ? html`<span class="wsh__sep">/</span><span class="wsh__title">${title}</span>` : '')}
       <span class="wsh__sp"></span>
@@ -42,6 +48,13 @@ export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
  * Every way out of 01 착수 / 02 요구사항 정의 (What's Next button, ?move=next from the guide) passes here, so the
  * approval soft gates live here (APPROVAL_GATES): 착수 결과 승인 / 요구사항 기준선 승인 not complete → record it first, or leave
  * a reason (stored in the gate step note as "[승인 전 진행] 사유 · 날짜 · 이름"). The server never blocks (확인 후 허용). */
+/** REQUIRED activities still open in the phases before `target` (same rule as server/closing.js priorGaps — 완료보고서 6절 uses that number). */
+export const priorGaps = (g, target) => (g.phases || []).filter((p) => p.sequence < target.sequence)
+  .flatMap((p) => (p.steps || []).filter((a) => a.importance === 'REQUIRED' && a.state !== 'COMPLETED' && a.state !== 'SKIPPED').map((a) => ({ sequence: p.sequence, phase_name: p.name, title: a.title, href: a.cta ? a.cta.href : null })));
+
+// a 앞 단계 link inside the dialog leaves it (the router handles the navigation)
+document.addEventListener('click', (e) => { const a = e.target.closest('[data-gap-link]'); if (a) { const sc = a.closest('.scrim'); if (sc) sc.remove(); } }, true);
+
 export async function moveToPhase(pid, g, target, { next = false } = {}) {
   const cur = g.current_phase;
   const acts = cur ? cur.steps || [] : [];
@@ -57,14 +70,19 @@ export async function moveToPhase(pid, g, target, { next = false } = {}) {
   }
   // the general dialog lists the other open REQUIRED activities (the approval gate step already handled above)
   const openReq = acts.filter((s) => s.importance === 'REQUIRED' && s.state !== 'COMPLETED' && s.state !== 'SKIPPED' && !(gate && s.step_key === cfg.step));
+  // Phase 7 US-6: entering 07 names the REQUIRED activities still open in earlier phases (one line + links; never blocks)
+  const gaps = target.phase_key === 'OPERATIONS' && target.sequence > (cur ? cur.sequence : 0) ? priorGaps(g, target) : [];
+  const groups = []; for (const x of gaps) { const gr = groups.find((y) => y.sequence === x.sequence); if (gr) gr.items.push(x); else groups.push({ sequence: x.sequence, name: x.phase_name, items: [x] }); }
+  const gapLine = gaps.length ? html`<p class="dgap" data-prior-gaps><i class="st st--warn" aria-hidden="true">!</i><span>앞 단계 미완료 필수 업무 ${gaps.length}건 (${raw(groups.map((gr) => { const label = gr.items.length === 1 ? `${no2(gr.sequence)} ${gr.items[0].title}` : `${no2(gr.sequence)} ${gr.name} ${gr.items.length}건`; const href = gr.items[0].href;
+    return href ? html`<a class="link" href="${href}" data-link data-gap-link>${label}</a>` : html`${label}`; }).join(' · '))})</span></p>` : '';
   let ok;
   if (gate && !openReq.length) ok = true;   // the approval dialog was the confirmation
   else if (next && !openReq.length) {
-    ok = await confirmDialog({ title: `${cur.name} 단계의 필수 업무를 모두 마쳤습니다.`, body: `다음 단계 ${no2(target.sequence)} ${josa(target.name, '을')} 시작하시겠습니까?`, confirm: '다음 단계 시작' });
+    ok = await confirmDialog({ title: `${cur.name} 단계의 필수 업무를 모두 마쳤습니다.`, bodyHtml: html`${raw(gapLine)}다음 단계 ${no2(target.sequence)} ${josa(target.name, '을')} 시작하시겠습니까?`, confirm: '다음 단계 시작' });
   } else if (next) {
     const warns = (g.guidance && g.guidance.warnings) || [];
     ok = await confirmDialog({ title: '아직 완료되지 않은 필수 업무가 있습니다.',
-      body: raw(html`<ul class="dlist">${raw(openReq.map((s) => html`<li>${s.title}</li>`).join(''))}${raw(warns.map((w) => html`<li class="is-warn">${w}</li>`).join(''))}</ul>그래도 <b>${no2(target.sequence)} ${target.name}</b> 단계를 시작하시겠습니까? 남은 업무는 그대로 유지되며, 이전 단계에서 다시 확인할 수 있습니다.`),
+      body: raw(html`${raw(gapLine)}<ul class="dlist">${raw(openReq.map((s) => html`<li>${s.title}</li>`).join(''))}${raw(warns.map((w) => html`<li class="is-warn">${w}</li>`).join(''))}</ul>그래도 <b>${no2(target.sequence)} ${target.name}</b> 단계를 시작하시겠습니까? 남은 업무는 그대로 유지되며, 이전 단계에서 다시 확인할 수 있습니다.`),
       confirm: '계속 진행' });
   } else {
     ok = await confirmDialog({ title: `${target.name} 단계를 현재 단계로 변경할까요?`,

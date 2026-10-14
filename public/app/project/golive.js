@@ -16,10 +16,17 @@ const LABEL = { ISSUE: '이슈', TEST: '테스트', CR: '변경 요청', ACCEPTA
 export const itemHref = (pid, type, id) => (HREF[type] ? HREF[type](pid, id) : `/app/projects/${pid}`);
 
 /** { 'ISSUE:<id>': note } from the project payload's go_live record. */
-export const carryIndex = (g) => Object.fromEntries(((g && g.go_live && g.go_live.carryovers) || []).map((c) => [`${c.type}:${c.id}`, c.note]));
+export const carryIndex = (g) => Object.fromEntries(((g && g.go_live && g.go_live.carryovers) || []).map((c) => [`${c.type}:${c.id}`, { note: c.note, owner: c.owner_name || '' }]));
+/** "운영 이관 · 담당 김운영" (Phase 7 US-3: the 운영 담당 once it is chosen). */
 export const carryTag = (idx, type, id, full = false) => {
-  const note = idx[`${type}:${id}`]; if (note === undefined) return '';
-  return html`<small class="carry" data-carry="${type}:${id}" title="${note}">운영 이관${raw(full && note ? html` · ${note}` : '')}</small>`;
+  const c = idx[`${type}:${id}`]; if (c === undefined) return '';
+  return html`<small class="carry" data-carry="${type}:${id}" title="${c.note}">운영 이관${c.owner ? ` · 담당 ${c.owner}` : ''}${raw(full && c.note ? html` · ${c.note}` : '')}</small>`;
+};
+
+/** Drawer line "운영 이관 · 메모 · 운영 담당 김운영" (issue / test / CR / 검수 drawers). */
+export const carryLine = (idx, type, id) => {
+  const c = idx[`${type}:${id}`]; if (c === undefined) return '';
+  return html`<p class="carryline" data-carryline><span class="carry" style="margin-left:0">운영 이관</span> · ${c.note}${c.owner ? ` · 운영 담당 ${c.owner}` : ''}</p>`;
 };
 
 export function goLiveDialog(pid) {

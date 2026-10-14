@@ -14,7 +14,9 @@ import { loadGuide } from './guide.js';
 import * as M from './metrics.js';
 import { projectHealth, STATUS_LABEL } from './health.js';
 import { LEAF_SQL, OWNER_NAME_SQL } from './wbs.js';
-import { diffDays, weekKst } from '../public/app/shared/kst-date.js';
+import { accApprovalView } from './testing.js';
+import { priorGapsText } from './closing.js';
+import { diffDays, weekKst, todayKst } from '../public/app/shared/kst-date.js';
 
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
@@ -44,7 +46,7 @@ export function defaultPeriod(at = new Date()) {
  *  FINAL report whose period overlaps the week → { state: 'FINAL' }, else a DRAFT → 'DRAFT', else 'NONE'. */
 export async function weeklyReportState(db, projectId, at = new Date()) {
   const wk = weekKst(at);
-  const rows = await db.all(`SELECT id, status, finalized_at, updated_at FROM weekly_reports WHERE project_id = ? AND period_start <= ? AND period_end >= ?
+  const rows = await db.all(`SELECT id, status, finalized_at, updated_at FROM weekly_reports WHERE project_id = ? AND report_type = 'WEEKLY' AND period_start <= ? AND period_end >= ?
     ORDER BY (status = 'FINAL') DESC, COALESCE(finalized_at, updated_at) DESC`, [projectId, wk.end, wk.start]);
   const fin = rows.find((r) => r.status === 'FINAL'); const draft = rows.find((r) => r.status === 'DRAFT');
   return { week: wk, state: fin ? 'FINAL' : draft ? 'DRAFT' : 'NONE', report_id: (fin || draft || {}).id || null, finalized_at: fin ? fin.finalized_at : null };
@@ -192,12 +194,14 @@ export function sectionsFromData(d) {
 }
 
 export function renderMarkdown(report) {
-  const d = report.structured_content; const head = `# ${report.title}\n\n보고 기간: ${d.period.start} ~ ${d.period.end}\n`;
+  const d = report.structured_content;
+  for (const s of d.sections) if (Array.isArray(s.fields)) s.body = lessonsBody(s.fields);   // 7절 교훈: three PM-written fields → one body
+  const head = `# ${report.title}\n\n${d.kind === 'COMPLETION' ? '프로젝트 기간' : '보고 기간'}: ${d.period.start} ~ ${d.period.end}\n`;
   return head + d.sections.map((s, i) => `\n## ${i + 1}. ${s.title}\n\n${s.body.trim() || '-'}\n`).join('');
 }
 
 /* ---------- persistence ---------- */
-const COLS = 'id, project_id, period_start, period_end, title, status, generated_at, finalized_at, created_by, created_at, updated_at';
+const COLS = 'id, project_id, report_type, period_start, period_end, title, status, generated_at, finalized_at, created_by, created_at, updated_at';
 const parse = (row) => (row ? { ...row, structured_content: JSON.parse(row.structured_content) } : null);
 
 export const listReports = async (db, projectId) => (await db.all(`SELECT ${COLS} FROM weekly_reports WHERE project_id = ? ORDER BY period_start DESC, created_at DESC`, [projectId]));
@@ -225,6 +229,16 @@ export async function updateReport(db, report, input) {
     else for (const s of input.sections) {
       const target = sc.sections.find((x) => x.key === s?.key);
       if (!target) { f.sections = `알 수 없는 섹션: ${s?.key}`; break; }
+      if (Array.isArray(target.fields) && s.fields && typeof s.fields === 'object') {   // 완료보고서 7절 교훈 (잘된 점 · 아쉬운 점 · 다음에 할 일)
+        for (const [k, v] of Object.entries(s.fields)) {
+          const fld = target.fields.find((x) => x.key === k);
+          if (!fld) { f.sections = `알 수 없는 항목: ${k}`; break; }
+          if (typeof v !== 'string' || v.length > 5000) { f.sections = '교훈 항목은 5,000자 이내의 문자열이어야 합니다.'; break; }
+          fld.body = v;
+        }
+        if (f.sections) break;
+        continue;
+      }
       if (typeof s.body !== 'string' || s.body.length > 20000) { f.sections = '섹션 본문은 20,000자 이내의 문자열이어야 합니다.'; break; }
       target.body = s.body;
     }
@@ -243,6 +257,116 @@ export async function finalizeReport(db, report) {
 export async function reopenReport(db, report) {
   if (report.status !== 'FINAL') return { error: 'not_final' };
   (await db.run(`UPDATE weekly_reports SET status = 'DRAFT', updated_at = ? WHERE id = ?`, [now(), report.id])); return { ok: true };
+}
+
+/* ---------- 완료보고서 (Phase 7 US-1) ---------- */
+/* Same table, editor, DRAFT→FINAL and PDF/Word export as the weekly report; report_type = 'COMPLETION', one per project.
+ * Seven rule-based sections filled from the project's own data (no AI); 7절 교훈 is three empty PM fields. */
+export const COMPLETION_SECTIONS = [['overview', '개요'], ['scope', '범위'], ['schedule', '일정'], ['quality', '품질'], ['acceptance', '검수'], ['carryover', '남은 일 (운영 이관)'], ['lessons', '교훈']];
+export const LESSON_FIELDS = [['good', '잘된 점'], ['bad', '아쉬운 점'], ['next', '다음에 할 일']];
+export const lessonsBody = (fields) => fields.map((x) => `**${x.label}**\n${String(x.body || '').trim() || '-'}`).join('\n\n');
+const CARRY_KO = { ISSUE: '이슈', TEST: '테스트', CR: '변경 요청', ACCEPTANCE: '검수' };
+const no2 = (x) => String(x).padStart(2, '0');
+
+export const completionOf = (db, projectId) => db.get(`SELECT id, status, finalized_at, updated_at FROM weekly_reports WHERE project_id = ? AND report_type = 'COMPLETION'`, [projectId]);
+/** 07 CLOSE state (computed on every read): FINAL 완료보고서 → 'FINAL', a DRAFT → 'DRAFT', else 'NONE'. */
+export async function completionState(db, projectId) {
+  const r = await completionOf(db, projectId);
+  return r ? { state: r.status, report_id: r.id, finalized_at: r.finalized_at } : { state: 'NONE', report_id: null, finalized_at: null };
+}
+
+/** Structured data for the seven sections. `gaps` = closing.priorGaps() (computed by the caller from the resolved guide). */
+export async function buildCompletionData(db, project, { gaps = [], goLive = null, carryovers = [], handover = null, acceptances = [] } = {}) {
+  const pid = project.id;
+  const def = (await db.get('SELECT goal FROM project_definitions WHERE project_id = ?', [pid])) || {};
+  const goal = String(def.goal || '').split('\n').map((x) => x.trim()).find(Boolean) || '';
+  const ms = await db.get(`SELECT original_planned_end_date, milestone_date FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'MILESTONE'
+    AND (btrim(title) = '오픈' OR lifecycle_phase = 'TRANSITION_GO_LIVE') ORDER BY milestone_date DESC NULLS LAST, created_at DESC LIMIT 1`, [pid]);
+  const req = await db.get(`SELECT COALESCE(SUM((scope = 'IN_SCOPE' AND status = 'CONFIRMED')::int), 0) AS in_scope, COALESCE(SUM((scope = 'OUT_OF_SCOPE')::int), 0) AS out_of_scope
+    FROM requirements WHERE project_id = ? AND archived_at IS NULL`, [pid]);
+  const cr = await db.get(`SELECT COALESCE(SUM((status IN ('APPROVED','IMPLEMENTED'))::int), 0) AS approved, COALESCE(SUM((status = 'IMPLEMENTED')::int), 0) AS implemented
+    FROM change_requests WHERE project_id = ? AND archived_at IS NULL`, [pid]);
+  // 일정: items whose end date now sits after the 최초 계획 종료일 frozen at 04 entry (Phase 4)
+  const pushed = (await db.all(`SELECT w.id, w.wbs_code, w.title, (w.original_planned_end_date)::text AS orig, (CASE WHEN w.item_type = 'MILESTONE' THEN w.milestone_date ELSE w.planned_end_date END)::text AS cur
+    FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type <> 'SUMMARY' AND w.original_planned_end_date IS NOT NULL
+      AND (CASE WHEN w.item_type = 'MILESTONE' THEN w.milestone_date ELSE w.planned_end_date END) > w.original_planned_end_date ORDER BY w.sequence`, [pid]))
+    .map((r) => ({ ...r, days: diffDays(r.orig, r.cur) }));
+  const reasons = (await db.all(`SELECT w.wbs_code AS display_id, w.title, h.old_value AS before, h.new_value AS after, h.note FROM wbs_history h JOIN wbs_items w ON w.id = h.wbs_item_id
+    WHERE w.project_id = ? AND w.archived_at IS NULL AND h.action_type = 'UPDATED' AND h.field_name IN ('planned_end_date','milestone_date') AND h.note IS NOT NULL AND btrim(h.note) <> ''
+      AND h.old_value ~ '^\\d{4}-\\d{2}-\\d{2}$' AND h.new_value ~ '^\\d{4}-\\d{2}-\\d{2}$' AND h.new_value > h.old_value`, [pid]))
+    .map((r) => ({ ...r, days: diffDays(r.before, r.after) })).sort((a, b) => b.days - a.days).slice(0, 3);
+  const tst = await db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((${LAST} = 'PASS')::int), 0) AS pass FROM test_cases t WHERE t.project_id = ? AND t.archived_at IS NULL`, [pid]);
+  const excluded = await db.all(`SELECT display_id, title, test_exclusion_reason AS reason FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status = 'CONFIRMED'
+    AND COALESCE(btrim(test_exclusion_reason), '') <> '' AND NOT EXISTS (SELECT 1 FROM test_links l JOIN test_cases tc ON tc.id = l.test_case_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = requirements.id AND tc.archived_at IS NULL)
+    ORDER BY sequence_number`, [pid]);
+  const defects = await db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((status IN ('RESOLVED','CLOSED'))::int), 0) AS resolved FROM issues WHERE project_id = ? AND archived_at IS NULL AND source_test_execution_id IS NOT NULL`, [pid]);
+  const n = (v) => Number(v) || 0;
+  return {
+    overview: { goal, start: project.planned_start_date, end: project.planned_end_date, open_planned: ms ? (ms.original_planned_end_date || ms.milestone_date) : null, open_actual: goLive ? goLive.date : null },
+    scope: { in_scope: n(req.in_scope), out_of_scope: n(req.out_of_scope), cr_approved: n(cr.approved), cr_implemented: n(cr.implemented) },
+    schedule: { pushed: pushed.length, total_days: pushed.reduce((a, x) => a + (Number(x.days) || 0), 0), reasons },
+    quality: { tests: n(tst.total), pass: n(tst.pass), excluded: excluded.length, excluded_list: excluded, defects: n(defects.total), defects_resolved: n(defects.resolved) },
+    acceptance: acceptances,
+    carryover: { items: carryovers, handover, gaps },
+  };
+}
+const ymdText = (d) => (d ? String(d).slice(0, 10) : '-');
+export function completionSections(d) {
+  const o = d.overview; const out = {};
+  const openLine = () => {
+    if (!o.open_planned && !o.open_actual) return '- 오픈일: 기록 없음';
+    if (!o.open_actual) return `- 오픈일: 최초 계획 ${ymdText(o.open_planned)} → 실제 오픈 기록 없음`;
+    if (!o.open_planned) return `- 오픈일: 실제 ${ymdText(o.open_actual)} (최초 계획 오픈일 기록 없음)`;
+    const dd = diffDays(ymdText(o.open_planned), ymdText(o.open_actual));
+    return `- 오픈일: 최초 계획 ${ymdText(o.open_planned)} → 실제 ${ymdText(o.open_actual)} (${dd > 0 ? `+${dd}일` : dd < 0 ? `${dd}일` : '계획대로'})`;
+  };
+  out.overview = [`- 목표: ${o.goal || '01 착수에서 목표가 기록되지 않았습니다.'}`, `- 계약 기간: ${ymdText(o.start)} ~ ${ymdText(o.end)}`, openLine()].join('\n');
+  const sc = d.scope;
+  out.scope = [`- 범위 내 확정 요구사항 ${sc.in_scope}건 · 범위 밖 ${sc.out_of_scope}건`, `- 변경 요청 승인 ${sc.cr_approved}건 / 반영 ${sc.cr_implemented}건`].join('\n');
+  const s = d.schedule;
+  out.schedule = [`- 미룬 작업 ${s.pushed}건 · 최초 계획 대비 총 +${s.total_days}일`,
+    ...(s.reasons.length ? ['- 주요 사유', ...s.reasons.map((r) => `  - ${r.display_id} ${r.title} · +${r.days}일 · ${r.note}`)] : ['- 기록된 미룸 사유가 없습니다.'])].join('\n');
+  const q = d.quality;
+  out.quality = [`- 테스트 ${q.tests}건 · 최근 통과 ${q.pass}건 · 제외 ${q.excluded}건`, ...q.excluded_list.map((x) => `  - ${x.display_id} ${x.title} — 제외 사유: ${x.reason}`),
+    `- 테스트에서 나온 이슈 ${q.defects}건 (해결 ${q.defects_resolved}건)`].join('\n');
+  out.acceptance = d.acceptance.length ? d.acceptance.map((a) => `- ${a.display_id} ${a.title} — ${a.recorded ? [a.approver, a.date, a.method].filter(Boolean).join(' · ') : '고객 승인 기록 없음'}`).join('\n') : '- 승인된 검수가 없습니다.';
+  const c = d.carryover; const cl = [];
+  if (c.handover) cl.push(`- 운영 인수: ${c.handover.receiver_name} · ${ymdText(c.handover.date)}`);
+  if (c.items.length) { cl.push(`- 운영 이관 ${c.items.length}건`); c.items.forEach((x) => cl.push(`  - [${CARRY_KO[x.type] || x.type}] ${x.display_id} ${x.title}${x.note ? ` — ${x.note}` : ''} · 운영 담당 ${x.owner_name || '미지정'}`)); }
+  else cl.push('- 운영 이관 항목이 없습니다.');
+  cl.push(c.gaps.length ? `- ${priorGapsText(c.gaps)}` : '- 앞 단계 필수 업무를 모두 마쳤습니다.');
+  out.carryover = cl.join('\n');
+  return COMPLETION_SECTIONS.map(([key, title]) => (key === 'lessons'
+    ? { key, title, body: '', fields: LESSON_FIELDS.map(([k, label]) => ({ key: k, label, body: '' })) }
+    : { key, title, body: out[key] }));
+}
+/** Accepted 검수 rows → { display_id, title, recorded, approver, date, method } (Phase 6 고객 승인 기록). */
+export async function acceptedApprovals(db, projectId) {
+  const rows = await db.all(`SELECT id, display_id, title, customer_approval FROM acceptances WHERE project_id = ? AND archived_at IS NULL AND status = 'ACCEPTED' ORDER BY sequence_number`, [projectId]);
+  const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]);
+  let sh = []; try { sh = JSON.parse((r && r.stakeholders) || '[]'); } catch { sh = []; }
+  return rows.map((a) => {
+    const v = accApprovalView(a.customer_approval, Array.isArray(sh) ? sh : []);
+    return { display_id: a.display_id, title: a.title, recorded: v.recorded, approver: v.approver ? `${v.approver.name}${v.approver.title ? ` ${v.approver.title}` : ''}` : '', date: v.date || '', method: v.method_label || '' };
+  });
+}
+
+/** One 완료보고서 per project: the existing one is returned as is ({ id, existing: true }). */
+export async function generateCompletion(db, project, userId, extra = {}) {
+  const cur = await completionOf(db, project.id);
+  if (cur) return { id: cur.id, existing: true };
+  const today = todayKst();
+  const end = project.closed_on ? String(project.closed_on).slice(0, 10) : today;
+  const start = String(project.planned_start_date).slice(0, 10);
+  const period = { start: start <= end ? start : end, end };
+  const data = await buildCompletionData(db, project, extra);
+  const id = randomUUID(); const ts = now();
+  const title = `${project.name} 완료보고서`;
+  const structured = { kind: 'COMPLETION', period, data, sections: completionSections(data) };
+  const rendered = renderMarkdown({ title, structured_content: structured });
+  await db.run(`INSERT INTO weekly_reports (id, project_id, report_type, period_start, period_end, title, status, structured_content, rendered_content, generated_at, created_by, created_at, updated_at)
+    VALUES (?, ?, 'COMPLETION', ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?)`, [id, project.id, period.start, period.end, title, JSON.stringify(structured), rendered, ts, userId, ts, ts]);
+  return { id, existing: false };
 }
 
 /** Plain-text variant for copy (markdown markers stripped; bullets kept as "•"). */

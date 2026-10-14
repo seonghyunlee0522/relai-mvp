@@ -12,7 +12,7 @@ import { statusChip } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
 import * as OP from '../shared/owner-picker.js';
-import { carryIndex, carryTag } from '../project/golive.js';
+import { carryIndex, carryTag, carryLine } from '../project/golive.js';
 
 export async function raidPage(id) {
   const main = $('#main');
@@ -167,7 +167,7 @@ export async function raidPage(id) {
     return html`${raw(drawerHead(x.display_id, statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status) + sevBadge(x.severity) + (x.is_overdue ? '<span class="chip chip--hold">기한 지남</span>' : ''), { archived: Boolean(x.archived_at) }))}
     ${raw(detailTabs(x))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
-      ${raw(carry[`ISSUE:${x.id}`] !== undefined ? html`<p class="carryline" data-carryline><span class="carry" style="margin-left:0">운영 이관</span> · ${carry[`ISSUE:${x.id}`]}</p>` : '')}
+      ${raw(carryLine(carry, 'ISSUE', x.id))}
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro ? 'disabled' : ''} aria-label="제목">
       ${raw(x.source_risk_id ? html`<p class="srcline">원본 리스크 · <a class="link" href="/app/projects/${p.id}/issues?tab=risks&sel=${x.source_risk_id}" data-link>${x.source_risk_display_id} ${x.source_risk_title}</a></p>` : '')}
       ${raw(x.source_test_id ? html`<p class="srcline">원본 테스트 · <a class="link" href="/app/projects/${p.id}/tests?sel=${x.source_test_id}" data-link>${x.source_test_label}</a> 실행 실패</p>` : '')}

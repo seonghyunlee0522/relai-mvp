@@ -66,7 +66,7 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT) {
     direct('change_request_history', 'change_request_id', 'change_requests'),
     poly('raid_history', 'ISSUE', 'issues'), poly('raid_history', 'RISK', 'risks'),
     poly('qa_history', 'TEST', 'test_cases'), poly('qa_history', 'ACCEPTANCE', 'acceptances'),
-    db.all(`SELECT t.changed_at AS at, t.seq, u.name AS actor_name, p.id AS entity_id, p.phase_key, p.name AS title
+    db.all(`SELECT t.changed_at AS at, t.seq, u.name AS actor_name, p.id AS entity_id, p.phase_key, p.name AS title, t.reason
       FROM phase_transitions t JOIN project_phases p ON p.id = t.to_phase_id LEFT JOIN users u ON u.id = t.changed_by
       WHERE t.project_id = ? ORDER BY t.changed_at DESC, t.seq DESC LIMIT ${lim}`, [pid]),
   ]);
@@ -77,7 +77,7 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT) {
     ...tag(reqs, 'REQUIREMENT', (id) => `requirements?sel=${id}`), ...tag(wbs, 'WBS', (id) => `wbs?sel=${id}`), ...tag(chg, 'CHANGE', (id) => `changes?sel=${id}`),
     ...tag(issues, 'ISSUE', (id) => `issues?sel=${id}`), ...tag(risks, 'RISK', (id) => `issues?tab=risks&sel=${id}`),
     ...tag(tests, 'TEST', (id) => `tests?sel=${id}`), ...tag(accs, 'ACCEPTANCE', (id) => `tests?tab=acceptance&sel=${id}`),
-    ...phases.map((r) => ({ ...r, entity_type: 'PHASE', display_id: null, href: `phases/${r.phase_key}`, summary: `'${r.title}' 단계로 전환했습니다.` })),
+    ...phases.map((r) => ({ ...r, entity_type: 'PHASE', display_id: null, href: `phases/${r.phase_key}`, summary: r.reason === 'PROJECT_CLOSED' ? '프로젝트 종료' : r.reason === 'PROJECT_REOPENED' ? '프로젝트 종료 취소' : `'${r.title}' 단계로 전환했습니다.` })),   // Phase 7 US-2
     ...integ.map((r) => ({ ...r, entity_type: 'JIRA', title: r.title || 'Jira', href: r.entity_id ? `wbs?sel=${r.entity_id}` : 'wbs', summary: r.summary })),
   ];
   events.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.seq - a.seq));

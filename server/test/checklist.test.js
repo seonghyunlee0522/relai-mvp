@@ -23,8 +23,10 @@ test('checklistDerived / activityStates: items drive manual activities only; man
   assert.equal(cut.cta.href, '/app/projects/p1/checklist?activity=CUTOVER_PLAN');
   assert.equal(mig.state, 'NOT_STARTED'); assert.deepEqual(mig.checklist, { total: 0, done: 0 });
   assert.equal(live.state, 'COMPLETED'); assert.equal(live.cta, null);
+  // Phase 7: HANDOVER never completes from its checklist alone (인수자 · 인수일); CLOSE = 완료보고서 확정
   const [ho, close] = activityStates('OPERATIONS', [mk('HANDOVER'), mk('CLOSE')], ctx);
-  assert.equal(ho.state, 'COMPLETED'); assert.equal(close.state, 'NOT_STARTED'); assert.equal(close.cta.href, '/app/projects/p1/checklist?activity=CLOSE');
+  assert.equal(ho.state, 'IN_PROGRESS'); assert.match(ho.text, /인수 완료 처리가 남았습니다/); assert.equal(ho.handover, true);
+  assert.equal(close.state, 'NOT_STARTED'); assert.equal(close.cta.href, '/app/projects/p1/reports?new=completion'); assert.equal(close.manual, true);
   // 04 의사결정 기록 has no data signal either → manual (완료 처리 on What's Next), but no checklist
   const [dec] = activityStates('DEVELOPMENT', [mk('DECISIONS', { importance: 'OPTIONAL' })], { pid: 'p1', stats: {} });
   assert.equal(dec.manual, true); assert.equal(dec.checklist, null);
@@ -141,15 +143,19 @@ test('end to end: 06 전환·오픈 and 07 운영 can be completed (checklists +
   g = (await A.c('POST', `${A.purl}/phases/${phase(g, 'OPERATIONS').id}/activate`, { reason: 'NEXT' })).json;
   assert.equal(phase(g, 'TRANSITION_GO_LIVE').status, 'COMPLETED');
   assert.equal(g.current_phase.phase_key, 'OPERATIONS');
-  assert.equal(g.guidance.primary_action.href, `/app/projects/${A.p.id}/checklist?activity=HANDOVER`);
+  assert.equal(g.guidance.primary_action.href, `/app/projects/${A.p.id}?handover=1`);   // Phase 7 US-3
 
   // HANDOVER via one custom item, CLOSE via 완료 처리 with a memo
   const ho = (await A.c('POST', `${A.purl}/steps/${step(g, 'HANDOVER').id}/checklist`, { title: '운영 매뉴얼 인계', owner: '고객사 운영팀', due_date: '2027-03-01', done: true })).json.item;
   assert.equal(ho.done, true); assert.ok(ho.done_at);
   await A.c('PATCH', `${A.purl}/steps/${step(g, 'CLOSE').id}`, { note: '완료 보고 3/5 · 교훈 정리 위키' });
   g = (await A.c('GET', A.purl)).json;
-  assert.equal(step(g, 'CLOSE').state, 'IN_PROGRESS', 'a memo means in progress');
-  g = (await A.c('PATCH', `${A.purl}/steps/${step(g, 'CLOSE').id}`, { status: 'COMPLETED' })).json;
+  assert.equal(step(g, 'CLOSE').state, 'NOT_STARTED', 'Phase 7: CLOSE follows the 완료보고서, a memo alone does not move it');
+  // Phase 7: HANDOVER needs 인수자 · 인수일; CLOSE without a 완료보고서 needs a 사유
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${step(g, 'HANDOVER').id}`, { status: 'COMPLETED' })).status, 422);
+  g = (await A.c('PATCH', `${A.purl}/steps/${step(g, 'HANDOVER').id}`, { status: 'COMPLETED', handover: { receiver: `u:${A.uid}`, date: todayKst() } })).json;
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${step(g, 'CLOSE').id}`, { status: 'COMPLETED' })).status, 422);
+  g = (await A.c('PATCH', `${A.purl}/steps/${step(g, 'CLOSE').id}`, { status: 'COMPLETED', reason: '고객사 양식으로 작성해 전달' })).json;
   const ops = phase(g, 'OPERATIONS');
   assert.equal(step(g, 'HANDOVER').state, 'COMPLETED');
   assert.equal(step(g, 'CLOSE').state, 'COMPLETED');
@@ -157,6 +163,6 @@ test('end to end: 06 전환·오픈 and 07 운영 can be completed (checklists +
   assert.equal(g.next_phase, null);
   // 되돌리기: the hand mark is removable again
   g = (await A.c('PATCH', `${A.purl}/steps/${step(g, 'CLOSE').id}`, { status: 'TODO' })).json;
-  assert.equal(step(g, 'CLOSE').state, 'IN_PROGRESS'); assert.equal(phase(g, 'OPERATIONS').summary.gate_met, false);
+  assert.equal(step(g, 'CLOSE').state, 'NOT_STARTED'); assert.equal(phase(g, 'OPERATIONS').summary.gate_met, false);   // data-driven now: no 완료보고서 → 미시작
   server.close();
 });

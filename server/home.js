@@ -17,9 +17,10 @@ import { LEAF_SQL, todayStr } from './wbs.js';
 import { pendingKeyDates } from './wbs-skeleton.js';
 import { projectGuidance } from './guidance.js';
 import { loadBaseline } from './req-baseline.js';
-import { weeklyReportState } from './reports.js';
+import { weeklyReportState, completionState } from './reports.js';
 import { PHASE_BY_KEY } from './templates/default-phases.js';
 import { goLiveOf } from './golive.js';
+import { handoverOf, ownerCounts } from './closing.js';
 
 const n = (v) => Number(v) || 0;
 
@@ -34,19 +35,31 @@ export async function guidanceContext(db, project) {
   const goLive = (await goLiveOf(db, project.id));   // Phase 6 US-3: 오픈 기록 (오픈일 · 운영 이관)
   const later = ['TRANSITION_GO_LIVE', 'OPERATIONS'].includes(project.current_phase);
   const dataReqs = later && project.data_migration === 'YES' ? (await db.all(`SELECT id, display_id, title FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND type = 'DATA' ORDER BY sequence_number LIMIT 5`, [project.id])) : [];   // US-4
+  const carried = later && goLive ? (await carriedStillOpen(db, project.id, goLive)) : { critical_issues_carried: 0, open_issues_carried: 0, approved_crs_carried: 0 };
+  // Phase 7: 운영 인수 (HANDOVER) · 완료보고서 (CLOSE) · 이관 뒤 독촉 제외 (US-4)
+  const ops = project.current_phase === 'OPERATIONS' || project.status === 'COMPLETED';
+  const handover = ops ? (await handoverOf(db, project.id)) : null;
+  const completionReport = ops ? (await completionState(db, project.id)) : { state: 'NONE', report_id: null, finalized_at: null };
   const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections, req_baseline: reqBaseline }, traits, overdue_tasks: overdue, key_dates_pending: keyDatesPending,
-    weekly_report: (await weeklyReportState(db, project.id)), go_live: goLive, data_requirements: dataReqs }));   // 04 WEEKLY_REPORT (US-3)
+    weekly_report: (await weeklyReportState(db, project.id)), go_live: goLive, data_requirements: dataReqs,   // 04 WEEKLY_REPORT (US-3)
+    handover, completion_report: completionReport, carried: { open_issues: carried.open_issues_carried, approved_crs: carried.approved_crs_carried } }));
   const scopeOut = (def.definition.scope_out || []).map((x) => x.text).filter(Boolean);   // Charter 제외 범위 → 02 범위 확정 hint
-  const goLiveCtx = later && goLive ? { ...goLive, ...(await carriedStillOpen(db, project.id, goLive)) } : null;
-  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats, overdue_tasks: overdue, go_live: goLiveCtx });
-  return { stats, def, overdue, guide, guidance, reqBaseline, goLive };
+  const goLiveCtx = later && goLive ? { ...goLive, ...carried, owners: ownerCounts(goLive.carryovers) } : null;
+  const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats, overdue_tasks: overdue, go_live: goLiveCtx, completion_report: completionReport });
+  return { stats, def, overdue, guide, guidance, reqBaseline, goLive, handover, completionReport, carriedIds: carriedIdSet(goLive) };
 }
+
+/** 'ISSUE:<id>' · 'CR:<id>' … of every 운영 이관 item (Phase 7 US-4: Home 확인 필요 rows skip them). */
+const ATT_TYPE = { ISSUE: 'ISSUE', CHANGE: 'CR', TEST: 'TEST', ACCEPTANCE: 'ACCEPTANCE' };
+export const carriedIdSet = (gl) => new Set((gl ? gl.carryovers : []).map((c) => `${c.type}:${c.id}`));
+export const notCarried = (items, ids) => (ids && ids.size ? items.filter((i) => !ids.has(`${ATT_TYPE[i.type] || i.type}:${i.id}`)) : items);
 
 /** Issues / approved CRs carried into 07 at 오픈 that are still open — they are recorded already, not a new warning. */
 async function carriedStillOpen(db, projectId, gl) {
   const ids = (t) => gl.carryovers.filter((c) => c.type === t).map((c) => c.id);
   const cnt = async (sql, list) => (list.length ? n((await db.get(`${sql} AND id IN (${list.map(() => '?').join(',')})`, [projectId, ...list])).n) : 0);
-  return { open_issues_carried: await cnt(`SELECT COUNT(*) n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED')`, ids('ISSUE')),
+  return { critical_issues_carried: await cnt(`SELECT COUNT(*) n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED') AND severity = 'CRITICAL'`, ids('ISSUE')),
+    open_issues_carried: await cnt(`SELECT COUNT(*) n FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED')`, ids('ISSUE')),
     approved_crs_carried: await cnt(`SELECT COUNT(*) n FROM change_requests WHERE project_id = ? AND archived_at IS NULL AND status = 'APPROVED'`, ids('CR')) };
 }
 
@@ -54,7 +67,7 @@ async function carriedStillOpen(db, projectId, gl) {
  * Guidance rules that describe steady-state monitoring rather than a task the user must do now.
  * Home renders these without a primary CTA ("정상 진행 중 · 다음 확인 …") — the rule text itself is untouched (guidance.js).
  */
-export const MONITOR_RULES = new Set(['DEV_STATUS', 'TRANSITION_RUN', 'OPS_HANDOVER']);
+export const MONITOR_RULES = new Set(['DEV_STATUS', 'TRANSITION_RUN', 'CLOSED']);   // Phase 7: OPS_HANDOVER is a task now (인수 완료 처리)
 export const guidanceKind = (g) => (g && MONITOR_RULES.has(g.rule) ? 'MONITOR' : 'ACTION');
 
 export const PRIORITY = { BLOCKER: 1, ATTENTION: 2, ACTION: 3, NORMAL: 4, WAITING: 5 };
@@ -91,7 +104,7 @@ export async function homeCard(db, row, { today } = {}) {
     M.attentionAll(db, project.id),
     M.upcomingDates(db, project.id, { days: 120, limit: 30 }),
   ]);
-  const attentionAll = early ? attentionRaw.filter((i) => i.kind !== 'CONFIRMED_UNLINKED_REQUIREMENT') : attentionRaw;
+  const attentionAll = notCarried(early ? attentionRaw.filter((i) => i.kind !== 'CONFIRMED_UNLINKED_REQUIREMENT') : attentionRaw, project.current_phase === 'OPERATIONS' ? ctx.carriedIds : null);
   const w = ctx.stats.wbs || {}; const iss = ctx.stats.issues || {};
   const attention = { total: attentionAll.length, crit: attentionAll.filter((i) => i.severity === 'crit').length,
     unlinked: attentionAll.filter((i) => i.kind === 'CONFIRMED_UNLINKED_REQUIREMENT').length,   // Home shows this once, as the 다음 할 일 (design §4 #2)
@@ -130,5 +143,7 @@ export async function workspaceHome(db, rows, { ensure = null, today = todayStr(
   await Promise.all(Array.from({ length: Math.min(concurrency, live.length) }, worker));
   cards.sort(comparePriority);
   const counts = {}; for (const c of cards) counts[c.priority] = (counts[c.priority] || 0) + 1;
-  return { projects: cards, completed: completed.map(({ id, name, client_name, status, current_phase_name, current_phase_sequence, planned_end_date }) => ({ id, name, client_name, status, current_phase_name, current_phase_sequence, planned_end_date })), counts, today };
+  // Phase 7 US-2: 완료된 프로젝트 = name · 완료일 · 완료보고서 link (no progress, no 다음 할 일)
+  const reports = completed.length ? new Map((await db.all(`SELECT project_id, id FROM weekly_reports WHERE report_type = 'COMPLETION' AND project_id IN (${completed.map(() => '?').join(',')})`, completed.map((r) => r.id))).map((r) => [r.project_id, r.id])) : new Map();
+  return { projects: cards, completed: completed.map(({ id, name, client_name, status, current_phase_name, current_phase_sequence, planned_end_date, closed_on }) => ({ id, name, client_name, status, current_phase_name, current_phase_sequence, planned_end_date, closed_on: closed_on || null, completion_report_id: reports.get(id) || null })), counts, today };
 }

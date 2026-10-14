@@ -70,7 +70,7 @@ export async function loadGuide(db, project, ctx = null) {
     LEFT JOIN project_phases f ON f.id = t.from_phase_id
     JOIN project_phases tp ON tp.id = t.to_phase_id
     LEFT JOIN users u ON u.id = t.changed_by
-    WHERE t.project_id = ? ORDER BY t.changed_at, t.seq`, [project.id]));
+    WHERE t.project_id = ? AND t.reason NOT IN ('PROJECT_CLOSED','PROJECT_REOPENED') ORDER BY t.changed_at, t.seq`, [project.id]));   // Phase 7: 종료 / 종료 취소 rows are history, not phase moves
   const current = out.find((p) => p.is_current) || null;
   // A phase before the current one has been left for the next step — shown as ended (✓) even if some activities stayed open.
   // Display only: status stays IN_PROGRESS for such a phase (transitionTo), so the open activities are still visible.

@@ -91,7 +91,8 @@ const card = (c, i) => {
   </article>`;
 };
 
-const completedRow = (p) => html`<a class="hc__done" href="/app/projects/${p.id}" data-link><span class="hc__done-n">${p.name}</span><span class="hc__client">${p.client_name || ''}</span><span class="chip chip--done">완료</span><span class="hc__done-ph">${no2(p.current_phase_sequence)} ${p.current_phase_name}</span></a>`;
+/** Phase 7 US-2: 완료된 프로젝트 card = 이름 · 완료일 · 완료보고서 (no progress, no 다음 할 일). */
+const completedRow = (p) => html`<div class="hc__done" data-done-pid="${p.id}"><a class="hc__done-n" href="/app/projects/${p.id}" data-link>${p.name}</a><span class="hc__client">${p.client_name || ''}</span><span class="chip chip--done">✓ 완료${p.closed_on ? ` · ${fmtShort(String(p.closed_on).slice(0, 10))}` : ''}</span>${raw(p.completion_report_id ? html`<a class="link hc__done-r" href="/app/projects/${p.id}/reports/${p.completion_report_id}" data-link>완료보고서</a>` : '<span></span>')}</div>`;
 
 const summaryLine = (live) => {
   const k = live.filter(isAlert).length;

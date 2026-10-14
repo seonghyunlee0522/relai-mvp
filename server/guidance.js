@@ -39,8 +39,11 @@ export function testDoneTitle(t) {
 /** 06: the GO_LIVE activity is recorded (오픈 완료). */
 const goLiveDone = (phase) => Array.isArray(phase && phase.steps) && phase.steps.some((a) => a.step_key === 'GO_LIVE' && a.state === 'COMPLETED');
 
+/** '2026-10-30' → '10/30'. */
+const mdDate = (d) => { const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(d || '')); return m ? `${Number(m[1])}/${Number(m[2])}` : ''; };
+
 export function projectGuidance(ctx) {
-  const { project, phase, next_phase: nextPhase, definition, stats = {}, overdue_tasks = 0, go_live: goLive = null } = ctx;
+  const { project, phase, next_phase: nextPhase, definition, stats = {}, overdue_tasks = 0, go_live: goLive = null, completion_report: completion = null } = ctx;
   const u = (p = '') => `/app/projects/${project.id}${p}`;
   const req = stats.requirements || {}; const wbs = stats.wbs || {}; const tst = stats.tests || {}; const acc = stats.acceptances || {}; const iss = stats.issues || {}; const chg = stats.changes || {};
   const key = phase ? phase.phase_key || phase.key : project.current_phase;
@@ -58,12 +61,19 @@ export function projectGuidance(ctx) {
   });
   const nextPhaseText = nextPhase ? `다음 단계: ${nextPhase.name}` : null;
 
+  // Phase 7 US-2: a closed project stops nudging — one quiet line + 완료보고서 보기 (the issue screens stay as they are)
+  if (project.status === 'COMPLETED') {
+    const wr = project.warranty_end_on ? ` · 하자보수 ${String(project.warranty_end_on).slice(0, 10).replace(/-/g, '/')}까지` : '';
+    return out('CLOSED', '프로젝트가 종료되었습니다', `${mdDate(project.closed_on)} 종료${wr}. 기록은 그대로 남아 있고 필요하면 종료를 취소할 수 있습니다.`, '종료된 프로젝트는 할 일을 독촉하지 않습니다.',
+      act('완료보고서 보기', completion && completion.report_id ? u(`/reports/${completion.report_id}`) : u('/reports')), null, null);
+  }
   // Cross-phase warnings (guidance, never gates)
   if (n(req.total) && n(req.scope_undecided) && key !== 'REQUIREMENTS') warnings.push(`범위가 결정되지 않은 요구사항 ${req.scope_undecided}건`);
   if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope) && key !== 'INITIATION' && key !== 'REQUIREMENTS' && key !== 'TESTING') warnings.push(`미확정 요구사항 ${n(req.in_scope) - n(req.in_scope_confirmed)}건`);
   // Phase 5 C1: in 05 the unconfirmed in-scope requirements are named with what confirming does (never blocks)
   if (key === 'TESTING' && n(tst.in_scope_unconfirmed)) warnLink(unconfirmedTestText(tst.in_scope_unconfirmed), u(UNCONFIRMED_HREF));
-  if (n(iss.critical) && key !== 'DEVELOPMENT') warnings.push(`심각한 이슈 ${iss.critical}건`);
+  const critical = n(iss.critical) - (key === 'OPERATIONS' ? n(goLive && goLive.critical_issues_carried) : 0);   // Phase 7 US-4: a carried critical issue is recorded, not 독촉
+  if (critical > 0 && key !== 'DEVELOPMENT') warnings.push(`심각한 이슈 ${critical}건`);
   // Phase 6 US-7: in 06 the open issues stand next to the unapplied changes on one warn line (never blocks)
   if (key === 'TRANSITION_GO_LIVE') { const w = [n(iss.active) ? `열린 이슈 ${iss.active}건` : '', n(chg.approved_unimplemented) ? `승인 후 미반영 변경 ${chg.approved_unimplemented}건` : ''].filter(Boolean).join(' · '); if (w && !goLiveDone(phase)) warnings.push(w); }
   else if (n(chg.approved_unimplemented) - n(goLive && goLive.approved_crs_carried) > 0 && key !== 'DEVELOPMENT') warnings.push(`승인 후 미반영 변경 ${n(chg.approved_unimplemented) - n(goLive && goLive.approved_crs_carried)}건`);   // CRs handed over at 오픈 are recorded
@@ -156,11 +166,21 @@ export function projectGuidance(ctx) {
       return out('TRANSITION_RUN', '검수가 승인되었습니다 — 전환과 오픈을 진행하세요', '검수가 승인되었습니다. 전환 계획·데이터 마이그레이션·사용자 교육을 마치고 오픈 후 안정화까지 기록해 두면 운영 이관이 매끄러워집니다.', '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('현황 보기 →', u('/overview')), actCta ? null : move ? act('현황 보기 →', u('/overview')) : null, nextPhaseText);
     }
     case 'OPERATIONS': {
-      // Phase 6 US-3: first line = what 오픈 handed over (표시만 — 07 spec turns it into work); carried issues are not 'unrecorded' any more
-      if (goLive && goLive.carryovers && goLive.carryovers.length) { const t = `오픈 때 운영으로 넘긴 항목 ${goLive.carryovers.length}건`; warnings.unshift(t); warningLinks[t] = u('?carryovers=1'); }   // always the first line
+      // Phase 7 US-4: what 오픈 handed over is one warn line with its owner count (never red) — not 독촉 numbers
+      if (goLive && goLive.carryovers && goLive.carryovers.length) { const o = goLive.owners || { assigned: 0 }; const t = `운영 이관 ${goLive.carryovers.length}건 · 담당 지정 ${n(o.assigned)}/${goLive.carryovers.length}`; warnings.unshift(t); warningLinks[t] = u('?handover=1'); }   // always the first line
       const fresh = n(iss.active) - n(goLive && goLive.open_issues_carried);
       if (fresh > 0) return out('OPS_ISSUES', '오픈 뒤 열린 이슈를 정리하세요', `${goLive ? '오픈 뒤 새로 열린' : '열린'} 이슈 ${fresh}건이 남아 있습니다. 해결하거나 담당을 정해 두어야 운영 단계에서 책임이 비지 않습니다.`, '남은 이슈는 해결하거나 운영 담당을 정해야 합니다.', act('이슈 처리 →', u('/issues')), act('현황 보기 →', u('/overview')), '운영 이관과 종료 정리를 진행합니다.');
-      return out('OPS_HANDOVER', '운영 이관과 종료 정리를 진행하세요', '운영 인수인계·유지보수 체계·SLA·정기 배포 계획을 정리해 두면 운영 단계와 다음 프로젝트에서 같은 기준을 재사용할 수 있습니다.', '종료 정리(결과 공유, 운영 이관)를 남겨야 운영 단계와 다음 프로젝트에서 재사용할 수 있습니다.', actCta || act('현황 보기 →', u('/overview')), act('주간보고 보기 →', u('/reports')), null);
+      const stepOf = (k) => (Array.isArray(phase && phase.steps) ? phase.steps.find((a) => a.step_key === k) : null);
+      const doneSt = (a) => !a || a.state === 'COMPLETED' || a.state === 'SKIPPED';
+      const hand = stepOf('HANDOVER'); const close = stepOf('CLOSE');
+      if (!doneSt(hand)) return out('OPS_HANDOVER', '운영 조직에 인수인계하세요', '운영 매뉴얼·계정·모니터링을 넘기고 누가 언제 인수했는지 기록하세요. 운영 이관 항목마다 운영 담당을 정해 두면 오픈 뒤 책임이 비지 않습니다.', '누가 운영을 인수했는지 남아야 프로젝트를 종료할 수 있습니다.', act('인수 완료 처리', u('?handover=1')), null, '인수 뒤 완료보고서를 정리하고 프로젝트를 종료합니다.');
+      if (!doneSt(close)) {
+        const draft = completion && completion.state === 'DRAFT';
+        return out('OPS_CLOSE_REPORT', draft ? '완료보고서를 마무리해 확정하세요' : '완료보고서로 결과를 정리하세요', '목표·범위·일정·품질·검수·남은 일은 데이터로 채워집니다. 고쳐서 확정하면 고객과 회사에 보고할 결과물이 됩니다. 교훈은 직접 적습니다.', '완료보고서를 확정해야 프로젝트를 종료할 수 있습니다.',
+          draft ? act('이어서 작성', u(`/reports/${completion.report_id}`)) : act('완료보고서 만들기', u('/reports?new=completion')), null, '확정하면 프로젝트를 종료합니다.');
+      }
+      if (!(phase && phase.summary && phase.summary.gate_met)) return out('OPS_HANDOVER', '운영 이관과 종료 정리를 진행하세요', '운영 인수인계·유지보수 체계를 정리해 두면 운영 단계와 다음 프로젝트에서 같은 기준을 재사용할 수 있습니다.', '07 필수 업무를 마쳐야 프로젝트를 종료할 수 있습니다.', actCta || act('현황 보기 →', u('/overview')), null, null);
+      return out('OPS_CLOSE', '프로젝트를 종료하세요', '07 필수 업무를 모두 마쳤습니다. 종료하면 홈과 안내가 더 이상 할 일을 독촉하지 않습니다. 기록은 그대로 남고 언제든 종료를 취소할 수 있습니다.', '모든 업무를 마친 프로젝트는 완료로 닫아 진행 중 목록에서 뺍니다.', act('프로젝트 종료', u('?close=1')), completion && completion.report_id ? act('완료보고서 보기', u(`/reports/${completion.report_id}`)) : null, null);
     }
     default:
       return out('UNKNOWN', 'What’s Next?', '', '', act('What’s Next? →', u('')), null, null);

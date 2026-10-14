@@ -1293,3 +1293,10 @@ ALTER TABLE acceptances ADD COLUMN IF NOT EXISTS customer_approval TEXT NOT NULL
 ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS go_live TEXT NOT NULL DEFAULT '{}';         -- US-3: 오픈 기록 {date, carryovers:[{type,id,display_id,title,note}], by, by_name, at}
 ALTER TABLE activity_checklist_items ADD COLUMN IF NOT EXISTS owner_user_id TEXT;                    -- US-6: 담당 = RELAI 사용자 …
 ALTER TABLE activity_checklist_items ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;             --       … or 01 이해관계자 id (팀원 / 고객사), no FK; else the free-text owner
+
+/* ---------- Phase 7 (07 운영 및 유지보수) ---------- */
+ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS report_type TEXT NOT NULL DEFAULT 'WEEKLY' CHECK (report_type IN ('WEEKLY','COMPLETION'));   -- US-1: 완료보고서 = same table, same editor/export
+CREATE UNIQUE INDEX IF NOT EXISTS uq_weekly_reports_completion ON weekly_reports(project_id) WHERE report_type = 'COMPLETION';                  --       one per project
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS closed_on date;                -- US-2: 프로젝트 종료일 (status = 'COMPLETED')
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS warranty_end_on date;          --       하자보수 종료일 (optional; default 종료일 + 12개월)
+ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS handover TEXT NOT NULL DEFAULT '{}';   -- US-3: 운영 인수 {receiver_user_id|receiver_stakeholder_id, date, by, by_name, at}

@@ -184,8 +184,8 @@ test('US-3 오픈: server recomputes open items (422 undecided_items), future da
   // → 07: first line = N건; carried issue/CR are not a fresh warning
   await toPhase(A, 'OPERATIONS');
   const O = await g(A);
-  assert.equal(O.guidance.warnings[0], '오픈 때 운영으로 넘긴 항목 4건');
-  assert.equal(O.guidance.warning_links['오픈 때 운영으로 넘긴 항목 4건'], `/app/projects/${A.p.id}?carryovers=1`);
+  assert.equal(O.guidance.warnings[0], '운영 이관 4건 · 담당 지정 0/4');   // Phase 7 US-4 replaces the Phase 6 line
+  assert.equal(O.guidance.warning_links['운영 이관 4건 · 담당 지정 0/4'], `/app/projects/${A.p.id}?handover=1`);
   assert.notEqual(O.guidance.rule, 'OPS_ISSUES');
   assert.ok(!O.guidance.warnings.some((w) => /미반영 변경/.test(w)));
   await A.c('POST', `${A.purl}/issues`, { title: '오픈 뒤 새 이슈', severity: 'LOW' });
@@ -286,7 +286,7 @@ test('migration 37: ACCEPTANCE texts, WEEKLY_REPORT inserted once right before G
   const a = (await A.c('POST', acc(A), { title: '예전 검수', requirements: [r0.id] })).json.acceptance;
   await db.run(`UPDATE acceptances SET status = 'ACCEPTED', accepted_at = now() WHERE id = ?`, [a.id]);
   await toPhase(A, 'OPERATIONS');
-  const m37 = migrations.find((m) => m.version === 37); assert.ok(m37); assert.equal(migrations[migrations.length - 1].version, 37);
+  const m37 = migrations.find((m) => m.version === 37); assert.ok(m37); assert.ok(migrations[migrations.length - 1].version >= 37);
   await m37.up(db); await m37.up(db);
   const steps = await db.all(`SELECT s.step_key, s.importance, s.status, s.completion_criteria FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id
     WHERE p.project_id = ? AND p.phase_key = 'TRANSITION_GO_LIVE' ORDER BY s.sequence`, [A.p.id]);

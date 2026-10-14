@@ -240,12 +240,22 @@ function transition(key, ctx) {
 
 function operations(key, ctx) {
   const is = ctx.stats.issues || {};
+  const fresh = Math.max(0, n(is.active) - n(ctx.carried && ctx.carried.open_issues));   // Phase 7 US-4: issues handed over at 오픈 are not 독촉 any more
   switch (key) {
-    case 'HANDOVER': return manual('운영 매뉴얼, 계정, 모니터링, 담당자를 운영 조직에 인수인계합니다.', cl(ctx, key));
-    case 'MAINTENANCE': return manual(n(is.active) ? `열린 이슈 ${is.active}건이 남아 있습니다. 운영 이관 대상인지 확인하세요.` : '장애·요청 접수 경로와 처리 절차를 정합니다.', n(is.active) ? act('이슈 보기 →', `/app/projects/${ctx.pid}/issues`) : cl(ctx, key));
-    case 'SLA': return manual('응답·복구 시간 등 서비스 수준 기준을 확인합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
-    case 'RELEASE_PLAN': return manual('개선 요청을 모아 배포하는 주기와 절차를 정합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
-    case 'CLOSE': return manual('결과 공유, 미결 사항, 교훈을 정리하고 프로젝트를 종료합니다.', cl(ctx, key));
+    case 'HANDOVER': {   // Phase 7 US-3: 완료 = 인수자 · 인수일 (the HANDOVER dialog); the checklist alone never completes it
+      const h = ctx.handover;
+      if (h && h.date) return ok(`✓ 인수 · ${mdYmd(h.date)} · ${h.receiver_name}`, null, { row_text: true });
+      return manual('운영 매뉴얼, 계정, 모니터링, 담당자를 운영 조직에 인수인계합니다.', act('인수 완료 처리', `/app/projects/${ctx.pid}?handover=1`));
+    }
+    case 'MAINTENANCE': return manual(fresh ? `오픈 뒤 열린 이슈 ${fresh}건이 남아 있습니다. 하자보수로 처리할지 확인하세요.` : '장애·요청 접수 경로와 처리 절차를 정합니다.', fresh ? act('이슈 보기 →', `/app/projects/${ctx.pid}/issues`) : cl(ctx, key));
+    case 'SLA': return manual('운영 계약이 있으면 — 응답·복구 시간 등 서비스 수준 기준을 확인합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
+    case 'RELEASE_PLAN': return manual('운영 계약이 있으면 — 개선 요청을 모아 배포하는 주기와 절차를 정합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
+    case 'CLOSE': {   // Phase 7 US-1: 완료 = 완료보고서 확정 (or 완료 처리 + 사유 when it was written outside RELAI)
+      const cr = ctx.completion_report || { state: 'NONE' }; const ru = `/app/projects/${ctx.pid}/reports`;
+      if (cr.state === 'FINAL') return ok(`✓ 완료보고서 확정 · ${mdOf(cr.finalized_at)}`, act('완료보고서 보기', `${ru}/${cr.report_id}`), { row_text: true, manual_close: true });
+      if (cr.state === 'DRAFT') return prog('완료보고서 초안 작성 중', act('이어서 작성', `${ru}/${cr.report_id}`), { row_action: true, row_text: true, manual_close: true });
+      return none('결과·차이·남은 일·교훈을 완료보고서로 정리하세요', act('완료보고서 만들기', `${ru}?new=completion`), { row_action: true, row_text: true, manual_close: true });
+    }
     default: return manual('');
   }
 }
@@ -292,6 +302,8 @@ export function activityStates(phaseKey, steps, ctx) {
     let r = hasList ? checklistDerived(r0, list) : r0;
     // 오픈 never completes from its checklist alone — only the 오픈 dialog records it (US-3)
     if (s.step_key === 'GO_LIVE' && phaseKey === 'TRANSITION_GO_LIVE' && r.derived === 'COMPLETED' && r0.derived === null) r = { ...r, derived: 'IN_PROGRESS', text: `${r.text} · 오픈 완료 처리가 남았습니다` };
+    // Phase 7 US-3: 운영 인수 likewise — only the HANDOVER dialog (인수자 · 인수일) records it
+    if (s.step_key === 'HANDOVER' && phaseKey === 'OPERATIONS' && r.derived === 'COMPLETED' && r0.derived === null) r = { ...r, derived: 'IN_PROGRESS', text: `${r.text} · 인수 완료 처리가 남았습니다` };
     const state = r.reopen ? 'IN_PROGRESS' : resolveState(s, r.derived);   // reopen: stored 완료 no longer holds (승인 후 변경 → 다시 승인 필요)
     let importance = effectiveImportance(phaseKey, s.step_key, s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL'), ctx.traits); let description = s.description;
     // US-4: 이관 있음 → the in-scope DATA requirements as links at the end of the row
@@ -304,7 +316,8 @@ export function activityStates(phaseKey, steps, ctx) {
       hint: state === 'COMPLETED' && r.hint ? r.hint : null, import_ms: state === 'NOT_STARTED' && r.import_ms ? { count: r.import_ms, text: r.text } : null,
       cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, row_action: Boolean(r.row_action) && state !== 'COMPLETED' && state !== 'SKIPPED', row_text: Boolean(r.row_text), crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
       // manual = no data signal decides this activity: What's Next offers 완료 처리 for it (checklist ones too — a hand mark wins)
-      manual: r0.derived === null, checklist: list, links: links && links.length ? links : null, go_live: s.step_key === 'GO_LIVE' && phaseKey === 'TRANSITION_GO_LIVE' };
+      manual: r0.derived === null || Boolean(r0.manual_close), checklist: list, links: links && links.length ? links : null, go_live: s.step_key === 'GO_LIVE' && phaseKey === 'TRANSITION_GO_LIVE',
+      handover: s.step_key === 'HANDOVER' && phaseKey === 'OPERATIONS', close: s.step_key === 'CLOSE' && phaseKey === 'OPERATIONS' };
   });
 }
 

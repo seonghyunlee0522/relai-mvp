@@ -17,6 +17,16 @@ export const TEST_PLAN_CRITERIA = '범위 내 요구사항이 모두 테스트�
 /** 06 ACCEPTANCE (Phase 6 US-2): 완료 = 범위 내 확정 요구사항이 모두 승인된 검수에 들어 있음. Migration 37 copies these into existing projects. */
 export const ACCEPTANCE_DESCRIPTION = '범위 내 확정 요구사항을 검수에 묶어 고객 검수를 요청하고, 고객 승인(누가·언제·어떻게)을 기록합니다. 1차·2차로 나눠도 합계로 판단합니다.';
 export const ACCEPTANCE_CRITERIA = '범위 내 확정 요구사항이 모두 승인된 검수에 들어 있습니다.';
+/* Phase 7 (migration 38): 07 운영 및 유지보수 copy */
+export const OPERATIONS_DESCRIPTION = '운영 조직에 인수인계하고, 완료보고서로 결과를 정리한 뒤 프로젝트를 종료합니다.';
+export const HANDOVER_CRITERIA = '인수자와 인수일이 기록되어 있습니다.';
+export const MAINTENANCE_DESCRIPTION = '장애·요청 접수 경로와 처리 절차를 정합니다. 하자보수 기간의 요청 접수 경로도 함께 정합니다.';
+export const SLA_DESCRIPTION = '운영 계약이 있으면 — 응답·복구 시간 등 서비스 수준 기준을 확인합니다.';
+export const RELEASE_PLAN_DESCRIPTION = '운영 계약이 있으면 — 개선 요청을 모아 배포하는 주기와 절차를 정합니다.';
+export const CLOSE_DESCRIPTION = '결과·계획 대비 차이·남은 일·교훈을 완료보고서로 정리해 고객과 회사에 보고합니다.';
+export const CLOSE_CRITERIA = '완료보고서가 확정되어 있습니다.';
+export const LESSONS_ITEM_V1 = '교훈(Lessons Learned) 정리';
+export const LESSONS_ITEM = '교훈 정리';
 export const DEFAULT_TEMPLATE_KEY = 'LIFECYCLE_V2';
 
 export const IMPORTANCE = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
@@ -110,13 +120,13 @@ export const DEFAULT_PHASES = [
   },
   {
     key: 'OPERATIONS', name: '운영 및 유지보수', short: '운영', en: 'Operations & Maintenance',
-    description: '운영 조직에 이관하고 유지보수 체계, SLA, 정기 배포 계획을 정리해 프로젝트를 마무리합니다.',
+    description: OPERATIONS_DESCRIPTION,
     steps: [
-      A('HANDOVER', '운영 이관 / 인수인계', '운영 매뉴얼, 계정, 모니터링, 담당자를 운영 조직에 인수인계합니다.', '운영 인수인계가 완료되어 있습니다.', 'REQUIRED', null),
-      A('MAINTENANCE', '유지보수 체계 확인', '장애·요청 접수 경로와 처리 절차를 정합니다.', '유지보수 접수·처리 절차가 정리되어 있습니다.', 'RECOMMENDED', null),
-      A('SLA', 'SLA 확인', '응답·복구 시간 등 서비스 수준 기준을 확인합니다.', 'SLA 기준이 정리되어 있습니다.', 'OPTIONAL', null),
-      A('RELEASE_PLAN', '정기 배포 계획', '개선 요청을 모아 배포하는 주기와 절차를 정합니다.', '정기 배포 계획이 정리되어 있습니다.', 'OPTIONAL', null),
-      A('CLOSE', '프로젝트 종료 정리', '결과 공유, 미결 사항, 교훈을 정리하고 프로젝트를 종료합니다.', '종료 정리가 기록되어 있습니다.', 'REQUIRED', null),
+      A('HANDOVER', '운영 이관 / 인수인계', '운영 매뉴얼, 계정, 모니터링, 담당자를 운영 조직에 인수인계합니다.', HANDOVER_CRITERIA, 'REQUIRED', null),   // Phase 7 US-3: 인수자·인수일 (migration 38)
+      A('MAINTENANCE', '유지보수 체계 확인', MAINTENANCE_DESCRIPTION, '유지보수 접수·처리 절차가 정리되어 있습니다.', 'RECOMMENDED', null),
+      A('SLA', 'SLA 확인', SLA_DESCRIPTION, 'SLA 기준이 정리되어 있습니다.', 'OPTIONAL', null),
+      A('RELEASE_PLAN', '정기 배포 계획', RELEASE_PLAN_DESCRIPTION, '정기 배포 계획이 정리되어 있습니다.', 'OPTIONAL', null),
+      A('CLOSE', '프로젝트 종료 정리', CLOSE_DESCRIPTION, CLOSE_CRITERIA, 'REQUIRED', null),   // Phase 7 US-1: 완료 = 완료보고서 확정 (migration 38)
     ],
   },
 ];
@@ -140,6 +150,6 @@ export const CHECKLIST_TEMPLATES = {
   MAINTENANCE: ['장애·요청 접수 경로 확정', '처리 절차와 에스컬레이션 정의', '유지보수 계약·범위 확인'],
   SLA: ['응답 시간 기준 합의', '복구 시간 기준 합의', 'SLA 측정·보고 방식 정의'],
   RELEASE_PLAN: ['정기 배포 주기 확정', '개선 요청 수집·우선순위 절차 정의', '배포 승인·공지 절차 정의'],
-  CLOSE: ['프로젝트 결과 공유(완료 보고)', '미결 사항과 후속 조치 정리', '교훈(Lessons Learned) 정리', '산출물 최종본 전달'],
+  CLOSE: ['프로젝트 결과 공유(완료 보고)', '미결 사항과 후속 조치 정리', LESSONS_ITEM, '산출물 최종본 전달'],
 };
 export const CHECKLIST_STEP_KEYS = new Set(Object.keys(CHECKLIST_TEMPLATES));

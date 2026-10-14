@@ -248,12 +248,12 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   await toPhase(A, ['OPERATIONS']);
   await page.goto(A.url); await page.waitForSelector('.rg');
   const w7 = await page.$$eval('.rg__warn', (els) => els.map((e) => e.textContent.trim()));
-  check('US-3 07 What\'s Next 첫 줄 "오픈 때 운영으로 넘긴 항목 2건"', /오픈 때 운영으로 넘긴 항목 2건/.test(w7[0] || ''), JSON.stringify(w7));
+  check('US-3 07 What\'s Next 첫 줄 = 운영 이관 2건 (Phase 7 US-4: "운영 이관 2건 · 담당 지정 0/2")', /운영 이관 2건 · 담당 지정 0\/2/.test(w7[0] || ''), JSON.stringify(w7));
   check('US-3 07: 넘긴 이슈는 "운영 이관 전 열린 이슈" 가이드로 다시 나오지 않음', (await api('GET', A.P)).json.guidance.rule !== 'OPS_ISSUES');
-  await page.click('.rg__warn a'); await page.waitForSelector('[data-carry-dialog]');
-  check('US-3 07 목록 링크 → 2건 (ID · 메모)', (await page.$$eval('[data-carry-dialog] .gl__row', (e) => e.length)) === 2 && /11월 정기 배포에 반영/.test(await page.textContent('[data-carry-dialog]')));
+  await page.click('.rg__warn a'); await page.waitForSelector('[data-handover-dialog]');   // Phase 7 US-3: the line opens the 운영 인수 dialog (items + 메모 + 운영 담당)
+  check('US-3 07 목록 링크 → 2건 (ID · 메모)', (await page.$$eval('[data-handover-dialog] .gl__row', (e) => e.length)) === 2 && /11월 정기 배포에 반영/.test(await page.textContent('[data-handover-dialog]')));
   await shot('d-08-07-carryovers.png');
-  await page.click('[data-co-close]');
+  await page.click('[data-ho-cancel]');
 
   /* ===== project B: 이관 없음 · 범위 내 0건 · 미완료 0 ===== */
   const B = await mkProject('사내 포털 개편', 'NO');
@@ -293,7 +293,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('regression 04 CR 승인 422 / 저장', (await api('POST', `${C.P}/changes/${cr2.id}/transition`, { action: 'approve' })).status === 422
     && (await api('POST', `${C.P}/changes/${cr2.id}/transition`, { action: 'approve', customer_approval: approval })).json.change.status === 'APPROVED');
 
-  if (DB) check('migration 37 recorded in schema_migrations', sql('SELECT MAX(version) FROM schema_migrations') === '37');
+  if (DB) check('migration 37 recorded in schema_migrations', Number(sql('SELECT MAX(version) FROM schema_migrations')) >= 37);   // later phases add 38+
 
   /* ---------- 375px ---------- */
   const m = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'ko-KR', storageState: await ctx.storageState() });

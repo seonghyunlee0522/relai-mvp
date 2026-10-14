@@ -8,7 +8,8 @@
  */
 import { ensurePhases, resetPhases } from './guide.js';
 import { randomUUID } from 'node:crypto';
-import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA, ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA } from './templates/default-phases.js';
+import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA, ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA,
+  OPERATIONS_DESCRIPTION, HANDOVER_CRITERIA, MAINTENANCE_DESCRIPTION, SLA_DESCRIPTION, RELEASE_PLAN_DESCRIPTION, CLOSE_DESCRIPTION, CLOSE_CRITERIA, LESSONS_ITEM_V1, LESSONS_ITEM } from './templates/default-phases.js';
 
 export const migrations = [
   { version: 1, name: 'projects.current_phase template-based (SQLite era)', up() {} },
@@ -146,6 +147,16 @@ export const migrations = [
       await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 0, st.importance, st.linked_feature_type]);
     }
+  } },
+  { version: 38, name: 'Phase 7 운영 및 유지보수: weekly_reports.report_type (+ 완료보고서 1건 unique index), projects.closed_on / warranty_end_on, project_definitions.handover (schema.sql) + 07 단계·업무 설명 (CLOSE = 완료보고서 확정, HANDOVER = 인수자·인수일, SLA·정기 배포 \'운영 계약이 있으면\') + 체크리스트 \'교훈(Lessons Learned) 정리\' → \'교훈 정리\'', async up(db) {
+    const OPS = `project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'OPERATIONS')`;
+    await db.run(`UPDATE project_phases SET description = ?, updated_at = now() WHERE phase_key = 'OPERATIONS'`, [OPERATIONS_DESCRIPTION]);
+    await db.run(`UPDATE project_steps SET completion_criteria = ?, updated_at = now() WHERE step_key = 'HANDOVER' AND ${OPS}`, [HANDOVER_CRITERIA]);
+    for (const [key, desc] of [['MAINTENANCE', MAINTENANCE_DESCRIPTION], ['SLA', SLA_DESCRIPTION], ['RELEASE_PLAN', RELEASE_PLAN_DESCRIPTION]])
+      await db.run(`UPDATE project_steps SET description = ?, updated_at = now() WHERE step_key = ? AND ${OPS}`, [desc, key]);
+    await db.run(`UPDATE project_steps SET description = ?, completion_criteria = ?, updated_at = now() WHERE step_key = 'CLOSE' AND ${OPS}`, [CLOSE_DESCRIPTION, CLOSE_CRITERIA]);
+    // items the PM renamed keep their title (same rule as migration 34)
+    await db.run(`UPDATE activity_checklist_items SET title = ?, updated_at = now() WHERE title = ?`, [LESSONS_ITEM, LESSONS_ITEM_V1]);
   } },
 ];
 

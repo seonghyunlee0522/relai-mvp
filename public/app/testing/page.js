@@ -18,7 +18,7 @@ import { performerOptions, performerBody } from '../shared/owner-picker.js';
 import { term } from '../project/initiation.js';
 import { todayKst, md } from '../shared/kst-date.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
-import { carryIndex, carryTag } from '../project/golive.js';
+import { carryIndex, carryTag, carryLine } from '../project/golive.js';
 
 export async function testsPage(id) {
   const main = $('#main');
@@ -238,7 +238,7 @@ export async function testsPage(id) {
     return html`${raw(drawerHead(x.display_id, resBadge(last ? last.result : null) + prText(x.priority), { archived: Boolean(x.archived_at) }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'exec', label: '실행 이력', count: x.executions.length }, { key: 'links', label: '연결', count: testLinkCount(x) }, { key: 'hist', label: '변경 이력', count: x.history.length }], dtab))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
-      ${raw(carryLine('TEST', x.id))}
+      ${raw(carryLineOf('TEST', x.id))}
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro ? 'disabled' : ''} aria-label="제목">
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="무엇을 확인하는 테스트인지 설명을 입력하세요." ${ro ? 'disabled' : ''}>${x.description}</textarea>
       <div class="dgrid">
@@ -280,7 +280,7 @@ export async function testsPage(id) {
     if (ca.recorded) return html`<p class="crapv" data-accapv><span class="chip chip--done">✓ 승인</span> <b>${md(ca.date)} · ${whoOf(ca)} · ${ca.method_label}</b> <small class="dim">(기록: ${ca.recorded_by_name || '-'})</small>${raw(ca.conditions ? html`<br><small class="dim">조건/보완: ${ca.conditions}</small>` : '')}</p>`;
     return html`<p class="crapv crapv--none" data-accapv-none><span class="dim">고객 승인 기록이 없습니다</span>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-acc-apv-add>승인 기록 추가</button>')}</p>`;
   };
-  const carryLine = (type, xid) => { const k = `${type}:${xid}`; return carry[k] === undefined ? '' : html`<p class="carryline" data-carryline><span class="carry" style="margin-left:0">운영 이관</span> · ${carry[k]}</p>`; };
+  const carryLineOf = (type, xid) => carryLine(carry, type, xid);
   const openApproval = (mode) => { apvMode = mode; apv = { add_to_stakeholders: true, ...(mode === 'record' && sel.customer_approval && sel.customer_approval.recorded ? sel.customer_approval : {}) }; delete apv.approver; delete apv.recorded; draw(); };
   const closeApproval = () => { apv = null; apvMode = null; draw(); };
   const drawerAccApproval = () => {
@@ -330,7 +330,7 @@ export async function testsPage(id) {
     return html`${raw(drawerHead(x.display_id, statusChip(ACC_STATUS, ACC_STATUS_CHIP, x.status), { archived: Boolean(x.archived_at) }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: '대상·테스트', count: x.requirements.filter((r) => !r.archived_at).length + liveTests.length }, { key: 'hist', label: '변경 이력', count: x.history.length }], dtab))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
-      ${raw(carryLine('ACCEPTANCE', x.id))}
+      ${raw(carryLineOf('ACCEPTANCE', x.id))}
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro || final ? 'disabled' : ''} aria-label="제목">
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="검수 범위와 기준을 적어두세요." ${ro || final ? 'disabled' : ''}>${x.description}</textarea>
       <div class="dgrid">
