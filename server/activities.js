@@ -14,9 +14,9 @@
  * intermediate phase/activity pages. Pure function; every rule is explainable and unit-testable.
  *
  *   activityStates(phaseKey, steps, ctx) → [{ ...step, state, derived, text, cta, crit }]
- *   ctx = { pid, stats, definition: { sections }, overdue_tasks }
+ *   ctx = { pid, stats, definition: { sections }, overdue_tasks, checklists: { [step_id]: { total, done } } }
  */
-import { IMPORTANCE_LABEL } from './templates/default-phases.js';
+import { IMPORTANCE_LABEL, CHECKLIST_STEP_KEYS } from './templates/default-phases.js';
 
 const n = (v) => Number(v) || 0;
 
@@ -28,6 +28,8 @@ const none = (text, cta, extra = {}) => ({ derived: 'NOT_STARTED', text, cta, ..
 const manual = (text, cta = null) => ({ derived: null, text, cta });
 
 const act = (label, href) => ({ label, href });
+/** 06/07 checklist screen for one activity (public/app/project/checklist.js). */
+const cl = (ctx, key, label = '체크리스트 작성 →') => act(label, `/app/projects/${ctx.pid}/checklist?activity=${key}`);
 
 /* ---------- per-phase rules ---------- */
 function initiation(key, ctx) {
@@ -180,12 +182,12 @@ function transition(key, ctx) {
       if (n(a.requested) + n(a.rework)) open.push(`미완료 검수 ${n(a.requested) + n(a.rework)}건`);
       if (n(c.approved_unimplemented)) open.push(`미반영 변경 ${c.approved_unimplemented}건`);
       return open.length ? manual(`오픈 전 확인: ${open.join(' · ')}`, act(n(is.active) ? 'Open Issue 확인 →' : n(t.last_fail) ? 'Fail 테스트 확인 →' : '확인 →', n(is.active) ? `/app/projects/${ctx.pid}/issues` : n(t.last_fail) ? `/app/projects/${ctx.pid}/tests?last_result=FAIL` : `/app/projects/${ctx.pid}/overview`))
-        : manual('오픈을 막는 미완료 항목이 없습니다. 오픈 후 완료 처리하세요.');
+        : manual('오픈을 막는 미완료 항목이 없습니다. 오픈 후 완료 처리하세요.', cl(ctx, key));
     }
-    case 'STABILIZE': return n(is.active) ? manual(`Open Issue ${is.active}건을 모니터링 중입니다.`, act('Issue 처리 →', `/app/projects/${ctx.pid}/issues`)) : manual('오픈 후 발생하는 문제를 Issue로 기록하고 처리합니다.', act('Issue 등록 →', `/app/projects/${ctx.pid}/issues?new=1`));
-    case 'CUTOVER_PLAN': return manual('전환 순서, 일정, 담당, 롤백 기준을 정리합니다. 전환 작업은 WBS에 등록할 수 있습니다.', act('WBS 보기 →', `/app/projects/${ctx.pid}/wbs?phase=TRANSITION_GO_LIVE`));
-    case 'DATA_MIGRATION': return manual('이관 대상 분석, 매핑, 리허설, 본 이관과 검증을 수행합니다. 해당 사항이 없으면 제외할 수 있습니다.', act('WBS 보기 →', `/app/projects/${ctx.pid}/wbs?phase=TRANSITION_GO_LIVE`));
-    case 'TRAINING': return manual('사용자·운영자 교육과 매뉴얼 전달을 완료하면 완료 처리하세요.');
+    case 'STABILIZE': return n(is.active) ? manual(`Open Issue ${is.active}건을 모니터링 중입니다.`, act('Issue 처리 →', `/app/projects/${ctx.pid}/issues`)) : manual('오픈 후 발생하는 문제를 Issue로 기록하고 처리합니다.', cl(ctx, key));
+    case 'CUTOVER_PLAN': return manual('전환 순서, 일정, 담당, 롤백 기준을 체크리스트로 정리합니다.', cl(ctx, key));
+    case 'DATA_MIGRATION': return manual('이관 대상 분석, 매핑, 리허설, 본 이관과 검증을 수행합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
+    case 'TRAINING': return manual('사용자·운영자 교육과 매뉴얼 전달을 체크리스트로 관리합니다.', cl(ctx, key));
     default: return manual('');
   }
 }
@@ -193,11 +195,11 @@ function transition(key, ctx) {
 function operations(key, ctx) {
   const is = ctx.stats.issues || {};
   switch (key) {
-    case 'HANDOVER': return manual('운영 매뉴얼, 계정, 모니터링, 담당자를 운영 조직에 인수인계합니다.');
-    case 'MAINTENANCE': return manual(n(is.active) ? `Open Issue ${is.active}건이 남아 있습니다. 운영 이관 대상인지 확인하세요.` : '장애·요청 접수 경로와 처리 절차를 정합니다.', n(is.active) ? act('Issue 보기 →', `/app/projects/${ctx.pid}/issues`) : null);
-    case 'SLA': return manual('응답·복구 시간 등 서비스 수준 기준을 확인합니다. 해당 사항이 없으면 제외할 수 있습니다.');
-    case 'RELEASE_PLAN': return manual('개선 요청을 모아 배포하는 주기와 절차를 정합니다. 해당 사항이 없으면 제외할 수 있습니다.');
-    case 'CLOSE': return manual('결과 공유, 미결 사항, 교훈을 정리하고 프로젝트를 종료합니다.', act('Overview 보기 →', `/app/projects/${ctx.pid}/overview`));
+    case 'HANDOVER': return manual('운영 매뉴얼, 계정, 모니터링, 담당자를 운영 조직에 인수인계합니다.', cl(ctx, key));
+    case 'MAINTENANCE': return manual(n(is.active) ? `Open Issue ${is.active}건이 남아 있습니다. 운영 이관 대상인지 확인하세요.` : '장애·요청 접수 경로와 처리 절차를 정합니다.', n(is.active) ? act('Issue 보기 →', `/app/projects/${ctx.pid}/issues`) : cl(ctx, key));
+    case 'SLA': return manual('응답·복구 시간 등 서비스 수준 기준을 확인합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
+    case 'RELEASE_PLAN': return manual('개선 요청을 모아 배포하는 주기와 절차를 정합니다. 해당 사항이 없으면 제외할 수 있습니다.', cl(ctx, key));
+    case 'CLOSE': return manual('결과 공유, 미결 사항, 교훈을 정리하고 프로젝트를 종료합니다.', cl(ctx, key));
     default: return manual('');
   }
 }
@@ -212,14 +214,26 @@ export function resolveState(step, derived) {
   return step.note ? 'IN_PROGRESS' : 'NOT_STARTED';
 }
 
+/** A manual activity with checklist items derives from them: all done → 완료, otherwise → 진행 중. Data-driven activities are untouched. */
+export function checklistDerived(r, list) {
+  if (r.derived || !list || !list.total) return r;
+  const tail = `체크리스트 ${list.done}/${list.total} 완료`;
+  return { ...r, derived: list.done >= list.total ? 'COMPLETED' : 'IN_PROGRESS', text: r.text ? `${tail} · ${r.text}` : tail };
+}
+
 export function activityStates(phaseKey, steps, ctx) {
   const rule = RULES[phaseKey];
   return steps.map((s) => {
-    const r = rule ? rule(s.step_key, ctx) : manual(s.completion_criteria);
+    const r0 = rule ? rule(s.step_key, ctx) : manual(s.completion_criteria);
+    const hasList = CHECKLIST_STEP_KEYS.has(s.step_key);
+    const list = hasList && ctx.checklists ? ctx.checklists[s.id] || { total: 0, done: 0 } : null;
+    const r = hasList ? checklistDerived(r0, list) : r0;
     const state = resolveState(s, r.derived);
     return { ...s, importance: s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL'), importance_label: IMPORTANCE_LABEL[s.importance || (s.is_required ? 'REQUIRED' : 'OPTIONAL')],
       state, derived: r.derived, text: state === 'COMPLETED' && s.status === 'COMPLETED' && r.derived !== 'COMPLETED' ? (r.text ? `완료 처리됨 · ${r.text}` : '완료 처리됨') : (r.text || s.completion_criteria),
-      cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null };
+      cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
+      // manual = no data signal decides this activity: What's Next offers 완료 처리 for it (checklist ones too — a hand mark wins)
+      manual: r0.derived === null, checklist: list };
   });
 }
 

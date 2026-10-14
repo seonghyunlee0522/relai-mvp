@@ -104,3 +104,23 @@ export const DEFAULT_PHASES = [
 
 export const PHASE_KEYS = DEFAULT_PHASES.map((p) => p.key);
 export const PHASE_BY_KEY = Object.fromEntries(DEFAULT_PHASES.map((p) => [p.key, p]));
+
+/**
+ * Checklist activities (06 전환·오픈 · 07 운영): activities with no dedicated work screen are worked through a per-activity
+ * checklist (activity_checklist_items: item · 담당 · 기한 · 완료 · 메모). Their state derives from it (activities.js):
+ * no items → stored mark/memo only · some open → 진행 중 · all done → 완료. Keys are the suggested starter items
+ * ("기본 항목 추가"); the team edits, adds or deletes freely.
+ */
+export const CHECKLIST_TEMPLATES = {
+  CUTOVER_PLAN: ['전환 대상 시스템·범위 확정', '전환 일정과 작업 순서(Runbook) 작성', '전환 담당자와 연락 체계 지정', '롤백 기준과 절차 정의', '전환 리허설 수행'],
+  DATA_MIGRATION: ['이관 대상 데이터와 매핑 정의', '이관 리허설과 결과 검증', '본 이관 수행', '이관 데이터 건수·정합성 검증'],
+  TRAINING: ['사용자 매뉴얼 작성·전달', '운영자 매뉴얼 작성·전달', '사용자 교육 실시', '교육 참석·질의 결과 정리'],
+  GO_LIVE: ['오픈 전 Open Issue·Fail 테스트 확인', '운영 환경 배포 완료', '오픈 공지 발송', '오픈 후 주요 기능 점검'],
+  STABILIZE: ['안정화 기간과 모니터링 담당 지정', '오픈 후 장애·문의 접수 및 조치', '긴급 조치 사항 정리'],
+  HANDOVER: ['운영 매뉴얼 인계', '계정·권한 인계', '모니터링·알림 체계 인계', '운영 담당자 지정 및 인수 확인'],
+  MAINTENANCE: ['장애·요청 접수 경로 확정', '처리 절차와 에스컬레이션 정의', '유지보수 계약·범위 확인'],
+  SLA: ['응답 시간 기준 합의', '복구 시간 기준 합의', 'SLA 측정·보고 방식 정의'],
+  RELEASE_PLAN: ['정기 배포 주기 확정', '개선 요청 수집·우선순위 절차 정의', '배포 승인·공지 절차 정의'],
+  CLOSE: ['프로젝트 결과 공유(완료 보고)', '미결 사항과 후속 조치 정리', '교훈(Lessons Learned) 정리', '산출물 최종본 전달'],
+};
+export const CHECKLIST_STEP_KEYS = new Set(Object.keys(CHECKLIST_TEMPLATES));

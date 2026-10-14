@@ -29,6 +29,10 @@ export function projectGuidance(ctx) {
   const warnings = [];
   const act = (label, href) => ({ label, href });
   const move = nextPhase ? act(`${nextPhase.name} 단계 시작 →`, u('?move=next')) : null;
+  /** 06/07: the first open REQUIRED (then any) activity that carries a work-screen CTA — the checklist screen for manual ones. */
+  const openActs = phase && Array.isArray(phase.steps) ? phase.steps.filter((a) => a.state !== 'COMPLETED' && a.state !== 'SKIPPED' && a.cta) : [];
+  const nextAct = openActs.find((a) => a.importance === 'REQUIRED') || null;
+  const actCta = nextAct ? act(nextAct.cta.label === '체크리스트 작성 →' ? `${nextAct.title} 체크리스트 →` : nextAct.cta.label, nextAct.cta.href) : null;
   const out = (rule, title, description, why, primary, secondary = null, next = null) => ({
     current_phase: { key, name: phase?.name || PHASE_BY_KEY[key]?.name || key, sequence: phase?.sequence || (DEFAULT_PHASES.findIndex((p) => p.key === key) + 1) },
     rule, title, description, why, primary_action: primary, secondary_action: secondary, warnings, next_preview: next,
@@ -84,20 +88,24 @@ export function projectGuidance(ctx) {
       return out('TEST_DONE', '테스트가 모두 통과했습니다', '테스트가 모두 통과했습니다. 오픈 전에 완료 기준과 미해결 항목을 점검하면 예상치 못한 이슈를 줄이고 안정적으로 마무리할 수 있습니다.', '검수는 전환 및 오픈으로 넘어가는 첫 관문입니다.', move || act('검수 항목 작성 →', u('/tests?tab=acceptance&new=1')), move ? act('테스트 결과 보기 →', u('/tests')) : null, nextPhaseText);
     }
     case 'TRANSITION_GO_LIVE': {
-      if (n(acc.total) === 0) return out('ACC_EMPTY', '검수 항목을 작성하고 인수 승인을 요청하세요', '오픈 전에 완료 기준과 미해결 항목을 점검하면 예상치 못한 이슈를 줄이고 안정적으로 프로젝트를 마무리할 수 있습니다. 검수 항목은 요구사항과 테스트를 묶어 만듭니다.', '검수 승인이 있어야 전환·오픈을 진행할 수 있습니다.', act('검수 항목 작성 →', u('/tests?tab=acceptance&new=1')), null, '검수가 승인되면 전환 계획과 오픈을 준비합니다.');
-      if (n(acc.rework)) return out('ACC_REWORK', '보완 요청된 검수를 처리하세요', `보완 필요 ${acc.rework}건이 있습니다. 보완 후 재요청해야 검수를 확정하고 오픈 일정을 지킬 수 있습니다.`, '보완 후 재요청해야 검수를 확정할 수 있습니다.', act('보완 처리 →', u('/tests?tab=acceptance&status=REWORK_REQUIRED')), null, '모든 검수가 승인되면 전환을 준비합니다.');
-      if (n(acc.requested)) return out('ACC_PENDING', '검수 결과를 기록하세요', `검수 요청 ${acc.requested}건이 고객 확인을 기다립니다. 승인·반려·보완 결과를 기록해야 미완료 항목을 빠짐없이 정리할 수 있습니다.`, '검수 결과(승인/반려/보완)를 기록해야 미완료 항목을 정리할 수 있습니다.', act('검수 결과 기록 →', u('/tests?tab=acceptance&status=REQUESTED')), null, '검수가 모두 승인되면 전환을 준비합니다.');
-      if (n(acc.draft)) return out('ACC_DRAFT', '작성 중인 검수를 요청하세요', `작성 중 검수 ${acc.draft}건이 있습니다. 검수를 요청해야 고객 확인 절차가 시작되고 오픈 일정이 확정됩니다.`, '검수 요청이 있어야 고객 확인 절차가 시작됩니다.', act('검수 요청 →', u('/tests?tab=acceptance&status=DRAFT')), null, '검수 결과를 기록합니다.');
+      // 검수 rules apply until the ACCEPTANCE activity is complete (from data, or marked by hand when 검수 happened outside RELAI)
+      const accDone = Array.isArray(phase && phase.steps) && phase.steps.some((a) => a.step_key === 'ACCEPTANCE' && a.state === 'COMPLETED');
+      if (!accDone) {
+        if (n(acc.total) === 0) return out('ACC_EMPTY', '검수 항목을 작성하고 인수 승인을 요청하세요', '오픈 전에 완료 기준과 미해결 항목을 점검하면 예상치 못한 이슈를 줄이고 안정적으로 프로젝트를 마무리할 수 있습니다. 검수 항목은 요구사항과 테스트를 묶어 만듭니다.', '검수 승인이 있어야 전환·오픈을 진행할 수 있습니다.', act('검수 항목 작성 →', u('/tests?tab=acceptance&new=1')), null, '검수가 승인되면 전환 계획과 오픈을 준비합니다.');
+        if (n(acc.rework)) return out('ACC_REWORK', '보완 요청된 검수를 처리하세요', `보완 필요 ${acc.rework}건이 있습니다. 보완 후 재요청해야 검수를 확정하고 오픈 일정을 지킬 수 있습니다.`, '보완 후 재요청해야 검수를 확정할 수 있습니다.', act('보완 처리 →', u('/tests?tab=acceptance&status=REWORK_REQUIRED')), null, '모든 검수가 승인되면 전환을 준비합니다.');
+        if (n(acc.requested)) return out('ACC_PENDING', '검수 결과를 기록하세요', `검수 요청 ${acc.requested}건이 고객 확인을 기다립니다. 승인·반려·보완 결과를 기록해야 미완료 항목을 빠짐없이 정리할 수 있습니다.`, '검수 결과(승인/반려/보완)를 기록해야 미완료 항목을 정리할 수 있습니다.', act('검수 결과 기록 →', u('/tests?tab=acceptance&status=REQUESTED')), null, '검수가 모두 승인되면 전환을 준비합니다.');
+        if (n(acc.draft)) return out('ACC_DRAFT', '작성 중인 검수를 요청하세요', `작성 중 검수 ${acc.draft}건이 있습니다. 검수를 요청해야 고객 확인 절차가 시작되고 오픈 일정이 확정됩니다.`, '검수 요청이 있어야 고객 확인 절차가 시작됩니다.', act('검수 요청 →', u('/tests?tab=acceptance&status=DRAFT')), null, '검수 결과를 기록합니다.');
+      }
       const open = [];
       if (n(iss.active)) open.push(`Open Issue ${iss.active}건`);
       if (n(tst.last_fail)) open.push(`Fail 테스트 ${tst.last_fail}건`);
       if (n(chg.approved_unimplemented)) open.push(`미반영 변경 ${chg.approved_unimplemented}건`);
       if (open.length) return out('GO_LIVE_OPEN', '오픈 전 미완료 항목을 정리하세요', `${open.join(' · ')}. 남은 항목을 정리하거나 운영 이관 항목으로 기록해야 안정적으로 오픈할 수 있습니다.`, '남은 항목을 정리하거나 운영 이관 항목으로 기록해야 안정적으로 오픈할 수 있습니다.', act(n(iss.active) ? 'Open Issue 처리 →' : n(tst.last_fail) ? 'Fail 테스트 조치 →' : '변경 반영 확인 →', u(n(iss.active) ? '/issues' : n(tst.last_fail) ? '/tests?last_result=FAIL' : '/changes?status=APPROVED')), null, '정리가 끝나면 전환 계획·교육·Go-Live를 진행합니다.');
-      return out('TRANSITION_RUN', '검수가 승인되었습니다 — 전환과 오픈을 진행하세요', '검수가 승인되었습니다. 전환 계획·데이터 마이그레이션·사용자 교육을 마치고 Go-Live 후 안정화까지 기록해 두면 운영 이관이 매끄러워집니다.', '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', move || act('Overview 보기 →', u('/overview')), move ? act('Overview 보기 →', u('/overview')) : null, nextPhaseText);
+      return out('TRANSITION_RUN', '검수가 승인되었습니다 — 전환과 오픈을 진행하세요', '검수가 승인되었습니다. 전환 계획·데이터 마이그레이션·사용자 교육을 마치고 Go-Live 후 안정화까지 기록해 두면 운영 이관이 매끄러워집니다.', '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('Overview 보기 →', u('/overview')), actCta ? null : move ? act('Overview 보기 →', u('/overview')) : null, nextPhaseText);
     }
     case 'OPERATIONS': {
       if (n(iss.active)) return out('OPS_ISSUES', '운영 이관 전 Open Issue를 정리하세요', `Open Issue ${iss.active}건이 남아 있습니다. 해결하거나 운영 이관 대상으로 기록해 두어야 운영 단계에서 책임이 비지 않습니다.`, '남은 이슈는 해결하거나 운영 이관 대상으로 기록해야 합니다.', act('Issue 처리 →', u('/issues')), act('Overview 보기 →', u('/overview')), '운영 이관과 종료 정리를 진행합니다.');
-      return out('OPS_HANDOVER', '운영 이관과 종료 정리를 진행하세요', '운영 인수인계·유지보수 체계·SLA·정기 배포 계획을 정리해 두면 운영 단계와 다음 프로젝트에서 같은 기준을 재사용할 수 있습니다.', '종료 정리(결과 공유, 운영 이관)를 남겨야 운영 단계와 다음 프로젝트에서 재사용할 수 있습니다.', act('Overview 보기 →', u('/overview')), act('주간보고 보기 →', u('/reports')), null);
+      return out('OPS_HANDOVER', '운영 이관과 종료 정리를 진행하세요', '운영 인수인계·유지보수 체계·SLA·정기 배포 계획을 정리해 두면 운영 단계와 다음 프로젝트에서 같은 기준을 재사용할 수 있습니다.', '종료 정리(결과 공유, 운영 이관)를 남겨야 운영 단계와 다음 프로젝트에서 재사용할 수 있습니다.', actCta || act('Overview 보기 →', u('/overview')), act('주간보고 보기 →', u('/reports')), null);
     }
     default:
       return out('UNKNOWN', 'What’s Next?', '', '', act('What’s Next? →', u('')), null, null);

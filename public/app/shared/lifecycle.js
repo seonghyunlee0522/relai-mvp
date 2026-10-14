@@ -11,6 +11,8 @@
 const P = (pid, s = '') => `/app/projects/${pid}${s}`;
 const q = (qs, k, v) => (v === undefined ? qs.has(k) : qs.get(k) === v);
 const isPath = (path, pid, suffix) => path === P(pid, suffix) || path === `${P(pid, suffix)}/`;
+/** 06/07 activity without its own work screen → its checklist (public/app/project/checklist.js). */
+const CL = (pid, key, label, activity) => ({ key, label, href: P(pid, `/checklist?activity=${activity}`), match: (path, qs) => isPath(path, pid, '/checklist') && q(qs, 'activity', activity) });
 
 export const HOME_ITEMS = (pid) => [
   { key: 'next', label: 'What’s Next', href: P(pid), match: (path) => isPath(path, pid, '') },
@@ -54,17 +56,18 @@ export const PHASE_ITEMS = {
   ],
   TRANSITION_GO_LIVE: (pid) => [
     { key: 'acceptance', label: '검수 / 인수 승인', href: P(pid, '/tests?tab=acceptance'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'tab', 'acceptance') },
-    { key: 'cutover', label: '전환 계획', enabled: false },
-    { key: 'migration', label: '데이터 마이그레이션', enabled: false },
-    { key: 'training', label: '사용자 교육 / 매뉴얼', enabled: false },
-    { key: 'go-live', label: 'Go-Live', enabled: false },
-    { key: 'stabilize', label: '안정화', enabled: false },
+    CL(pid, 'cutover', '전환 계획', 'CUTOVER_PLAN'),
+    CL(pid, 'migration', '데이터 마이그레이션', 'DATA_MIGRATION'),
+    CL(pid, 'training', '사용자 교육 / 매뉴얼', 'TRAINING'),
+    CL(pid, 'go-live', 'Go-Live', 'GO_LIVE'),
+    CL(pid, 'stabilize', '안정화', 'STABILIZE'),
   ],
   OPERATIONS: (pid) => [
-    { key: 'ops-status', label: '운영 현황', enabled: false },
-    { key: 'maintenance', label: '유지보수', enabled: false },
-    { key: 'sla', label: 'SLA', enabled: false },
-    { key: 'release', label: '정기 배포', enabled: false },
+    CL(pid, 'ops-handover', '운영 이관 / 인수인계', 'HANDOVER'),
+    CL(pid, 'maintenance', '유지보수', 'MAINTENANCE'),
+    CL(pid, 'sla', 'SLA', 'SLA'),
+    CL(pid, 'release', '정기 배포', 'RELEASE_PLAN'),
+    CL(pid, 'close', '종료 정리', 'CLOSE'),
   ],
 };
 

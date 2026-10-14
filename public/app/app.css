@@ -2276,3 +2276,32 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .trf2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
 @media (max-width:640px){.trf2{grid-template-columns:1fr}}
 .chx__kvs--traits{margin-top:4px}
+
+/* 06 전환·오픈 · 07 운영 — activity checklist (project/checklist.js) */
+.np__done{color:#0E7A4F}.np__done:hover{color:#065F3B}
+.clk__tabs{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.clk__tab{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border-soft);border-radius:8px;font-size:12.5px;color:var(--text-2);text-decoration:none;background:#fff}
+.clk__tab:hover{background:var(--bg-alt)}.clk__tab.is-active{border-color:var(--blue);color:var(--navy);font-weight:600}
+.clk__card{border:1px solid var(--border-soft);border-radius:10px;padding:16px;background:#fff}
+.clk__h{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.clk__t{display:flex;align-items:center;gap:8px;min-width:0}.clk__t h2{margin:0;font-size:16px;color:var(--navy)}
+.clk__marks{display:inline-flex;align-items:center;gap:12px}
+.clk__d{margin:6px 0 2px;color:var(--text-2);font-size:13px}
+.clk__crit{margin:0 0 10px;color:var(--muted);font-size:12.5px}.clk__crit b{color:var(--text-2);margin-right:4px}
+.clk__cnt{color:var(--navy);font-variant-numeric:tabular-nums}
+.clk__hint{margin:0 0 10px;font-size:12.5px;color:#B45309}
+.clk__tbl{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.clk__tbl th{text-align:left;font-weight:500;font-size:12px;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--border-soft)}
+.clk__tbl td{padding:3px 4px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+.clk__ck{width:32px;text-align:center}.clk__x{width:32px;text-align:center}
+.clk__w-owner{width:130px}.clk__w-due{width:140px}
+.clk__in{width:100%;min-width:0;height:30px;border-color:transparent;background:transparent;font-size:13px}
+.clk__in:hover:not(:disabled),.clk__in:focus{border-color:var(--border-soft);background:#fff}
+.clk__row.is-done .clk__in[data-f=title]{text-decoration:line-through;color:var(--muted)}
+.clk__date.is-overdue{color:#B42318}
+.clk__del{color:#98A2B3;width:auto;padding:0 4px}.clk__del:hover{color:#B42318}
+.clk__empty{padding:14px;border:1px dashed var(--border-soft);border-radius:8px;font-size:13px;color:var(--text-2)}.clk__empty p{margin:4px 0 10px;color:var(--muted)}
+.clk__add{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.clk__add [name=title]{flex:1 1 220px;min-width:0}
+.clk__memo{margin-top:16px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}.clk__memo label{font-size:12.5px;color:var(--text-2);font-weight:600}.clk__memo textarea{width:100%}
+.clk__back{margin-top:12px;font-size:13px}
+@media (max-width:760px){.clk__tbl thead{display:none}.clk__tbl,.clk__tbl tbody,.clk__tbl tr,.clk__tbl td{display:block;width:100%}.clk__tbl tr{display:grid;grid-template-columns:32px 1fr 32px;border-bottom:1px solid var(--border-soft);padding:4px 0}.clk__tbl td{border:0}.clk__tbl td:nth-child(n+3):not(.clk__x){grid-column:2}.clk__x{grid-column:3;grid-row:1}.clk__w-owner,.clk__w-due{width:100%}}

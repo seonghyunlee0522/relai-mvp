@@ -50,6 +50,7 @@ export const migrations = [
     await db.run(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT CHECK (project_type IN ('NEW_BUILD','ENHANCEMENT','TRANSITION','OTHER'))`);
   } },
   { version: 25, name: 'Billing (Phase 10): subscriptions, payments, billing_events, subscription_events — tables in schema.sql; plan limits enforced by billing/limits.js', up() {} },
+  { version: 26, name: 'Activity checklists (06 전환·오픈 · 07 운영): activity_checklist_items — table in schema.sql; activity state derives from it', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;
