@@ -60,6 +60,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      ...(secureCookies ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}),
     });
     next();
   });
@@ -180,7 +182,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     try {
       await tx(db, async (db) => {
         if (invite) {
-          userId = await createUser(db, { email, name, passwordHash: password_hash });
+          userId = await createUser(db, { email, name, passwordHash: password_hash, emailVerifiedAt: new Date().toISOString() });   // the invite link arrived by e-mail
           const user = { id: userId, email, status: 'ACTIVE' };
           accepted = await I.acceptInvite(db, invite, user);
         } else ({ userId } = await createDirectSignupUser(db, { email, name, passwordHash: password_hash }));

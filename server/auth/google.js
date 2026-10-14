@@ -121,10 +121,17 @@ export async function finishGoogleAuth(db, { state, code, tx }, env = process.en
   const result = await tx(db, async (db) => {
     const ident = await db.get(`SELECT user_id FROM user_identities WHERE provider = 'GOOGLE' AND provider_subject = ?`, [sub]);
     if (ident) { await touchIdentity(db, 'GOOGLE', sub); return { userId: ident.user_id, created: false, linked: false }; }
-    const existing = await db.get('SELECT id, email, status FROM users WHERE email = ?', [email]);
+    const existing = await db.get('SELECT id, email, status, password_hash, email_verified_at FROM users WHERE email = ? FOR UPDATE', [email]);
     if (existing) {
       if (!verified) throw new GoogleAuthError('google_email_unverified', 'Google 계정의 이메일이 인증되지 않아 기존 계정과 연결할 수 없습니다.', 403);
       if (existing.status !== 'ACTIVE') throw new GoogleAuthError('account_suspended', '정지된 계정입니다. 운영자에게 문의해 주세요.', 403);
+      // Pre-registration takeover guard: a password set on a never-verified e-mail may belong to someone else who signed up first.
+      // Google just proved ownership, so that unverified password and every session it opened are dropped before linking.
+      if (existing.password_hash && !existing.email_verified_at) {
+        await db.run('UPDATE users SET password_hash = NULL WHERE id = ?', [existing.id]);
+        await db.run(`DELETE FROM user_identities WHERE user_id = ? AND provider = 'PASSWORD'`, [existing.id]);
+        await db.run('DELETE FROM sessions WHERE user_id = ?', [existing.id]);
+      }
       await addIdentity(db, { userId: existing.id, provider: 'GOOGLE', subject: sub, email, verified: true });
       await db.run('UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = ?', [existing.id]);
       await writeAudit(db, { adminUserId: existing.id, action: 'GOOGLE_IDENTITY_LINKED', targetType: 'USER', targetId: existing.id, metadata: { email }, actorKind: 'USER' });

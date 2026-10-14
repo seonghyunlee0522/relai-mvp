@@ -1,14 +1,11 @@
 import { openDb } from './db.js';
 import { createApp } from './app.js';
 import { startInProcessScheduler } from './integrations/scheduler.js';
-import { assertEncryptionConfig, IntegrationConfigError } from './integrations/crypto.js';
-import { assertEmailConfig, EmailConfigError } from './email/config.js';
+import { assertStartupConfig } from './config-check.js';
 
 const port = Number(process.env.PORT || 3000);
-if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) { console.error('SESSION_SECRET is required in production'); process.exit(1); }
-
-// Integration credential key: malformed → always fatal; missing → fatal in production, derived from SESSION_SECRET elsewhere.
-try { assertEncryptionConfig(); assertEmailConfig(); } catch (e) { if (e instanceof IntegrationConfigError || e instanceof EmailConfigError) { console.error(e.message); process.exit(1); } throw e; }
+// SESSION_SECRET (production), integration key (malformed → always fatal; missing → fatal in production), e-mail config.
+try { assertStartupConfig(); } catch (e) { console.error(e.message); process.exit(1); }
 
 const db = await openDb();
 const app = createApp(db);

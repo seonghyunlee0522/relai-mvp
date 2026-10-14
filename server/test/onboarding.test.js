@@ -166,7 +166,11 @@ test('google: new signup (personal workspace), same verified e-mail links to pas
   const gc = client(); r = await googleLogin(gc, { sub: 'g-200', email: 'PW@corp.com' }); assert.equal(r.status, 302);
   const me = await gc('GET', '/api/me'); assert.equal(me.json.user.id, P.uid);
   assert.equal(Number((await db.get(`SELECT COUNT(*) n FROM users WHERE email = 'pw@corp.com'`)).n), 1);
-  assert.deepEqual((await db.all('SELECT provider FROM user_identities WHERE user_id = ? ORDER BY provider', [P.uid])).map((x) => x.provider), ['GOOGLE', 'PASSWORD']);
+  // the password was set on a never-verified e-mail (possible pre-registration by someone else): Google proves ownership → password + its sessions dropped
+  assert.deepEqual((await db.all('SELECT provider FROM user_identities WHERE user_id = ? ORDER BY provider', [P.uid])).map((x) => x.provider), ['GOOGLE']);
+  assert.equal((await db.get('SELECT password_hash FROM users WHERE id = ?', [P.uid])).password_hash, null);
+  assert.equal((await P.c('GET', '/api/me')).status, 401);
+  assert.equal((await client()('POST', '/api/auth/login', { email: 'pw@corp.com', password: 'passw0rd!' })).status, 401);
   // 39. repeat → same user (by sub even if the e-mail changed)
   const gc2 = client(); r = await googleLogin(gc2, { sub: 'g-200', email: 'renamed@corp.com' }); assert.equal((await gc2('GET', '/api/me')).json.user.id, P.uid);
   // 40. different e-mail → separate user (no merge)
@@ -235,6 +239,7 @@ test('e-mail: fake provider, platform + member mails, failed delivery keeps the 
 test('admin: users list with login methods + filter, user detail identities (no subjects/hashes), workspace list pending invites, invitations list/filters, secrets never exposed', async () => {
   const { server, client, db } = await boot();
   const ad = await admin(client, db); const P = await setup(client, 'pw@corp.com', '비번');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE id = ?', [P.uid]);   // verified password user → keeps the password when Google links
   await googleLogin(client(), { sub: 'g-900', email: 'pw@corp.com' }); await googleLogin(client(), { sub: 'g-901', email: 'g@corp.com' });
   let r = await ad.c('GET', '/api/admin/users'); const byEmail = Object.fromEntries(r.json.items.map((u) => [u.email, u]));
   assert.equal(byEmail['pw@corp.com'].login_method_label, 'Password + Google'); assert.equal(byEmail['g@corp.com'].login_method_label, 'Google'); assert.equal(byEmail['root@relai.test'].login_method_label, 'Password');
