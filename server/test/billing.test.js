@@ -44,7 +44,7 @@ test('provider interface: fake implements createCheckout/handleWebhook/cancel; r
   assert.equal(providerFromEnv({ NODE_ENV: 'production' }), null);
   assert.equal(providerFromEnv({ NODE_ENV: 'production', BILLING_PROVIDER: 'fake' }), null);
   assert.throws(() => providerFromEnv({ BILLING_PROVIDER: 'nope' }), /unknown BILLING_PROVIDER/);
-  assert.equal(LATEST_VERSION, 25);
+  assert.ok(LATEST_VERSION >= 25);   // 25 = billing; later migrations (26 auth) follow
 });
 
 test('FREE limits: projects / requirements / WBS / weekly reports / members answer 402 plan_limit_reached with the limit payload', async () => {
@@ -78,6 +78,7 @@ test('FREE limits: projects / requirements / WBS / weekly reports / members answ
   await client()('POST', '/api/auth/signup', { name: '정라마', email: 'd@x.com', password: 'passw0rd!' });
   const m4 = await A.c('POST', `/api/workspaces/${A.w}/members`, { email: 'd@x.com', role: 'MEMBER' });
   assert.equal(m4.status, 402); assert.equal(m4.json.error.limit.dimension, 'members');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // invites need a verified sender (auth hardening); the plan limit is what is tested here
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/invitations`, { email: 'e@x.com', role: 'MEMBER' })).status, 402);
   // the customer billing summary reflects all of it
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
