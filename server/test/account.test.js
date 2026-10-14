@@ -73,7 +73,7 @@ test('account deletion: re-auth, blocked while sole OWNER with members, then ano
   const { client, db } = await boot();
   const A = await setup(client, 'del@x.com', '삭제자');
   const B = await addMember(client, A, 'mate@x.com', '동료');
-  let r = await A.c('DELETE', '/api/me', { password: 'wrong1pass' }); assert.equal(r.status, 401); assert.equal(r.json.error.code, 'invalid_password');
+  let r = await A.c('DELETE', '/api/me', { password: 'wrong1pass' }); assert.equal(r.status, 403); assert.equal(r.json.error.code, 'invalid_password');
   r = await A.c('DELETE', '/api/me', { password: 'passw0rd!' }); assert.equal(r.status, 409); assert.equal(r.json.error.code, 'account_delete_blocked');
   assert.equal(r.json.error.blockers[0].code, 'sole_owner'); assert.equal(r.json.error.blockers[0].workspace_id, A.w);
   assert.equal((await A.c('GET', '/api/me/account')).json.account.deletion.blockers[0].code, 'sole_owner');
@@ -108,7 +108,7 @@ test('account deletion: refused for a running paid subscription; Google-only re-
 
   const c = client(); const me = await googleSignup(c, { sub: 'g-del', email: 'gdel@x.com' });
   await db.run(`UPDATE sessions SET created_at = now() - interval '11 minutes' WHERE user_id = ?`, [me.user.id]);
-  r = await c('DELETE', '/api/me', {}); assert.equal(r.status, 401); assert.equal(r.json.error.code, 'reauth_required');
+  r = await c('DELETE', '/api/me', {}); assert.equal(r.status, 403); assert.equal(r.json.error.code, 'reauth_required');
   await db.run(`UPDATE sessions SET created_at = now() WHERE user_id = ?`, [me.user.id]);
   assert.equal((await c('DELETE', '/api/me', {})).status, 200);
 });
@@ -124,7 +124,7 @@ test('workspace deletion: OWNER only, name + password confirmation, subscription
 
   assert.equal((await B.c('DELETE', `/api/workspaces/${A.w}`, { confirm_name: ws.name, password: 'passw0rd!' })).status, 403);
   let r = await A.c('DELETE', `/api/workspaces/${A.w}`, { confirm_name: 'nope', password: 'passw0rd!' }); assert.equal(r.status, 400);
-  r = await A.c('DELETE', `/api/workspaces/${A.w}`, { confirm_name: ws.name, password: 'bad1bad1' }); assert.equal(r.status, 401);
+  r = await A.c('DELETE', `/api/workspaces/${A.w}`, { confirm_name: ws.name, password: 'bad1bad1' }); assert.equal(r.status, 403);
   await db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, current_period_end) VALUES ('s2', ?, 'TEAM', 'ACTIVE', 'fake', now() + interval '20 days')`, [A.w]);
   await db.run(`INSERT INTO payments (id, workspace_id, subscription_id, plan, amount, status, provider, provider_tid, paid_at) VALUES ('pay1', ?, 's2', 'TEAM', 45000, 'PAID', 'fake', 'tid-1', now())`, [A.w]);
   r = await A.c('DELETE', `/api/workspaces/${A.w}`, { confirm_name: ws.name, password: 'passw0rd!' }); assert.equal(r.status, 409); assert.equal(r.json.error.code, 'subscription_active');

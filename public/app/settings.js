@@ -7,6 +7,8 @@ import { formDialog, inviteStatusChip, emailStatusChip } from './shared/forms.js
 import { usageBars, fmtDay } from './admin/ui.js';
 
 const qp0 = () => new URLSearchParams(location.search);
+const unverified = () => state.user?.email_verified === false;   // server refuses checkout/invitations until the e-mail is verified
+const VERIFY_HINT = '이메일 인증 후 이용할 수 있습니다. 상단 배너에서 인증 메일을 다시 받을 수 있습니다.';
 const ROLE = { OWNER: 'Owner', ADMIN: 'Admin', MEMBER: 'Member' };
 const ROLE_DESC = { OWNER: '모든 기능 · 멤버/설정/결제 관리', ADMIN: '프로젝트 생성·관리 · 멤버/설정 관리 (결제 불가)', MEMBER: '프로젝트 업무 수행 (멤버/설정/결제 불가)' };
 
@@ -49,7 +51,7 @@ export async function settingsPage(main = $('#main')) {
         <label class="dim" style="display:flex;align-items:center;gap:6px">사용자 수 (소유자 포함) <input class="input input--sm" name="users" type="number" min="${co.min_users}" max="${co.max_users}" step="1" value="${Math.max(co.min_users, billing.subscription?.seats || 0)}" style="width:84px"></label></div>
       <p class="hint" style="margin-top:6px">Workspace ${won(co.base_monthly)}/월 (소유자 ${co.included_users}명 포함) + 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월</p>
       <p class="hint" id="bill-quote" style="margin-top:8px">금액 계산 중…</p>
-      <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay">결제하기</button></div>
+      <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay"${raw(unverified() ? ' disabled' : '')}>결제하기</button>${raw(unverified() ? html`<span class="hint" id="bill-verify">${VERIFY_HINT}</span>` : '')}</div>
       <p class="hint">가격은 부가세 별도이며 결제 시 부가세 10%가 더해집니다. 현재 멤버 수(${co.min_users}명) 이상으로 구매해 주세요 · 자동 결제되지 않습니다.${co.sandbox ? ' (테스트 결제 환경)' : ''}</p>
       ${raw(co.recurring_available && !extend ? html`<details style="margin-top:10px"><summary class="link">카드 등록 후 자동 결제(정기결제)로 구독</summary><div class="inline-form" style="gap:8px;flex-wrap:wrap;margin-top:8px">
         <input class="input input--sm" name="number" placeholder="카드번호" autocomplete="cc-number" inputmode="numeric"><input class="input input--sm" name="expiry" placeholder="MM/YY" autocomplete="cc-exp" style="width:80px">
@@ -66,11 +68,11 @@ export async function settingsPage(main = $('#main')) {
       try {
         const { quote: x } = await api('GET', `/api/workspaces/${wid}/billing/quote?cycle=${v.cycle}&users=${v.users}`); if (my !== seq) return;
         q.innerHTML = html`(${won(x.base_monthly)} + 추가 ${x.extra_users}명 × ${won(x.extra_user_monthly)}) = ${won(x.monthly_amount)}/월 × ${x.months}개월 = ${won(x.list_amount)}${raw(x.discount_amount ? html` − 할인 ${won(x.discount_amount)}` : '')} + 부가세 ${won(x.vat_amount)} → <b>${won(x.amount)}</b>`;
-        $('#bill-pay').disabled = false;
+        $('#bill-pay').disabled = unverified();
       } catch (e) { if (my !== seq) return; q.textContent = e.fields?.users || e.message; $('#bill-pay').disabled = true; }
     };
     f.cycle.onchange = refresh; f.users.oninput = refresh; refresh();
-    f.onsubmit = async (e) => { e.preventDefault(); const b = $('#bill-pay'); b.disabled = true; try { const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, val()); location.href = r.checkout_url; } catch (err) { b.disabled = false; toast(err.message); } };
+    f.onsubmit = async (e) => { e.preventDefault(); if (unverified()) return toast(VERIFY_HINT); const b = $('#bill-pay'); b.disabled = true; try { const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, val()); location.href = r.checkout_url; } catch (err) { b.disabled = false; toast(err.message); } };
     const rb = $('#bill-recurring'); if (rb) rb.onclick = async () => {
       rb.disabled = true;
       try { billing = (await api('POST', `/api/workspaces/${wid}/billing/recurring`, { ...val(), card: { number: f.number.value, expiry: f.expiry.value, id_no: f.id_no.value, password2: f.password2.value } })).billing; toast('정기결제를 시작했습니다.'); draw(members0); }
@@ -83,7 +85,7 @@ export async function settingsPage(main = $('#main')) {
   // Pending invitations (OWNER/ADMIN only) — Phase 13
   let invites = []; const loadInvites = async () => { if (!perm.member_manage) return; try { invites = (await api('GET', `/api/workspaces/${wid}/invitations`)).all.filter((i) => i.status === 'PENDING' || i.status === 'EXPIRED').slice(0, 50); } catch { invites = []; } };
   await loadInvites();
-  const inviteTable = () => !perm.member_manage ? '' : html`<div class="panel" style="margin-top:20px"><div class="panel__h">초대 대기 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${invites.filter((i) => i.status === 'PENDING').length}</em><span class="panel__sp"></span><button class="btn btn--primary btn--sm" id="invite-btn" data-tour-id="invite-members">멤버 초대</button></div>
+  const inviteTable = () => !perm.member_manage ? '' : html`<div class="panel" style="margin-top:20px"><div class="panel__h">초대 대기 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${invites.filter((i) => i.status === 'PENDING').length}</em><span class="panel__sp"></span><button class="btn btn--primary btn--sm" id="invite-btn" data-tour-id="invite-members"${raw(unverified() ? html` disabled title="${VERIFY_HINT}"` : '')}>멤버 초대</button></div>${raw(unverified() ? html`<p class="hint" id="invite-verify" style="padding:0 20px">${VERIFY_HINT}</p>` : '')}
       <div class="rtable-wrap--in"><table class="rtable rtable--raid" style="margin:0" id="invtbl"><thead><tr><th>이메일</th><th>역할</th><th>초대한 사람</th><th>만료</th><th>상태</th><th>메일</th><th></th></tr></thead>
       <tbody>${raw(invites.length ? invites.map((i) => html`<tr data-inv="${i.id}">
         <td class="mono">${i.email}</td><td>${ROLE[i.role] || i.role}</td><td class="dim">${i.invited_by_name || '-'}</td><td class="dim">${fmtShort(i.expires_at)}</td><td>${raw(inviteStatusChip(i.status))}</td>
@@ -135,7 +137,7 @@ export async function settingsPage(main = $('#main')) {
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });
     const ib = $('#invite-btn'); if (ib) ib.onclick = async () => {
       const roles = [['MEMBER', 'Member — 프로젝트 업무 수행']]; if (workspace.role === 'OWNER') roles.push(['ADMIN', 'Admin — 프로젝트·멤버·설정 관리']);
-      const r = await formDialog({ title: '멤버 초대', body: html`초대 메일을 보냅니다. 초대받은 사람은 같은 이메일로 가입하거나 로그인한 뒤 수락하면 <b>${workspace.name}</b> Workspace에 참여합니다. (유효기간 7일)`, confirm: '초대 메일 보내기',
+      const r = await formDialog({ title: '멤버 초대', body: html`초대 메일을 보냅니다. 초대받은 사람은 같은 이메일로 가입하거나 로그인한 뒤 수락하면 <b>${workspace.name}</b>${/workspace$/i.test(workspace.name.trim()) ? '' : ' Workspace'}에 참여합니다. (유효기간 7일)`, confirm: '초대 메일 보내기',
         fields: [{ name: 'email', label: '이메일', type: 'email', required: true, placeholder: 'teammate@company.com' }, { name: 'role', label: '역할', type: 'select', options: roles, value: 'MEMBER' }],
         submit: (v) => api('POST', `/api/workspaces/${wid}/invitations`, { email: v.email.trim(), role: v.role }) });
       if (!r) return;
@@ -148,7 +150,7 @@ export async function settingsPage(main = $('#main')) {
     const jc = $('#jira-connect'); if (jc) jc.onclick = connect;
     const jr = $('#jira-reconnect'); if (jr) jr.onclick = connect;
     const jd = $('#jira-disconnect'); if (jd) jd.onclick = async () => { if (!(await confirmDialog({ title: 'Jira 연결을 해제할까요?', body: '저장된 Jira 인증 정보가 삭제되고 모든 프로젝트의 동기화가 중단됩니다. 프로젝트·WBS·요구사항 데이터와 기존 Jira 연결 기록은 삭제되지 않습니다.', confirm: '연결 해제', danger: true }))) return; try { integ = await api('POST', `/api/workspaces/${wid}/integrations/jira/disconnect`, {}); toast('Jira 연결을 해제했습니다.'); draw(members); } catch (e) { toast(e.message); } };
-    const mef = $('#mef'); if (mef) mef.onsubmit = async (e) => { e.preventDefault(); try { const r = await api('PATCH', '/api/me', { name: mef.name.value.trim() }); state.user.name = r.user.name; toast('이름을 저장했습니다.'); } catch (err) { toast(err.fields?.name || err.message); } };
+    const mef = $('#mef'); if (mef) mef.onsubmit = async (e) => { e.preventDefault(); try { const r = await api('PATCH', '/api/me', { name: mef.name.value.trim() }); state.user.name = r.user.name; const sb = $('.me__t b'); if (sb) sb.textContent = r.user.name; const av = $('.me .avatar'); if (av) av.textContent = [...r.user.name][0]; toast('이름을 저장했습니다.'); } catch (err) { toast(err.fields?.name || err.message); } };
     const reauthField = () => (account?.has_password ? [{ name: 'password', label: '비밀번호', type: 'password', required: true, hint: '본인 확인을 위해 비밀번호를 입력해 주세요.' }] : []);
     const reauthNote = () => (account?.has_password ? '' : html`<p class="hint">Google 계정 사용자는 보안을 위해 최근 ${account?.reauth_minutes || 10}분 안에 다시 로그인한 경우에만 진행할 수 있습니다.</p>`);
     const pw = $('#pw-change'); if (pw) pw.onclick = async () => {

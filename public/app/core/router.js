@@ -30,8 +30,11 @@ export async function render() {
   const inv = path.match(/^\/invite\/([A-Za-z0-9_-]+)\/?$/);   // public landing: works with or without a session
   if (inv && inviteFn) return inviteFn(inv[1]);
   if (!state.user) {
-    try { Object.assign(state, await api('GET', '/api/me')); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0]; }
-    catch { return; }
+    try {
+      const me = await api('GET', '/api/me?optional=1');
+      if (!me.user) { location.href = '/login'; return; }   // logged out: no 401 in the console
+      Object.assign(state, me); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0];
+    } catch { return; }
   }
   for (const [re, fn] of routes) {
     const m = path.match(re);

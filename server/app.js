@@ -240,7 +240,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.json({ ok: true });
   }));
 
-  app.get('/api/me', requireAuth, wrap(async (req, res) => {
+  // ?optional=1 (landing, invite page): an anonymous visitor gets 200 { user: null } instead of a 401 console error.
+  app.get('/api/me', (req, res, next) => (!req.user && req.query.optional ? res.json({ user: null, workspaces: [] }) : next()), requireAuth, wrap(async (req, res) => {
     res.json({ user: toPublicUser(req.user), workspaces: await q.memberships.all(req.user.id) });
   }));
 

@@ -879,8 +879,8 @@ document.querySelectorAll('[data-loc]').forEach(function(el){
   });
 });
 /* If the visitor already has a session, point the CTAs at the app. */
-fetch('/api/me', {credentials:'same-origin'}).then(function(r){
-  if (!r.ok) return;
+fetch('/api/me?optional=1', {credentials:'same-origin'}).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+  if (!d || !d.user) return;
   document.querySelectorAll('[data-auth="login"]').forEach(function(el){ el.hidden = true; });
   document.querySelectorAll('[data-auth="start"]').forEach(function(el){
     el.setAttribute('href', '/app/projects');

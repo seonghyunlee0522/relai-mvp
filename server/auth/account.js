@@ -86,18 +86,19 @@ export function mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, se
   const pwLimit = rateLimiter(db, { name: 'account-password', max: 5, windowMs: 15 * 60 * 1000 });   // per user: wrong current password / re-auth
   const loadUser = (id) => db.get('SELECT id, email, name, status, system_role, password_hash, email_verified_at FROM users WHERE id = ?', [id]);
 
-  /** Re-authentication for destructive actions. Returns true, or sends the error and returns false. */
+  /** Re-authentication for destructive actions. Returns true, or sends the error and returns false.
+   * Failures are 403, never 401: the session is valid, and the client treats any 401 as "logged out" (redirects to /login). */
   async function reauth(req, res, user) {
     if (user.password_hash) {
       if (await pwLimit.blocked(user.id)) { fail(res, 429, 'rate_limited', '비밀번호를 너무 많이 틀렸습니다. 잠시 후 다시 시도해 주세요.'); return false; }
       if (!(await verifyPassword(String(req.body?.password || ''), user.password_hash))) {
         await pwLimit.hit(user.id);
-        fail(res, 401, 'invalid_password', '비밀번호가 올바르지 않습니다.', { fields: { password: '비밀번호가 올바르지 않습니다.' } }); return false;
+        fail(res, 403, 'invalid_password', '비밀번호가 올바르지 않습니다.', { fields: { password: '비밀번호가 올바르지 않습니다.' } }); return false;
       }
       return true;
     }
     const s = await db.get(`SELECT created_at > now() - (?::int * interval '1 minute') AS fresh FROM sessions WHERE token_hash = ?`, [REAUTH_MINUTES, sessionHash(req)]);
-    if (!s?.fresh) { fail(res, 401, 'reauth_required', `보안을 위해 Google로 다시 로그인한 후 ${REAUTH_MINUTES}분 안에 진행해 주세요.`); return false; }
+    if (!s?.fresh) { fail(res, 403, 'reauth_required', `보안을 위해 Google로 다시 로그인한 후 ${REAUTH_MINUTES}분 안에 진행해 주세요.`); return false; }
     return true;
   }
 

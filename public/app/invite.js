@@ -13,7 +13,7 @@ export async function invitePage(token) {
   document.title = '초대 — RELAI';
   const frame = (body) => { root.innerHTML = html`<div class="auth auth--single"><main class="auth__form invite"><a class="logo" href="/">RELAI</a>${raw(body)}</main></div>`; };
   // Session (optional): the landing works without one; with one we can offer explicit acceptance.
-  if (!state.user) { try { Object.assign(state, await api('GET', '/api/me')); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0]; } catch { /* logged out */ } }
+  if (!state.user) { try { const me = await api('GET', '/api/me?optional=1'); if (me.user) { Object.assign(state, me); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0]; } } catch { /* logged out */ } }
   let data;
   try { data = await api('GET', `/api/invitations/${encodeURIComponent(token)}`); }
   catch (e) { frame(html`<h1>초대를 찾을 수 없습니다</h1><p class="sub">${e.status === 429 ? e.message : '링크가 올바른지 확인해 주세요. 초대 메일의 링크를 그대로 열어야 합니다.'}</p><a class="btn btn--secondary btn--block btn--lg" href="/login" data-link>로그인</a>`); return; }
