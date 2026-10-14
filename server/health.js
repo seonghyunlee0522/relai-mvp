@@ -43,7 +43,7 @@ export async function healthFacts(db, project) {
       COALESCE(SUM((status != 'CONFIRMED')::int), 0) AS unconfirmed,
       COALESCE(SUM((status = 'REVIEWING')::int), 0) AS reviewing,
       COALESCE(SUM((status = 'CONFIRMED' AND NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id WHERE l.requirement_id = r.id AND w.archived_at IS NULL))::int), 0) AS confirmed_unlinked
-    FROM requirements r WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE'`, [pid]));
+    FROM requirements r WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status <> 'REJECTED'`, [pid]));   // N1
   const chg = (await db.get(`SELECT COUNT(*) AS total,
       COALESCE(SUM((status = 'UNDER_REVIEW')::int), 0) AS under_review,
       COALESCE(SUM((status = 'APPROVED')::int), 0) AS approved_unimplemented,

@@ -128,10 +128,10 @@ export async function testStats(db, projectId) {
       COALESCE(SUM((x.status = 'CONFIRMED' AND x.tested)::int), 0) AS target_tested,
       COALESCE(SUM((x.status = 'CONFIRMED' AND NOT x.tested AND x.excluded)::int), 0) AS excluded,
       COALESCE(SUM((x.status = 'CONFIRMED' AND NOT x.tested AND NOT x.excluded)::int), 0) AS untested,
-      COALESCE(SUM((x.status NOT IN ('CONFIRMED','REJECTED'))::int), 0) AS unconfirmed   -- K8: a REJECTED requirement never becomes a test target
+      COALESCE(SUM((x.status <> 'CONFIRMED')::int), 0) AS unconfirmed
     FROM (SELECT r.status, COALESCE(TRIM(r.test_exclusion_reason), '') <> '' AS excluded,
         EXISTS (SELECT 1 FROM test_links l JOIN test_cases tc ON tc.id = l.test_case_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = r.id AND tc.archived_at IS NULL) AS tested
-      FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE') x`, [projectId]));
+      FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE' AND r.status <> 'REJECTED') x`, [projectId]));   // K8/N1: a REJECTED requirement never becomes a test target
   // US-2: issues raised from a test execution that are still open (해결·종료 아님) keep 결함 조치 open
   const fi = (await db.all(`SELECT i.display_id FROM issues i WHERE i.project_id = ? AND i.archived_at IS NULL AND i.source_test_execution_id IS NOT NULL AND i.status NOT IN ('RESOLVED','CLOSED') ORDER BY i.sequence_number`, [projectId])).map((r) => r.display_id);
   return { ...t, in_scope: c.in_scope, in_scope_tested: c.in_scope_tested, in_scope_untested: c.untested,
@@ -143,7 +143,7 @@ export async function testStats(db, projectId) {
 
 /** Coverage view: every active IN_SCOPE requirement with its latest-result summary (one query for links, grouped in JS). */
 export async function coverage(db, projectId) {
-  const reqs = (await db.all(`SELECT id, display_id, title, status, scope, test_exclusion_reason FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' ORDER BY sequence_number`, [projectId]));
+  const reqs = (await db.all(`SELECT id, display_id, title, status, scope, test_exclusion_reason FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status <> 'REJECTED' ORDER BY sequence_number`, [projectId]));   // N1: no 테스트 추가 for REJECTED
   const rows = (await db.all(`SELECT l.target_id AS requirement_id, t.id, t.display_id, t.title, t.status, ${LAST} AS last_result
     FROM test_links l JOIN test_cases t ON t.id = l.test_case_id WHERE l.project_id = ? AND l.target_type = 'REQUIREMENT' AND t.archived_at IS NULL ORDER BY t.sequence_number`, [projectId]));
   const by = new Map(); for (const r of rows) { if (!by.has(r.requirement_id)) by.set(r.requirement_id, []); by.get(r.requirement_id).push(r); }

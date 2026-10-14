@@ -482,7 +482,7 @@ export async function testsPage(id) {
     };
   };
   const pickReq = async (title, have, { inScope = false } = {}) => {
-    const all = (await api('GET', wsApi(`/${id}/requirements`))).requirements; const rows2 = inScope ? all.filter((r) => r.scope === 'IN_SCOPE') : all;
+    const all = (await api('GET', wsApi(`/${id}/requirements`))).requirements; const rows2 = inScope ? all.filter((r) => r.scope === 'IN_SCOPE' && r.status !== 'REJECTED') : all;
     const pk = await pickerDialog({ title, placeholder: '번호 또는 제목 검색', withType: false, rows: rows2.map((r) => ({ ...r, disabled: have.has(r.id) })), searchKeys: ['display_id', 'title'],
       render: (r) => html`<span class="mono">${r.display_id}</span><span class="pick__t">${r.title}</span><span class="chip ${REQ_SCOPE_CHIP[r.scope]}">${REQ_SCOPE[r.scope]}</span><span class="chip ${REQ_STATUS_CHIP[r.status] || ''}">${REQ_STATUS[r.status]}</span>${raw(r.disabled ? '<small class="dim">연결됨</small>' : '')}` });
     return pk ? { ...pk, row: rows2.find((r) => r.id === pk.id) } : null;

@@ -76,7 +76,7 @@ export async function setBaselineStatus(db, project, action, userId, body = null
   const m = await loadBaseline(db, project);
   if (m.missing.length) throw new ValidationError({ section: m.missing[0], missing: m.missing.join('\n') });
   if (!m.counts.in_scope) throw new ValidationError({ section: '아직 범위 내 요구사항이 없습니다. 요구사항을 등록하고 범위 내로 분류한 뒤 승인을 기록하세요.' });   // no empty baseline (Q6-2)
-  const open = await db.all(`SELECT * FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status <> 'CONFIRMED' ORDER BY sequence_number`, [project.id]);
+  const open = await db.all(`SELECT * FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status NOT IN ('CONFIRMED','REJECTED') ORDER BY sequence_number`, [project.id]);
   if (open.length) {
     if (!(body && body.confirm_unconfirmed)) throw new ValidationError({ section: `범위 내 미확정 ${open.length}건이 있습니다. 먼저 확정하세요.`, unconfirmed: String(open.length) });
     for (const r of open) await R.updateRequirement(db, project, r, { status: 'CONFIRMED' }, userId);   // same per-row update + history as the bulk API

@@ -47,7 +47,7 @@ export async function linkCountsByWbs(db, projectId) {
 }
 
 /**
- * Coverage: active IN_SCOPE requirements linked to ≥1 active WBS / active IN_SCOPE requirements.
+ * Coverage: active IN_SCOPE (not REJECTED, N1) requirements linked to ≥1 active WBS / active IN_SCOPE requirements.
  * Also: confirmed-in-scope-unlinked (requirements phase guidance) and active TASKs without any active requirement link (schedule phase).
  */
 export async function traceStats(db, projectId) {
@@ -57,7 +57,7 @@ export async function traceStats(db, projectId) {
         WHERE l.requirement_id = rq.id AND w.archived_at IS NULL))::int), 0) AS in_scope_linked,
       COALESCE(SUM((rq.status = 'CONFIRMED' AND NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id
         WHERE l.requirement_id = rq.id AND w.archived_at IS NULL))::int), 0) AS confirmed_unlinked
-    FROM requirements rq WHERE rq.project_id = ? AND rq.archived_at IS NULL AND rq.scope = 'IN_SCOPE'`, [projectId]));
+    FROM requirements rq WHERE rq.project_id = ? AND rq.archived_at IS NULL AND rq.scope = 'IN_SCOPE' AND rq.status <> 'REJECTED'`, [projectId]));
   const t = (await db.get(`SELECT COUNT(*) AS tasks,
       COALESCE(SUM((NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN requirements rq ON rq.id = l.requirement_id
         WHERE l.wbs_item_id = w.id AND rq.archived_at IS NULL))::int), 0) AS tasks_unlinked,

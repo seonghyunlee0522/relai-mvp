@@ -101,7 +101,7 @@ export async function listRequirements(db, project, q = {}) {
 export async function requirementStats(db, projectId) {
   const base = (await db.get(`SELECT
       COUNT(*) AS total,
-      COALESCE(SUM((scope = 'IN_SCOPE')::int), 0) AS in_scope,
+      COALESCE(SUM((scope = 'IN_SCOPE' AND status <> 'REJECTED')::int), 0) AS in_scope,   -- N1/K8: a REJECTED requirement is not in-scope work
       COALESCE(SUM((scope = 'OUT_OF_SCOPE')::int), 0) AS out_of_scope,
       COALESCE(SUM((scope = 'UNDECIDED')::int), 0) AS scope_undecided,
       COALESCE(SUM((status = 'CONFIRMED')::int), 0) AS confirmed,

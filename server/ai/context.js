@@ -109,7 +109,7 @@ export async function assistantContext(db, project, question) {
   }
   if (always || intents.includes('scope') || intents.includes('change')) {
     const reqs = await requirementRows(db, project.id, { limit: 120 });
-    const unlinked = new Set((await db.all(`SELECT r.id FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE'
+    const unlinked = new Set((await db.all(`SELECT r.id FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL AND r.scope = 'IN_SCOPE' AND r.status <> 'REJECTED'
       AND NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id WHERE l.requirement_id = r.id AND w.archived_at IS NULL)`, [project.id])).map((r) => r.id));
     parts.push(lines(`요구사항 (${reqs.length}건)`, reqs, (r) => `${reqLine(r)}${unlinked.has(r.id) ? ' (WBS 미연결)' : ''}`));
     keep('REQUIREMENT', reqs, (r) => `requirements?sel=${r.id}`);

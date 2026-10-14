@@ -76,7 +76,7 @@ const scopeCol = (g, p) => {
     ${raw(kv('Requirements', `${n(r.total)}건`, { href: `${u}/requirements`, sub: n(r.in_scope) ? `범위 내 ${r.in_scope}건` : '' }))}
     ${raw(kv('확정 Requirements', `${n(r.confirmed)}건`, { href: `${u}/requirements?status=CONFIRMED`, tone: unconfirmed && n(r.total) ? 'warn' : n(r.total) ? 'good' : '', sub: unconfirmed ? `미확정 ${unconfirmed}건` : '' }))}
     ${raw(kv('WBS 연결률', pv(k.requirement_coverage), { href: `${u}/requirements?view=trace`, tone: k.requirement_coverage === null || k.requirement_coverage === undefined ? '' : k.requirement_coverage < 100 ? 'warn' : 'good', sub: '범위 내 요구사항 중 WBS 연결 비율' }))}
-    ${raw(kv('WBS 미연결 Requirement', `${n(r.in_scope_unlinked)}건`, { href: `${u}/requirements?scope=IN_SCOPE&link=unlinked`, tone: n(r.in_scope_unlinked) ? 'warn' : '' }))}
+    ${raw(kv('WBS 미연결 Requirement', `${n(r.in_scope_unlinked)}건`, { href: `${u}/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked`, tone: n(r.in_scope_unlinked) ? 'warn' : '' }))}
     ${raw(kv('Change', `${n(c.total)}건`, { href: `${u}/changes`, tone: n(c.under_review) || n(c.approved_unimplemented) ? 'warn' : '', sub: [n(c.under_review) ? `검토 중 ${c.under_review}` : '', n(c.approved_unimplemented) ? `승인 후 미반영 ${c.approved_unimplemented}` : ''].filter(Boolean).join(' · ') }))}
   </div>`;
 };
