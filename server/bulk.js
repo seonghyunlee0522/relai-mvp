@@ -77,6 +77,7 @@ const shiftDate = (s, days) => (s ? new Date(Date.parse(`${s}T00:00:00Z`) + days
 
 export async function bulkWbs(db, project, wid, body, userId) {
   const { ids, action, patch, shift } = parseBulkBody(body, WBS_PATCH_KEYS, { allowShift: true });
+  const delayReason = W.parseDelayReason(body.delay_reason);   // Phase 4 US-1: one reason for every pushed row; a pushed row without it fails the whole request (422)
   if (action === 'update' && Object.keys(patch).length) W.parseWbs(patch, { partial: true, existing: { item_type: 'TASK' } });   // static problems → 400
   const ownerBad = action === 'update' && patch.owner_user_id && !(await R.isWorkspaceMember(db, wid, String(patch.owner_user_id)));
   return tx(db, async (t) => {
@@ -112,7 +113,7 @@ export async function bulkWbs(db, project, wid, body, userId) {
       }
       let input;
       try { input = W.parseWbs(draft, { partial: true, existing: w }); } catch (e) { const m = joinMessages(e); if (m === null) throw e; skipped.push({ id, reason: m }); continue; }
-      if (await W.updateWbs(t, project, w, input, userId)) updated++; else skipped.push({ id, reason: NO_CHANGE });
+      if (await W.updateWbs(t, project, w, input, userId, { delayReason })) updated++; else skipped.push({ id, reason: NO_CHANGE });
     }
     if (archivedIds.length) await W.renumber(t, project.id);
     return { updated, skipped, ...(action === 'archive' ? { archived_ids: archivedIds } : {}) };

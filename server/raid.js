@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
 import { nextDisplayId, resolveLinkTarget, ensureNoDuplicate, linkLabel } from './common.js';
+import { OWNER_NAME_SQL } from './wbs-history.js';
 
 export const ISSUE_STATUSES = ['OPEN', 'IN_PROGRESS', 'BLOCKED', 'RESOLVED', 'CLOSED'];
 export const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
@@ -16,7 +17,7 @@ export const TARGET_TYPES = ['WBS', 'REQUIREMENT', 'CHANGE'];
 
 /** Allowed status moves. Reopening is allowed; MATERIALIZED never goes back to OPEN/MONITORING. */
 export const ISSUE_TRANSITIONS = {
-  OPEN: ['IN_PROGRESS', 'BLOCKED', 'RESOLVED'], IN_PROGRESS: ['BLOCKED', 'RESOLVED', 'OPEN'], BLOCKED: ['IN_PROGRESS', 'OPEN'],
+  OPEN: ['IN_PROGRESS', 'BLOCKED', 'RESOLVED'], IN_PROGRESS: ['BLOCKED', 'RESOLVED', 'OPEN'], BLOCKED: ['IN_PROGRESS', 'OPEN', 'RESOLVED'],   // Phase 4 US-5: 차단됨 → 해결 directly
   RESOLVED: ['CLOSED', 'IN_PROGRESS'], CLOSED: ['OPEN'],
 };
 export const RISK_TRANSITIONS = { OPEN: ['MONITORING', 'MATERIALIZED', 'CLOSED'], MONITORING: ['MATERIALIZED', 'CLOSED'], MATERIALIZED: ['CLOSED'], CLOSED: ['OPEN'] };
@@ -53,9 +54,24 @@ function common(b, partial, f, out) {
     if (v !== null && !isDate(v)) f[k] = '날짜 형식이 올바르지 않습니다.'; else out[k] = v;
   }
 }
+/** Phase 4 US-6 — Issue 담당자 = RELAI 사용자 or 팀원 (계정 없음), same rule as the WBS owner (Phase 3 US-1): exactly one of
+ *  owner_user_id / owner_stakeholder_id; `owner` = one select value ('' · 'u:<user id>' · 's:<stakeholder id>'). */
+function issueOwner(b, f, out) {
+  if (b.owner_stakeholder_id !== undefined) out.owner_stakeholder_id = b.owner_stakeholder_id ? String(b.owner_stakeholder_id) : null;
+  if (b.owner !== undefined) {
+    const v = String(b.owner ?? '');
+    if (!v) { out.owner_user_id = null; out.owner_stakeholder_id = null; }
+    else if (/^u:./.test(v)) { out.owner_user_id = v.slice(2); out.owner_stakeholder_id = null; }
+    else if (/^s:./.test(v)) { out.owner_stakeholder_id = v.slice(2); out.owner_user_id = null; }
+    else f.owner = '담당자 값이 올바르지 않습니다.';
+  }
+  if (out.owner_user_id !== undefined && out.owner_stakeholder_id === undefined) out.owner_stakeholder_id = null;
+  if (out.owner_stakeholder_id && out.owner_user_id === undefined) out.owner_user_id = null;
+  if (out.owner_user_id && out.owner_stakeholder_id) f.owner_user_id = '담당자는 RELAI 사용자와 팀원 중 한 명만 지정할 수 있습니다.';
+}
 export function parseIssue(b = {}, { partial = false } = {}) {
-  const f = {}; const out = {}; common(b, partial, f, out);
-  if (b.severity !== undefined) { const v = b.severity || 'MEDIUM'; if (!SEVERITIES.includes(v)) f.severity = 'Severity 값이 올바르지 않습니다.'; else out.severity = v; }
+  const f = {}; const out = {}; common(b, partial, f, out); issueOwner(b, f, out);
+  if (b.severity !== undefined) { const v = b.severity || 'MEDIUM'; if (!SEVERITIES.includes(v)) f.severity = '심각도 값이 올바르지 않습니다.'; else out.severity = v; }
   if (b.status !== undefined) { if (!ISSUE_STATUSES.includes(b.status)) f.status = '상태 값이 올바르지 않습니다.'; else out.status = b.status; }
   if (b.resolution !== undefined) { out.resolution = str(b.resolution); if (out.resolution.length > 2000) f.resolution = '해결 내용은 2,000자 이내로 입력해 주세요.'; }
   delete out.review_date;
@@ -75,7 +91,7 @@ export function parseRisk(b = {}, { partial = false } = {}) {
 
 /* ---------- reads ---------- */
 const linkCountSql = (type, target) => `(SELECT COUNT(*) FROM raid_links l WHERE l.source_type = '${type}' AND l.source_id = x.id AND l.target_type = '${target}')`;
-const ISSUE_COLS = `x.*, u.name AS owner_name, (x.due_date IS NOT NULL AND x.due_date < ${TODAY} AND x.status NOT IN ('RESOLVED','CLOSED'))::int AS is_overdue,
+const ISSUE_COLS = `x.*, ${OWNER_NAME_SQL('x', 'u')} AS owner_name, (x.owner_user_id IS NULL AND x.owner_stakeholder_id IS NOT NULL) AS owner_no_account, (x.due_date IS NOT NULL AND x.due_date < ${TODAY} AND x.status NOT IN ('RESOLVED','CLOSED'))::int AS is_overdue,
   ${linkCountSql('ISSUE', 'WBS')} AS wbs_count, ${linkCountSql('ISSUE', 'REQUIREMENT')} AS requirement_count, ${linkCountSql('ISSUE', 'CHANGE')} AS change_count,
   (SELECT display_id FROM risks r WHERE r.id = x.source_risk_id) AS source_risk_display_id, (SELECT title FROM risks r WHERE r.id = x.source_risk_id) AS source_risk_title,
   (SELECT t.id FROM test_executions e JOIN test_cases t ON t.id = e.test_case_id WHERE e.id = x.source_test_execution_id) AS source_test_id,
@@ -91,7 +107,9 @@ function listWhere(type, q, vals) {
   const multi = (k, list) => { if (!q[k]) return; const v = String(q[k]).split(',').filter((s) => list.includes(s)); if (v.length) { where.push(`x.${k} IN (${v.map(() => '?').join(',')})`); vals.push(...v); } };
   if (type === 'ISSUE') { multi('status', ISSUE_STATUSES); multi('severity', SEVERITIES); if (q.overdue === '1') where.push(`x.due_date IS NOT NULL AND x.due_date < ${TODAY} AND x.status NOT IN ('RESOLVED','CLOSED')`); }
   else { multi('status', RISK_STATUSES); multi('probability', LEVELS3); multi('impact', LEVELS3); multi('risk_level', RISK_LEVELS); multi('response_strategy', STRATEGIES); if (q.review === '1') where.push(`x.review_date IS NOT NULL AND x.review_date < ${TODAY} AND x.status NOT IN ('CLOSED','MATERIALIZED')`); }
-  if (q.owner === 'none') where.push('x.owner_user_id IS NULL'); else if (q.owner) { where.push('x.owner_user_id = ?'); vals.push(String(q.owner)); }
+  if (q.owner === 'none') where.push(type === 'ISSUE' ? 'x.owner_user_id IS NULL AND x.owner_stakeholder_id IS NULL' : 'x.owner_user_id IS NULL');
+  else if (q.owner && type === 'ISSUE' && /^s:./.test(String(q.owner))) { where.push('x.owner_stakeholder_id = ?'); vals.push(String(q.owner).slice(2)); }
+  else if (q.owner) { where.push('x.owner_user_id = ?'); vals.push(String(q.owner).replace(/^u:/, '')); }
   for (const [param, target] of [['wbs', 'WBS'], ['requirement', 'REQUIREMENT'], ['change', 'CHANGE']]) {
     if (q[param]) { where.push(`EXISTS (SELECT 1 FROM raid_links l WHERE l.source_type = '${type}' AND l.source_id = x.id AND l.target_type = '${target}' AND l.target_id = ?)`); vals.push(String(q[param])); }
   }
@@ -156,8 +174,8 @@ const history = async (db, type, id) => (await db.all(`SELECT h.*, u.name AS cha
 /* ---------- writes (caller wraps in tx) ---------- */
 export async function createIssue(db, project, input, userId, { sourceRiskId = null } = {}) {
   const { sequence: seq, display_id } = (await nextDisplayId(db, project.id, 'ISSUE')); const id = randomUUID(); const ts = now();
-  (await db.run(`INSERT INTO issues (id, project_id, sequence_number, display_id, title, description, status, severity, owner_user_id, identified_at, due_date, source_risk_id, created_by, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,'OPEN',?,?,?,?,?,?,?,?)`, [id, project.id, seq, display_id, input.title, input.description ?? '', input.severity ?? 'MEDIUM', input.owner_user_id ?? null, input.identified_at ?? ts.slice(0, 10), input.due_date ?? null, sourceRiskId, userId, ts, ts]));
+  (await db.run(`INSERT INTO issues (id, project_id, sequence_number, display_id, title, description, status, severity, owner_user_id, identified_at, due_date, source_risk_id, created_by, created_at, updated_at, owner_stakeholder_id)
+    VALUES (?,?,?,?,?,?,'OPEN',?,?,?,?,?,?,?,?,?)`, [id, project.id, seq, display_id, input.title, input.description ?? '', input.severity ?? 'MEDIUM', input.owner_user_id ?? null, input.identified_at ?? ts.slice(0, 10), input.due_date ?? null, sourceRiskId, userId, ts, ts, input.owner_user_id ? null : input.owner_stakeholder_id ?? null]));
   (await addHistory(db, 'ISSUE', id, 'CREATED', {}, userId, ts));
   return id;
 }
@@ -170,7 +188,7 @@ export async function createRisk(db, project, input, userId) {
   return id;
 }
 
-const ISSUE_TRACKED = ['title', 'severity', 'owner_user_id', 'due_date', 'identified_at'];
+const ISSUE_TRACKED = ['title', 'severity', 'owner_user_id', 'owner_stakeholder_id', 'due_date', 'identified_at'];
 const RISK_TRACKED = ['title', 'probability', 'impact', 'owner_user_id', 'review_date', 'identified_at', 'response_strategy'];
 /** Partial update with guarded status transitions. Returns {changed} or {error}. */
 export async function updateEntity(db, type, existing, input, userId) {

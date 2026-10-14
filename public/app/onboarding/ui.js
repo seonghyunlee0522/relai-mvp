@@ -43,7 +43,7 @@ export function bindChecklist(root) {
 export const COACH = {
   REQ_TRACE_INTRO: { title: '요구사항–WBS 연결', body: '요구사항을 열어 WBS 작업을 연결하면 어떤 작업이 어떤 요구사항을 수행하는지 추적할 수 있습니다. 확정된 요구사항은 모두 WBS와 연결하는 것이 목표입니다.' },
   CHANGE_REQUEST_INTRO: { title: '변경 요청', body: '확정된 요구사항을 바꾸거나 추가하는 요청은 변경 요청으로 기록하고, 영향받는 요구사항·WBS와 일정 영향을 함께 관리합니다. 승인된 변경은 WBS에 반영한 뒤 "반영 완료"로 닫습니다.' },
-  ISSUE_RISK_INTRO: { title: '이슈와 리스크', body: 'Issue는 이미 발생해 진행을 막는 문제, Risk는 아직 발생하지 않았지만 영향을 줄 수 있는 위험입니다. 담당자·기한·심각도를 정해 두면 현황의 확인 필요 목록에 자동으로 올라옵니다.' },
+  ISSUE_RISK_INTRO: { title: '이슈와 리스크', body: 'Issue는 이미 발생해 진행을 막는 문제, 리스크는 아직 발생하지 않았지만 영향을 줄 수 있는 위험입니다. 담당자·기한·심각도를 정해 두면 현황의 확인 필요 목록에 자동으로 올라옵니다.' },
   TESTING_INTRO: { title: '테스트', body: '요구사항을 기준으로 테스트 항목을 만들고 실행 결과(Pass/Fail/Blocked)를 기록합니다. Fail은 바로 Issue로 등록할 수 있고, Coverage 탭에서 테스트가 없는 요구사항을 확인합니다.' },
   ACCEPTANCE_INTRO: { title: '검수', body: '검수는 고객이 결과물을 확인하는 절차입니다. 대상 요구사항과 테스트를 묶어 검수를 요청하고 승인·반려·보완 결과를 기록하세요.' },
   JIRA_OPTIONAL_INTRO: { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira Issue를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 프로젝트를 계속 진행할 수 있습니다.' },
@@ -82,7 +82,7 @@ const SCREEN_HELP = [
   [/^\/app\/projects\/[\w-]+\/requirements/, '요구사항', '프로젝트 범위와 검수 기준이 되는 요구사항을 등록·분류·확정합니다. 직접 추가, Excel 가져오기, AI 추출(사용 가능 시)을 쓸 수 있습니다.'],
   [/^\/app\/projects\/[\w-]+\/wbs/, 'WBS', '요구사항을 실제 작업 단위로 나누어 담당자·일정·진행률을 관리합니다. 트리/Gantt 보기, Excel Import, AI 초안을 지원하며 Jira 연결은 선택입니다.'],
   [/^\/app\/projects\/[\w-]+\/changes/, '변경 요청', '확정 이후의 추가·변경 요청을 기록하고 영향 요구사항·WBS·일정 영향을 관리합니다.'],
-  [/^\/app\/projects\/[\w-]+\/issues/, '이슈·리스크', '발생한 문제(Issue)와 잠재 위험(Risk)을 담당자·기한과 함께 관리합니다.'],
+  [/^\/app\/projects\/[\w-]+\/issues/, '이슈·리스크', '발생한 문제(Issue)와 잠재 위험(리스크)을 담당자·기한과 함께 관리합니다.'],
   [/^\/app\/projects\/[\w-]+\/tests/, 'Tests & Acceptance', '요구사항 기준으로 테스트를 만들고 실행 결과를 기록하며, 고객 검수를 요청·확정합니다.'],
   [/^\/app\/projects\/[\w-]+\/overview/, '현황', '계획 대비 실제 진척률과 편차, 일정 상태, 확인 필요 항목, Schedule·Scope·Quality 현황, 7일 내 일정, 최근 활동 기록을 봅니다.'],
   [/^\/app\/projects\/[\w-]+/, '지금 할 일', '전체 진행률과 현재 단계, 지금 해야 할 Action을 봅니다. 현재 단계 체크리스트의 작업 버튼으로 실제 업무 화면에서 작업하고 완료 처리하세요.'],

@@ -1,13 +1,14 @@
-/* Approval record form — shared by 01 착수 결과 승인 (프로젝트 정의 drawer) and 02 요구사항 기준선 승인 (요구사항 Drawer).
+/* Approval record form — shared by 01 착수 결과 승인 (프로젝트 정의 drawer), 02 요구사항 기준선 승인 (요구사항 Drawer) and 04 변경 요청 고객 승인 (CR Drawer).
  *   approvalFields(a, { people, methods, disabled, approverHint })   승인자(이해관계자 선택 / 직접 입력 + 이해관계자에도 추가) · 승인일(≤ 오늘) · 방법 · 근거 · 조건/보완
  *   collectApproval(root, a)                                          read the fields back into a working copy
  *   approvalBody(a)                                                   working copy → API body ('__direct' → '', no baseline)
  * Same markup and data-af attributes on both screens; the caller wires `[data-af="approver_id"]` change → redraw (shows the direct-entry inputs). */
 import { html, raw } from '../core/dom.js';
+import { todayKst } from './kst-date.js';
 
 const ORG = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 const ORDER = { CLIENT: 0, OTHER: 1, PARTNER: 2, OWN: 3 };
-export const localYmd = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
+export const localYmd = () => todayKst();   // C1: '오늘' = Korea time (same helper as the server's 승인일 check)
 
 /** methods = [[key, label], …]; people = stakeholder rows; approverHint = raw HTML after the 승인자 label. */
 export function approvalFields(a, { people = [], methods = [], disabled = false, approverHint = '', evidencePh = '' } = {}) {

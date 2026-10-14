@@ -58,7 +58,7 @@ test('issues: ISS-001 per project, fields, owner, transitions, resolution, overd
   assert.equal((await A.c('PATCH', `${A.is}/${i1.id}`, { status: 'CLOSED' })).status, 409);
   r = await A.c('PATCH', `${A.is}/${i1.id}`, { status: 'IN_PROGRESS' }); assert.equal(r.json.issue.status, 'IN_PROGRESS');
   r = await A.c('PATCH', `${A.is}/${i1.id}`, { status: 'BLOCKED' }); assert.equal(r.json.issue.status, 'BLOCKED');
-  assert.equal((await A.c('PATCH', `${A.is}/${i1.id}`, { status: 'RESOLVED' })).status, 409); // blocked → resolved not allowed
+  assert.equal((await A.c('PATCH', `${A.is}/${i1.id}`, { status: 'CLOSED' })).status, 409); // blocked → closed not allowed (→ resolved is, Phase 4 US-5)
   await A.c('PATCH', `${A.is}/${i1.id}`, { status: 'IN_PROGRESS' });
   r = await A.c('PATCH', `${A.is}/${i1.id}`, { status: 'RESOLVED', resolution: 'Mock API 기반으로 우선 개발' });
   assert.equal(r.json.issue.status, 'RESOLVED'); assert.ok(r.json.issue.resolved_at); assert.equal(r.json.issue.resolution, 'Mock API 기반으로 우선 개발');

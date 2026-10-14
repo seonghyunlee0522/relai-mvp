@@ -110,9 +110,9 @@ test('change request approval: author cannot self-approve, MEMBER needs designat
 
   // MEMBER-authored CR: author blocked, other MEMBER blocked, OWNER allowed
   const cr1 = await mk(M1.c, '화면 추가');
-  let r = await M1.c('POST', `${cbase}/${cr1.id}/transition`, { action: 'approve' });
+  let r = await M1.c('POST', `${cbase}/${cr1.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } });
   assert.equal(r.status, 403); assert.equal(r.json.error.code, 'self_approval');
-  r = await M2.c('POST', `${cbase}/${cr1.id}/transition`, { action: 'approve' });
+  r = await M2.c('POST', `${cbase}/${cr1.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } });
   assert.equal(r.status, 403); assert.equal(r.json.error.code, 'forbidden');
   const view = (await M2.c('GET', `${cbase}/${cr1.id}`)).json.change;
   assert.deepEqual(view.review, { allowed: false, reason: 'role' });
@@ -127,11 +127,11 @@ test('change request approval: author cannot self-approve, MEMBER needs designat
 
   // OWNER-authored CR: OWNER blocked (author), MEMBER blocked, promoted ADMIN allowed
   const cr2 = await mk(A.c, '일정 변경');
-  assert.equal((await A.c('POST', `${cbase}/${cr2.id}/transition`, { action: 'approve' })).json.error.code, 'self_approval');
+  assert.equal((await A.c('POST', `${cbase}/${cr2.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } })).json.error.code, 'self_approval');
   assert.equal((await A.c('GET', `${cbase}/${cr2.id}`)).json.change.review.reason, 'author');
-  assert.equal((await M1.c('POST', `${cbase}/${cr2.id}/transition`, { action: 'approve' })).status, 403);
+  assert.equal((await M1.c('POST', `${cbase}/${cr2.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } })).status, 403);
   assert.equal((await A.c('PATCH', `/api/workspaces/${A.w}/members/${M1.uid}`, { role: 'ADMIN' })).status, 200);
-  r = await M1.c('POST', `${cbase}/${cr2.id}/transition`, { action: 'approve', decision_note: '승인' });
+  r = await M1.c('POST', `${cbase}/${cr2.id}/transition`, { action: 'approve', decision_note: '승인', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } });
   assert.equal(r.status, 200); assert.equal(r.json.change.status, 'APPROVED');
   // implement stays open to every member
   assert.equal((await M2.c('POST', `${cbase}/${cr2.id}/transition`, { action: 'implement' })).status, 200);

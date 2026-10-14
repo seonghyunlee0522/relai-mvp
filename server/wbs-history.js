@@ -17,9 +17,10 @@ export const OWNER_NAME_SQL = (w = 'w', u = 'u') => `COALESCE(${u}.name, CASE WH
 
 const txt = (v) => (v === null || v === undefined ? null : String(v));
 
-export const addWbsHistory = async (db, wbsId, action, { field = null, oldValue = null, newValue = null } = {}, userId = null, ts = new Date().toISOString()) =>
-  (await db.run(`INSERT INTO wbs_history (id, wbs_item_id, action_type, field_name, old_value, new_value, changed_by, changed_at)
-    VALUES (?,?,?,?,?,?,?,?)`, [randomUUID(), wbsId, action, field, txt(oldValue), txt(newValue), userId, ts]));
+/** `note` = Phase 4 US-1 delay reason on a planned_end_date / milestone_date row pushed later. */
+export const addWbsHistory = async (db, wbsId, action, { field = null, oldValue = null, newValue = null, note = null } = {}, userId = null, ts = new Date().toISOString()) =>
+  (await db.run(`INSERT INTO wbs_history (id, wbs_item_id, action_type, field_name, old_value, new_value, changed_by, changed_at, note)
+    VALUES (?,?,?,?,?,?,?,?,?)`, [randomUUID(), wbsId, action, field, txt(oldValue), txt(newValue), userId, ts, note]));
 
 export const listWbsHistory = async (db, wbsId) =>
   (await db.all(`SELECT h.*, u.name AS changed_by_name FROM wbs_history h LEFT JOIN users u ON u.id = h.changed_by

@@ -1,5 +1,6 @@
 import { $, html, raw } from '../core/dom.js';
 import { LINK_TYPE } from './constants.js';
+import { needsDelayReason, planShiftText, todayKst } from './kst-date.js';
 
 export function toast(msg) {
   const t = document.createElement('div');
@@ -97,6 +98,42 @@ export function promptDialog({ title, body, label, placeholder = '', required = 
     document.body.append(el); $('#pd-in', el).focus();
   });
 }
+/* ---------- Phase 4 US-1: 일정 미루기 = 사유 (Drawer 저장 · 표 셀 편집 · 일괄 편집 공통) ---------- */
+/** "작업 일정을 미루려 합니다" — one required line. Resolves the reason or null (취소). `count` > 1 → bulk wording. */
+export function delayReasonDialog({ before, after, count = 1 } = {}) {
+  return new Promise((resolve) => {
+    const shift = planShiftText(before, after);
+    const lead = count > 1 ? `선택한 작업 중 ${count}건의 종료일이 늦춰집니다.` : shift ? `${shift}.` : '종료일이 늦춰집니다.';
+    const el = document.createElement('div'); el.className = 'scrim';
+    el.innerHTML = html`<div class="dialog dialog--confirm dialog--stack" role="dialog" aria-modal="true" aria-labelledby="dlyT" data-delay-dialog><h3 id="dlyT">작업 일정을 미루려 합니다</h3>
+      <div class="dialog__b"><b class="dly__shift">${lead}</b> 미루는 이유와 대응을 한 줄 남기면 주간보고에 함께 나갑니다.</div>
+      <div class="field"><label for="dly-in">사유와 대응 <span class="req">*</span></label><input class="input" id="dly-in" maxlength="300" autocomplete="off" placeholder="예: 고객 계정 발급 지연 → 버퍼 3일 사용"></div>
+      <div class="actions"><button class="btn btn--ghost" data-v="0">취소</button><button class="btn btn--primary" data-v="1" disabled>일정 변경 저장</button></div></div>`;
+    const inp = $('#dly-in', el); const ok = $('[data-v="1"]', el);
+    const done = (v) => { el.remove(); resolve(v); };
+    inp.oninput = () => { ok.disabled = !inp.value.trim(); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter' && inp.value.trim()) done(inp.value.trim()); };
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; } done(b.dataset.v === '1' && inp.value.trim() ? inp.value.trim() : null); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });
+    document.body.append(el); inp.focus();
+  });
+}
+/** Runs `run(extra)` (a WBS PATCH / bulk call). Asks for the reason first when `pre` ({ before, after, status }) needs one (same rule as
+ *  the server), and again whenever the server answers 422 delay_reason_required. Resolves run's result, or null when the user cancels. */
+export async function withDelayReason(run, pre = null) {
+  let extra = {};
+  if (pre && needsDelayReason(pre.before, pre.after, todayKst(), pre.status)) {
+    const r = await delayReasonDialog(pre); if (r === null) return null; extra = { delay_reason: r };
+  }
+  try { return await run(extra); }
+  catch (e) {
+    if (e.code !== 'delay_reason_required' || extra.delay_reason) throw e;
+    const r = await delayReasonDialog({ before: e.error && e.error.before, after: e.error && e.error.after, count: pre && pre.count });
+    if (r === null) return null;
+    return run({ delay_reason: r });
+  }
+}
+
 export function showErrors(form, fields = {}, general) {
   form.querySelectorAll('.err').forEach((el) => { el.textContent = ''; });
   form.querySelectorAll('.is-invalid').forEach((el) => el.classList.remove('is-invalid'));

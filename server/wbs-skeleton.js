@@ -97,7 +97,8 @@ export async function ownerOptions(db, project) {
   const members = await db.all('SELECT u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', [project.workspace_id]);
   const names = new Set(members.map((m) => norm(m.name)).filter(Boolean)); const emails = new Set(members.map((m) => norm(m.email)).filter(Boolean));
   // A task that already names such a stakeholder keeps showing (and keeping) them.
-  const used = new Set((await db.all('SELECT DISTINCT owner_stakeholder_id AS id FROM wbs_items WHERE project_id = ? AND owner_stakeholder_id IS NOT NULL', [project.id])).map((r) => r.id));
+  const used = new Set((await db.all(`SELECT owner_stakeholder_id AS id FROM wbs_items WHERE project_id = ? AND owner_stakeholder_id IS NOT NULL
+    UNION SELECT owner_stakeholder_id FROM issues WHERE project_id = ? AND owner_stakeholder_id IS NOT NULL`, [project.id, project.id])).map((r) => r.id));   // + Issue owners (Phase 4 US-6)
   const team = teamOf(all).filter((x) => used.has(x.id) || (!names.has(norm(x.name)) && !emails.has(norm(all.find((s) => s.id === x.id)?.email))));
   return { team, stakeholders_total: all.length };
 }

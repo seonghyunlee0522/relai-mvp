@@ -12,6 +12,7 @@ import { changesFor } from './changes.js';
 import { addWbsHistory, listWbsHistory, WBS_TRACKED, DELETED_OWNER, OWNER_NAME_SQL } from './wbs-history.js';
 export { DELETED_OWNER, OWNER_NAME_SQL };
 import { listComments } from './comments.js';
+import { needsDelayReason, todayKst, diffDays } from '../public/app/shared/kst-date.js';
 
 export const WBS_TYPES = ['SUMMARY', 'TASK', 'MILESTONE'];   // SUMMARY = legacy; new items are TASK (a TASK with children behaves as a group) or MILESTONE
 export const WBS_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD'];
@@ -51,6 +52,24 @@ export const pastEnd = (project, it) => {
 };
 /** Counted in the 03 completion guide: past the end but STARTING on/before it (a task that starts after the end — 오픈 후 안정화 — and milestones only get the row warning). */
 export const overrunsEnd = (project, it) => it.item_type === 'TASK' && pastEnd(project, it) && (!it.planned_start_date || it.planned_start_date <= project.planned_end_date);
+
+/* ---------- 일정 미루기 = 사유 + 최초 계획일 (Phase 4 US-1) ---------- */
+/** Phases from 04 구현 on: the end date entered by then is the 최초 계획 종료일 (frozen at 04 entry, guide.js transitionTo). */
+export const FROM_DEVELOPMENT = ['DEVELOPMENT', 'TESTING', 'TRANSITION_GO_LIVE', 'OPERATIONS'];
+export const EXCEL_DELAY_REASON = 'Excel 가져오기로 변경';
+/** The date field that is a work item's end: milestone_date for a milestone, planned_end_date otherwise. */
+export const endField = (it) => (it.item_type === 'MILESTONE' ? 'milestone_date' : 'planned_end_date');
+/** 422 delay_reason_required — the client opens the "작업 일정을 미루려 합니다" dialog with these dates and retries with delay_reason. */
+export function delayReasonError(it, before, after) {
+  const e = new ValidationError({ delay_reason: '일정을 미루는 이유와 대응을 한 줄 입력하세요.' });
+  e.status = 422; e.code = 'delay_reason_required'; e.message = '작업 일정을 미루려면 사유와 대응을 입력해야 합니다.';
+  e.extra = { item: { id: it.id, wbs_code: it.wbs_code, title: it.title }, before, after, days: diffDays(before, after) };
+  return e;
+}
+export const parseDelayReason = (v) => {
+  const r = str(v); if (r.length > 300) throw new ValidationError({ delay_reason: '사유는 300자 이내로 입력해 주세요.' });
+  return r;
+};
 
 /* ---------- validation ---------- */
 export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
@@ -328,8 +347,10 @@ export async function getWbs(db, project, id) {
     FROM wbs_dependencies d JOIN wbs_items p ON p.id = d.predecessor_id WHERE d.successor_id = ? ORDER BY p.sequence`, [id]));
   const succs = (await db.all(`SELECT d.id, d.successor_id, s.wbs_code, s.title FROM wbs_dependencies d JOIN wbs_items s ON s.id = d.successor_id
     WHERE d.predecessor_id = ? AND s.archived_at IS NULL ORDER BY s.sequence`, [id]));
+  const history = await listWbsHistory(db, id);
+  const lastDelay = history.find((h) => h.note);   // US-1 Drawer: "계획 5/14 → 5/21 (+7일)" + the latest reason
   return { ...it, predecessors: preds.filter((p) => !p.archived_at), successors: succs, requirement_links: (await linksForWbs(db, id)), raid: (await linkedRaid(db, 'WBS', id)), testing: (await testsFor(db, 'WBS', id)), changes: (await changesFor(db, 'WBS', id)),
-    history: (await listWbsHistory(db, id)), comments: (await listComments(db, 'WBS', id)) };
+    history, comments: (await listComments(db, 'WBS', id)), delay_note: lastDelay ? { note: lastDelay.note, at: lastDelay.changed_at, by: lastDelay.changed_by_name } : null };
 }
 
 /* ---------- writes (caller wraps in tx) ---------- */
@@ -366,16 +387,19 @@ export async function createWbs(db, project, input, userId, { skipRenumber = fal
     if (!skipGuard) input = await guardLeafToGroup(db, project, parent, input.convert_parent, userId, { child: input });
   }
   const id = randomUUID(); const ts = now();
+  const firstEnd = input.item_type === 'MILESTONE' ? input.milestone_date : input.planned_end_date;
+  const original = FROM_DEVELOPMENT.includes(project.current_phase) && firstEnd ? firstEnd : null;   // US-1: created in 04+ → its first end date is the original
   const seq = (await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS s FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND parent_id IS NOT DISTINCT FROM ?', [project.id, input.parent_id || null])).s;
   (await db.run(`INSERT INTO wbs_items (id, project_id, parent_id, sequence, item_type, title, description, owner_user_id, status, progress, weight,
-      planned_start_date, planned_end_date, actual_start_date, actual_end_date, milestone_date, lifecycle_phase, created_by, created_at, updated_at, owner_stakeholder_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, input.parent_id || null, seq, input.item_type, input.title, input.description ?? '', input.owner_user_id ?? null, input.status ?? 'NOT_STARTED', input.item_type === 'TASK' ? (input.progress ?? (input.status === 'COMPLETED' ? 100 : 0)) : 0, input.weight ?? 1, input.item_type === 'MILESTONE' ? null : input.planned_start_date ?? null, input.item_type === 'MILESTONE' ? null : input.planned_end_date ?? null, input.actual_start_date ?? null, input.actual_end_date ?? null, input.item_type === 'MILESTONE' ? input.milestone_date ?? null : null, input.lifecycle_phase ?? null, userId, ts, ts, input.owner_user_id ? null : input.owner_stakeholder_id ?? null]));
+      planned_start_date, planned_end_date, actual_start_date, actual_end_date, milestone_date, lifecycle_phase, created_by, created_at, updated_at, owner_stakeholder_id, original_planned_end_date)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, input.parent_id || null, seq, input.item_type, input.title, input.description ?? '', input.owner_user_id ?? null, input.status ?? 'NOT_STARTED', input.item_type === 'TASK' ? (input.progress ?? (input.status === 'COMPLETED' ? 100 : 0)) : 0, input.weight ?? 1, input.item_type === 'MILESTONE' ? null : input.planned_start_date ?? null, input.item_type === 'MILESTONE' ? null : input.planned_end_date ?? null, input.actual_start_date ?? null, input.actual_end_date ?? null, input.item_type === 'MILESTONE' ? input.milestone_date ?? null : null, input.lifecycle_phase ?? null, userId, ts, ts, input.owner_user_id ? null : input.owner_stakeholder_id ?? null, original]));
   (await addWbsHistory(db, id, 'CREATED', input.history_source ? { field: 'source', newValue: input.history_source } : {}, userId, ts));
   if (!skipRenumber) (await renumber(db, project.id));
   return id;
 }
 
-export async function updateWbs(db, project, existing, input, userId = null) {
+/** opts.delayReason: US-1 reason for pushing a started / already-late item's end date later (422 delay_reason_required without it). */
+export async function updateWbs(db, project, existing, input, userId = null, { delayReason = '' } = {}) {
   const sets = []; const vals = [];
   const next = { ...input };
   // A group's progress and dates are roll-ups of its children: refuse direct edits instead of silently storing dead values.
@@ -390,11 +414,19 @@ export async function updateWbs(db, project, existing, input, userId = null) {
     if (next.item_type !== 'MILESTONE') next.milestone_date = null;
     if (next.item_type === 'SUMMARY') next.progress = 0;
   }
+  // US-1: an end date pushed later on a started or already-late item needs a reason (rule shared with the client: needsDelayReason)
+  const ef = endField({ item_type: next.item_type || existing.item_type });
+  const before = existing[ef] || null; const after = next[ef] === undefined ? undefined : next[ef] || null;
+  const pushed = after !== undefined && ef === endField(existing) && needsDelayReason(before, after, todayKst(), existing.status);
+  const reason = pushed ? str(delayReason) : '';
+  if (pushed && !reason) throw delayReasonError(existing, before, after);
+  // 최초 계획 종료일: set once — from 04 on, the first end date a item gets (its earlier value when it somehow had one)
+  if (after && !existing.original_planned_end_date && FROM_DEVELOPMENT.includes(project.current_phase) && next.original_planned_end_date === undefined) next.original_planned_end_date = before || after;
   const ts = now();
   for (const [k, v] of Object.entries(next)) {
     if (v === undefined || v === existing[k]) continue;
     sets.push(`${k} = ?`); vals.push(v);
-    if (WBS_TRACKED.includes(k)) (await addWbsHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: v }, userId, ts));
+    if (WBS_TRACKED.includes(k)) (await addWbsHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: v, note: k === ef && pushed ? reason.slice(0, 300) : null }, userId, ts));
   }
   if (!sets.length) return false;
   sets.push('updated_at = ?'); vals.push(ts, existing.id);

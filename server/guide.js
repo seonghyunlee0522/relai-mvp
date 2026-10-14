@@ -127,6 +127,10 @@ export async function transitionTo(db, project, toPhaseId, userId, reason = 'MAN
     (await db.run(`UPDATE project_phases SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?`, [done ? 'COMPLETED' : 'IN_PROGRESS', done ? ts : null, ts, from.id]));
   }
   (await db.run(`UPDATE project_phases SET status = 'IN_PROGRESS', started_at = COALESCE(started_at, ?), completed_at = NULL, updated_at = ? WHERE id = ?`, [ts, ts, to.id]));
+  // Phase 4 US-1: entering 04 구현 (or a later phase) freezes each item's end date as its 최초 계획 종료일 (03 date changes were planning)
+  const dev = (await db.get(`SELECT sequence FROM project_phases WHERE project_id = ? AND phase_key = 'DEVELOPMENT'`, [project.id]));
+  if (dev && to.sequence >= dev.sequence) (await db.run(`UPDATE wbs_items SET original_planned_end_date = CASE WHEN item_type = 'MILESTONE' THEN milestone_date ELSE planned_end_date END
+    WHERE project_id = ? AND original_planned_end_date IS NULL`, [project.id]));
   (await db.run(`UPDATE projects SET current_phase = ?, status = CASE WHEN status = 'DRAFT' AND ? <> 'INITIATION' THEN 'ACTIVE' ELSE status END, updated_at = ? WHERE id = ?`, [to.phase_key, to.phase_key, ts, project.id]));
   (await db.run(`INSERT INTO phase_transitions (id, project_id, from_phase_id, to_phase_id, reason, changed_by, changed_at)
     VALUES (?,?,?,?,?,?,?)`, [randomUUID(), project.id, from?.id ?? null, to.id, reason, userId, ts]));

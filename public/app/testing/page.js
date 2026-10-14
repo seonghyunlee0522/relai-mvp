@@ -67,7 +67,7 @@ export async function testsPage(id) {
         : html`<div class="summary summary--inline">
           <div><b>${ts.in_scope}</b><span>범위 내 요구사항</span></div><div><b>${ts.in_scope_tested}</b><span>테스트 연결됨</span></div>
           <div class="${ts.in_scope_untested ? 'is-warn' : ''}"><b>${ts.in_scope_untested}</b><span>테스트 없음</span></div><div><b>${ts.coverage === null ? '-' : ts.coverage + '%'}</b><span>Coverage</span></div></div>`)}</div>
-      ${raw(T === 'coverage' ? '' : html`<div class="rtool">
+      ${raw(T === 'coverage' || (T === 'cases' && !rows.length && !hasFilter) ? '' : html`<div class="rtool">
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
         ${raw(T === 'cases' ? html`${raw(filterSelect('status', 'Status', TC_STATUS, q.get('status')))}${raw(filterSelect('last_result', '최근 결과', RESULT, q.get('last_result')))}
           ${raw(filterSelect('priority', 'Priority', TC_PRIORITY, q.get('priority')))}${raw(filterSelect('owner', 'Owner', ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}`

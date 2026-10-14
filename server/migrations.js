@@ -91,6 +91,30 @@ export const migrations = [
     await db.run(`UPDATE project_steps SET title = '요구사항–WBS 연결' WHERE step_key = 'REQ_TRACE' AND title = 'Requirements ↔ WBS 연결'`);
     await db.run(`UPDATE project_steps SET description = replace(description, 'Task 수준', '작업 수준') WHERE step_key = 'PLAN' AND description LIKE '%Task 수준%'`);
   } },
+  { version: 35, name: 'Phase 4 구현: wbs_items.original_planned_end_date (backfilled for projects at/after 04), wbs_history.note, change_requests.customer_approval, issues.owner_stakeholder_id (schema.sql) + WEEKLY_REPORT (주간보고 작성·공유) added to every project\'s 04 right after CHANGES as TODO', async up(db) {
+    // 최초 종료일: projects already at/after 04 take the end date as it stood when 04 began (last planned_end_date / milestone_date change
+    // recorded before the first entry into DEVELOPMENT — or into any later phase when 04 was skipped), else the current value.
+    // Projects before 04 stay NULL: the value is frozen when they enter 04 (guide.js transitionTo).
+    await db.run(`UPDATE wbs_items w SET original_planned_end_date = COALESCE(
+        (SELECT (h.new_value)::date FROM wbs_history h WHERE h.wbs_item_id = w.id AND h.action_type = 'UPDATED'
+          AND h.field_name = CASE WHEN w.item_type = 'MILESTONE' THEN 'milestone_date' ELSE 'planned_end_date' END
+          AND h.new_value ~ '^\\d{4}-\\d{2}-\\d{2}$'
+          AND h.changed_at <= (SELECT MIN(t.changed_at) FROM phase_transitions t JOIN project_phases ph ON ph.id = t.to_phase_id
+            WHERE t.project_id = w.project_id AND ph.sequence >= (SELECT sequence FROM project_phases d WHERE d.project_id = w.project_id AND d.phase_key = 'DEVELOPMENT'))
+          ORDER BY h.changed_at DESC, h.seq DESC LIMIT 1),
+        CASE WHEN w.item_type = 'MILESTONE' THEN w.milestone_date ELSE w.planned_end_date END)
+      FROM projects p WHERE p.id = w.project_id AND w.original_planned_end_date IS NULL
+        AND p.current_phase IN ('DEVELOPMENT','TESTING','TRANSITION_GO_LIVE','OPERATIONS')`);
+    const st = PHASE_BY_KEY.DEVELOPMENT.steps.find((x) => x.key === 'WEEKLY_REPORT');
+    for (const ph of await db.all(`SELECT id FROM project_phases WHERE phase_key = 'DEVELOPMENT'`)) {
+      if (await db.get(`SELECT 1 FROM project_steps WHERE project_phase_id = ? AND step_key = 'WEEKLY_REPORT'`, [ph.id])) continue;
+      const ch = await db.get(`SELECT sequence FROM project_steps WHERE project_phase_id = ? AND step_key = 'CHANGES'`, [ph.id]);
+      const seq = ch ? Number(ch.sequence) + 1 : Number((await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM project_steps WHERE project_phase_id = ?', [ph.id])).n);
+      await db.run('UPDATE project_steps SET sequence = sequence + 1 WHERE project_phase_id = ? AND sequence >= ?', [ph.id, seq]);
+      await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 0, st.importance, st.linked_feature_type]);
+    }
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

@@ -57,6 +57,8 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
   // browse = another phase's list opened from the stepper: every row with a work screen is a way into it
   const href = !archived && a.cta && (browse || isCurrent || a.state === 'IN_PROGRESS' || a.linked_feature_type === 'definition') ? a.cta.href : null;   // the row itself opens the work screen (same href the server CTA carries) — no separate '… →' link
   const acts = [];
+  // US-3: an inline row action (주간보고 만들기 / 이어서 작성) — secondary: the Guide CTA stays the screen's only primary
+  if (!archived && a.row_action && a.cta) acts.push(html`<a class="btn btn--secondary btn--xs np__rowcta" href="${a.cta.href}" data-link data-row-cta="${a.step_key}">${a.cta.label}</a>`);
   if (!archived) {
     if (skipped) acts.push(html`<button type="button" class="link linkbtn np__act" data-step="${a.id}" data-status="TODO">업무 다시 시작 →</button>`);
     else if (manualDone && (isCurrent || (markable && a.manual))) acts.push(html`<button type="button" class="link linkbtn np__act np__act--dim" data-step="${a.id}" data-status="TODO">되돌리기</button>`);
@@ -75,7 +77,7 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
     <div class="np__m">
       <span class="np__st"><span class="badge badge--imp ${impCls}">${a.importance_label}</span>${a.title}</span>
       <span class="np__purpose">${a.description}</span>
-      ${raw(GATE_KEYS.has(a.step_key) && a.text && a.state !== 'NOT_STARTED' ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}">${a.text}</span>` : '')}
+      ${raw(a.text && ((GATE_KEYS.has(a.step_key) && a.state !== 'NOT_STARTED') || a.row_text) ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}" data-row-text>${a.text}</span>` : '')}
       ${raw(a.hint ? html`<span class="np__hint">${a.hint}</span>` : '')}
       ${raw(a.import_ms && !archived ? html`<span class="np__imp">${a.import_ms.text} <button type="button" class="btn btn--secondary btn--xs" data-import-ms>가져오기</button></span>` : '')}
     </div>

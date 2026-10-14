@@ -14,6 +14,7 @@ import { loadGuide } from './guide.js';
 import * as M from './metrics.js';
 import { projectHealth, STATUS_LABEL } from './health.js';
 import { LEAF_SQL, OWNER_NAME_SQL } from './wbs.js';
+import { diffDays, todayKst, weekKst } from '../public/app/shared/kst-date.js';
 
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
@@ -21,6 +22,7 @@ const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id 
 const IN_PERIOD = (col) => `(${col})::date BETWEEN ? AND ?`;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISSUE_STATUS = { OPEN: '열림', IN_PROGRESS: '진행 중', BLOCKED: '차단됨', RESOLVED: '해결', CLOSED: '종료' };
+const SEVERITY = { CRITICAL: '심각', HIGH: '높음', MEDIUM: '보통', LOW: '낮음' };   // US-7: no English enum values in the report body
 const RISK_STATUS = { OPEN: '열림', MONITORING: '모니터링', MATERIALIZED: '발생', CLOSED: '종료' };
 const CR_STATUS = { DRAFT: '초안', UNDER_REVIEW: '검토 중', APPROVED: '승인', REJECTED: '반려', IMPLEMENTED: '반영 완료' };
 const ACC_STATUS = { DRAFT: '초안', REQUESTED: '검수 요청', ACCEPTED: '승인', REJECTED: '반려', REWORK_REQUIRED: '보완 필요' };
@@ -34,7 +36,7 @@ export const SECTIONS = [
 /* ---------- period ---------- */
 const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const dayOfWeek = (d) => new Date(d + 'T00:00:00Z').getUTCDay();
-const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const localToday = () => todayKst();   // C1: Korea time, not the server's zone
 /** Week = Mon–Sun; while the week is still running the default period is Mon–today, so weekend activity is never dropped (UX-010). */
 export function defaultPeriod(today = localToday()) {
   const dow = dayOfWeek(today); // 0 Sun … 6 Sat
@@ -42,6 +44,16 @@ export function defaultPeriod(today = localToday()) {
   const monday = addDays(today, mondayOffset); const sunday = addDays(monday, 6);
   return { period_start: monday, period_end: today < sunday ? today : sunday };
 }
+/** Phase 4 US-3 — 04 WEEKLY_REPORT state for this week (Mon–Sun, Korea time), computed on every read (never stored):
+ *  FINAL report whose period overlaps the week → { state: 'FINAL' }, else a DRAFT → 'DRAFT', else 'NONE'. */
+export async function weeklyReportState(db, projectId, at = new Date()) {
+  const wk = weekKst(at);
+  const rows = await db.all(`SELECT id, status, finalized_at, updated_at FROM weekly_reports WHERE project_id = ? AND period_start <= ? AND period_end >= ?
+    ORDER BY (status = 'FINAL') DESC, COALESCE(finalized_at, updated_at) DESC`, [projectId, wk.end, wk.start]);
+  const fin = rows.find((r) => r.status === 'FINAL'); const draft = rows.find((r) => r.status === 'DRAFT');
+  return { week: wk, state: fin ? 'FINAL' : draft ? 'DRAFT' : 'NONE', report_id: (fin || draft || {}).id || null, finalized_at: fin ? fin.finalized_at : null };
+}
+
 export function parsePeriod(body = {}) {
   const f = {}; const s = str(body.period_start); const e = str(body.period_end);
   if (!DATE_RE.test(s)) f.period_start = '시작일을 입력하세요 (YYYY-MM-DD).';
@@ -82,7 +94,7 @@ export async function buildReportData(db, project, { period_start: s, period_end
     WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status = 'IN_PROGRESS') s
     ORDER BY overdue DESC, (planned_end_date IS NULL), planned_end_date, (raid_links + change_impacts) DESC, sequence LIMIT 10`, [pid]));
 
-  const issues = (await db.all(`SELECT i.id, i.display_id, i.title, i.status, i.severity, i.due_date, u.name AS owner, (i.due_date IS NOT NULL AND i.due_date < ${TODAY})::int AS overdue
+  const issues = (await db.all(`SELECT i.id, i.display_id, i.title, i.status, i.severity, i.due_date, ${OWNER_NAME_SQL('i', 'u')} AS owner, (i.owner_user_id IS NULL AND i.owner_stakeholder_id IS NOT NULL) AS owner_no_account, (i.due_date IS NOT NULL AND i.due_date < ${TODAY})::int AS overdue
     FROM issues i LEFT JOIN users u ON u.id = i.owner_user_id WHERE i.project_id = ? AND i.archived_at IS NULL AND i.status NOT IN ('RESOLVED','CLOSED')
       AND (i.severity IN ('CRITICAL','HIGH') OR (i.due_date IS NOT NULL AND i.due_date < ${TODAY})) ORDER BY CASE i.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 ELSE 2 END, i.due_date`, [pid]));
   const risks = (await db.all(`SELECT r.id, r.display_id, r.title, r.status, r.risk_level, r.review_date, u.name AS owner, (r.review_date IS NOT NULL AND r.review_date < ${TODAY})::int AS review_overdue
@@ -113,6 +125,13 @@ export async function buildReportData(db, project, { period_start: s, period_end
   for (const r of (await db.all(`SELECT id, display_id, title FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status = 'REVIEWING' ORDER BY sequence_number`, [pid])))
     attention.push({ kind: 'REVIEWING_REQUIREMENT', type: 'REQUIREMENT', priority: 10, severity: 'warn', decision: true, id: r.id, display_id: r.display_id, title: r.title, meta: '검토 중 요구사항 (범위 내)', href: `requirements?sel=${r.id}` });
 
+  // Phase 4 US-1: end dates pushed later in the period through the delay-reason dialog (or Excel) — one line per push, reason included
+  const scheduleChanges = (await db.all(`SELECT w.wbs_code AS display_id, w.title, h.old_value AS before, h.new_value AS after, h.note, (h.changed_at)::date AS at
+    FROM wbs_history h JOIN wbs_items w ON w.id = h.wbs_item_id
+    WHERE w.project_id = ? AND w.archived_at IS NULL AND h.action_type = 'UPDATED' AND h.field_name IN ('planned_end_date','milestone_date') AND h.note IS NOT NULL
+      AND h.old_value IS NOT NULL AND h.new_value > h.old_value AND ${IN_PERIOD('h.changed_at')} ORDER BY h.changed_at, h.seq`, [pid, s, e]))
+    .map((r) => ({ ...r, days: diffDays(r.before, r.after) }));
+
   const nextWeek = (await M.upcomingDates(db, pid, { from: addDays(e, 1), to: addDays(e, 7), limit: 30 }));
 
   return {
@@ -120,15 +139,22 @@ export async function buildReportData(db, project, { period_start: s, period_end
     summary: { phase_key: project.current_phase, phase_name: guide.current_phase?.name || project.current_phase, health: { status: health.status, label: health.status_label, partial_unknown: health.partial_unknown },
       dimensions: Object.values(health.dimensions).map((d) => ({ key: d.key, label: d.label, status: d.status, status_label: d.status_label, reasons: d.reasons })), kpis },
     completed_items: completed, in_progress_items: inProgress, issues_and_risks: { issues, risks }, changes, test_and_acceptance: testAcceptance,
-    attention_items: attention, next_week_plan: nextWeek,
+    attention_items: attention, next_week_plan: nextWeek, schedule_changes: scheduleChanges,
   };
 }
 
 /* ---------- sections (markdown bodies derived from data; the user edits these) ---------- */
 const pct = (v) => (v === null || v === undefined ? '-' : `${v}%`);
 const md = (d) => (d ? d.slice(5).replace('-', '/') : '-');
-const EVENT = { COMPLETED: '완료', CONFIRMED: '확정', RESOLVED: '해결', CLOSED: '종료', APPROVED: '승인', IMPLEMENTED: '반영 완료', PASS: 'Pass', ACCEPTED: '검수 승인' };
+const EVENT = { COMPLETED: '완료', CONFIRMED: '확정', RESOLVED: '해결', CLOSED: '종료', APPROVED: '승인', IMPLEMENTED: '반영 완료', PASS: '통과', ACCEPTED: '검수 승인' };
 const TYPE_KO = { WBS: 'WBS', REQUIREMENT: '요구사항', ISSUE: '이슈', CHANGE: '변경', TEST: '테스트', ACCEPTANCE: '검수', RISK: '리스크' };
+
+/** US-1 '일정' lines: "이번 주 일정 변경 N건 (총 +M일)" + one line per push (작업명 · +일 · 사유). Nothing when there was none. */
+export function scheduleLines(list) {
+  if (!list || !list.length) return [];
+  const total = list.reduce((a, x) => a + (Number(x.days) || 0), 0);
+  return [`- 일정: 이번 주 일정 변경 ${list.length}건 (총 +${total}일)`, ...list.map((x) => `  - ${x.display_id} ${x.title} · +${x.days}일 · ${x.note}`)];
+}
 
 export function sectionsFromData(d) {
   const S = d.summary; const out = {};
@@ -136,8 +162,9 @@ export function sectionsFromData(d) {
     `- 현재 단계: ${S.phase_name}`,
     `- 프로젝트 상태: ${S.health.label}${S.health.partial_unknown ? ' (일부 정보 부족)' : ''}`,
     ...S.dimensions.map((x) => `  - ${x.label}: ${x.status_label}${x.status === 'GOOD' || x.status === 'UNKNOWN' ? '' : ` — ${x.reasons.join(', ')}`}`),
+    ...scheduleLines(d.schedule_changes),
     `- WBS 진행률: ${pct(S.kpis.wbs_progress)}`,
-    `- Requirement Coverage: ${pct(S.kpis.requirement_coverage)}`, `- Test Coverage: ${pct(S.kpis.test_coverage)}`,
+    `- 요구사항 반영률: ${pct(S.kpis.requirement_coverage)}`, `- 테스트 커버리지: ${pct(S.kpis.test_coverage)}`,
   ].join('\n');
   out.completed = d.completed_items.length ? d.completed_items.map((c) => `- [${TYPE_KO[c.type]}] ${c.display_id} ${c.title} — ${EVENT[c.event] || c.event} (${md(c.at)})`).join('\n') : '- 기간 내 완료 처리된 항목이 없습니다.';
   out.in_progress = d.in_progress_items.length ? d.in_progress_items.map((w) => {
@@ -145,9 +172,9 @@ export function sectionsFromData(d) {
     return `- ${w.display_id} ${w.title} — ${w.progress}%${w.owner ? ` · ${w.owner}${w.owner_no_account ? ' (계정 없음)' : ''}` : ''}${w.planned_end_date ? ` · 종료 예정 ${md(w.planned_end_date)}` : ''}${flags.length ? ` · ${flags.join(', ')}` : ''}`;
   }).join('\n') : '- 진행 중인 WBS 작업이 없습니다.';
   const ir = d.issues_and_risks; const irLines = [];
-  if (ir.issues.length) { irLines.push('**이슈**'); for (const i of ir.issues) irLines.push(`- ${i.display_id} ${i.title} — ${i.severity} · ${ISSUE_STATUS[i.status] || i.status}${i.owner ? ` · ${i.owner}` : ''}${i.due_date ? ` · 기한 ${md(i.due_date)}${i.overdue ? ' (초과)' : ''}` : ''}`); }
-  if (ir.risks.length) { irLines.push('**리스크**'); for (const r of ir.risks) irLines.push(`- ${r.display_id} ${r.title} — ${r.risk_level} · ${RISK_STATUS[r.status] || r.status}${r.owner ? ` · ${r.owner}` : ''}${r.review_date ? ` · 검토일 ${md(r.review_date)}${r.review_overdue ? ' (초과)' : ''}` : ''}`); }
-  out.issues_risks = irLines.length ? irLines.join('\n') : '- Critical/High 이슈·리스크, 기한 초과 항목이 없습니다.';
+  if (ir.issues.length) { irLines.push('**이슈**'); for (const i of ir.issues) irLines.push(`- ${i.display_id} ${i.title} — ${SEVERITY[i.severity] || i.severity} · ${ISSUE_STATUS[i.status] || i.status}${i.owner ? ` · ${i.owner}${i.owner_no_account ? ' (계정 없음)' : ''}` : ''}${i.due_date ? ` · 기한 ${md(i.due_date)}${i.overdue ? ' (초과)' : ''}` : ''}`); }
+  if (ir.risks.length) { irLines.push('**리스크**'); for (const r of ir.risks) irLines.push(`- ${r.display_id} ${r.title} — ${SEVERITY[r.risk_level] || r.risk_level} · ${RISK_STATUS[r.status] || r.status}${r.owner ? ` · ${r.owner}` : ''}${r.review_date ? ` · 검토일 ${md(r.review_date)}${r.review_overdue ? ' (초과)' : ''}` : ''}`); }
+  out.issues_risks = irLines.length ? irLines.join('\n') : '- 심각·높음 이슈·리스크, 기한 초과 항목이 없습니다.';
   const c = d.changes; const cl = []; const crLine = (x, suffix = '') => `- ${x.display_id} ${x.title} — ${CR_STATUS[x.status] || x.status}${suffix}`;
   const imp = (x) => { const p = []; if (x.schedule_impact_days != null) p.push(`일정 ${x.schedule_impact_days}일`); if (x.effort_impact_md != null) p.push(`공수 ${x.effort_impact_md}MD`); if (x.cost_impact != null) p.push(`비용 ${x.cost_impact}`); return p.length ? ` (입력 영향: ${p.join(', ')})` : ''; };
   if (c.created.length) { cl.push(`**기간 내 신규 ${c.created.length}건**`); c.created.forEach((x) => cl.push(crLine(x, imp(x)))); }
@@ -157,7 +184,7 @@ export function sectionsFromData(d) {
   if (cl.length && (c.impact.schedule_days || c.impact.effort_md || c.impact.cost)) cl.push(`- 승인·반영 변경의 입력된 영향 합계: 일정 ${c.impact.schedule_days}일, 공수 ${c.impact.effort_md}MD, 비용 ${c.impact.cost} (입력값 합계이며 실제 지연 예측치가 아님)`);
   out.changes = cl.length ? cl.join('\n') : '- 기간 내 변경 요청 활동이 없습니다.';
   const t = d.test_and_acceptance; const tl = [];
-  tl.push(`- 테스트 실행: ${t.executions.total}회 (Pass ${t.executions.pass} · Fail ${t.executions.fail} · Blocked ${t.executions.blocked})`);
+  tl.push(`- 테스트 실행: ${t.executions.total}회 (통과 ${t.executions.pass} · 실패 ${t.executions.fail} · 차단됨 ${t.executions.blocked})`);
   if (t.latest_fail.length) { tl.push(`- 현재 Fail 상태 테스트 ${t.latest_fail.length}건`); t.latest_fail.forEach((x) => tl.push(`  - ${x.display_id} ${x.title}`)); }
   const an = t.acceptance_now; const ap = t.acceptance_period;
   tl.push(`- 검수 현황: 요청 ${an.requested} · 승인 ${an.accepted} · 보완 필요 ${an.rework} · 반려 ${an.rejected}`);

@@ -2,15 +2,15 @@
 export const STATUS = { DRAFT: '초안', ACTIVE: '진행 중', ON_HOLD: '보류', COMPLETED: '완료', ARCHIVED: '보관됨' };
 export const STATUS_CHIP = { DRAFT: 'chip--muted', ACTIVE: 'chip--active', ON_HOLD: 'chip--hold', COMPLETED: 'chip--done' };
 export const FEATURE_ROUTES = { tests: (pid, qs = '') => `/app/projects/${pid}/tests${qs}`, acceptance: (pid, qs = '') => `/app/projects/${pid}/tests?tab=acceptance${qs ? '&' + qs.replace(/^\?/, '') : ''}`, raid: (pid, qs = '') => `/app/projects/${pid}/issues${qs}`, changes: (pid, qs = '') => `/app/projects/${pid}/changes${qs}`, requirements: (pid, qs = '') => `/app/projects/${pid}/requirements${qs}`, wbs: (pid, qs = '') => `/app/projects/${pid}/wbs${qs}` };
-export const ISSUE_STATUS = { OPEN: '열림', IN_PROGRESS: '진행 중', BLOCKED: '막힘', RESOLVED: '해결', CLOSED: '종료' };
+export const ISSUE_STATUS = { OPEN: '열림', IN_PROGRESS: '진행 중', BLOCKED: '차단됨', RESOLVED: '해결', CLOSED: '종료' };   // Phase 4 US-7
 export const ISSUE_STATUS_CHIP = { IN_PROGRESS: 'chip--active', BLOCKED: 'chip--hold', RESOLVED: 'chip--done', CLOSED: 'chip--muted' };
-export const ISSUE_TRANSITIONS = { OPEN: ['IN_PROGRESS', 'BLOCKED', 'RESOLVED'], IN_PROGRESS: ['BLOCKED', 'RESOLVED', 'OPEN'], BLOCKED: ['IN_PROGRESS', 'OPEN'], RESOLVED: ['CLOSED', 'IN_PROGRESS'], CLOSED: ['OPEN'] };
-export const SEVERITY = { CRITICAL: '치명', HIGH: '높음', MEDIUM: '보통', LOW: '낮음' };
+export const ISSUE_TRANSITIONS = { OPEN: ['IN_PROGRESS', 'BLOCKED', 'RESOLVED'], IN_PROGRESS: ['BLOCKED', 'RESOLVED', 'OPEN'], BLOCKED: ['IN_PROGRESS', 'OPEN', 'RESOLVED'], RESOLVED: ['CLOSED', 'IN_PROGRESS'], CLOSED: ['OPEN'] };   // mirrors server/raid.js (Phase 4 US-5: 차단됨 → 해결)
+export const SEVERITY = { CRITICAL: '심각', HIGH: '높음', MEDIUM: '보통', LOW: '낮음' };
 export const RISK_STATUS = { OPEN: '열림', MONITORING: '모니터링', MATERIALIZED: '발생', CLOSED: '종료' };
 export const RISK_STATUS_CHIP = { MONITORING: 'chip--active', MATERIALIZED: 'chip--hold', CLOSED: 'chip--muted' };
 export const RISK_TRANSITIONS = { OPEN: ['MONITORING', 'MATERIALIZED', 'CLOSED'], MONITORING: ['MATERIALIZED', 'CLOSED'], MATERIALIZED: ['CLOSED'], CLOSED: ['OPEN'] };
 export const LEVEL3 = { LOW: '낮음', MEDIUM: '보통', HIGH: '높음' };
-export const RISK_LEVEL = { LOW: '낮음', MEDIUM: '보통', HIGH: '높음', CRITICAL: '치명' };
+export const RISK_LEVEL = { LOW: '낮음', MEDIUM: '보통', HIGH: '높음', CRITICAL: '심각' };
 export const STRATEGY = { AVOID: '회피', MITIGATE: '완화', TRANSFER: '전가', ACCEPT: '수용' };
 export const RAID_TARGET = { WBS: '관련 WBS', REQUIREMENT: '관련 요구사항', CHANGE: '관련 변경 요청' };
 export const CR_STATUS = { DRAFT: '작성 중', UNDER_REVIEW: '검토 중', APPROVED: '승인', REJECTED: '반려', IMPLEMENTED: '반영 완료' };

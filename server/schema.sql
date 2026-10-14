@@ -300,6 +300,8 @@ ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS weight INTEGER NOT NULL DEFAULT 1
 ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS lifecycle_phase TEXT CHECK (lifecycle_phase IN ('INITIATION','REQUIREMENTS','ANALYSIS_DESIGN','DEVELOPMENT','TESTING','TRANSITION_GO_LIVE','OPERATIONS'));
 -- Phase 3 US-1: 담당자 = RELAI 사용자(owner_user_id) 또는 계정 없는 팀원(01 이해관계자 id, project_definitions.stakeholders JSON — FK 없음). 둘 중 하나만.
 ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;
+-- Phase 4 US-1: 최초 계획 종료일 (milestone: 최초 마일스톤 날짜). Frozen when the project enters 04 구현; NULL before that.
+ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS original_planned_end_date date;
 
 -- Finish-to-start predecessor links. Many predecessors per item; cycle check is done in code before insert.
 CREATE TABLE IF NOT EXISTS wbs_dependencies (
@@ -381,6 +383,8 @@ CREATE TABLE IF NOT EXISTS change_requests (
 CREATE INDEX IF NOT EXISTS idx_cr_project ON change_requests(project_id, archived_at, status);
 -- Designated approver (optional). Approve/reject: OWNER/ADMIN or this user, never the CR's author (server/changes.js reviewPermission).
 ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS approver_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+-- Phase 4 US-2: 고객 승인 기록 (same JSON shape as project_definitions.approval: approver_id | approver_name/title, date, method, evidence, conditions)
+ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS customer_approval TEXT NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS change_request_requirements (
   id                TEXT PRIMARY KEY,
@@ -1273,3 +1277,7 @@ CREATE TABLE IF NOT EXISTS login_records (
 );
 CREATE INDEX IF NOT EXISTS idx_login_records_created ON login_records(created_at);
 CREATE INDEX IF NOT EXISTS idx_login_records_user ON login_records(user_id, created_at);
+
+/* ---------- Phase 4 (04 구현) ---------- */
+ALTER TABLE wbs_history ADD COLUMN IF NOT EXISTS note TEXT;                  -- US-1: 일정 미루기 사유 (on the planned_end_date / milestone_date UPDATED row)
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;       -- US-6: 담당자 = 01 이해관계자(당사·협력사) id, no FK (same as wbs_items)

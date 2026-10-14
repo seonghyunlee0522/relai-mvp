@@ -11,6 +11,7 @@ import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
 import { statusChip } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
+import * as OP from '../shared/owner-picker.js';
 
 export async function raidPage(id) {
   const main = $('#main');
@@ -30,14 +31,17 @@ export async function raidPage(id) {
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys()]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
   let rows = []; let is = g.issues; let rs = g.risks; let sel = null; let creating = params().get('new') === '1'; let dtab = 'info';
-  const load = async () => { const d = await api('GET', xApi(listQuery())); rows = d.items; is = d.issues; rs = d.risks; g.issues = is; g.risks = rs; };
+  let owners = { team: [], stakeholders_total: 0 };   // Phase 4 US-6: Issue 담당자 = the Phase 3 picker (RELAI 사용자 · 팀원 (계정 없음))
+  const load = async () => { const d = await api('GET', xApi(listQuery())); rows = d.items; is = d.issues; rs = d.risks; g.issues = is; g.risks = rs; if (d.owners) owners = d.owners; };
+  const teamMap = () => Object.fromEntries((owners.team || []).map((t) => [`s:${t.id}`, `${t.name} (계정 없음)`]));
+  const RES_HINT = '어떻게 해결했는지 한 줄 남겨 두면 주간보고에 나옵니다.';   // US-5: a hint, never a block
   const loadSel = async (xid) => { sel = xid ? (await api('GET', xApi(`/${xid}`)))[key()] : null; setParam('sel', xid); };
   const opt = (map, cur, blank) => (blank ? html`<option value="">${blank}</option>` : '') + Object.entries(map).map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
   const ownerMap = Object.fromEntries(members.map((m) => [m.id, m.name]));
-  const FILTER_DEFS = (I) => [{ key: 'q', label: '검색' }, { key: 'status', label: 'Status', map: I ? ISSUE_STATUS : RISK_STATUS }, { key: 'severity', label: 'Severity', map: SEVERITY }, { key: 'risk_level', label: 'Level', map: RISK_LEVEL },
-    { key: 'probability', label: 'Probability', map: LEVEL3 }, { key: 'impact', label: 'Impact', map: LEVEL3 }, { key: 'response_strategy', label: '전략', map: STRATEGY }, { key: 'owner', label: 'Owner', map: { ...ownerMap, none: '미지정' } },
+  const FILTER_DEFS = (I) => [{ key: 'q', label: '검색' }, { key: 'status', label: '상태', map: I ? ISSUE_STATUS : RISK_STATUS }, { key: 'severity', label: '심각도', map: SEVERITY }, { key: 'risk_level', label: '등급', map: RISK_LEVEL },
+    { key: 'probability', label: '발생 가능성', map: LEVEL3 }, { key: 'impact', label: '영향도', map: LEVEL3 }, { key: 'response_strategy', label: '전략', map: STRATEGY }, { key: 'owner', label: '담당자', map: { ...ownerMap, ...teamMap(), none: '미지정' } },
     { key: 'wbs', label: 'WBS', format: () => '선택 항목' }, { key: 'requirement', label: '요구사항', format: () => '선택 항목' }, { key: 'change', label: '변경 요청', format: () => '선택 항목' },
-    { key: 'overdue', label: 'Overdue', format: () => '예' }, { key: 'review', label: 'Review 필요', format: () => '예' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
+    { key: 'overdue', label: '기한 지남', format: () => '예' }, { key: 'review', label: '검토 필요', format: () => '예' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const ownerOpts = (cur, blank = '미지정') => html`<option value="">${blank}</option>` + members.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
   const dcell = (d) => (d ? html`${fmtShort(d)}` : '<span class="dim">-</span>');
   document.title = `이슈·리스크 — ${p.name} — RELAI`;
@@ -47,79 +51,79 @@ export async function raidPage(id) {
     const hasFilter = ['q', ...filterKeys(), 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: 'raid', title: '이슈·리스크' }))}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. Issue와 Risk는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. Issue와 리스크는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(coachMark('ISSUE_RISK_INTRO'))}
-      <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? 'Issue는 이미 발생해 대응이 필요한 문제입니다.' : 'Risk는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">Issues${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">Risks${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>
+      <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? 'Issue는 이미 발생해 대응이 필요한 문제입니다.' : '리스크는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">Issue${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">리스크${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>
       ${raw(I ? html`<div class="summary summary--inline">
-        <div><b>${is.active}</b><span>Open <small>(진행 중 포함)</small></span></div><div class="${is.blocked ? 'is-warn' : ''}"><b>${is.blocked}</b><span>Blocked</span></div>
-        <div class="${is.critical ? 'is-crit' : ''}"><b>${is.critical}</b><span>Critical</span></div><div class="${is.overdue ? 'is-warn' : ''}"><b>${is.overdue}</b><span>Overdue</span></div></div>`
+        <div><b>${is.active}</b><span>열림 <small>(진행 중 포함)</small></span></div><div class="${is.blocked ? 'is-warn' : ''}"><b>${is.blocked}</b><span>차단됨</span></div>
+        <div class="${is.critical ? 'is-crit' : ''}"><b>${is.critical}</b><span>심각</span></div><div class="${is.overdue ? 'is-warn' : ''}"><b>${is.overdue}</b><span>기한 지남</span></div></div>`
       : html`<div class="summary summary--inline">
-        <div><b>${rs.open + rs.monitoring}</b><span>Open <small>(모니터링 포함)</small></span></div><div class="${rs.critical ? 'is-crit' : rs.high ? 'is-warn' : ''}"><b>${rs.high_or_critical}</b><span>High / Critical</span></div>
-        <div class="${rs.review_needed ? 'is-warn' : ''}"><b>${rs.review_needed}</b><span>Review 필요</span></div><div><b>${rs.materialized}</b><span>발생</span></div></div>`)}</div>
+        <div><b>${rs.open + rs.monitoring}</b><span>열림 <small>(모니터링 포함)</small></span></div><div class="${rs.critical ? 'is-crit' : rs.high ? 'is-warn' : ''}"><b>${rs.high_or_critical}</b><span>높음·심각</span></div>
+        <div class="${rs.review_needed ? 'is-warn' : ''}"><b>${rs.review_needed}</b><span>검토 필요</span></div><div><b>${rs.materialized}</b><span>발생</span></div></div>`)}</div>
       <div class="rtool">
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
-        ${raw(I ? html`${raw(filterSelect('status', 'Status', ISSUE_STATUS, q.get('status')))}${raw(filterSelect('severity', 'Severity', SEVERITY, q.get('severity')))}`
-        : html`${raw(filterSelect('status', 'Status', RISK_STATUS, q.get('status')))}${raw(filterSelect('risk_level', 'Level', RISK_LEVEL, q.get('risk_level')))}
-          ${raw(filterSelect('probability', 'Probability', LEVEL3, q.get('probability')))}${raw(filterSelect('impact', 'Impact', LEVEL3, q.get('impact')))}${raw(filterSelect('response_strategy', '전략', STRATEGY, q.get('response_strategy')))}`)}
-        ${raw(filterSelect('owner', 'Owner', ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
-        <label class="toggle"><input type="checkbox" data-t="${I ? 'overdue' : 'review'}" ${q.get(I ? 'overdue' : 'review') ? 'checked' : ''}> ${I ? 'Overdue만' : 'Review 필요만'}</label>
+        ${raw(I ? html`${raw(filterSelect('status', '상태', ISSUE_STATUS, q.get('status')))}${raw(filterSelect('severity', '심각도', SEVERITY, q.get('severity')))}`
+        : html`${raw(filterSelect('status', '상태', RISK_STATUS, q.get('status')))}${raw(filterSelect('risk_level', '등급', RISK_LEVEL, q.get('risk_level')))}
+          ${raw(filterSelect('probability', '발생 가능성', LEVEL3, q.get('probability')))}${raw(filterSelect('impact', '영향도', LEVEL3, q.get('impact')))}${raw(filterSelect('response_strategy', '전략', STRATEGY, q.get('response_strategy')))}`)}
+        ${raw(filterSelect('owner', '담당자', I ? { ...ownerMap, ...teamMap() } : ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
+        <label class="toggle"><input type="checkbox" data-t="${I ? 'overdue' : 'review'}" ${q.get(I ? 'overdue' : 'review') ? 'checked' : ''}> ${I ? '기한 지남만' : '검토 필요만'}</label>
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         <span class="rtool__sp"></span>
-        ${raw(archived ? '' : html`<button class="btn btn--primary btn--sm" id="add">+ ${I ? 'Issue' : 'Risk'} 등록</button>`)}
+        ${raw(archived ? '' : html`<button class="btn btn--primary btn--sm" id="add">+ ${I ? 'Issue' : '리스크'} 등록</button>`)}
       </div>
       ${raw(appliedFilters(q, FILTER_DEFS(I)))}
       <div class="rlayout rlayout--cr ${sel || creating ? 'has-drawer' : ''}">
         <div class="rtable-wrap">${raw(rows.length ? (I ? issueTable() : riskTable())
-          : hasFilter ? emptyFiltered(I ? 'Issue' : 'Risk')
+          : hasFilter ? emptyFiltered(I ? 'Issue' : '리스크')
           : I ? emptyState({ title: '현재 등록된 Issue가 없습니다.', body: '프로젝트 진행 중 발생한 문제를 기록하면 담당자·기한·해결 상태를 관리하고 관련 요구사항·WBS와 연결할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 Issue 등록' } })
-          : emptyState({ title: '현재 등록된 Risk가 없습니다.', body: '프로젝트에 영향을 줄 수 있는 잠재 위험을 미리 기록하고 대응 계획과 Review 일정을 관리하세요.', cta: archived ? null : { id: 'add2', label: '첫 Risk 등록' } }))}</div>
+          : emptyState({ title: '현재 등록된 리스크가 없습니다.', body: '프로젝트에 영향을 줄 수 있는 잠재 위험을 미리 기록하고 대응 계획과 검토 일정을 관리하세요.', cta: archived ? null : { id: 'add2', label: '첫 리스크 등록' } }))}</div>
         <aside class="drawer drawer--cr" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? (I ? createIssue() : createRisk()) : sel ? (I ? detailIssue() : detailRisk()) : '')}</aside>
       </div></div>`;
     bind(); bindCoach(main);
   };
 
-  const issueTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>Severity</th><th>Status</th><th>Owner</th><th>Due</th><th class="num">관련 WBS</th><th>Updated</th></tr></thead>
+  const issueTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>심각도</th><th>상태</th><th>담당자</th><th>기한</th><th class="num">관련 WBS</th><th>수정일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
-      <td class="ttl"><span>${x.title}</span>${raw(x.source_risk_display_id ? html`<small title="Source Risk">${x.source_risk_display_id}</small>` : '')}${raw(x.source_test_execution_id ? '<small title="테스트 Fail에서 등록">테스트 Fail</small>' : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
+      <td class="ttl"><span>${x.title}</span>${raw(x.source_risk_display_id ? html`<small title="원본 리스크">${x.source_risk_display_id}</small>` : '')}${raw(x.source_test_execution_id ? '<small title="테스트 실패에서 등록">테스트 실패</small>' : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
       <td>${raw(sevBadge(x.severity))}</td><td>${raw(statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status))}</td>
-      <td>${x.owner_name || raw('<span class="dim">-</span>')}</td>
+      <td>${x.owner_name || raw('<span class="dim">-</span>')}${raw(OP.noAcct(x))}</td>
       <td class="${x.is_overdue ? 'is-overdue' : ''}">${raw(dcell(x.due_date))}${raw(x.is_overdue ? ' <small class="over">지남</small>' : '')}</td>
       <td class="num">${x.wbs_count || raw('<span class="dim">0</span>')}</td><td class="dim">${fmtShort(x.updated_at)}</td></tr>`).join(''))}</tbody></table>`;
-  const riskTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>Probability</th><th>Impact</th><th>Level</th><th>Status</th><th>Owner</th><th>Review</th></tr></thead>
+  const riskTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>발생 가능성</th><th>영향도</th><th>등급</th><th>상태</th><th>담당자</th><th>검토일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
       <td class="ttl"><span>${x.title}</span>${raw(x.converted_issue_display_id ? html`<small title="전환된 Issue">→ ${x.converted_issue_display_id}</small>` : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
       <td>${LEVEL3[x.probability]}</td><td>${LEVEL3[x.impact]}</td><td>${raw(sevBadge(x.risk_level))}</td>
       <td>${raw(statusChip(RISK_STATUS, RISK_STATUS_CHIP, x.status))}</td>
       <td>${x.owner_name || raw('<span class="dim">-</span>')}</td>
-      <td class="${x.needs_review ? 'is-overdue' : ''}">${raw(dcell(x.review_date))}${raw(x.needs_review ? ' <small class="over">Review</small>' : '')}</td></tr>`).join(''))}</tbody></table>`;
+      <td class="${x.needs_review ? 'is-overdue' : ''}">${raw(dcell(x.review_date))}${raw(x.needs_review ? ' <small class="over">검토</small>' : '')}</td></tr>`).join(''))}</tbody></table>`;
 
   const createIssue = () => html`<form id="cf" novalidate><div class="drawer__h"><b>새 Issue</b><button type="button" class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
     <div class="drawer__b"><div class="form-err" role="alert" hidden></div>
       <div class="field"><label for="c-title">제목 <span class="req">*</span></label><input class="input" id="c-title" name="title" maxlength="200" placeholder="예: 고객 API 미제공"><div class="err" data-for="title"></div></div>
       <div class="field"><label>설명</label><textarea class="textarea" name="description" maxlength="5000" style="min-height:72px"></textarea></div>
       <div class="row2">
-        <div class="field"><label>Severity</label><select class="select" name="severity">${raw(opt(SEVERITY, 'MEDIUM'))}</select></div>
-        <div class="field"><label>담당자</label><select class="select" name="owner_user_id">${raw(ownerOpts(''))}</select></div>
+        <div class="field"><label>심각도</label><select class="select" name="severity">${raw(opt(SEVERITY, 'MEDIUM'))}</select></div>
+        <div class="field"><label>담당자</label><select class="select" name="owner">${raw(OP.ownerOptions(members, owners, ''))}</select></div>
         <div class="field"><label>발견일</label><input class="input" type="date" name="identified_at" value="${todayLocal()}"></div>
         <div class="field"><label>기한</label><input class="input" type="date" name="due_date"></div></div></div>
     <div class="drawer__f"><button class="btn btn--primary" type="submit">Issue 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
-  const createRisk = () => html`<form id="cf" novalidate><div class="drawer__h"><b>새 Risk</b><button type="button" class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
+  const createRisk = () => html`<form id="cf" novalidate><div class="drawer__h"><b>새 리스크</b><button type="button" class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
     <div class="drawer__b"><div class="form-err" role="alert" hidden></div>
       <div class="field"><label for="c-title">제목 <span class="req">*</span></label><input class="input" id="c-title" name="title" maxlength="200" placeholder="예: 고객 API 일정 지연 가능성"><div class="err" data-for="title"></div></div>
       <div class="field"><label>설명</label><textarea class="textarea" name="description" maxlength="5000" style="min-height:72px"></textarea></div>
       <div class="row2">
-        <div class="field"><label>Probability</label><select class="select" name="probability" data-mx>${raw(opt(LEVEL3, 'MEDIUM'))}</select></div>
-        <div class="field"><label>Impact</label><select class="select" name="impact" data-mx>${raw(opt(LEVEL3, 'MEDIUM'))}</select></div></div>
-      <div class="field"><span class="lbl">Risk Level <small class="dim" style="font-weight:500">(Probability × Impact)</small></span><div id="c-level">${raw(sevBadge(riskLevel('MEDIUM', 'MEDIUM')))}</div></div>
+        <div class="field"><label>발생 가능성</label><select class="select" name="probability" data-mx>${raw(opt(LEVEL3, 'MEDIUM'))}</select></div>
+        <div class="field"><label>영향도</label><select class="select" name="impact" data-mx>${raw(opt(LEVEL3, 'MEDIUM'))}</select></div></div>
+      <div class="field"><span class="lbl">리스크 등급 <small class="dim" style="font-weight:500">(발생 가능성 × 영향도)</small></span><div id="c-level">${raw(sevBadge(riskLevel('MEDIUM', 'MEDIUM')))}</div></div>
       <div class="row2">
         <div class="field"><label>대응 전략</label><select class="select" name="response_strategy">${raw(opt(STRATEGY, '', '미정'))}</select></div>
         <div class="field"><label>담당자</label><select class="select" name="owner_user_id">${raw(ownerOpts(''))}</select></div>
         <div class="field"><label>식별일</label><input class="input" type="date" name="identified_at" value="${todayLocal()}"></div>
-        <div class="field"><label>Review Date</label><input class="input" type="date" name="review_date"></div></div>
+        <div class="field"><label>검토일</label><input class="input" type="date" name="review_date"></div></div>
       <div class="field"><label>대응 계획</label><textarea class="textarea" name="mitigation_plan" maxlength="5000" style="min-height:60px"></textarea></div></div>
-    <div class="drawer__f"><button class="btn btn--primary" type="submit">Risk 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
+    <div class="drawer__f"><button class="btn btn--primary" type="submit">리스크 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
 
   const linkBlocks = (x, ro, labels) => ['WBS', 'REQUIREMENT', 'CHANGE'].map((t) => {
     const list = t === 'WBS' ? x.links.wbs : t === 'REQUIREMENT' ? x.links.requirements : x.links.changes;
@@ -133,8 +137,8 @@ export async function raidPage(id) {
   }).join('');
 
   const histText = (h, x) => {
-    const lab = { title: '제목', severity: 'Severity', owner_user_id: '담당자', due_date: '기한', identified_at: I_LABEL(), probability: 'Probability', impact: 'Impact', risk_level: 'Risk Level', review_date: 'Review Date', response_strategy: '대응 전략' };
-    const val = (f, v) => { if (v == null || v === '') return '-'; if (f === 'owner_user_id') return (members.find((m) => m.id === v) || {}).name || '미지정'; if (f === 'status') return ISSUE_STATUS[v] || RISK_STATUS[v] || v;
+    const lab = { title: '제목', severity: '심각도', owner_user_id: '담당자', owner_stakeholder_id: '담당자 (팀원)', due_date: '기한', identified_at: I_LABEL(), probability: '발생 가능성', impact: '영향도', risk_level: '리스크 등급', review_date: '검토일', response_strategy: '대응 전략' };
+    const val = (f, v) => { if (v == null || v === '') return '-'; if (f === 'owner_user_id') return (members.find((m) => m.id === v) || {}).name || '미지정'; if (f === 'owner_stakeholder_id') return ((owners.team || []).find((t) => t.id === v) || {}).name || '(삭제된 담당자)'; if (f === 'status') return ISSUE_STATUS[v] || RISK_STATUS[v] || v;
       if (f === 'severity' || f === 'risk_level') return SEVERITY[v] || RISK_LEVEL[v] || v; if (f === 'probability' || f === 'impact') return LEVEL3[v] || v; if (f === 'response_strategy') return STRATEGY[v] || v; return v; };
     switch (h.action_type) {
       case 'CREATED': return html`<b>${x.display_id}</b> 생성 <small>${h.changed_by_name || ''}</small>`;
@@ -142,7 +146,7 @@ export async function raidPage(id) {
       case 'STATUS_CHANGED': return html`<b>${val('status', h.old_value)}</b> → <b>${val('status', h.new_value)}</b> <small>${h.changed_by_name || ''}</small>`;
       case 'LINKED': return html`${RAID_TARGET[h.field_name] || '연결'} 추가 <q>${h.new_value}</q>`;
       case 'UNLINKED': return html`${RAID_TARGET[h.field_name] || '연결'} 해제 <q>${h.old_value}</q>`;
-      case 'CONVERTED': return h.new_value ? html`Issue로 전환 <q>${h.new_value}</q>` : html`Risk에서 전환됨 <q>${h.old_value}</q>`;
+      case 'CONVERTED': return h.new_value ? html`Issue로 전환 <q>${h.new_value}</q>` : html`리스크에서 전환됨 <q>${h.old_value}</q>`;
       default: return html`<b>${lab[h.field_name] || h.field_name}</b> ${val(h.field_name, h.old_value)} → ${val(h.field_name, h.new_value)} <small>${h.changed_by_name || ''}</small>`;
     }
   };
@@ -158,58 +162,58 @@ export async function raidPage(id) {
 
   const detailIssue = () => {
     const x = sel; const ro = archived || Boolean(x.archived_at);
-    return html`${raw(drawerHead(x.display_id, statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status) + sevBadge(x.severity) + (x.is_overdue ? '<span class="chip chip--hold">Overdue</span>' : ''), { archived: Boolean(x.archived_at) }))}
+    return html`${raw(drawerHead(x.display_id, statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status) + sevBadge(x.severity) + (x.is_overdue ? '<span class="chip chip--hold">기한 지남</span>' : ''), { archived: Boolean(x.archived_at) }))}
     ${raw(detailTabs(x))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro ? 'disabled' : ''} aria-label="제목">
-      ${raw(x.source_risk_id ? html`<p class="srcline">Source Risk · <a class="link" href="/app/projects/${p.id}/issues?tab=risks&sel=${x.source_risk_id}" data-link>${x.source_risk_display_id} ${x.source_risk_title}</a></p>` : '')}
-      ${raw(x.source_test_id ? html`<p class="srcline">Source Test · <a class="link" href="/app/projects/${p.id}/tests?sel=${x.source_test_id}" data-link>${x.source_test_label}</a> 실행 Fail</p>` : '')}
+      ${raw(x.source_risk_id ? html`<p class="srcline">원본 리스크 · <a class="link" href="/app/projects/${p.id}/issues?tab=risks&sel=${x.source_risk_id}" data-link>${x.source_risk_display_id} ${x.source_risk_title}</a></p>` : '')}
+      ${raw(x.source_test_id ? html`<p class="srcline">원본 테스트 · <a class="link" href="/app/projects/${p.id}/tests?sel=${x.source_test_id}" data-link>${x.source_test_label}</a> 실행 실패</p>` : '')}
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${ro ? 'disabled' : ''}>${x.description}</textarea>
       <div class="dgrid">
-        <div class="dfield"><span>Severity</span><div><select class="select select--sm" data-field="severity" ${ro ? 'disabled' : ''}>${raw(opt(SEVERITY, x.severity))}</select></div></div>
-        <div class="dfield"><span>Status</span><div>${raw(statusSelect(ISSUE_STATUS, ISSUE_TRANSITIONS, x.status, ro))}</div></div>
-        <div class="dfield"><span>담당자</span><div><select class="select select--sm" data-field="owner_user_id" ${ro ? 'disabled' : ''}>${raw(ownerOpts(x.owner_user_id || ''))}</select></div></div>
+        <div class="dfield"><span>심각도</span><div><select class="select select--sm" data-field="severity" ${ro ? 'disabled' : ''}>${raw(opt(SEVERITY, x.severity))}</select></div></div>
+        <div class="dfield"><span>상태</span><div>${raw(statusSelect(ISSUE_STATUS, ISSUE_TRANSITIONS, x.status, ro))}</div></div>
+        <div class="dfield"><span>담당자</span><div><select class="select select--sm" data-field="owner" ${ro ? 'disabled' : ''}>${raw(OP.ownerOptions(members, owners, OP.ownerKey(x)))}</select>${raw(OP.noAcct(x))}${raw(OP.teamHint(owners, p.id, archived))}</div></div>
         <div class="dfield"><span>발견일</span><div><input class="input input--sm" type="date" data-field="identified_at" value="${x.identified_at || ''}" ${ro ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>기한</span><div><input class="input input--sm" type="date" data-field="due_date" value="${x.due_date || ''}" ${ro ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>해결/종료</span><div class="hint" style="height:36px;display:flex;align-items:center">${x.resolved_at ? '해결 ' + fmtShort(x.resolved_at) : '-'}${x.closed_at ? ' · 종료 ' + fmtShort(x.closed_at) : ''}</div></div>
       </div>
-      <div class="dfield" style="margin-top:10px"><span>Resolution</span><div><textarea class="textarea" data-field="resolution" maxlength="2000" style="min-height:56px;font-size:14px" placeholder="해결 조치 내용" ${ro ? 'disabled' : ''}>${x.resolution}</textarea></div></div>
+      <div class="dfield" style="margin-top:10px"><span>해결 내용</span><div><textarea class="textarea" data-field="resolution" maxlength="2000" style="min-height:56px;font-size:14px" placeholder="해결 조치 내용" ${ro ? 'disabled' : ''}>${x.resolution}</textarea>${raw(['RESOLVED', 'CLOSED'].includes(x.status) && !String(x.resolution || '').trim() ? `<p class="hint" data-res-hint>${RES_HINT}</p>` : '')}</div></div>
       <div class="dsave" id="dsave"></div>
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>${raw(linkBlocks(x, ro, { WBS: '영향 WBS' }))}
       </section>
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section>
     </div>
-    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: 'Issue 보관' }))}`;
+    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: 'Issue 보관', id: 'xarchive' }))}`;
   };
   const detailRisk = () => {
     const x = sel; const ro = archived || Boolean(x.archived_at);
     const canConvert = !ro && ['OPEN', 'MONITORING', 'MATERIALIZED'].includes(x.status) && !x.converted_issue_id;
-    return html`${raw(drawerHead(x.display_id, statusChip(RISK_STATUS, RISK_STATUS_CHIP, x.status) + sevBadge(x.risk_level) + (x.needs_review ? '<span class="chip chip--hold">Review 필요</span>' : ''), { archived: Boolean(x.archived_at) }))}
+    return html`${raw(drawerHead(x.display_id, statusChip(RISK_STATUS, RISK_STATUS_CHIP, x.status) + sevBadge(x.risk_level) + (x.needs_review ? '<span class="chip chip--hold">검토 필요</span>' : ''), { archived: Boolean(x.archived_at) }))}
     ${raw(detailTabs(x))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro ? 'disabled' : ''} aria-label="제목">
       ${raw(x.converted_issue_id ? html`<p class="srcline">전환된 Issue · <a class="link" href="/app/projects/${p.id}/issues?sel=${x.converted_issue_id}" data-link>${x.converted_issue_display_id} ${x.title}</a>${x.materialized_at ? ' · 발생 ' + fmtShort(x.materialized_at) : ''}</p>` : '')}
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${ro ? 'disabled' : ''}>${x.description}</textarea>
-      <div class="matrix"><div><span>Probability</span><select class="select select--sm" data-field="probability" ${ro ? 'disabled' : ''}>${raw(opt(LEVEL3, x.probability))}</select></div><span class="matrix__x">×</span>
-        <div><span>Impact</span><select class="select select--sm" data-field="impact" ${ro ? 'disabled' : ''}>${raw(opt(LEVEL3, x.impact))}</select></div><span class="matrix__x">=</span>
-        <div><span>Risk Level</span><div style="height:36px;display:flex;align-items:center">${raw(sevBadge(x.risk_level))}</div></div></div>
+      <div class="matrix"><div><span>발생 가능성</span><select class="select select--sm" data-field="probability" ${ro ? 'disabled' : ''}>${raw(opt(LEVEL3, x.probability))}</select></div><span class="matrix__x">×</span>
+        <div><span>영향도</span><select class="select select--sm" data-field="impact" ${ro ? 'disabled' : ''}>${raw(opt(LEVEL3, x.impact))}</select></div><span class="matrix__x">=</span>
+        <div><span>리스크 등급</span><div style="height:36px;display:flex;align-items:center">${raw(sevBadge(x.risk_level))}</div></div></div>
       <div class="dgrid">
-        <div class="dfield"><span>Status</span><div>${raw(statusSelect(RISK_STATUS, RISK_TRANSITIONS, x.status, ro))}</div></div>
+        <div class="dfield"><span>상태</span><div>${raw(statusSelect(RISK_STATUS, RISK_TRANSITIONS, x.status, ro))}</div></div>
         <div class="dfield"><span>대응 전략</span><div><select class="select select--sm" data-field="response_strategy" ${ro ? 'disabled' : ''}>${raw(opt(STRATEGY, x.response_strategy || '', '미정'))}</select></div></div>
         <div class="dfield"><span>담당자</span><div><select class="select select--sm" data-field="owner_user_id" ${ro ? 'disabled' : ''}>${raw(ownerOpts(x.owner_user_id || ''))}</select></div></div>
         <div class="dfield"><span>식별일</span><div><input class="input input--sm" type="date" data-field="identified_at" value="${x.identified_at || ''}" ${ro ? 'disabled' : ''}></div></div>
-        <div class="dfield"><span>Review Date</span><div><input class="input input--sm" type="date" data-field="review_date" value="${x.review_date || ''}" ${ro ? 'disabled' : ''}></div></div>
+        <div class="dfield"><span>검토일</span><div><input class="input input--sm" type="date" data-field="review_date" value="${x.review_date || ''}" ${ro ? 'disabled' : ''}></div></div>
       </div>
-      <div class="dfield" style="margin-top:10px"><span>대응 계획 (Mitigation Plan)</span><div><textarea class="textarea" data-field="mitigation_plan" maxlength="5000" style="min-height:64px;font-size:14px" placeholder="완화·회피를 위해 할 일" ${ro ? 'disabled' : ''}>${x.mitigation_plan}</textarea></div></div>
+      <div class="dfield" style="margin-top:10px"><span>대응 계획</span><div><textarea class="textarea" data-field="mitigation_plan" maxlength="5000" style="min-height:64px;font-size:14px" placeholder="완화·회피를 위해 할 일" ${ro ? 'disabled' : ''}>${x.mitigation_plan}</textarea></div></div>
       <div class="dsave" id="dsave"></div>
-      ${raw(canConvert ? html`<div class="decision decision--review"><p><b>이 Risk가 실제로 발생했나요?</b> Issue로 전환하면 제목·설명·담당자·연결 항목이 복사되고 Risk는 '발생' 상태가 됩니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="convert">Issue로 전환</button></div></div>` : '')}
+      ${raw(canConvert ? html`<div class="decision decision--review"><p><b>이 리스크가 실제로 발생했나요?</b> Issue로 전환하면 제목·설명·담당자·연결 항목이 복사되고 리스크는 '발생' 상태가 됩니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="convert">Issue로 전환</button></div></div>` : '')}
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>${raw(linkBlocks(x, ro, { WBS: '영향 가능 WBS' }))}
       </section>
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section>
     </div>
-    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: 'Risk 보관' }))}`;
+    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '리스크 보관', id: 'xarchive' }))}`;
   };
 
   const bind = () => {
@@ -251,7 +255,7 @@ export async function raidPage(id) {
       const field = el.dataset.field;
       if (el.tagName === 'SELECT' || el.type === 'date') el.onchange = async () => {
         if (field === 'status' && isIssue() && el.value === 'RESOLVED') {
-          const note = await promptDialog({ title: `${x.display_id} 해결 처리`, body: '어떻게 해결했는지 적어두면 나중에 같은 문제를 다룰 때 도움이 됩니다.', label: 'Resolution', placeholder: '예: Mock API 기반으로 우선 개발 후 실제 API 연동 완료', confirm: '해결 처리' });
+          const note = await promptDialog({ title: `${x.display_id} 해결 처리`, body: RES_HINT, label: '해결 내용', placeholder: '예: Mock API 기반으로 우선 개발 후 실제 API 연동 완료', confirm: '해결 처리' });
           if (note === null) { el.value = x.status; return; }
           status.textContent = '저장 중…';
           try { await apply(await api('PATCH', xApi(`/${x.id}`), { status: 'RESOLVED', resolution: note || x.resolution })); toast('해결 처리했습니다.'); } catch (e) { toast(e.message); draw(); }
@@ -278,7 +282,7 @@ export async function raidPage(id) {
     });
     const cv = $('#convert');
     if (cv) cv.onclick = async () => {
-      if (!(await confirmDialog({ title: '이 Risk가 실제 Issue로 발생했나요?', body: `${x.display_id}의 제목·설명·담당자·연결 항목을 복사해 새 Issue를 만들고, Risk 상태를 '발생'으로 바꿉니다.`, confirm: 'Issue로 전환' }))) return;
+      if (!(await confirmDialog({ title: '이 리스크가 실제 Issue로 발생했나요?', body: `${x.display_id}의 제목·설명·담당자·연결 항목을 복사해 새 Issue를 만들고, 리스크 상태를 '발생'으로 바꿉니다.`, confirm: 'Issue로 전환' }))) return;
       try { const d = await api('POST', xApi(`/${x.id}/convert`), {}); toast(`${d.issue.display_id} Issue를 생성했습니다.`); setParam('tab', ''); setParam('sel', d.issue.id); sel = d.issue; dtab = 'info'; await load(); draw(); }
       catch (e) { toast(e.message); }
     };

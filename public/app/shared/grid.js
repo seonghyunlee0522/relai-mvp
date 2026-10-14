@@ -6,7 +6,7 @@
  *        canEdit?(r, col), onEdit?(id, field, value), onOpen?(id), onSelect?(selectedSet), empty?(), activeId?() }
  * column: { key, label, width, min, sort?(r) → comparable, render(r) → html, cls?, align?, sticky?, hidden?, fixed?,
  *           edit?: { type: 'select'|'date'|'number', field, options?(r)|map|[[v,l] | {group, options}], value?(r), prefix?(r), suffix?(r), title?(r) (date), min?, max?,
- *                    display?(r) (date/number: html shown at rest instead of the input — default `10/20` / the number) },
+ *                    display?(r) (date/number: html shown at rest instead of the input — default `10/20` / the number), after?(r) (date: html under the cell) },
  *           card?: false — left out of the <640px card row (ID + title on line 1, the other visible columns on line 2) }
  */
 import { esc, html, raw, fmtShort } from '../core/dom.js';
@@ -79,7 +79,8 @@ export function createGrid(cfg) {
     const atRest = (inp, text) => html`<span class="cedit">${raw(inp)}<span class="cedit__v" aria-hidden="true">${raw(text)}</span></span>`;
     if (ed.type === 'date') { const tip = typeof ed.title === 'function' ? ed.title(r) : ''; const inp = atRest(html`<input type="date" class="cell cell--date ${(typeof ed.cls === 'function' ? ed.cls(r) : ed.cls) || ''}" data-edit="${ed.field}" value="${cur || ''}" aria-label="${c.label}" ${raw(tip ? html`title="${tip}"` : '')}>`,
         ed.display ? ed.display(r) : cur ? esc(fmtShort(cur)) : '<span class="dim">-</span>');
-      return ed.prefix && ed.prefix(r) ? html`<span class="cellwrap">${raw(ed.prefix(r))}${raw(inp)}</span>` : inp; }
+      const out = ed.prefix && ed.prefix(r) ? html`<span class="cellwrap">${raw(ed.prefix(r))}${raw(inp)}</span>` : inp;
+      return ed.after ? out + ed.after(r) : out; }   // after(r): small line under the date (Phase 4: "계획 5/14 → 5/21 (+7일)")
     if (ed.type === 'number') return atRest(html`<input type="number" class="cell cell--num" data-edit="${ed.field}" value="${cur ?? ''}" min="${ed.min ?? 0}" max="${ed.max ?? 100}" step="1" aria-label="${c.label}">`,
       ed.display ? ed.display(r) : cur == null || cur === '' ? '<span class="dim">-</span>' : esc(String(cur)));
     return c.render(r);

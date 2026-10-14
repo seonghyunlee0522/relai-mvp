@@ -102,7 +102,7 @@ test('workflow: submit → approve/reject → implement; guards; reviewer record
   const S = await setup(client);
   const a = (await S.c('POST', S.cr, { title: 'A' })).json.change;
   const b = (await S.c('POST', S.cr, { title: 'B' })).json.change;
-  const tr = (id, action, note) => S.c('POST', `${S.cr}/${id}/transition`, { action, decision_note: note });
+  const tr = (id, action, note) => S.c('POST', `${S.cr}/${id}/transition`, { action, decision_note: note, ...(action === 'approve' ? { customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } } : {}) });
   assert.equal((await tr(a.id, 'approve')).status, 409);   // DRAFT cannot be approved
   assert.equal((await tr(a.id, 'implement')).status, 409);
   assert.equal((await tr(a.id, 'bogus')).status, 400);
@@ -129,7 +129,7 @@ test('list, search, filters, summary, guided/overview stats, archive', async () 
   const cc = (await S.c('POST', S.cr, { title: '색상 변경', priority: 'LOW' })).json.change;
   await S.c('PATCH', `${S.cr}/${a.id}`, { schedule_impact_days: 4, cost_impact: 3000000 });
   await S.c('PATCH', `${S.cr}/${b.id}`, { schedule_impact_days: 2 });
-  const tr = (id, action, note) => S.c('POST', `${S.cr}/${id}/transition`, { action, decision_note: note });
+  const tr = (id, action, note) => S.c('POST', `${S.cr}/${id}/transition`, { action, decision_note: note, ...(action === 'approve' ? { customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } } : {}) });
   await tr(a.id, 'submit'); await tr(a.id, 'approve'); await tr(b.id, 'submit'); await tr(cc.id, 'submit'); await tr(cc.id, 'reject', '불필요');
   const list = (await S.c('GET', S.cr)).json;
   assert.deepEqual(list.changes.map((x) => x.display_id), ['CR-003', 'CR-002', 'CR-001']);

@@ -762,7 +762,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
     const input = W.parseWbs(req.body, { partial: true, existing: ctx.w });
     if (!(await ownerOk(req, res, input.owner_user_id)) || !(await stakeholderOk(res, ctx.project, input.owner_stakeholder_id))) return;
-    (await tx(db, async (db) => (await W.updateWbs(db, ctx.project, ctx.w, input, req.user.id))));
+    (await tx(db, async (db) => (await W.updateWbs(db, ctx.project, ctx.w, input, req.user.id, { delayReason: W.parseDelayReason(req.body?.delay_reason) }))));
     const item = (await W.getWbs(db, ctx.project, ctx.w.id));
     res.json({ item, warnings: W.rangeWarnings(ctx.project, item), ...(await wbsResponse(ctx.project)) });
   }));
@@ -899,7 +899,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(cbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
-    res.json({ changes: (await C.listChanges(db, project, req.query)), summary: (await C.changeStats(db, project.id)), requesters: (await C.requesterOptions(db, project.id)) });
+    res.json({ changes: (await C.listChanges(db, project, req.query)), summary: (await C.changeStats(db, project.id)), requesters: (await C.requesterOptions(db, project.id)),
+      people: (await C.stakeholdersOf(db, project.id)).filter((x) => x && x.name).map(({ id, org_type, org, name, role }) => ({ id, org_type, org, name, role })) });   // US-6: 요청자 autocomplete
   }));
   app.post(cbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
@@ -941,9 +942,18 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       if (perm.reason === 'author') return fail(res, 403, 'self_approval', '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. 다른 승인자에게 요청하세요.');
       if (!perm.allowed) return fail(res, 403, 'forbidden', '변경 요청은 Owner·Admin 또는 지정된 승인자만 승인하거나 반려할 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
     }
-    const r = (await tx(db, async (db) => (await C.transition(db, ctx.c, String(req.body?.action || ''), { note: req.body?.decision_note }, req.user.id))));
+    const r = (await tx(db, async (db) => (await C.transition(db, ctx.c, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id))));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
     if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${ctx.c.status})에서는 이 작업을 할 수 없습니다.`);
+    res.json((await crResponse(ctx.project, ctx.c.id, req)));
+  }));
+  /* Phase 4 US-2: 승인 기록 추가 — an APPROVED / IMPLEMENTED CR without a customer record gets one; the status never changes. */
+  app.patch(`${cbase}/:cid/customer-approval`, guard, wrap(async (req, res) => {
+    const ctx = (await crMutable(req, res)); if (!ctx) return;
+    if (!['APPROVED', 'IMPLEMENTED'].includes(ctx.c.status)) return fail(res, 409, 'invalid_transition', '검토 중인 변경 요청은 승인 버튼으로 고객 승인을 기록하세요.');
+    const perm = C.reviewPermission(ctx.c, { userId: req.user.id, role: req.role, memberCount: await memberCount(req.params.wid) });
+    if (!perm.allowed && perm.reason === 'role') return fail(res, 403, 'forbidden', '승인 기록은 Owner·Admin 또는 지정된 승인자만 남길 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
+    (await tx(db, async (db) => (await C.saveCustomerApproval(db, ctx.project, ctx.c, req.body?.customer_approval, req.user.id))));
     res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   app.post(`${cbase}/:cid/archive`, guard, wrap(async (req, res) => {
@@ -1009,12 +1019,13 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     };
     app.get(xbase, guard, wrap(async (req, res) => {
       const project = (await loadProject(req, res)); if (!project) return;
-      res.json({ items: await listFn(db, project, req.query), issues: (await X.issueStats(db, project.id)), risks: (await X.riskStats(db, project.id)) });
+      res.json({ items: await listFn(db, project, req.query), issues: (await X.issueStats(db, project.id)), risks: (await X.riskStats(db, project.id)),
+        ...(type === 'ISSUE' ? { owners: await SK.ownerOptions(db, project) } : {}) });   // Phase 4 US-6: the Phase 3 owner picker
     }));
     app.post(xbase, guard, wrap(async (req, res) => {
       const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
       const input = parse(req.body);
-      if (!(await ownerOk(req, res, input.owner_user_id))) return;
+      if (!(await ownerOk(req, res, input.owner_user_id)) || !(await stakeholderOk(res, project, input.owner_stakeholder_id))) return;
       const id = (await tx(db, async (db) => await create(db, project, input, req.user.id)));
       res.status(201).json((await resp(project, id)));
     }));
@@ -1025,7 +1036,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     app.patch(`${xbase}/:xid`, guard, wrap(async (req, res) => {
       const ctx = (await xMutable(req, res)); if (!ctx) return;
       const input = parse(req.body, { partial: true });
-      if (!(await ownerOk(req, res, input.owner_user_id))) return;
+      if (!(await ownerOk(req, res, input.owner_user_id)) || !(await stakeholderOk(res, ctx.project, input.owner_stakeholder_id))) return;
       const r = (await tx(db, async (db) => (await X.updateEntity(db, type, ctx.x, input, req.user.id))));
       if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${r.from})에서 ${r.to}(으)로 바꿀 수 없습니다.`);
       res.json({ ...(await resp(ctx.project, ctx.x.id)), changed: r.changed });
@@ -1239,7 +1250,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- errors ---------- */
   app.use((err, req, res, next) => {
-    if (err instanceof ValidationError) return fail(res, err.code === 'parent_has_values' ? 409 : 400, err.code || 'validation_error', err.code === 'parent_has_values' ? '상위 작업의 일정·진행률 처리 방식을 선택해 주세요.' : '입력값을 확인해 주세요.', { fields: err.fields, ...(err.parent ? { parent: err.parent } : {}) });
+    if (err instanceof ValidationError) return fail(res, err.code === 'parent_has_values' ? 409 : err.status || 400, err.code || 'validation_error', err.code === 'parent_has_values' ? '상위 작업의 일정·진행률 처리 방식을 선택해 주세요.' : err.message !== 'validation' ? err.message : '입력값을 확인해 주세요.', { fields: err.fields, ...(err.parent ? { parent: err.parent } : {}), ...(err.extra || {}) });
     if (err.type === 'entity.parse.failed') return fail(res, 400, 'bad_json', '잘못된 요청입니다.');
     if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);

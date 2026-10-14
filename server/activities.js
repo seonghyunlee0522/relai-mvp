@@ -139,22 +139,31 @@ function development(key, ctx) {
       : n(ctx.overdue_tasks) ? prog(`종료 예정일이 지난 작업 ${ctx.overdue_tasks}건이 있습니다.`, act('지연 작업 확인 →', u('?f=overdue')), { crit: true })
       : ok('종료 예정일이 지난 미완료 작업이 없습니다.', act('WBS 보기 →', u('?ctx=monitor')));
     case 'ISSUES': {
-      if (n(is.total) === 0) return none('아직 기록된 이슈가 없습니다. 문제가 생기면 이슈로 기록하세요.', act('이슈 등록 →', iu('?new=1')));
-      if (n(is.active)) { const parts = [`열린 이슈 ${is.active}건`]; if (n(is.critical)) parts.push(`Critical ${is.critical}건`); if (n(is.blocked)) parts.push(`Blocked ${is.blocked}건`);
+      // US-5: no issue at all → the manual 완료 처리 button (a project without problems must still be able to close this required activity)
+      if (n(is.total) === 0) return { ...manual('아직 기록된 Issue가 없습니다. 문제가 없었다면 완료 처리하세요.', act('Issue 등록 →', iu('?new=1'))), row_text: true };
+      if (n(is.active)) { const parts = [`열린 Issue ${is.active}건`]; if (n(is.critical)) parts.push(`심각 ${is.critical}건`); if (n(is.blocked)) parts.push(`차단됨 ${is.blocked}건`);
         return prog(parts.join(' · '), act('이슈 처리 →', iu(n(is.critical) ? '?severity=CRITICAL' : n(is.blocked) ? '?status=BLOCKED' : '')), { crit: Boolean(n(is.critical) || n(is.blocked)) }); }
-      return ok(`이슈 ${is.total}건이 모두 해결되었습니다.`, act('Issues 보기 →', iu()));
+      return ok(`Issue ${is.total}건이 모두 해결되었습니다.`, act('Issue 보기 →', iu()));
     }
     case 'CHANGES': {
       const cu = (qs = '') => `/app/projects/${ctx.pid}/changes${qs}`;
       if (n(c.total) === 0) return none('아직 변경 요청이 없습니다. 추가·변경 요청이 들어오면 변경 요청으로 기록하세요.', act('변경 요청 등록 →', cu('?new=1')));
-      const parts = []; if (n(c.under_review)) parts.push(`검토 중 ${c.under_review}건`); if (n(c.approved_unimplemented)) parts.push(`승인 후 미반영 ${c.approved_unimplemented}건`);
-      return parts.length ? prog(parts.join(' · '), act('변경 요청 결정 →', cu(n(c.under_review) ? '?status=UNDER_REVIEW' : '?status=APPROVED')))
+      const parts = []; if (n(c.under_review)) parts.push(`검토 중 ${c.under_review}건 · 고객 결정을 받아 기록하세요`); if (n(c.approved_unimplemented)) parts.push(`승인 후 미반영 ${c.approved_unimplemented}건`);
+      return parts.length ? prog(parts.join(' · '), n(c.under_review) ? act('승인 기록하기', cu('?status=UNDER_REVIEW&approve=1')) : act('변경 요청 결정 →', cu('?status=APPROVED')), { row_text: Boolean(n(c.under_review)) })   // US-2: the approval Drawer
         : ok(`변경 요청 ${c.total}건이 모두 처리되었습니다.`, act('변경 요청 보기 →', cu()));
+    }
+    case 'WEEKLY_REPORT': {   // US-3: this week (Mon–Sun, Korea time), computed on every read — next week it is open again
+      const wr = ctx.weekly_report || { state: 'NONE' }; const ru = `/app/projects/${ctx.pid}/reports`;
+      if (wr.state === 'FINAL') return ok(`✓ 이번 주 보고 확정 · ${mdOf(wr.finalized_at)}`, null, { row_text: true });
+      if (wr.state === 'DRAFT') return prog('초안 작성 중', act('이어서 작성', `${ru}/${wr.report_id}`), { row_action: true, row_text: true });
+      return none('이번 주 주간보고를 만드세요', act('주간보고 만들기', `${ru}?new=week`), { row_action: true, row_text: true });
     }
     case 'DECISIONS': return manual('프로젝트 방향에 영향을 주는 결정을 메모로 기록합니다.');
     default: return manual('');
   }
 }
+/** '10/14' (Korea time) from an ISO timestamp. */
+const mdOf = (iso) => { if (!iso) return ''; const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit' }).format(new Date(iso)); const [m, dd] = d.split('-'); return `${Number(m)}/${Number(dd)}`; };
 
 function testing(key, ctx) {
   const t = ctx.stats.tests || {};
@@ -260,7 +269,7 @@ export function activityStates(phaseKey, steps, ctx) {
     return { ...s, description, importance, importance_label: IMPORTANCE_LABEL[importance],
       state, derived: r.derived, text: state === 'COMPLETED' && s.status === 'COMPLETED' && r.derived !== 'COMPLETED' ? (r.text ? `완료 처리됨 · ${r.text}` : '완료 처리됨') : (r.text || s.completion_criteria),
       hint: state === 'COMPLETED' && r.hint ? r.hint : null, import_ms: state === 'NOT_STARTED' && r.import_ms ? { count: r.import_ms, text: r.text } : null,
-      cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
+      cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, row_action: Boolean(r.row_action) && state !== 'COMPLETED' && state !== 'SKIPPED', row_text: Boolean(r.row_text), crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
       // manual = no data signal decides this activity: What's Next offers 완료 처리 for it (checklist ones too — a hand mark wins)
       manual: r0.derived === null, checklist: list };
   });

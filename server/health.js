@@ -16,7 +16,7 @@ const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id 
 export const STATUS = { GOOD: 'GOOD', WARNING: 'WARNING', CRITICAL: 'CRITICAL', UNKNOWN: 'UNKNOWN' };
 export const STATUS_LABEL = { GOOD: '정상', WARNING: '주의', CRITICAL: '위험', UNKNOWN: '정보 부족' };
 export const DIMENSIONS = ['schedule', 'scope', 'quality', 'change', 'risk'];
-export const DIMENSION_LABEL = { schedule: 'Schedule', scope: 'Scope', quality: 'Quality', change: 'Change', risk: 'Risk' };
+export const DIMENSION_LABEL = { schedule: '일정', scope: '범위', quality: '품질', change: '변경', risk: '리스크' };   // Phase 4 US-7: Korean labels
 
 export const HEALTH_RULES = {
   schedule: { warn_tasks_min: 1, crit_tasks_min: 4, warn_milestones_min: 1, crit_milestones_min: 2 },
@@ -99,9 +99,9 @@ export function scopeHealth(f, R = HEALTH_RULES.scope) {
 
 export function qualityHealth(f, R = HEALTH_RULES.quality) {
   const i = f.iss; const t = f.tst; const a = f.acc; const reasons = [];
-  if (n(i.critical_open)) reasons.push(`Critical Issue ${i.critical_open}건`);
-  if (n(i.high_open)) reasons.push(`High Issue ${i.high_open}건`);
-  if (n(t.last_fail)) reasons.push(`Latest Fail Test ${t.last_fail}건`);
+  if (n(i.critical_open)) reasons.push(`심각한 Issue ${i.critical_open}건`);
+  if (n(i.high_open)) reasons.push(`높음 Issue ${i.high_open}건`);
+  if (n(t.last_fail)) reasons.push(`최근 실패한 테스트 ${t.last_fail}건`);
   if (n(a.rework)) reasons.push(`보완 필요 검수 ${a.rework}건`);
   if (n(i.critical_open)) return { status: STATUS.CRITICAL, reasons };
   if (R.verify_phases.includes(f.phase) && n(t.last_fail) >= R.crit_fail_tests_min_in_verify) return { status: STATUS.CRITICAL, reasons: [...reasons, `시험/전환 단계에서 Fail Test 다수`] };
@@ -123,8 +123,8 @@ export function changeHealth(f, R = HEALTH_RULES.change) {
 export function riskHealth(f) {
   const r = f.rsk; const reasons = [];
   if (n(r.total) === 0) return { status: STATUS.UNKNOWN, reasons: ['등록된 리스크가 없습니다.'], hint: '리스크가 0건이라고 프로젝트가 안전한 것은 아닙니다. 식별된 리스크를 등록하세요.' };
-  if (n(r.critical)) reasons.push(`Critical Risk ${r.critical}건`);
-  if (n(r.high)) reasons.push(`High Risk ${r.high}건`);
+  if (n(r.critical)) reasons.push(`심각한 리스크 ${r.critical}건`);
+  if (n(r.high)) reasons.push(`높음 리스크 ${r.high}건`);
   if (n(r.review_overdue)) reasons.push(`검토일이 지난 리스크 ${r.review_overdue}건`);
   if (n(r.critical)) return { status: STATUS.CRITICAL, reasons };
   if (reasons.length) return { status: STATUS.WARNING, reasons };

@@ -129,7 +129,7 @@ test('metrics: snapshot endpoint + attention items + kpis from computed data onl
   const w = await A.wbs({ title: 'W', planned_start_date: '2026-01-01', planned_end_date: '2026-01-10' });
   await A.c('POST', `${A.purl}/requirements/${r1.id}/links`, { wbs_item_id: w.id });
   await A.issue({ title: 'crit', severity: 'CRITICAL' });
-  const cr = await A.cr({ title: 'C' }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve' });
+  const cr = await A.cr({ title: 'C' }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } });
   const t = await A.tc({ title: 'T' }); await A.c('POST', `${A.purl}/tests/${t.id}/links`, { target_type: 'REQUIREMENT', target_id: r1.id }); await A.c('POST', `${A.purl}/tests/${t.id}/executions`, { result: 'FAIL' });
   const a = await A.acc({ title: 'A' }); await A.c('POST', `${A.purl}/acceptances/${a.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/acceptances/${a.id}/transition`, { action: 'rework', decision_note: 'x' });
   const s = await A.c('GET', `${A.purl}/snapshot`);

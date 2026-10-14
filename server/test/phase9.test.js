@@ -121,7 +121,7 @@ test('health + attention + upcoming from real data: computed, archived excluded,
   await A.risk({ title: 'Review overdue low risk', probability: 'LOW', impact: 'LOW', review_date: ymd(-1) });
   await A.risk({ title: 'Review in 6 days', probability: 'LOW', impact: 'MEDIUM', review_date: ymd(6) });
   const t1 = await A.tc({ title: 'Fails' }); await A.c('POST', `${A.purl}/tests/${t1.id}/executions`, { result: 'FAIL' });
-  const cr1 = await A.cr({ title: 'Approved CR' }); await A.c('PATCH', `${A.purl}/changes/${cr1.id}`, { schedule_impact_days: 3 }); await A.c('POST', `${A.purl}/changes/${cr1.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/changes/${cr1.id}/transition`, { action: 'approve' });
+  const cr1 = await A.cr({ title: 'Approved CR' }); await A.c('PATCH', `${A.purl}/changes/${cr1.id}`, { schedule_impact_days: 3 }); await A.c('POST', `${A.purl}/changes/${cr1.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/changes/${cr1.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } });
   const cr2 = await A.cr({ title: 'Under review CR' }); await A.c('POST', `${A.purl}/changes/${cr2.id}/transition`, { action: 'submit' });
   const a1 = await A.acc({ title: 'Rework acc', requirements: [r1.id], due_date: ymd(7) }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'submit' });
   await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'rework', decision_note: '보완' });
@@ -131,7 +131,7 @@ test('health + attention + upcoming from real data: computed, archived excluded,
   assert.equal(H.status, 'CRITICAL');
   assert.equal(H.dimensions.schedule.status, 'WARNING'); assert.deepEqual(H.dimensions.schedule.reasons, ['종료 예정일이 지난 WBS 1건', '지난 마일스톤 1건']);
   assert.equal(H.dimensions.scope.status, 'CRITICAL'); assert.match(H.dimensions.scope.reasons.join(), /미확정 요구사항 1건.*WBS와 미연결.*100%/); // R2 unconfirmed; R1 confirmed-unlinked = 1/1 ≥ 30%
-  assert.equal(H.dimensions.quality.status, 'CRITICAL'); assert.match(H.dimensions.quality.reasons.join(), /Critical Issue 1건/);
+  assert.equal(H.dimensions.quality.status, 'CRITICAL'); assert.match(H.dimensions.quality.reasons.join(), /심각한 Issue 1건/);
   assert.equal(H.dimensions.change.status, 'WARNING'); assert.equal(H.dimensions.risk.status, 'CRITICAL');
   // attention: ladder order, archived excluded, all kinds present
   const all = (await A.c('GET', `${A.purl}/attention`)).json;
@@ -179,7 +179,7 @@ test('weekly report: default period, generate (structured + sections + markdown)
   const i1 = await A.issue({ title: 'Resolved issue', severity: 'HIGH' }); await A.c('PATCH', `${A.purl}/issues/${i1.id}`, { status: 'RESOLVED' });
   await A.issue({ title: 'Open critical', severity: 'CRITICAL', owner_user_id: A.uid });
   await A.risk({ title: 'High risk', probability: 'HIGH', impact: 'MEDIUM' });
-  const cr = await A.cr({ title: 'CR approved' }); await A.c('PATCH', `${A.purl}/changes/${cr.id}`, { schedule_impact_days: 2 }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve' });
+  const cr = await A.cr({ title: 'CR approved' }); await A.c('PATCH', `${A.purl}/changes/${cr.id}`, { schedule_impact_days: 2 }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } });
   const t1 = await A.tc({ title: 'T pass' }); await A.c('POST', `${A.purl}/tests/${t1.id}/executions`, { result: 'PASS' });
   const t2 = await A.tc({ title: 'T fail' }); await A.c('POST', `${A.purl}/tests/${t2.id}/executions`, { result: 'FAIL' });
   const a1 = await A.acc({ title: 'Acc accepted', requirements: [r1.id] }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'submit' }); await A.c('POST', `${A.purl}/acceptances/${a1.id}/transition`, { action: 'accept' });
