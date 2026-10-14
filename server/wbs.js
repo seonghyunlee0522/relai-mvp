@@ -9,7 +9,8 @@ import { linkCountsByWbs, linksForWbs, traceStats } from './trace.js';
 import { linkedRaid } from './raid.js';
 import { testsFor } from './testing.js';
 import { changesFor } from './changes.js';
-import { addWbsHistory, listWbsHistory, WBS_TRACKED } from './wbs-history.js';
+import { addWbsHistory, listWbsHistory, WBS_TRACKED, DELETED_OWNER, OWNER_NAME_SQL } from './wbs-history.js';
+export { DELETED_OWNER, OWNER_NAME_SQL };
 import { listComments } from './comments.js';
 
 export const WBS_TYPES = ['SUMMARY', 'TASK', 'MILESTONE'];   // SUMMARY = legacy; new items are TASK (a TASK with children behaves as a group) or MILESTONE
@@ -30,6 +31,27 @@ const dateOrNull = (v) => (v === undefined ? undefined : v === null || v === '' 
 /** Lifecycle V2 (§17): a work item may be tagged with the lifecycle phase it belongs to. */
 export const LIFECYCLE_PHASES = ['INITIATION', 'REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING', 'TRANSITION_GO_LIVE', 'OPERATIONS'];
 
+/* ---------- 담당자: RELAI 사용자 또는 계정 없는 팀원 (Phase 3 US-1) ---------- */
+/** 팀원 (계정 없음) = 01 이해관계자 중 조직 구분이 당사·협력사인 사람. wbs_items.owner_stakeholder_id holds the stakeholder's id
+ *  (project_definitions.stakeholders JSON, no FK). Exactly one of owner_user_id / owner_stakeholder_id is set (parseWbs). */
+export const TEAM_ORG_TYPES = ['OWN', 'PARTNER'];
+export async function projectStakeholders(db, projectId) {
+  const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]);
+  try { const v = r ? JSON.parse(r.stakeholders) : []; return Array.isArray(v) ? v : []; } catch { return []; }
+}
+/** Assignable team members: { id, name, role, org_type } in 01 order. */
+export const teamOf = (stakeholders) => stakeholders.filter((x) => TEAM_ORG_TYPES.includes(x.org_type) && x.name).map((x) => ({ id: x.id, name: x.name, role: x.role || '', org_type: x.org_type }));
+/** A task has an owner when it has a user, or a stakeholder that still exists in 01 (a deleted one counts as 미지정). */
+export const hasOwner = (it, shIds) => Boolean(it.owner_user_id || (it.owner_stakeholder_id && shIds.has(it.owner_stakeholder_id)));
+/** 프로젝트 종료일 이후 (US-3): leaf task end or milestone date after the project's planned end. */
+export const pastEnd = (project, it) => {
+  const pe = project && project.planned_end_date; if (!pe) return false;
+  const d = it.item_type === 'MILESTONE' ? it.milestone_date : it.planned_end_date;
+  return Boolean(d && d > pe);
+};
+/** Counted in the 03 completion guide: past the end but STARTING on/before it (a task that starts after the end — 오픈 후 안정화 — and milestones only get the row warning). */
+export const overrunsEnd = (project, it) => it.item_type === 'TASK' && pastEnd(project, it) && (!it.planned_start_date || it.planned_start_date <= project.planned_end_date);
+
 /* ---------- validation ---------- */
 export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
   const f = {}; const out = {};
@@ -42,6 +64,19 @@ export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
   if (has('title')) { out.title = str(b.title); if (!out.title || out.title.length > 200) f.title = '업무명을 200자 이내로 입력해 주세요.'; }
   if (given('description')) { out.description = str(b.description); if (out.description.length > 5000) f.description = '설명은 5,000자 이내로 입력해 주세요.'; }
   if (given('owner_user_id')) out.owner_user_id = b.owner_user_id ? String(b.owner_user_id) : null;
+  if (given('owner_stakeholder_id')) out.owner_stakeholder_id = b.owner_stakeholder_id ? String(b.owner_stakeholder_id) : null;
+  // `owner` = one select value for both kinds: '' (미지정) · 'u:<user id>' · 's:<stakeholder id>'
+  if (given('owner')) {
+    const v = String(b.owner ?? '');
+    if (!v) { out.owner_user_id = null; out.owner_stakeholder_id = null; }
+    else if (/^u:./.test(v)) { out.owner_user_id = v.slice(2); out.owner_stakeholder_id = null; }
+    else if (/^s:./.test(v)) { out.owner_stakeholder_id = v.slice(2); out.owner_user_id = null; }
+    else f.owner = '담당자 값이 올바르지 않습니다.';
+  }
+  // 둘 중 하나만: choosing one kind clears the other (a user — or 미지정 — clears the stakeholder; a stakeholder clears the user)
+  if (out.owner_user_id !== undefined && out.owner_stakeholder_id === undefined) out.owner_stakeholder_id = null;
+  if (out.owner_stakeholder_id && out.owner_user_id === undefined) out.owner_user_id = null;
+  if (out.owner_user_id && out.owner_stakeholder_id) f.owner_user_id = '담당자는 RELAI 사용자와 팀원 중 한 명만 지정할 수 있습니다.';
   if (given('lifecycle_phase')) { const v = b.lifecycle_phase || null; if (v !== null && !LIFECYCLE_PHASES.includes(v)) f.lifecycle_phase = 'Lifecycle 단계 값이 올바르지 않습니다.'; else out.lifecycle_phase = v; }
   if (given('weight')) { const n = Number(b.weight); if (!Number.isInteger(n) || n < 0 || n > 1000) f.weight = '가중치는 0~1000 사이의 정수여야 합니다.'; else out.weight = n; }
   if (given('status')) { if (!WBS_STATUSES.includes(b.status)) f.status = '상태 값이 올바르지 않습니다.'; else out.status = b.status; }
@@ -114,6 +149,13 @@ const getItem = async (db, projectId, id) => (await db.get('SELECT * FROM wbs_it
 export async function loadTree(db, project, { includeArchived = false } = {}) {
   const items = (await db.all(`SELECT w.*, u.name AS owner_name FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id
     WHERE w.project_id = ? ${includeArchived ? '' : 'AND w.archived_at IS NULL'} ORDER BY w.sequence, w.created_at`, [project.id]));
+  // Phase 3 US-1: a stakeholder owner shows its 01 name + `계정 없음`; a stakeholder deleted from 01 shows (삭제된 담당자)
+  const shById = new Map((await projectStakeholders(db, project.id)).map((x) => [x.id, x]));
+  for (const it of items) {
+    if (it.owner_user_id || !it.owner_stakeholder_id) continue;
+    const sh = shById.get(it.owner_stakeholder_id);
+    it.owner_name = sh ? sh.name : DELETED_OWNER; it.owner_no_account = true; it.owner_deleted = !sh; it.owner_role = sh ? sh.role || '' : '';
+  }
   const deps = (await db.all(`SELECT d.* FROM wbs_dependencies d JOIN wbs_items a ON a.id = d.predecessor_id JOIN wbs_items b ON b.id = d.successor_id
     WHERE d.project_id = ? AND a.archived_at IS NULL AND b.archived_at IS NULL`, [project.id]));
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -127,6 +169,7 @@ export async function loadTree(db, project, { includeArchived = false } = {}) {
     for (const it of kids.get(parentKey) || []) {
       const children = kids.get(it.id) || [];
       const node = { ...it, depth, children_count: children.length, is_group: children.length > 0, predecessors: predsOf.get(it.id) || [], linked_req_count: linkCounts.get(it.id) || 0 };
+      node.past_end = !children.length && pastEnd(project, it);   // US-3 row warning (leaf task end / milestone date after the project end)
       out.push(node);
       walk(it.id, depth + 1);
       node.computed_progress = computeProgress(node, kids);
@@ -245,6 +288,8 @@ export function scheduleFigures(leafTasks, milestones, today = todayStr()) {
 const countBy = (rows, f) => rows.reduce((m, r) => { const k = f(r); m[k] = (m[k] || 0) + 1; return m; }, {});
 export async function wbsStats(db, projectId) {
   const items = (await liveItems(db, projectId));
+  const project = (await db.get('SELECT id, planned_end_date FROM projects WHERE id = ?', [projectId])) || {};
+  const shIds = new Set((await projectStakeholders(db, projectId)).map((x) => x.id));
   const hasChild = new Set(items.filter((i) => i.parent_id).map((i) => i.parent_id));
   const leafTasks = items.filter((i) => i.item_type === 'TASK' && !hasChild.has(i.id));
   const tasks = leafTasks;   // groups (TASK with children, legacy SUMMARY) are roll-ups, never counted as work items
@@ -265,10 +310,13 @@ export async function wbsStats(db, projectId) {
     by_phase: countBy(tasks, (i) => i.lifecycle_phase || 'UNCLASSIFIED'),
     by_phase_completed: countBy(tasks.filter((i) => i.status === 'COMPLETED'), (i) => i.lifecycle_phase || 'UNCLASSIFIED'),
     dependencies: deps,
-    tasks_without_owner: tasks.filter((i) => !i.owner_user_id).length,
+    tasks_without_owner: tasks.filter((i) => !hasOwner(i, shIds)).length,
+    tasks_over_end: tasks.filter((i) => overrunsEnd(project, i)).length,   // US-3: 03 completion guide count (milestones / tasks starting after the end excluded)
     tasks_without_dates: tasks.filter((i) => !i.planned_start_date || !i.planned_end_date).length,
     ...scheduleFigures(leafTasks, milestones),
-    tasks_unlinked: (await traceStats(db, projectId)).tasks_unlinked,
+    // US-5: once any task carries a lifecycle tag, only 구현(DEVELOPMENT) tasks count as "작업 without a requirement"; untagged WBS counts every task as before
+    ...(await (async () => { const tr = await traceStats(db, projectId); const scoped = tasks.some((i) => i.lifecycle_phase);
+      return { tasks_unlinked: scoped ? tr.dev_unlinked : tr.tasks_unlinked, tasks_unlinked_scope: scoped ? 'DEVELOPMENT' : 'ALL' }; })()),
   };
 }
 
@@ -320,9 +368,9 @@ export async function createWbs(db, project, input, userId, { skipRenumber = fal
   const id = randomUUID(); const ts = now();
   const seq = (await db.get('SELECT COALESCE(MAX(sequence), 0) + 1 AS s FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND parent_id IS NOT DISTINCT FROM ?', [project.id, input.parent_id || null])).s;
   (await db.run(`INSERT INTO wbs_items (id, project_id, parent_id, sequence, item_type, title, description, owner_user_id, status, progress, weight,
-      planned_start_date, planned_end_date, actual_start_date, actual_end_date, milestone_date, lifecycle_phase, created_by, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, input.parent_id || null, seq, input.item_type, input.title, input.description ?? '', input.owner_user_id ?? null, input.status ?? 'NOT_STARTED', input.item_type === 'TASK' ? (input.progress ?? (input.status === 'COMPLETED' ? 100 : 0)) : 0, input.weight ?? 1, input.item_type === 'MILESTONE' ? null : input.planned_start_date ?? null, input.item_type === 'MILESTONE' ? null : input.planned_end_date ?? null, input.actual_start_date ?? null, input.actual_end_date ?? null, input.item_type === 'MILESTONE' ? input.milestone_date ?? null : null, input.lifecycle_phase ?? null, userId, ts, ts]));
-  (await addWbsHistory(db, id, 'CREATED', {}, userId, ts));
+      planned_start_date, planned_end_date, actual_start_date, actual_end_date, milestone_date, lifecycle_phase, created_by, created_at, updated_at, owner_stakeholder_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, input.parent_id || null, seq, input.item_type, input.title, input.description ?? '', input.owner_user_id ?? null, input.status ?? 'NOT_STARTED', input.item_type === 'TASK' ? (input.progress ?? (input.status === 'COMPLETED' ? 100 : 0)) : 0, input.weight ?? 1, input.item_type === 'MILESTONE' ? null : input.planned_start_date ?? null, input.item_type === 'MILESTONE' ? null : input.planned_end_date ?? null, input.actual_start_date ?? null, input.actual_end_date ?? null, input.item_type === 'MILESTONE' ? input.milestone_date ?? null : null, input.lifecycle_phase ?? null, userId, ts, ts, input.owner_user_id ? null : input.owner_stakeholder_id ?? null]));
+  (await addWbsHistory(db, id, 'CREATED', input.history_source ? { field: 'source', newValue: input.history_source } : {}, userId, ts));
   if (!skipRenumber) (await renumber(db, project.id));
   return id;
 }
@@ -411,7 +459,7 @@ export async function outdentWbs(db, project, existing, userId = null) {
 export async function duplicateWbs(db, project, existing, userId, { withChildren = true } = {}) {
   const items = (await liveItems(db, project.id)); const kids = new Map();
   for (const it of items) { const k = it.parent_id || ''; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(it); }
-  const copyOf = (src, parentId, title) => ({ item_type: src.item_type, title, description: src.description, owner_user_id: src.owner_user_id, status: 'NOT_STARTED', progress: 0, weight: src.weight,
+  const copyOf = (src, parentId, title) => ({ item_type: src.item_type, title, description: src.description, owner_user_id: src.owner_user_id, owner_stakeholder_id: src.owner_stakeholder_id, lifecycle_phase: src.lifecycle_phase, status: 'NOT_STARTED', progress: 0, weight: src.weight,
     planned_start_date: src.planned_start_date, planned_end_date: src.planned_end_date, milestone_date: src.milestone_date, parent_id: parentId });
   const created = [];
   const clone = async (src, parentId, title) => {

@@ -113,7 +113,9 @@ test('feature guides: seen once → hidden; reset shows again; unknown key 404; 
 test('guidance engine (pure rules, Lifecycle V2): INITIATION / REQUIREMENTS / ANALYSIS_DESIGN / DEVELOPMENT / TESTING / TRANSITION_GO_LIVE / OPERATIONS; task-centred CTAs; Jira & AI never required', () => {
   const base = { project: { id: 'p1', current_phase: 'INITIATION' }, next_phase: { name: '요구사항 정의', sequence: 2 }, stats: {} };
   const g = (over) => projectGuidance({ ...base, ...over });
-  const arrow = (a) => a && a.label.endsWith('→') && !/로 이동/.test(a.label);
+  // CTAs that open a dialog on arrival carry no arrow (Phase 2 Q6-3 '승인 기록하기', Phase 3 US-2 'WBS 뼈대 만들기'); navigation CTAs end with →
+  const OPENS_DIALOG = new Set(['승인 기록하기', 'WBS 뼈대 만들기']);
+  const arrow = (a) => a && (a.label.endsWith('→') || OPENS_DIALOG.has(a.label)) && !/로 이동/.test(a.label);
   // INITIATION
   let r = g({ phase: { phase_key: 'INITIATION', name: '착수', sequence: 1 }, definition: { progress: { done: 0, total: 5 }, needs_review: [] } });
   assert.equal(r.rule, 'INIT_DEFINE'); assert.equal(r.primary_action.href, '/app/projects/p1/definition'); assert.ok(arrow(r.primary_action)); assert.ok(r.why && r.next_preview);
@@ -130,7 +132,9 @@ test('guidance engine (pure rules, Lifecycle V2): INITIATION / REQUIREMENTS / AN
   r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 3 }, wbs: { tasks: 0 } } }); assert.equal(r.rule, 'REQ_DONE'); assert.equal(r.primary_action.href, '/app/projects/p1?move=next');
   // ANALYSIS_DESIGN: WBS empty → trace → assign → plan → done
   const AD = { phase: { phase_key: 'ANALYSIS_DESIGN', name: '분석·설계', sequence: 3 }, next_phase: { name: '구현', sequence: 4 } };
-  r = g({ ...AD, stats: { wbs: { tasks: 0 } } }); assert.equal(r.rule, 'WBS_EMPTY'); assert.equal(r.primary_action.label, 'WBS 작성 시작 →'); assert.equal(r.primary_action.href, '/app/projects/p1/wbs?new=1');
+  // Phase 3 US-2: an empty WBS starts from the rule-based skeleton; a WBS with only milestones (not empty → no skeleton) keeps 'WBS 작성 시작 →'
+  r = g({ ...AD, stats: { wbs: { tasks: 0, total: 0 } } }); assert.equal(r.rule, 'WBS_EMPTY'); assert.equal(r.primary_action.label, 'WBS 뼈대 만들기'); assert.equal(r.primary_action.href, '/app/projects/p1/wbs?skeleton=1');
+  r = g({ ...AD, stats: { wbs: { tasks: 0, total: 2 } } }); assert.equal(r.rule, 'WBS_EMPTY'); assert.equal(r.primary_action.label, 'WBS 작성 시작 →'); assert.equal(r.primary_action.href, '/app/projects/p1/wbs?new=1');
   r = g({ ...AD, stats: { wbs: { tasks: 4 }, requirements: { in_scope: 3, in_scope_unlinked: 1 } } }); assert.equal(r.rule, 'WBS_TRACE');
   r = g({ ...AD, stats: { wbs: { tasks: 4, tasks_without_owner: 2, tasks_without_dates: 0 } } }); assert.equal(r.rule, 'WBS_ASSIGN'); assert.equal(r.primary_action.label, '담당자 지정 →');
   r = g({ ...AD, stats: { wbs: { tasks: 4, tasks_without_owner: 0, tasks_without_dates: 1 } } }); assert.equal(r.rule, 'WBS_PLAN'); assert.equal(r.primary_action.label, '일정 입력 →');

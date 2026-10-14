@@ -38,7 +38,8 @@ const guideCard = (g, p, archived, created) => {
     <div class="rg__body">
       <h2 class="rg__title">${q.title}</h2>
       <div class="rg__row">
-        <p class="rg__d">${q.description || ''}${raw(q.warnings && q.warnings.length ? q.warnings.map((w) => html`<span class="rg__warn"><i class="st st--warn" aria-hidden="true">!</i>${w}</span>`).join('') : '')}</p>
+        <p class="rg__d">${q.description || ''}${raw(q.warnings && q.warnings.length ? q.warnings.map((w) => { const href = q.warning_links && q.warning_links[w];   // 03 완료 가이드: each warning links to its WBS filter (never blocks)
+          return html`<span class="rg__warn"><i class="st st--warn" aria-hidden="true">!</i>${raw(href && !archived ? html`<a href="${href}" data-link>${w}</a>` : html`${w}`)}</span>`; }).join('') : '')}</p>
         ${raw(primary || secondary ? html`<div class="rg__cta">${raw(secondary)}${raw(primary)}</div>` : '')}
       </div>
     </div></section>`;
@@ -76,6 +77,7 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
       <span class="np__purpose">${a.description}</span>
       ${raw(GATE_KEYS.has(a.step_key) && a.text && a.state !== 'NOT_STARTED' ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}">${a.text}</span>` : '')}
       ${raw(a.hint ? html`<span class="np__hint">${a.hint}</span>` : '')}
+      ${raw(a.import_ms && !archived ? html`<span class="np__imp">${a.import_ms.text} <button type="button" class="btn btn--secondary btn--xs" data-import-ms>가져오기</button></span>` : '')}
     </div>
     <span class="badge badge--st is-${cls}">${stLabel}</span>
     <span class="np__acts">${raw(acts.join(''))}</span>
@@ -159,6 +161,12 @@ export async function nextPage(id, main = $('#main')) {
       b.disabled = true;
       try { g = await api('PATCH', wsApi(`/${id}/steps/${b.dataset.step}`), { status: b.dataset.status }); toast(b.dataset.status === 'COMPLETED' ? '완료 처리했습니다.' : b.dataset.status === 'SKIPPED' ? '이 업무를 건너뛰었습니다.' : '업무를 다시 시작합니다.'); draw(); }
       catch (e) { toast(e.message); b.disabled = false; }
+    });
+    // 03 MILESTONES (US-4): 01 주요 일정 → WBS 마일스톤 in one click; the row turns ✓ 완료 on redraw
+    main.querySelectorAll('[data-import-ms]').forEach((b) => b.onclick = async (e) => {
+      e.stopPropagation(); b.disabled = true;
+      try { const r = await api('POST', wsApi(`/${id}/wbs/milestones/from-key-dates`), {}); g = await api('GET', wsApi(`/${id}`)); draw(); toast(r.created ? `마일스톤 ${r.created}건을 가져왔습니다.` : '이미 같은 마일스톤이 있습니다.'); }
+      catch (err) { toast(err.message); b.disabled = false; }
     });
     bindCoach(main);
     if (pendingMove && g.next_phase) { pendingMove = false; move(); }

@@ -88,7 +88,7 @@ function requirements(key, ctx) {
 function analysisDesign(key, ctx) {
   const w = ctx.stats.wbs || {}; const r = ctx.stats.requirements || {};
   const u = (qs = '') => `/app/projects/${ctx.pid}/wbs${qs}`;
-  const empty = none('아직 등록된 WBS가 없습니다.', act('WBS 작성 시작 →', u('?new=1')));
+  const empty = n(w.tasks) === 0 && n(w.total) === 0 ? none('아직 등록된 WBS가 없습니다. 기본 작업 목록(WBS 뼈대)으로 시작할 수 있습니다.', act('WBS 뼈대 만들기', u('?skeleton=1'))) : none('아직 등록된 WBS가 없습니다.', act('WBS 작성 시작 →', u('?new=1')));
   const dep = none('먼저 WBS를 작성하세요.', null);
   switch (key) {
     case 'WBS_BUILD': return n(w.tasks) === 0 ? empty : ok(`실행 작업 ${w.tasks}건이 등록되어 있습니다.`, act('WBS 보기 →', u()));
@@ -96,7 +96,7 @@ function analysisDesign(key, ctx) {
       if (n(w.tasks) === 0) return dep;
       if (n(r.in_scope) === 0) return none('범위 내 요구사항이 없어 연결할 대상이 없습니다.', act('요구사항 보기 →', `/app/projects/${ctx.pid}/requirements`));
       if (n(r.in_scope_unlinked)) return prog(`범위 내 요구사항 ${r.in_scope}건 중 ${r.in_scope_unlinked}건이 WBS와 연결되지 않았습니다.`, act('요구사항 연결 →', `/app/projects/${ctx.pid}/requirements?view=trace&scope=IN_SCOPE&link=unlinked`));
-      return ok(`범위 내 요구사항 ${r.in_scope}건이 모두 WBS와 연결되었습니다.`, act('Trace 보기 →', `/app/projects/${ctx.pid}/requirements?view=trace`), { trace: n(w.tasks_unlinked) ? `요구사항과 연결되지 않은 작업 ${w.tasks_unlinked}건` : null });
+      return ok(`범위 내 요구사항 ${r.in_scope}건이 모두 WBS와 연결되었습니다.`, act('Trace 보기 →', `/app/projects/${ctx.pid}/requirements?view=trace`), { trace: n(w.tasks_unlinked) ? `${w.tasks_unlinked_scope === 'DEVELOPMENT' ? '구현 작업 중 ' : ''}요구사항과 연결되지 않은 작업 ${w.tasks_unlinked}건` : null });   // US-5: only 구현 tasks once tasks are tagged
     }
     case 'ASSIGN': return n(w.tasks) === 0 ? dep
       : n(w.tasks_without_owner) ? prog(`${w.tasks}건 중 ${w.tasks_without_owner}건에 담당자가 없습니다.`, act('담당자 지정 →', u('?f=no_owner')))
@@ -107,8 +107,13 @@ function analysisDesign(key, ctx) {
     case 'ORDER': return n(w.tasks) === 0 ? dep
       : n(w.dependencies) ? ok(`선후관계 ${w.dependencies}건이 설정되어 있습니다.`, act('WBS 보기 →', u()))
       : none('아직 작업 간 선후관계가 없습니다.', act('선후관계 설정 →', u()));
-    case 'MILESTONES': return n(w.milestones) ? ok(`마일스톤 ${w.milestones}건이 등록되어 있습니다.`, act('Gantt 보기 →', u('?view=gantt')))
-      : none('아직 등록된 마일스톤이 없습니다.', act('마일스톤 등록 →', u('?new=1&type=MILESTONE')));
+    case 'MILESTONES': {
+      if (n(w.milestones)) return ok(`마일스톤 ${w.milestones}건이 등록되어 있습니다.`, act('Gantt 보기 →', u('?view=gantt')));
+      // US-4: the 01 주요 일정 not yet in the WBS are offered once, inline (What's Next row + the WBS screen) — one click imports them
+      const kd = ctx.key_dates_pending || [];
+      if (kd.length) return none(`착수 때 정한 주요 일정 ${kd.length}건(${kd.slice(0, 3).map((k) => k.title).join('·')}${kd.length > 3 ? '…' : ''})을 마일스톤으로 가져올까요?`, act('마일스톤 등록 →', u('?new=1&type=MILESTONE')), { import_ms: kd.length });
+      return none('아직 등록된 마일스톤이 없습니다.', act('마일스톤 등록 →', u('?new=1&type=MILESTONE')));
+    }
     case 'NON_DEV_TASKS': {
       const bp = w.by_phase || {}; const nondev = n(bp.TESTING) + n(bp.TRANSITION_GO_LIVE) + n(bp.OPERATIONS);
       if (n(w.tasks) === 0) return dep;
@@ -254,7 +259,7 @@ export function activityStates(phaseKey, steps, ctx) {
     if (emph) { importance = 'RECOMMENDED'; description = `${description} ${emph}`; }
     return { ...s, description, importance, importance_label: IMPORTANCE_LABEL[importance],
       state, derived: r.derived, text: state === 'COMPLETED' && s.status === 'COMPLETED' && r.derived !== 'COMPLETED' ? (r.text ? `완료 처리됨 · ${r.text}` : '완료 처리됨') : (r.text || s.completion_criteria),
-      hint: state === 'COMPLETED' && r.hint ? r.hint : null,
+      hint: state === 'COMPLETED' && r.hint ? r.hint : null, import_ms: state === 'NOT_STARTED' && r.import_ms ? { count: r.import_ms, text: r.text } : null,
       cta: state === 'COMPLETED' || state === 'SKIPPED' ? null : r.cta || null, crit: Boolean(r.crit) && state !== 'COMPLETED' && state !== 'SKIPPED', trace: r.trace || null,
       // manual = no data signal decides this activity: What's Next offers 완료 처리 for it (checklist ones too — a hand mark wins)
       manual: r0.derived === null, checklist: list };

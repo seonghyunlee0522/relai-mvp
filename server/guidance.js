@@ -29,7 +29,8 @@ export function projectGuidance(ctx) {
   const u = (p = '') => `/app/projects/${project.id}${p}`;
   const req = stats.requirements || {}; const wbs = stats.wbs || {}; const tst = stats.tests || {}; const acc = stats.acceptances || {}; const iss = stats.issues || {}; const chg = stats.changes || {};
   const key = phase ? phase.phase_key || phase.key : project.current_phase;
-  const warnings = [];
+  const warnings = []; const warningLinks = {};   // warning text → filter href (Phase 3: 03 완료 가이드 경고 목록)
+  const warnLink = (text, href) => { warnings.push(text); warningLinks[text] = href; };
   const act = (label, href) => ({ label, href });
   const move = nextPhase ? act(`${nextPhase.name} 단계 시작 →`, u('?move=next')) : null;
   /** 06/07: the first open REQUIRED (then any) activity that carries a work-screen CTA — the checklist screen for manual ones. */
@@ -38,7 +39,7 @@ export function projectGuidance(ctx) {
   const actCta = nextAct ? act(nextAct.cta.label === '체크리스트 작성 →' ? `${nextAct.title} 체크리스트 →` : nextAct.cta.label, nextAct.cta.href) : null;
   const out = (rule, title, description, why, primary, secondary = null, next = null) => ({
     current_phase: { key, name: phase?.name || PHASE_BY_KEY[key]?.name || key, sequence: phase?.sequence || (DEFAULT_PHASES.findIndex((p) => p.key === key) + 1) },
-    rule, title, description, why, primary_action: primary, secondary_action: secondary, warnings, next_preview: next,
+    rule, title, description, why, primary_action: primary, secondary_action: secondary, warnings, warning_links: warningLinks, next_preview: next,
   });
   const nextPhaseText = nextPhase ? `다음 단계: ${nextPhase.name}` : null;
 
@@ -80,11 +81,18 @@ export function projectGuidance(ctx) {
       return out('REQ_DONE', '요구사항 정의가 마무리되었습니다', '요구사항 기준선이 잡혔습니다. 요구사항을 실행 가능한 작업 단위로 구체화하면 일정과 책임을 명확하게 관리할 수 있습니다.', 'WBS는 요구사항을 실제 작업 단위로 나눈 실행 계획입니다.', move || act('WBS 작성 시작 →', u('/wbs?new=1')), move ? act('요구사항 보기 →', u('/requirements')) : null, nextPhaseText);
     }
     case 'ANALYSIS_DESIGN': {
+      // Phase 3 US-2: an empty WBS starts from the rule-based skeleton (primary); 직접 추가 · Excel · AI stay on the WBS screen as secondary paths
+      if (n(wbs.tasks) === 0 && n(wbs.total) === 0) return out('WBS_EMPTY', 'WBS를 작성하세요', `${n(req.in_scope_confirmed) ? `확정한 요구사항 ${req.in_scope_confirmed}건으로` : '확정한 요구사항이 없어도'} 시험·전환·오픈 작업까지 들어간 기본 작업 목록(WBS 뼈대)을 만들 수 있습니다. 만든 뒤 자유롭게 고치고, 일정과 담당자는 직접 채웁니다.`, '실행 작업이 있어야 담당자·일정·진척률을 관리할 수 있습니다.', act('WBS 뼈대 만들기', u('/wbs?skeleton=1')), act('직접 추가 · Excel · AI →', u('/wbs')), '작업이 준비되면 담당자와 일정을 정합니다.');
       if (n(wbs.tasks) === 0) return out('WBS_EMPTY', 'WBS를 작성하세요', '요구사항을 실행 가능한 작업 단위로 구체화해야 일정과 책임을 명확하게 관리할 수 있습니다. 직접 추가, Excel 가져오기, AI WBS 초안(사용 가능 시)을 WBS 화면에서 선택할 수 있습니다.', '실행 작업이 있어야 담당자·일정·진척률을 관리할 수 있습니다.', act('WBS 작성 시작 →', u('/wbs?new=1')), null, '작업이 준비되면 요구사항을 연결하고 담당자와 일정을 정합니다.');
       if (n(req.in_scope) && n(req.in_scope_unlinked)) return out('WBS_TRACE', '요구사항과 WBS를 연결하세요', `범위 내 요구사항 ${req.in_scope}건 중 ${req.in_scope_unlinked}건이 아직 어떤 작업과도 연결되지 않았습니다. 연결이 있어야 빠진 요구사항을 찾고 변경 영향을 추적할 수 있습니다.`, '연결이 있어야 빠진 요구사항을 찾고 변경 영향을 추적할 수 있습니다.', act('요구사항 연결 →', u('/requirements?view=trace&scope=IN_SCOPE&link=unlinked')), act('WBS 보기 →', u('/wbs')), '연결이 끝나면 담당자와 일정을 정합니다.');
       if (n(wbs.tasks_without_owner)) return out('WBS_ASSIGN', '작업 담당자를 지정하세요', `담당자가 없는 작업 ${wbs.tasks_without_owner}건이 있습니다. 담당자가 정해져야 진행 상황과 지연을 사람 기준으로 추적할 수 있습니다.`, '담당자가 있어야 진행 상황과 지연을 추적할 수 있습니다.', act('담당자 지정 →', u('/wbs?f=no_owner')), n(wbs.tasks_without_dates) ? act('일정 입력 →', u('/wbs?f=no_dates')) : null, '담당자 지정 후 일정을 입력합니다.');
       if (n(wbs.tasks_without_dates)) return out('WBS_PLAN', '작업 일정을 입력하세요', `일정이 없는 작업 ${wbs.tasks_without_dates}건이 있습니다. 작업별 계획 일정이 있어야 계획 대비 진척과 지연을 조기에 발견할 수 있습니다.`, '작업별 계획 일정이 있어야 계획 대비 진척과 지연을 계산할 수 있습니다.', act('일정 입력 →', u('/wbs?f=no_dates')), act('Gantt 보기 →', u('/wbs?view=gantt')), '일정이 준비되면 구현 단계로 이동합니다.');
-      if (n(wbs.tasks_unlinked)) warnings.push(`요구사항과 연결되지 않은 작업 ${wbs.tasks_unlinked}건`);
+      // 03 완료 가이드 경고 목록 (never blocks — the move to 04 stays primary): 시험 / 오픈 작업 없음 · 종료일 초과 · 구현 작업 미연결
+      const bp = wbs.by_phase || {};
+      if (n(bp.TESTING) === 0) warnLink('시험 작업이 없습니다', u('/wbs?phase=TESTING'));
+      if (n(bp.TRANSITION_GO_LIVE) === 0) warnLink('오픈(전환) 작업이 없습니다', u('/wbs?phase=TRANSITION_GO_LIVE'));
+      if (n(wbs.tasks_over_end)) warnLink(`종료일을 넘는 작업 ${wbs.tasks_over_end}건`, u('/wbs?f=over_end'));
+      if (n(wbs.tasks_unlinked)) warnLink(wbs.tasks_unlinked_scope === 'DEVELOPMENT' ? `구현 작업 중 요구사항과 연결되지 않은 작업 ${wbs.tasks_unlinked}건` : `요구사항과 연결되지 않은 작업 ${wbs.tasks_unlinked}건`, u(wbs.tasks_unlinked_scope === 'DEVELOPMENT' ? '/wbs?f=unlinked&phase=DEVELOPMENT' : '/wbs?f=unlinked'));
       if (n(wbs.milestones) === 0) warnings.push('등록된 마일스톤 없음');
       return out('WBS_DONE', '실행 계획이 준비되었습니다', '실행 계획이 갖춰졌습니다. 구현 단계에서는 진척·지연·이슈·변경 요청을 꾸준히 기록해야 일정 영향을 미리 줄일 수 있습니다.', '구현 단계에서는 진척·지연·이슈·변경 요청을 중심으로 안내합니다.', move || act('WBS 보기 →', u('/wbs')), move ? act('WBS 보기 →', u('/wbs')) : null, nextPhaseText);
     }

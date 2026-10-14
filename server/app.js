@@ -18,6 +18,7 @@ import { PDF_MIME, DOCX_MIME, renderReportPdf, renderReportDocx } from './report
 const safeFileName = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, '_').replace(/^\.+/, '').slice(0, 60) || 'project';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
+import * as SK from './wbs-skeleton.js';
 import * as T from './trace.js';
 import * as C from './changes.js';
 import * as X from './raid.js';
@@ -690,7 +691,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- WBS ---------- */
   const wbase = `${base}/:pid/wbs`;
-  const wbsResponse = async (project, opts = {}) => ({ ...(await W.loadTree(db, project, opts)), summary: (await W.wbsStats(db, project.id)), jira: (await wbsExecutionMap(db, project.id)) });   // jira: null unless the project is mapped (Phase 12)
+  const wbsResponse = async (project, opts = {}) => ({ ...(await W.loadTree(db, project, opts)), summary: (await W.wbsStats(db, project.id)), jira: (await wbsExecutionMap(db, project.id)),
+    owners: (await SK.ownerOptions(db, project)), key_dates_pending: (await SK.pendingKeyDates(db, project)).length });   // Phase 3: 팀원 (계정 없음) picker · 01 주요 일정 가져오기 suggestion   // jira: null unless the project is mapped (Phase 12)
   const loadWbs = async (req, res, project) => {
     const w = (await W.getWbs(db, project, req.params.wid2 || req.params.iid));
     if (!w) fail(res, 404, 'not_found', 'WBS 항목을 찾을 수 없습니다.');
@@ -706,6 +708,30 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   };
 
   mountWbsRoutes({ app, db, guard, wrap, fail, loadProject, mutable, wbase, wbsResponse });   // Excel / bulk / comments (before the /:iid routes)
+  /** Phase 3 US-1: a stakeholder owner must be a 당사·협력사 stakeholder of this project (01 이해관계자). */
+  const stakeholderOk = async (res, project, shId) => {
+    if (!shId) return true;
+    if ((await SK.ownerOptions(db, project)).team.some((x) => x.id === shId)) return true;
+    fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { owner_stakeholder_id: '팀원은 01 착수 › 이해관계자에 등록된 당사·협력사 인원만 지정할 수 있습니다.' } });
+    return false;
+  };
+  /* Phase 3 US-2 / US-4 (before the /:iid routes): WBS 뼈대 (empty WBS only → 409 otherwise) and 01 주요 일정 → 마일스톤 */
+  app.get(`${wbase}/skeleton/preview`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json({ preview: (await SK.skeletonPreview(db, project)) });
+  }));
+  app.post(`${wbase}/skeleton`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    let out;
+    try { out = (await tx(db, async (t) => { const r = await SK.createSkeleton(t, project, req.user.id); if (!(await t.get('SELECT 1 FROM wbs_items WHERE project_id = ? AND archived_at IS NOT NULL LIMIT 1', [project.id]))) await recordFirst(t, { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id, kind: 'wbs' }); return r; })); }
+    catch (e) { if (e instanceof SK.WbsNotEmpty) return fail(res, 409, e.code, e.message); throw e; }
+    res.status(201).json({ result: out, ...(await wbsResponse(project)) });
+  }));
+  app.post(`${wbase}/milestones/from-key-dates`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const ids = (await tx(db, async (t) => SK.milestonesFromKeyDates(t, project, req.user.id)));
+    res.status(ids.length ? 201 : 200).json({ created: ids.length, created_ids: ids, ...(await wbsResponse(project)) });
+  }));
 
   app.get(wbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
@@ -717,7 +743,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const project = (await loadProject(req, res));
     if (!project || !mutable(res, project)) return;
     const input = W.parseWbs(req.body);
-    if (!(await ownerOk(req, res, input.owner_user_id))) return;
+    if (!(await ownerOk(req, res, input.owner_user_id)) || !(await stakeholderOk(res, project, input.owner_stakeholder_id))) return;
     const id = (await tx(db, async (db) => { const iid = (await W.createWbs(db, project, { ...input, parent_id: req.body?.parent_id || null, convert_parent: req.body?.convert_parent }, req.user.id));
       if (Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?', [project.id])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id, kind: 'wbs' });
       return iid; }));
@@ -735,7 +761,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.patch(`${wbase}/:iid`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
     const input = W.parseWbs(req.body, { partial: true, existing: ctx.w });
-    if (!(await ownerOk(req, res, input.owner_user_id))) return;
+    if (!(await ownerOk(req, res, input.owner_user_id)) || !(await stakeholderOk(res, ctx.project, input.owner_stakeholder_id))) return;
     (await tx(db, async (db) => (await W.updateWbs(db, ctx.project, ctx.w, input, req.user.id))));
     const item = (await W.getWbs(db, ctx.project, ctx.w.id));
     res.json({ item, warnings: W.rangeWarnings(ctx.project, item), ...(await wbsResponse(ctx.project)) });

@@ -14,6 +14,7 @@ import * as D from './definition.js';
 import * as M from './metrics.js';
 import * as H from './health.js';
 import { LEAF_SQL, todayStr } from './wbs.js';
+import { pendingKeyDates } from './wbs-skeleton.js';
 import { projectGuidance } from './guidance.js';
 import { loadBaseline } from './req-baseline.js';
 import { PHASE_BY_KEY } from './templates/default-phases.js';
@@ -27,7 +28,8 @@ export async function guidanceContext(db, project) {
   const overdue = n((await db.get(`SELECT COUNT(*) n FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status <> 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE`, [project.id])).n);
   const reqBaseline = (await loadBaseline(db, project, { stats: stats.requirements }));   // 02 요구사항 기준선 승인 (Phase 2)
   const traits = { data_migration: project.data_migration, has_external_integration: project.has_external_integration };
-  const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections, req_baseline: reqBaseline }, traits, overdue_tasks: overdue }));
+  const keyDatesPending = project.current_phase === 'ANALYSIS_DESIGN' ? (await pendingKeyDates(db, project)) : [];   // 03 MILESTONES: 01 주요 일정 가져오기 suggestion (US-4)
+  const guide = (await loadGuide(db, project, { stats, definition: { sections: def.sections, req_baseline: reqBaseline }, traits, overdue_tasks: overdue, key_dates_pending: keyDatesPending }));
   const scopeOut = (def.definition.scope_out || []).map((x) => x.text).filter(Boolean);   // Charter 제외 범위 → 02 범위 확정 hint
   const guidance = projectGuidance({ project, phase: guide.current_phase, next_phase: guide.next_phase, definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, req_baseline: reqBaseline, scope_out: scopeOut }, stats, overdue_tasks: overdue });
   return { stats, def, overdue, guide, guidance, reqBaseline };

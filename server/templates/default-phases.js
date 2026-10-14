@@ -17,6 +17,10 @@ export const IMPORTANCE_LABEL = { REQUIRED: '필수', RECOMMENDED: '권장', OPT
 /** 착수보고회(KICKOFF) importance — one constant so it can flip to REQUIRED (spec Phase 1 D1/Q1). Migration 31 copies it into existing projects. */
 export const KICKOFF_IMPORTANCE = 'RECOMMENDED';
 
+/** 03 분석·설계 phase description; the last sentence is Phase 3 US-6 (migration 33 copies it into existing projects). */
+export const ANALYSIS_DESIGN_DESCRIPTION_V1 = '요구사항의 “무엇”을 실행 가능한 “어떻게”로 구체화하고, 요구사항 기반 WBS와 실행 계획을 세웁니다.';
+export const ANALYSIS_DESIGN_DESCRIPTION = `${ANALYSIS_DESIGN_DESCRIPTION_V1} 화면·DB·인터페이스 설계도 WBS 작업으로 넣어 관리하세요.`;
+
 const A = (key, title, description, criteria, importance = 'REQUIRED', feature = null) =>
   ({ key, title, description, completion_criteria: criteria, importance, is_required: importance === 'REQUIRED' ? 1 : 0, linked_feature_type: feature });
 
@@ -49,7 +53,7 @@ export const DEFAULT_PHASES = [
   },
   {
     key: 'ANALYSIS_DESIGN', name: '분석·설계', short: '분석·설계', en: 'Analysis & Design',
-    description: '요구사항의 “무엇”을 실행 가능한 “어떻게”로 구체화하고, 요구사항 기반 WBS와 실행 계획을 세웁니다.',
+    description: ANALYSIS_DESIGN_DESCRIPTION,
     steps: [
       A('WBS_BUILD', 'WBS 작성', '확정된 요구사항을 실제 작업 단위로 나눕니다. 직접 추가, Excel 가져오기, AI WBS 초안 생성을 사용할 수 있습니다.', '실행 작업(WBS)이 1건 이상 등록되어 있습니다.', 'REQUIRED', 'wbs'),
       A('REQ_TRACE', '요구사항–WBS 연결', '범위 내 요구사항마다 이를 구현하는 작업을 연결해 누락된 요구사항이 없는지 확인합니다.', '범위 내 요구사항이 모두 WBS와 연결되어 있습니다.', 'REQUIRED', 'wbs'),
@@ -57,7 +61,7 @@ export const DEFAULT_PHASES = [
       A('PLAN', '일정 입력', '작업별 시작일과 종료일을 정해 작업 수준의 세부 일정을 만듭니다.', '모든 실행 작업에 계획 일정이 입력되어 있습니다.', 'REQUIRED', 'wbs'),
       A('ORDER', '선후관계 설정', '먼저 끝나야 하는 작업과 동시에 할 수 있는 작업을 구분합니다.', '작업 간 선후관계가 1건 이상 설정되어 있습니다.', 'RECOMMENDED', 'wbs'),
       A('MILESTONES', '마일스톤 등록', '중간 점검, 테스트 시작, 검수, 오픈 등 고객과 공유할 주요 시점을 마일스톤으로 등록합니다.', '마일스톤이 1건 이상 등록되어 있습니다.', 'RECOMMENDED', 'wbs'),
-      A('NON_DEV_TASKS', '기능 개발 외 작업 확인', '인프라, 데이터 마이그레이션, 교육, 전환, 테스트처럼 기능 개발이 아닌 작업이 WBS에 포함되어 있는지 확인합니다.', '시험·전환·운영 단계에 해당하는 작업이 WBS에 포함되어 있습니다.', 'OPTIONAL', 'wbs'),
+      A('NON_DEV_TASKS', '기능 개발 외 작업 확인', '인프라, 데이터 마이그레이션, 교육, 전환, 테스트처럼 기능 개발이 아닌 작업이 WBS에 포함되어 있는지 확인합니다.', '시험·전환·운영 단계에 해당하는 작업이 WBS에 포함되어 있습니다.', 'RECOMMENDED', 'wbs'),   // Phase 3 US-2: 선택 → 권장 (migration 33)
     ],
   },
   {

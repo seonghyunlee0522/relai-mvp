@@ -13,7 +13,7 @@ import { assertWithinLimit } from './billing/limits.js';
 import { loadGuide } from './guide.js';
 import * as M from './metrics.js';
 import { projectHealth, STATUS_LABEL } from './health.js';
-import { LEAF_SQL } from './wbs.js';
+import { LEAF_SQL, OWNER_NAME_SQL } from './wbs.js';
 
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
@@ -74,7 +74,7 @@ export async function buildReportData(db, project, { period_start: s, period_end
       WHERE h.entity_type = 'ACCEPTANCE' AND a.project_id = ? AND a.archived_at IS NULL AND h.action_type = 'STATUS_CHANGED' AND h.new_value = 'ACCEPTED' AND ${IN_PERIOD('h.changed_at')} GROUP BY a.id`, [pid, s, e])),
   ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 
-  const inProgress = (await db.all(`SELECT * FROM (SELECT w.id, w.wbs_code AS display_id, w.title, w.status, w.progress, w.planned_end_date, w.sequence, u.name AS owner,
+  const inProgress = (await db.all(`SELECT * FROM (SELECT w.id, w.wbs_code AS display_id, w.title, w.status, w.progress, w.planned_end_date, w.sequence, ${OWNER_NAME_SQL('w', 'u')} AS owner, (w.owner_user_id IS NULL AND w.owner_stakeholder_id IS NOT NULL) AS owner_no_account,
       (w.planned_end_date IS NOT NULL AND w.planned_end_date < ${TODAY})::int AS overdue,
       (SELECT COUNT(*) FROM raid_links l WHERE l.target_type = 'WBS' AND l.target_id = w.id) AS raid_links,
       (SELECT COUNT(*) FROM change_request_wbs_impacts x JOIN change_requests c ON c.id = x.change_request_id WHERE x.wbs_item_id = w.id AND c.archived_at IS NULL AND c.status IN ('UNDER_REVIEW','APPROVED')) AS change_impacts
@@ -142,7 +142,7 @@ export function sectionsFromData(d) {
   out.completed = d.completed_items.length ? d.completed_items.map((c) => `- [${TYPE_KO[c.type]}] ${c.display_id} ${c.title} — ${EVENT[c.event] || c.event} (${md(c.at)})`).join('\n') : '- 기간 내 완료 처리된 항목이 없습니다.';
   out.in_progress = d.in_progress_items.length ? d.in_progress_items.map((w) => {
     const flags = []; if (w.overdue) flags.push('종료 예정일 경과'); if (w.raid_links) flags.push(`이슈/리스크 ${w.raid_links}건 연결`); if (w.change_impacts) flags.push(`변경 영향 ${w.change_impacts}건`);
-    return `- ${w.display_id} ${w.title} — ${w.progress}%${w.owner ? ` · ${w.owner}` : ''}${w.planned_end_date ? ` · 종료 예정 ${md(w.planned_end_date)}` : ''}${flags.length ? ` · ${flags.join(', ')}` : ''}`;
+    return `- ${w.display_id} ${w.title} — ${w.progress}%${w.owner ? ` · ${w.owner}${w.owner_no_account ? ' (계정 없음)' : ''}` : ''}${w.planned_end_date ? ` · 종료 예정 ${md(w.planned_end_date)}` : ''}${flags.length ? ` · ${flags.join(', ')}` : ''}`;
   }).join('\n') : '- 진행 중인 WBS 작업이 없습니다.';
   const ir = d.issues_and_risks; const irLines = [];
   if (ir.issues.length) { irLines.push('**이슈**'); for (const i of ir.issues) irLines.push(`- ${i.display_id} ${i.title} — ${i.severity} · ${ISSUE_STATUS[i.status] || i.status}${i.owner ? ` · ${i.owner}` : ''}${i.due_date ? ` · 기한 ${md(i.due_date)}${i.overdue ? ' (초과)' : ''}` : ''}`); }

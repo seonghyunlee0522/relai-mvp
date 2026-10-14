@@ -4,7 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
-import { addWbsHistory } from './wbs-history.js';
+import { addWbsHistory, OWNER_NAME_SQL } from './wbs-history.js';
 
 export const LINK_TYPES = ['IMPLEMENTS', 'SUPPORTS', 'VALIDATES'];
 
@@ -22,7 +22,7 @@ const addReqHistory = async (db, reqId, action, { oldValue = null, newValue = nu
 /** Links of one requirement with the WBS side (archived WBS included, flagged). */
 export async function linksForRequirement(db, reqId) {
   return (await db.all(`SELECT l.id, l.link_type, l.created_at, w.id AS wbs_item_id, w.wbs_code, w.title, w.item_type, w.status, w.archived_at,
-      u.name AS owner_name
+      ${OWNER_NAME_SQL('w', 'u')} AS owner_name
     FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id LEFT JOIN users u ON u.id = w.owner_user_id
     WHERE l.requirement_id = ? ORDER BY w.archived_at IS NOT NULL, w.sequence, w.wbs_code`, [reqId]));
 }
@@ -60,13 +60,15 @@ export async function traceStats(db, projectId) {
     FROM requirements rq WHERE rq.project_id = ? AND rq.archived_at IS NULL AND rq.scope = 'IN_SCOPE'`, [projectId]));
   const t = (await db.get(`SELECT COUNT(*) AS tasks,
       COALESCE(SUM((NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN requirements rq ON rq.id = l.requirement_id
-        WHERE l.wbs_item_id = w.id AND rq.archived_at IS NULL))::int), 0) AS tasks_unlinked
+        WHERE l.wbs_item_id = w.id AND rq.archived_at IS NULL))::int), 0) AS tasks_unlinked,
+      COALESCE(SUM((w.lifecycle_phase = 'DEVELOPMENT' AND NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN requirements rq ON rq.id = l.requirement_id
+        WHERE l.wbs_item_id = w.id AND rq.archived_at IS NULL))::int), 0) AS dev_unlinked
     FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND NOT EXISTS (SELECT 1 FROM wbs_items wc WHERE wc.parent_id = w.id AND wc.archived_at IS NULL)`, [projectId]));
   return {
     in_scope: r.in_scope, in_scope_linked: r.in_scope_linked, in_scope_unlinked: r.in_scope - r.in_scope_linked,
     coverage: r.in_scope ? Math.round((r.in_scope_linked / r.in_scope) * 100) : null, // null = no target
     confirmed_unlinked: r.confirmed_unlinked,
-    tasks: t.tasks, tasks_unlinked: t.tasks_unlinked, tasks_linked: t.tasks - t.tasks_unlinked,
+    tasks: t.tasks, tasks_unlinked: t.tasks_unlinked, tasks_linked: t.tasks - t.tasks_unlinked, dev_unlinked: t.dev_unlinked,   // dev_unlinked: 구현(DEVELOPMENT) tasks only (Phase 3 US-5)
   };
 }
 

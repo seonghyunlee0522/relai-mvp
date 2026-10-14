@@ -36,12 +36,12 @@ export function choiceDialog({ title, body, options, cancel = '취소' }) {
   });
 }
 
-export function confirmDialog({ title, body, confirm, danger }) {
+export function confirmDialog({ title, body, bodyHtml = null, confirm, danger }) {   // bodyHtml: trusted markup built with html`` (e.g. a small preview list)
   return new Promise((resolve) => {
     const el = document.createElement('div');
     el.className = 'scrim';
     el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgT">
-      <h3 id="dlgT">${title}</h3><div class="dialog__b">${body}</div>
+      <h3 id="dlgT">${title}</h3><div class="dialog__b">${bodyHtml ? raw(bodyHtml) : body}</div>
       <div class="actions"><button class="btn btn--secondary" data-v="0">취소</button>
       <button class="btn ${danger ? 'btn--danger' : 'btn--primary'}" data-v="1">${confirm}</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };

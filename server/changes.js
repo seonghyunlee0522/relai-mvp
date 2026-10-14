@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
 import { nextDisplayId, resolveLinkTarget, ensureNoDuplicate } from './common.js';
 import { POLICY } from './authz.js';
+import { OWNER_NAME_SQL } from './wbs-history.js';
 
 export const CR_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
 export const CR_STATUSES = ['DRAFT', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
@@ -109,11 +110,11 @@ export async function getChange(db, project, id) {
   if (!c) return null;
   c.requirements = (await db.all(`SELECT x.id, x.relation_type, r.id AS requirement_id, r.display_id, r.title, r.status, r.scope, r.archived_at
     FROM change_request_requirements x JOIN requirements r ON r.id = x.requirement_id WHERE x.change_request_id = ? ORDER BY r.archived_at IS NOT NULL, r.sequence_number`, [id]));
-  c.impacts = (await db.all(`SELECT x.id, x.impact_type, x.impact_note, w.id AS wbs_item_id, w.wbs_code, w.title, w.item_type, w.status, w.archived_at, u.name AS owner_name
+  c.impacts = (await db.all(`SELECT x.id, x.impact_type, x.impact_note, w.id AS wbs_item_id, w.wbs_code, w.title, w.item_type, w.status, w.archived_at, ${OWNER_NAME_SQL('w', 'u')} AS owner_name
     FROM change_request_wbs_impacts x JOIN wbs_items w ON w.id = x.wbs_item_id LEFT JOIN users u ON u.id = w.owner_user_id
     WHERE x.change_request_id = ? ORDER BY w.archived_at IS NOT NULL, w.sequence, w.wbs_code`, [id]));
   // Candidates: active WBS linked (requirement_wbs_links) to any of this CR's active requirements, not yet recorded as impact.
-  c.wbs_candidates = (await db.all(`SELECT w.id AS wbs_item_id, w.wbs_code, w.title, w.item_type, w.status, u.name AS owner_name,
+  c.wbs_candidates = (await db.all(`SELECT w.id AS wbs_item_id, w.wbs_code, w.title, w.item_type, w.status, ${OWNER_NAME_SQL('w', 'u')} AS owner_name,
       STRING_AGG(DISTINCT r.display_id, ',') AS via
     FROM change_request_requirements x
     JOIN requirements r ON r.id = x.requirement_id AND r.archived_at IS NULL

@@ -5,7 +5,7 @@
  * cfg: { key, columns, rowId(r), rowClass?(r), select = true, paginate = true, pageSize = 100, sortable = true,
  *        canEdit?(r, col), onEdit?(id, field, value), onOpen?(id), onSelect?(selectedSet), empty?(), activeId?() }
  * column: { key, label, width, min, sort?(r) → comparable, render(r) → html, cls?, align?, sticky?, hidden?, fixed?,
- *           edit?: { type: 'select'|'date'|'number', field, options?(r)|map|[[v,l]], value?(r), min?, max? },
+ *           edit?: { type: 'select'|'date'|'number', field, options?(r)|map|[[v,l] | {group, options}], value?(r), prefix?(r), suffix?(r), title?(r) (date), min?, max? },
  *           card?: false — left out of the <640px card row (ID + title on line 1, the other visible columns on line 2) }
  */
 import { esc, html, raw } from '../core/dom.js';
@@ -65,12 +65,17 @@ export function createGrid(cfg) {
     if (!ed) return c.render(r);
     const cur = ed.value ? ed.value(r) : r[ed.field];
     if (ed.type === 'select') {
-      const opts = pairs(typeof ed.options === 'function' ? ed.options(r) : ed.options);
+      const src = typeof ed.options === 'function' ? ed.options(r) : ed.options;
       const cls = typeof ed.cls === 'function' ? ed.cls(r) : ed.cls;
-      const sel = html`<select class="cell cell--sel ${cls || ''}" data-edit="${ed.field}" aria-label="${c.label}">${raw(opts.map(([v, l]) => html`<option value="${v}" ${String(cur ?? '') === String(v) ? 'selected' : ''}>${l}</option>`).join(''))}</select>`;
-      return ed.prefix ? html`<span class="cellwrap">${raw(ed.prefix(r))}${raw(sel)}</span>` : sel;
+      const optHtml = (list) => pairs(list).map(([v, l]) => html`<option value="${v}" ${String(cur ?? '') === String(v) ? 'selected' : ''}>${l}</option>`).join('');
+      // [[v, l], { group: '라벨', options: [[v, l]] }, …] → <optgroup>s (an empty group is left out)
+      const body = Array.isArray(src) && src.some((o) => o && o.group) ? src.map((o) => (o && o.group ? (o.options.length ? html`<optgroup label="${o.group}">${raw(optHtml(o.options))}</optgroup>` : '') : optHtml([o]))).join('') : optHtml(src);
+      const sel = html`<select class="cell cell--sel ${cls || ''}" data-edit="${ed.field}" aria-label="${c.label}">${raw(body)}</select>`;
+      const suf = ed.suffix ? ed.suffix(r) : '';
+      return ed.prefix || suf ? html`<span class="cellwrap">${raw(ed.prefix ? ed.prefix(r) : '')}${raw(sel)}${raw(suf)}</span>` : sel;
     }
-    if (ed.type === 'date') return html`<input type="date" class="cell cell--date ${(typeof ed.cls === 'function' ? ed.cls(r) : ed.cls) || ''}" data-edit="${ed.field}" value="${cur || ''}" aria-label="${c.label}">`;
+    if (ed.type === 'date') { const tip = typeof ed.title === 'function' ? ed.title(r) : ''; const inp = html`<input type="date" class="cell cell--date ${(typeof ed.cls === 'function' ? ed.cls(r) : ed.cls) || ''}" data-edit="${ed.field}" value="${cur || ''}" aria-label="${c.label}" ${raw(tip ? html`title="${tip}"` : '')}>`;
+      return ed.prefix && ed.prefix(r) ? html`<span class="cellwrap">${raw(ed.prefix(r))}${raw(inp)}</span>` : inp; }
     if (ed.type === 'number') return html`<input type="number" class="cell cell--num" data-edit="${ed.field}" value="${cur ?? ''}" min="${ed.min ?? 0}" max="${ed.max ?? 100}" step="1" aria-label="${c.label}">`;
     return c.render(r);
   };
@@ -102,7 +107,8 @@ export function createGrid(cfg) {
     const to = Math.min(all.length, st.page * st.size);
     const pageIds = view().rows.map((r) => String(cfg.rowId(r)));
     const pageAll = pageIds.length && pageIds.every((i) => st.selected.has(i));
-    return html`<div class="gfoot"><span>총 <b>${all.length.toLocaleString('ko-KR')}</b>건</span>
+    const real = all.filter((r) => !r._ghost).length;   // an inline "new item" row is not an item (J3)
+    return html`<div class="gfoot"><span>총 <b>${real.toLocaleString('ko-KR')}</b>건</span>
       ${raw(n ? html`<span class="gfoot__sel"><b>${n.toLocaleString('ko-KR')}</b>건 선택됨${raw(pageAll && n < all.length ? html` · <button type="button" class="link linkbtn" data-pickall>필터 결과 ${all.length.toLocaleString('ko-KR')}건 모두 선택</button>` : '')}</span>` : '')}
       <span class="gfoot__sp"></span>
       ${raw(paged ? html`<span>${from.toLocaleString('ko-KR')}–${to.toLocaleString('ko-KR')}</span>

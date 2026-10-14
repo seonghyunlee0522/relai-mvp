@@ -111,13 +111,13 @@ export async function projectDashboard(db, project) {
     db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((w.status = 'IN_PROGRESS')::int), 0) AS in_progress, COALESCE(SUM((w.status = 'COMPLETED')::int), 0) AS completed,
         COALESCE(SUM(${OVERDUE}::int), 0) AS delayed FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')}`, [pid]),
     R.requirementStats(db, pid),
-    db.all(`SELECT w.id, w.wbs_code, w.title, w.owner_user_id AS owner_id, u.name AS owner_name, w.planned_end_date, (${TODAY} - w.planned_end_date) AS days_overdue, w.status, w.progress
+    db.all(`SELECT w.id, w.wbs_code, w.title, COALESCE(w.owner_user_id, 's:' || w.owner_stakeholder_id) AS owner_id, ${W.OWNER_NAME_SQL('w', 'u')} AS owner_name, w.planned_end_date, (${TODAY} - w.planned_end_date) AS days_overdue, w.status, w.progress
       FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id
       WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND ${OVERDUE} ORDER BY w.planned_end_date, w.sequence LIMIT ${OVERDUE_LIMIT}`, [pid]),
-    db.all(`SELECT w.owner_user_id AS owner_id, u.name AS owner_name, COUNT(*) AS tasks, COALESCE(SUM((w.status = 'IN_PROGRESS')::int), 0) AS in_progress,
+    db.all(`SELECT COALESCE(w.owner_user_id, 's:' || w.owner_stakeholder_id) AS owner_id, ${W.OWNER_NAME_SQL('w', 'u')} AS owner_name, COUNT(*) AS tasks, COALESCE(SUM((w.status = 'IN_PROGRESS')::int), 0) AS in_progress,
         COALESCE(SUM((w.status = 'COMPLETED')::int), 0) AS completed, COALESCE(SUM(${OVERDUE}::int), 0) AS overdue, COALESCE(ROUND(AVG(w.progress)), 0) AS avg_progress
       FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')}
-      GROUP BY w.owner_user_id, u.name`, [pid]),
+      GROUP BY 1, 2`, [pid]),
     db.all(`SELECT w.id, w.wbs_code, w.title, w.milestone_date, w.status, (w.milestone_date - ${TODAY}) AS days_left FROM wbs_items w
       WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'MILESTONE' ORDER BY w.milestone_date NULLS LAST, w.sequence LIMIT ${MILESTONE_LIMIT}`, [pid]),
     db.get(`SELECT COALESCE(SUM((status NOT IN ('RESOLVED','CLOSED'))::int), 0) AS open, COALESCE(SUM((status NOT IN ('RESOLVED','CLOSED') AND severity IN ('CRITICAL','HIGH'))::int), 0) AS critical_or_high

@@ -64,7 +64,7 @@ async function wbsRows(db, project, wid) {
   const byId = new Map(items.map((i) => [i.id, i]));
   const L = KINDS.wbs.columns; const lab = (key, v) => L.find((c) => c.key === key).options.find((o) => o.value === v)?.label ?? v;
   return items.map((i) => ({ code: i.wbs_code, parent_code: i.parent_id ? byId.get(i.parent_id)?.wbs_code || '' : '', item_type: lab('item_type', i.item_type), title: i.title, description: i.description,
-    owner: i.owner_user_id ? label(i.owner_user_id) : '', start: i.item_type === 'MILESTONE' ? '' : i.planned_start_date || '', end: i.item_type === 'MILESTONE' ? i.milestone_date || '' : i.planned_end_date || '',
+    owner: i.owner_user_id ? label(i.owner_user_id) : i.owner_stakeholder_id && !i.owner_deleted ? i.owner_name : '', start: i.item_type === 'MILESTONE' ? '' : i.planned_start_date || '', end: i.item_type === 'MILESTONE' ? i.milestone_date || '' : i.planned_end_date || '',
     status: lab('status', i.status), progress: i.item_type === 'TASK' && !i.is_group ? i.progress : '', predecessors: i.predecessors.map((p) => byId.get(p.predecessor_id)?.wbs_code).filter(Boolean).join(', ') }));
 }
 

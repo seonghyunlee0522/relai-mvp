@@ -30,7 +30,7 @@ export function resolveEnum(column, raw) {
   return { error: `${column.label} 값이 올바르지 않습니다. (${column.options.map((o) => o.label).join(', ')})` };
 }
 
-function resolveOwner(members, raw) {
+function resolveOwner(members, raw, team = null) {
   const t = raw.trim();
   if (!t) return { value: null };
   const byEmail = members.filter((m) => m.email.toLowerCase() === t.toLowerCase());
@@ -38,6 +38,10 @@ function resolveOwner(members, raw) {
   const byName = members.filter((m) => m.name === t);
   if (byName.length === 1) return { value: byName[0].id };
   if (byName.length > 1) return { error: '같은 이름의 멤버가 여러 명입니다. 이메일로 입력해 주세요.' };
+  // WBS (Phase 3 US-1): no RELAI user → a 당사·협력사 stakeholder of 01 with exactly that name (계정 없는 팀원)
+  const sh = team ? team.filter((x) => x.name === t) : [];
+  if (sh.length === 1) return { value: null, stakeholder: sh[0].id };
+  if (sh.length > 1) return { error: '같은 이름의 팀원이 여러 명입니다. 01 이해관계자 이름을 구분해 주세요.' };
   return { error: '담당자를 찾을 수 없습니다.' };
 }
 
@@ -175,7 +179,7 @@ async function wbsContext(db, project, wid, parentId) {
     if (!p || p.archived_at) throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
     if (p.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래에는 항목을 만들 수 없습니다.' });
   }
-  return { members, parentId: parentId || null };
+  return { members, team: W.teamOf(await W.projectStakeholders(db, project.id)), parentId: parentId || null };
 }
 
 const parentCodeOf = (code) => (code.includes('.') ? code.slice(0, code.lastIndexOf('.')) : null);
@@ -203,7 +207,7 @@ function validateWbs(rows, ctx) {
     const type = t.value || 'TASK';   // a row with children is a TASK group (SUMMARY only when the file says so — legacy)
     typeOf[i] = type;
     const st = resolveEnum(col('status'), v.status); if (st.error) e.status = st.error;
-    const ow = resolveOwner(ctx.members, v.owner); if (ow.error) e.owner = ow.error;
+    const ow = resolveOwner(ctx.members, v.owner, ctx.team); if (ow.error) e.owner = ow.error;
     const sd = parseDate(v.start); const ed = parseDate(v.end);
     if (sd.error) e.start = sd.error; else if (sd.value) v.start = sd.value;
     if (ed.error) e.end = ed.error; else if (ed.value) v.end = ed.value;
@@ -226,7 +230,7 @@ function validateWbs(rows, ctx) {
           planned_start_date: type === 'MILESTONE' ? undefined : sd.value || undefined, planned_end_date: type === 'MILESTONE' ? undefined : ed.value || undefined });
       } catch (err) { mergeFieldErrors(e, err, { planned_start_date: 'start', planned_end_date: 'end' }); }
     }
-    o.draft = { type, status: st.value, owner: ow.value, start: sd.value, end: ed.value, progress: pg.value };
+    o.draft = { type, status: st.value, owner: ow.value, owner_stakeholder: ow.stakeholder || null, start: sd.value, end: ed.value, progress: pg.value };
   });
 
   /* pass 2: references to other rows (parent, predecessors) */
@@ -270,7 +274,7 @@ function validateWbs(rows, ctx) {
   out.forEach((o, i) => {
     if (!failed(o)) {
       const d = o.draft; const milestone = d.type === 'MILESTONE';
-      o.model = { item_type: d.type, title: o.values.title, description: o.values.description, owner_user_id: d.owner, status: d.status || undefined,
+      o.model = { item_type: d.type, title: o.values.title, description: o.values.description, owner_user_id: d.owner, owner_stakeholder_id: d.owner_stakeholder, status: d.status || undefined,
         progress: d.type === 'TASK' ? d.progress ?? undefined : undefined,
         planned_start_date: milestone ? undefined : d.start, planned_end_date: milestone ? undefined : d.end, milestone_date: milestone ? d.end : undefined,
         code: o.values.code, parent_code: parentCodeOf(o.values.code), preds: preds[i] };

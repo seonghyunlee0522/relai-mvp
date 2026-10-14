@@ -8,7 +8,7 @@
  */
 import { ensurePhases, resetPhases } from './guide.js';
 import { randomUUID } from 'node:crypto';
-import { PHASE_BY_KEY } from './templates/default-phases.js';
+import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1 } from './templates/default-phases.js';
 
 export const migrations = [
   { version: 1, name: 'projects.current_phase template-based (SQLite era)', up() {} },
@@ -79,6 +79,12 @@ export const migrations = [
       await db.run(`INSERT INTO project_steps (id, project_phase_id, step_key, title, description, completion_criteria, sequence, is_required, importance, linked_feature_type, created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?, now(), now())`, [randomUUID(), ph.id, st.key, st.title, st.description, st.completion_criteria, seq, 1, st.importance, st.linked_feature_type]);
     }
+  } },
+  { version: 33, name: 'Phase 3 분석·설계: wbs_items.owner_stakeholder_id (schema.sql) + NON_DEV_TASKS 선택 → 권장 + 03 단계 설명 한 줄 추가 in every project', async up(db) {
+    // Existing projects only see 기능 개발 외 작업 확인 as 권장 (still never a gate) and the extra description line; no data is moved.
+    await db.run(`UPDATE project_steps SET importance = 'RECOMMENDED', is_required = 0, updated_at = now() WHERE step_key = 'NON_DEV_TASKS' AND importance <> 'RECOMMENDED'
+      AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'ANALYSIS_DESIGN')`);
+    await db.run(`UPDATE project_phases SET description = ? WHERE phase_key = 'ANALYSIS_DESIGN' AND description = ?`, [ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1]);
   } },
 ];
 

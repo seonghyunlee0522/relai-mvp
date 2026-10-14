@@ -2523,3 +2523,31 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 body:has(.scrim) #main .btn--primary,
 #main:has(.wdrawer) .btn--primary:not(.wdrawer .btn--primary),
 #main:has(.drawer--side:not([hidden])) .btn--primary:not(.drawer .btn--primary){background:#fff;color:var(--navy);border-color:var(--border-strong)}
+
+/* ---------- Phase 3 (03 분석·설계): empty WBS · 뼈대 dialog · 계정 없음 · 종료일 초과 · 마일스톤 가져오기 ---------- */
+.wempty__ic{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:var(--blue-soft);color:var(--blue-deep);font-size:20px;margin-bottom:10px}
+.wempty__a{align-items:center}
+.wempty__add{max-width:420px;margin:14px auto 0}
+.wempty__alt{margin:14px auto 0!important;font-size:var(--fs-sm)}
+.wempty__alt .linkbtn{width:auto;display:inline;padding:0}
+.skel{list-style:none;margin:4px 0 10px;padding:0;border:1px solid var(--border-soft);border-radius:var(--r-lg)}
+.skel li{display:flex;justify-content:space-between;gap:12px;padding:7px 12px;border-top:1px solid var(--border-soft);font-size:var(--fs-sm)}
+.skel li:first-child{border-top:0}
+.skel b{font-variant-numeric:tabular-nums;text-align:right}.skel b small{font-weight:400;color:var(--text-3)}
+.skel__note{margin:0;font-size:var(--fs-xs);color:var(--text-3)}
+.wnoacct{margin-left:6px;font-size:12px;color:var(--text-3);font-weight:400;white-space:nowrap}
+.whint{margin:4px 0 0;font-size:12px;color:var(--text-3);line-height:1.5}
+.wpast{color:var(--warn-fg);font-weight:600;white-space:nowrap}.wpast i{font-style:normal;margin-right:3px}
+.cell--past{color:var(--warn-fg)!important;font-weight:600}
+.wpast__i{font-style:normal;font-weight:700;color:var(--warn-fg);margin-right:2px}
+.wpast__msg{margin-top:4px}
+.wsuggest{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;margin:0 0 10px;border:1px solid var(--border-soft);border-radius:var(--r-lg);background:#fff;font-size:var(--fs-sm)}
+.gowner{margin-left:auto;padding-left:8px;font-size:12px;color:var(--text-2);white-space:nowrap}
+.wterms{display:inline-flex;gap:4px;align-items:center}
+.np__imp{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;font-size:var(--fs-sm);color:var(--text-2)}
+.rg__warn a{color:inherit;text-decoration:underline}
+@media (max-width:600px){
+  .wempty{padding:36px 16px}
+  .wempty__a .btn{flex:1 1 100%}
+  .wsuggest .btn{width:100%}
+}

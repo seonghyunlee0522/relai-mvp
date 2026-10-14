@@ -298,6 +298,8 @@ ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS weight INTEGER NOT NULL DEFAULT 1 CHECK (weight BETWEEN 0 AND 1000);
 -- Lifecycle V2 (§17): which lifecycle phase a work item belongs to (API 설계 → ANALYSIS_DESIGN, 통합 테스트 → TESTING …). NULL = not classified.
 ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS lifecycle_phase TEXT CHECK (lifecycle_phase IN ('INITIATION','REQUIREMENTS','ANALYSIS_DESIGN','DEVELOPMENT','TESTING','TRANSITION_GO_LIVE','OPERATIONS'));
+-- Phase 3 US-1: 담당자 = RELAI 사용자(owner_user_id) 또는 계정 없는 팀원(01 이해관계자 id, project_definitions.stakeholders JSON — FK 없음). 둘 중 하나만.
+ALTER TABLE wbs_items ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;
 
 -- Finish-to-start predecessor links. Many predecessors per item; cycle check is done in code before insert.
 CREATE TABLE IF NOT EXISTS wbs_dependencies (
