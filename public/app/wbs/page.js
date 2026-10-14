@@ -619,7 +619,7 @@ export async function wbsPage(id) {
             ${raw(traceStrip([
               { label: '요구사항', value: liveReq.length, tone: liveReq.length ? '' : isLeafTask(live) ? 'warn' : 'muted' },
               { label: '변경 요청', value: it.changes ? it.changes.length : 0, href: `/app/projects/${p.id}/changes?wbs=${it.id}`, tone: it.changes && it.changes.length ? 'warn' : 'muted' },
-              { label: 'Issue', value: it.raid ? it.raid.issues.length : 0, sub: it.raid && it.raid.risks.length ? `리스크 ${it.raid.risks.length}` : '', href: `/app/projects/${p.id}/issues?wbs=${it.id}`, tone: it.raid && it.raid.issues.length ? 'warn' : 'muted' },
+              { label: '이슈', value: it.raid ? it.raid.issues.length : 0, sub: it.raid && it.raid.risks.length ? `리스크 ${it.raid.risks.length}` : '', href: `/app/projects/${p.id}/issues?wbs=${it.id}`, tone: it.raid && it.raid.issues.length ? 'warn' : 'muted' },
               { label: '테스트', value: it.testing ? it.testing.tests.length : 0, sub: it.testing && it.testing.tests.length ? `통과 ${it.testing.summary.pass} · 실패 ${it.testing.summary.fail}` : '', href: `/app/projects/${p.id}/tests?wbs=${it.id}`, tone: it.testing && it.testing.summary.fail ? 'crit' : it.testing && it.testing.tests.length ? '' : 'muted' },
             ], { compact: true }))}
           </div>

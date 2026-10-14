@@ -57,10 +57,10 @@ export async function attentionAll(db, projectId) {
   const ihref = (r) => `issues?sel=${r.id}`; const rhref = (r) => `issues?tab=risks&sel=${r.id}`;
   const ISSUE_OPEN = `project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED')`;
   const issues = (await db.all(`SELECT id, display_id, title, severity, due_date, (due_date IS NOT NULL AND due_date < ${TODAY})::int AS overdue FROM issues WHERE ${ISSUE_OPEN} AND (severity IN ('CRITICAL','HIGH') OR (due_date IS NOT NULL AND due_date < ${TODAY})) ORDER BY due_date, updated_at DESC`, [projectId]));
-  push('CRITICAL_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'CRITICAL'), (i) => `Critical Issue${i.overdue ? ` · 기한 ${i.due_date} 초과` : ''}`);
-  push('OVERDUE_HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && i.overdue), (i) => `High Issue · 기한 ${i.due_date} 초과`);
-  push('HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && !i.overdue), 'High Issue');
-  push('OVERDUE_ISSUE', 'ISSUE', ihref, issues.filter((i) => !['CRITICAL', 'HIGH'].includes(i.severity) && i.overdue), (i) => `Overdue Issue · 기한 ${i.due_date}`);
+  push('CRITICAL_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'CRITICAL'), (i) => `Critical 이슈${i.overdue ? ` · 기한 ${i.due_date} 초과` : ''}`);
+  push('OVERDUE_HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && i.overdue), (i) => `High 이슈 · 기한 ${i.due_date} 초과`);
+  push('HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && !i.overdue), 'High 이슈');
+  push('OVERDUE_ISSUE', 'ISSUE', ihref, issues.filter((i) => !['CRITICAL', 'HIGH'].includes(i.severity) && i.overdue), (i) => `기한 초과 이슈 · 기한 ${i.due_date}`);
   const risks = (await db.all(`SELECT id, display_id, title, risk_level, review_date, (review_date IS NOT NULL AND review_date < ${TODAY})::int AS review_overdue FROM risks WHERE project_id = ? AND archived_at IS NULL AND status IN ('OPEN','MONITORING') AND (risk_level IN ('CRITICAL','HIGH') OR (review_date IS NOT NULL AND review_date < ${TODAY})) ORDER BY updated_at DESC`, [projectId]));
   push('CRITICAL_RISK', 'RISK', rhref, risks.filter((r) => r.risk_level === 'CRITICAL'), 'Critical Risk');
   push('HIGH_RISK', 'RISK', rhref, risks.filter((r) => r.risk_level === 'HIGH'), 'High Risk');

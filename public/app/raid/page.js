@@ -53,9 +53,9 @@ export async function raidPage(id) {
     const hasFilter = ['q', ...filterKeys(), 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: 'raid', title: '이슈·리스크' }))}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. Issue와 리스크는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 이슈와 리스크는 조회만 할 수 있습니다.</div>' : '')}
       ${raw(coachMark('ISSUE_RISK_INTRO'))}
-      <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? 'Issue는 이미 발생해 대응이 필요한 문제입니다.' : '리스크는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">Issue${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">리스크${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>
+      <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? '이슈는 이미 발생해 대응이 필요한 문제입니다.' : '리스크는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">이슈${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">리스크${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>
       ${raw(I ? html`<div class="summary summary--inline">
         <div><b>${is.active}</b><span>열림 <small>(진행 중 포함)</small></span></div><div class="${is.blocked ? 'is-warn' : ''}"><b>${is.blocked}</b><span>차단됨</span></div>
         <div class="${is.critical ? 'is-crit' : ''}"><b>${is.critical}</b><span>심각</span></div><div class="${is.overdue ? 'is-warn' : ''}"><b>${is.overdue}</b><span>기한 지남</span></div></div>`
@@ -71,13 +71,13 @@ export async function raidPage(id) {
         <label class="toggle"><input type="checkbox" data-t="${I ? 'overdue' : 'review'}" ${q.get(I ? 'overdue' : 'review') ? 'checked' : ''}> ${I ? '기한 지남만' : '검토 필요만'}</label>
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         <span class="rtool__sp"></span>
-        ${raw(archived ? '' : html`<button class="btn btn--primary btn--sm" id="add">+ ${I ? 'Issue' : '리스크'} 등록</button>`)}
+        ${raw(archived ? '' : html`<button class="btn btn--primary btn--sm" id="add">+ ${I ? '이슈' : '리스크'} 등록</button>`)}
       </div>
       ${raw(appliedFilters(q, FILTER_DEFS(I)))}
       <div class="rlayout rlayout--cr ${sel || creating ? 'has-drawer' : ''}">
         <div class="rtable-wrap">${raw(rows.length ? (I ? issueTable() : riskTable())
-          : hasFilter ? emptyFiltered(I ? 'Issue' : '리스크')
-          : I ? emptyState({ title: '현재 등록된 Issue가 없습니다.', body: '프로젝트 진행 중 발생한 문제를 기록하면 담당자·기한·해결 상태를 관리하고 관련 요구사항·WBS와 연결할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 Issue 등록' } })
+          : hasFilter ? emptyFiltered(I ? '이슈' : '리스크')
+          : I ? emptyState({ title: '현재 등록된 이슈가 없습니다.', body: '프로젝트 진행 중 발생한 문제를 기록하면 담당자·기한·해결 상태를 관리하고 관련 요구사항·WBS와 연결할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 이슈 등록' } })
           : emptyState({ title: '현재 등록된 리스크가 없습니다.', body: '프로젝트에 영향을 줄 수 있는 잠재 위험을 미리 기록하고 대응 계획과 검토 일정을 관리하세요.', cta: archived ? null : { id: 'add2', label: '첫 리스크 등록' } }))}</div>
         <aside class="drawer drawer--cr" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? (I ? createIssue() : createRisk()) : sel ? (I ? detailIssue() : detailRisk()) : '')}</aside>
       </div></div>`;
@@ -95,13 +95,13 @@ export async function raidPage(id) {
   const riskTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>발생 가능성</th><th>영향도</th><th>등급</th><th>상태</th><th>담당자</th><th>검토일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
-      <td class="ttl"><span>${x.title}</span>${raw(x.converted_issue_display_id ? html`<small title="전환된 Issue">→ ${x.converted_issue_display_id}</small>` : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
+      <td class="ttl"><span>${x.title}</span>${raw(x.converted_issue_display_id ? html`<small title="전환된 이슈">→ ${x.converted_issue_display_id}</small>` : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
       <td>${LEVEL3[x.probability]}</td><td>${LEVEL3[x.impact]}</td><td>${raw(sevBadge(x.risk_level))}</td>
       <td>${raw(statusChip(RISK_STATUS, RISK_STATUS_CHIP, x.status))}</td>
       <td>${x.owner_name || raw('<span class="dim">-</span>')}</td>
       <td class="${x.needs_review ? 'is-overdue' : ''}">${raw(dcell(x.review_date))}${raw(x.needs_review ? ' <small class="over">검토</small>' : '')}</td></tr>`).join(''))}</tbody></table>`;
 
-  const createIssue = () => html`<form id="cf" novalidate><div class="drawer__h"><b>새 Issue</b><button type="button" class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
+  const createIssue = () => html`<form id="cf" novalidate><div class="drawer__h"><b>새 이슈</b><button type="button" class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
     <div class="drawer__b"><div class="form-err" role="alert" hidden></div>
       <div class="field"><label for="c-title">제목 <span class="req">*</span></label><input class="input" id="c-title" name="title" maxlength="200" placeholder="예: 고객 API 미제공"><div class="err" data-for="title"></div></div>
       <div class="field"><label>설명</label><textarea class="textarea" name="description" maxlength="5000" style="min-height:72px"></textarea></div>
@@ -110,7 +110,7 @@ export async function raidPage(id) {
         <div class="field"><label>담당자</label><select class="select" name="owner">${raw(OP.ownerOptions(members, owners, ''))}</select></div>
         <div class="field"><label>발견일</label><input class="input" type="date" name="identified_at" value="${todayLocal()}"></div>
         <div class="field"><label>기한</label><input class="input" type="date" name="due_date"></div></div></div>
-    <div class="drawer__f"><button class="btn btn--primary" type="submit">Issue 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
+    <div class="drawer__f"><button class="btn btn--primary" type="submit">이슈 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
   const createRisk = () => html`<form id="cf" novalidate><div class="drawer__h"><b>새 리스크</b><button type="button" class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
     <div class="drawer__b"><div class="form-err" role="alert" hidden></div>
       <div class="field"><label for="c-title">제목 <span class="req">*</span></label><input class="input" id="c-title" name="title" maxlength="200" placeholder="예: 고객 API 일정 지연 가능성"><div class="err" data-for="title"></div></div>
@@ -148,7 +148,7 @@ export async function raidPage(id) {
       case 'STATUS_CHANGED': return html`<b>${val('status', h.old_value)}</b> → <b>${val('status', h.new_value)}</b> <small>${h.changed_by_name || ''}</small>`;
       case 'LINKED': return html`${RAID_TARGET[h.field_name] || '연결'} 추가 <q>${h.new_value}</q>`;
       case 'UNLINKED': return html`${RAID_TARGET[h.field_name] || '연결'} 해제 <q>${h.old_value}</q>`;
-      case 'CONVERTED': return h.new_value ? html`Issue로 전환 <q>${h.new_value}</q>` : html`리스크에서 전환됨 <q>${h.old_value}</q>`;
+      case 'CONVERTED': return h.new_value ? html`이슈로 전환 <q>${h.new_value}</q>` : html`리스크에서 전환됨 <q>${h.old_value}</q>`;
       default: return html`<b>${lab[h.field_name] || h.field_name}</b> ${val(h.field_name, h.old_value)} → ${val(h.field_name, h.new_value)} <small>${h.changed_by_name || ''}</small>`;
     }
   };
@@ -187,7 +187,7 @@ export async function raidPage(id) {
       </section>
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section>
     </div>
-    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: 'Issue 보관', id: 'xarchive' }))}`;
+    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '이슈 보관', id: 'xarchive' }))}`;
   };
   const detailRisk = () => {
     const x = sel; const ro = archived || Boolean(x.archived_at);
@@ -196,7 +196,7 @@ export async function raidPage(id) {
     ${raw(detailTabs(x))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro ? 'disabled' : ''} aria-label="제목">
-      ${raw(x.converted_issue_id ? html`<p class="srcline">전환된 Issue · <a class="link" href="/app/projects/${p.id}/issues?sel=${x.converted_issue_id}" data-link>${x.converted_issue_display_id} ${x.title}</a>${x.materialized_at ? ' · 발생 ' + fmtShort(x.materialized_at) : ''}</p>` : '')}
+      ${raw(x.converted_issue_id ? html`<p class="srcline">전환된 이슈 · <a class="link" href="/app/projects/${p.id}/issues?sel=${x.converted_issue_id}" data-link>${x.converted_issue_display_id} ${x.title}</a>${x.materialized_at ? ' · 발생 ' + fmtShort(x.materialized_at) : ''}</p>` : '')}
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${ro ? 'disabled' : ''}>${x.description}</textarea>
       <div class="matrix"><div><span>발생 가능성</span><select class="select select--sm" data-field="probability" ${ro ? 'disabled' : ''}>${raw(opt(LEVEL3, x.probability))}</select></div><span class="matrix__x">×</span>
         <div><span>영향도</span><select class="select select--sm" data-field="impact" ${ro ? 'disabled' : ''}>${raw(opt(LEVEL3, x.impact))}</select></div><span class="matrix__x">=</span>
@@ -210,7 +210,7 @@ export async function raidPage(id) {
       </div>
       <div class="dfield" style="margin-top:10px"><span>대응 계획</span><div><textarea class="textarea" data-field="mitigation_plan" maxlength="5000" style="min-height:64px;font-size:14px" placeholder="완화·회피를 위해 할 일" ${ro ? 'disabled' : ''}>${x.mitigation_plan}</textarea></div></div>
       <div class="dsave" id="dsave"></div>
-      ${raw(canConvert ? html`<div class="decision decision--review"><p><b>이 리스크가 실제로 발생했나요?</b> Issue로 전환하면 제목·설명·담당자·연결 항목이 복사되고 리스크는 '발생' 상태가 됩니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="convert">Issue로 전환</button></div></div>` : '')}
+      ${raw(canConvert ? html`<div class="decision decision--review"><p><b>이 리스크가 실제로 발생했나요?</b> 이슈로 전환하면 제목·설명·담당자·연결 항목이 복사되고 리스크는 '발생' 상태가 됩니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="convert">이슈로 전환</button></div></div>` : '')}
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>${raw(linkBlocks(x, ro, { WBS: '영향 가능 WBS' }))}
       </section>
@@ -285,8 +285,8 @@ export async function raidPage(id) {
     });
     const cv = $('#convert');
     if (cv) cv.onclick = async () => {
-      if (!(await confirmDialog({ title: '이 리스크가 실제 Issue로 발생했나요?', body: `${x.display_id}의 제목·설명·담당자·연결 항목을 복사해 새 Issue를 만들고, 리스크 상태를 '발생'으로 바꿉니다.`, confirm: 'Issue로 전환' }))) return;
-      try { const d = await api('POST', xApi(`/${x.id}/convert`), {}); toast(`${d.issue.display_id} Issue를 생성했습니다.`); setParam('tab', ''); setParam('sel', d.issue.id); sel = d.issue; dtab = 'info'; await load(); draw(); }
+      if (!(await confirmDialog({ title: '이 리스크가 실제 이슈로 발생했나요?', body: `${x.display_id}의 제목·설명·담당자·연결 항목을 복사해 새 이슈를 만들고, 리스크 상태를 '발생'으로 바꿉니다.`, confirm: '이슈로 전환' }))) return;
+      try { const d = await api('POST', xApi(`/${x.id}/convert`), {}); toast(`${d.issue.display_id} 이슈를 생성했습니다.`); setParam('tab', ''); setParam('sel', d.issue.id); sel = d.issue; dtab = 'info'; await load(); draw(); }
       catch (e) { toast(e.message); }
     };
     const ab = $('#xarchive');
