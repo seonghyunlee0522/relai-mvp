@@ -207,7 +207,7 @@ export async function testsPage(id) {
       case 'LINKED': return html`${h.field_name === 'REQUIREMENT' ? '요구사항' : h.field_name === 'TEST' ? '테스트' : 'WBS'} 연결 <q>${h.new_value}</q>`;
       case 'UNLINKED': return html`${h.field_name === 'REQUIREMENT' ? '요구사항' : h.field_name === 'TEST' ? '테스트' : 'WBS'} 연결 해제 <q>${h.old_value}</q>`;
       case 'STEPS_CHANGED': return html`테스트 절차 수정 <small>${h.changed_by_name || ''}</small>`;
-      case 'CUSTOMER_APPROVAL': return html`고객 승인 기록 <q>${h.new_value}</q> <small>${h.changed_by_name || ''}</small>`;   // Phase 6 US-1
+      case 'CUSTOMER_APPROVAL': return h.old_value ? html`고객 승인 기록 수정 <q>${h.old_value}</q> → <q>${h.new_value}</q> <small>${h.changed_by_name || ''}</small>` : html`고객 승인 기록 <q>${h.new_value}</q> <small>${h.changed_by_name || ''}</small>`;   // Phase 6 US-1
       default: return html`<b>${lab[h.field_name] || h.field_name}</b> ${val(h.field_name, h.old_value)} → ${val(h.field_name, h.new_value)} <small>${h.changed_by_name || ''}</small>`;
     }
   };
@@ -277,7 +277,7 @@ export async function testsPage(id) {
   /** Drawer: "✓ 승인 · 10/20 · 오지현 고객 PM · 서명본 수령 (기록: 정하늘)", or the grey 'no record' line + 승인 기록 추가 (status unchanged). */
   const accApprovedLine = (x, ro) => {
     const ca = x.customer_approval || {};
-    if (ca.recorded) return html`<p class="crapv" data-accapv><span class="chip chip--done">✓ 승인</span> <b>${md(ca.date)} · ${whoOf(ca)} · ${ca.method_label}</b> <small class="dim">(기록: ${ca.recorded_by_name || '-'})</small>${raw(ca.conditions ? html`<br><small class="dim">조건/보완: ${ca.conditions}</small>` : '')}</p>`;
+    if (ca.recorded) return html`<p class="crapv" data-accapv><span class="chip chip--done">✓ 승인</span> <b>${md(ca.date)} · ${whoOf(ca)} · ${ca.method_label}</b> <small class="dim">(기록: ${ca.recorded_by_name || '-'})</small>${raw(ro || x.status !== 'ACCEPTED' ? '' : ' · <button type="button" class="link linkbtn" data-acc-apv-edit>승인 기록 수정</button>')}${raw(ca.conditions ? html`<br><small class="dim">조건/보완: ${ca.conditions}</small>` : '')}</p>`;
     return html`<p class="crapv crapv--none" data-accapv-none><span class="dim">고객 승인 기록이 없습니다</span>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-acc-apv-add>승인 기록 추가</button>')}</p>`;
   };
   const carryLineOf = (type, xid) => carryLine(carry, type, xid);
@@ -311,7 +311,7 @@ export async function testsPage(id) {
       try {
         const r = apvMode === 'record' ? await api('PATCH', aApi(`/${sel.id}/customer-approval`), { customer_approval: approvalBody(apv) })
           : await api('POST', aApi(`/${sel.id}/transition`), { action: 'accept', customer_approval: approvalBody(apv) });
-        toast(apvMode === 'record' ? '고객 승인 기록을 추가했습니다.' : '고객 승인을 기록하고 검수를 승인했습니다.');
+        toast(apvMode === 'record' ? (sel.customer_approval && sel.customer_approval.recorded ? '고객 승인 기록을 수정했습니다.' : '고객 승인 기록을 추가했습니다.') : '고객 승인을 기록하고 검수를 승인했습니다.');
         apv = null; apvMode = null; sel = r.acceptance; ac = r.acceptances; g.acceptances = ac; await load(); draw();
       } catch (e) {
         btn.disabled = false;
@@ -569,7 +569,7 @@ export async function testsPage(id) {
       if (!(await confirmDialog({ title: '연결을 해제할까요?', body: '연결 관계만 제거되며 항목 자체는 그대로 남습니다.', confirm: '연결 해제', danger: true }))) return;
       try { await apply(await api('DELETE', aApi(`/${x.id}/links/${b.dataset.unlink}`))); toast('연결을 해제했습니다.'); } catch (e) { toast(e.message); }
     });
-    const aa = main.querySelector('[data-acc-apv-add]'); if (aa) aa.onclick = () => openApproval('record');
+    const aa = main.querySelector('[data-acc-apv-add]'); if (aa) aa.onclick = () => openApproval('record'); const ae = main.querySelector('[data-acc-apv-edit]'); if (ae) ae.onclick = () => openApproval('record');
     const ab = $('#xarchive');
     if (ab) ab.onclick = async () => {
       if (!(await confirmDialog({ title: `${x.display_id}을 보관할까요?`, body: '보관된 검수는 기본 목록에서 숨겨지고 수정할 수 없습니다. 연결 관계와 이력은 보존됩니다.', confirm: '보관하기', danger: true }))) return;

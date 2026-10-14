@@ -3,7 +3,7 @@
  * requirement verification status, coverage, fail → issue, acceptance workflow.
  */
 import { randomUUID } from 'node:crypto';
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { nextDisplayId, formatDisplayId, reserveProjectSequence, resolveLinkTarget, ensureNoDuplicate, linkLabel } from './common.js';
 import { createIssue, updateEntity } from './raid.js';
 import { todayKst } from '../public/app/shared/kst-date.js';
@@ -18,7 +18,6 @@ export const ACC_TRANSITIONS = { submit: ['DRAFT', 'REQUESTED'], accept: ['REQUE
 
 const now = () => new Date().toISOString();
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 const addHistory = async (db, type, id, action, { field = null, oldValue = null, newValue = null } = {}, userId, ts = now()) =>
   (await db.run('INSERT INTO qa_history (id, entity_type, entity_id, action_type, field_name, old_value, new_value, changed_by, changed_at) VALUES (?,?,?,?,?,?,?,?,?)', [randomUUID(), type, id, action, field, oldValue, newValue, userId, ts]));
 const history = async (db, type, id) => (await db.all(`SELECT h.*, u.name AS changed_by_name FROM qa_history h LEFT JOIN users u ON u.id = h.changed_by WHERE h.entity_type = ? AND h.entity_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [type, id]));
@@ -350,6 +349,13 @@ export async function acceptanceStats(db, projectId) {
   return { ...s, in_progress: s.requested + s.rework, target_requirements: t.target_requirements, target_fail_tests: t.target_fail_tests,
     scope_target, scope_accepted, scope_remaining: scope_target - scope_accepted, scope_remaining_tests: Number(rest.n) || 0 };
 }
+/** 06 ACCEPTANCE gate (same rule as activities.js transition ACCEPTANCE → 완료): every in-scope confirmed requirement is in an ACCEPTED 검수;
+ *  with no such requirement, at least one 검수 exists and none is still 작성 중 / 요청 / 보완 필요 / only 반려. */
+export function acceptanceGateMet(a) {
+  const n = (v) => Number(v) || 0;
+  if (n(a.scope_target)) return n(a.scope_accepted) >= n(a.scope_target);
+  return n(a.total) > 0 && !n(a.draft) && !n(a.requested) && !n(a.rework) && n(a.accepted) > 0;
+}
 /** 범위 내 확정 요구사항 (보관 안 됨) of one project — the 06 검수 target. */
 const SCOPE_REQ = (r) => `${r}.project_id = ? AND ${r}.archived_at IS NULL AND ${r}.scope = 'IN_SCOPE' AND ${r}.status = 'CONFIRMED'`;
 const IN_ACCEPTED = (r) => `(EXISTS (SELECT 1 FROM acceptance_links l JOIN acceptances a ON a.id = l.acceptance_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = ${r}.id AND a.status = 'ACCEPTED' AND a.archived_at IS NULL))`;
@@ -381,9 +387,10 @@ export async function saveAcceptanceApproval(db, project, acc, body, userId, ts 
   }
   if (a.approver_id) { a.approver_name = ''; a.approver_title = ''; }
   a.recorded_by = userId; a.recorded_by_name = (await db.get('SELECT name FROM users WHERE id = ?', [userId]))?.name || '';
+  const prev = accApprovalView(acc.customer_approval, stakeholders);   // 승인 기록 수정: the old record line stays in 이력 (old → new)
   await db.run('UPDATE acceptances SET customer_approval = ?, updated_at = ? WHERE id = ?', [JSON.stringify(a), ts, acc.id]);
   const view = accApprovalView(a, await stakeholdersOf(db, project.id));
-  await addHistory(db, 'ACCEPTANCE', acc.id, 'CUSTOMER_APPROVAL', { field: 'customer_approval', newValue: view.summary }, userId, ts);
+  await addHistory(db, 'ACCEPTANCE', acc.id, 'CUSTOMER_APPROVAL', { field: 'customer_approval', oldValue: prev.recorded ? prev.summary : null, newValue: view.summary }, userId, ts);
   return view;
 }
 export async function getAcceptance(db, project, id) {

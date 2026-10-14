@@ -3,7 +3,7 @@
  * Issue = something that already happened; Risk = something that may happen (probability × impact).
  */
 import { randomUUID } from 'node:crypto';
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { nextDisplayId, resolveLinkTarget, ensureNoDuplicate, linkLabel } from './common.js';
 import { OWNER_NAME_SQL } from './wbs-history.js';
 
@@ -34,7 +34,6 @@ export const severityFromRiskLevel = (level) => (SEVERITIES.includes(level) ? le
 
 const now = () => new Date().toISOString();
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 const TODAY = 'CURRENT_DATE';
 
 const addHistory = async (db, type, id, action, { field = null, oldValue = null, newValue = null } = {}, userId, ts = now()) =>

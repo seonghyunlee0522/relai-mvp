@@ -9,7 +9,8 @@ export class ValidationError extends Error {
   }
 }
 
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))
+/** Strict YYYY-MM-DD: a real calendar day (2026-02-30 is rejected — Date.parse rolls it over to 03-02). */
+export const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))
   && new Date(s).toISOString().slice(0, 10) === s;
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');

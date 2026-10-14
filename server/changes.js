@@ -3,7 +3,7 @@
  * WBS impact records, and WBS candidates derived from requirement ↔ WBS traceability.
  */
 import { randomUUID } from 'node:crypto';
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { nextDisplayId, resolveLinkTarget, ensureNoDuplicate } from './common.js';
 import { POLICY } from './authz.js';
 import { OWNER_NAME_SQL } from './wbs-history.js';
@@ -23,7 +23,6 @@ export const TRANSITIONS = {
 
 const now = () => new Date().toISOString();
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 
 const addHistory = async (db, crId, action, { field = null, oldValue = null, newValue = null } = {}, userId, ts = now()) =>
   (await db.run(`INSERT INTO change_request_history (id, change_request_id, action_type, field_name, old_value, new_value, changed_by, changed_at)

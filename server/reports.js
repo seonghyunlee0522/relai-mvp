@@ -8,7 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { now, str } from './common.js';
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { assertWithinLimit } from './billing/limits.js';
 import { loadGuide } from './guide.js';
 import * as M from './metrics.js';
@@ -22,7 +22,6 @@ const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
 /** History timestamps are UTC ISO; period bounds are local dates. */
 const IN_PERIOD = (col) => `(${col})::date BETWEEN ? AND ?`;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISSUE_STATUS = { OPEN: '열림', IN_PROGRESS: '진행 중', BLOCKED: '차단됨', RESOLVED: '해결', CLOSED: '종료' };
 const SEVERITY = { CRITICAL: '심각', HIGH: '높음', MEDIUM: '보통', LOW: '낮음' };   // US-7: no English enum values in the report body
 const RISK_STATUS = { OPEN: '열림', MONITORING: '모니터링', MATERIALIZED: '발생', CLOSED: '종료' };
@@ -54,8 +53,8 @@ export async function weeklyReportState(db, projectId, at = new Date()) {
 
 export function parsePeriod(body = {}) {
   const f = {}; const s = str(body.period_start); const e = str(body.period_end);
-  if (!DATE_RE.test(s)) f.period_start = '시작일을 입력하세요 (YYYY-MM-DD).';
-  if (!DATE_RE.test(e)) f.period_end = '종료일을 입력하세요 (YYYY-MM-DD).';
+  if (!isDate(s)) f.period_start = '시작일을 입력하세요 (YYYY-MM-DD).';
+  if (!isDate(e)) f.period_end = '종료일을 입력하세요 (YYYY-MM-DD).';
   if (!f.period_start && !f.period_end && e < s) f.period_end = '종료일은 시작일보다 이전일 수 없습니다.';
   if (!f.period_start && !f.period_end && (new Date(e) - new Date(s)) / 86400000 > 92) f.period_end = '보고 기간은 최대 3개월입니다.';
   if (Object.keys(f).length) throw new ValidationError(f);

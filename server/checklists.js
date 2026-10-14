@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { CHECKLIST_STEP_KEYS, CHECKLIST_TEMPLATES } from './templates/default-phases.js';
+import { isDate } from './validate.js';
 
 const now = () => new Date().toISOString();
 const COLS = `i.id, i.step_id, s.step_key, i.title, i.owner, i.owner_user_id, i.owner_stakeholder_id, ou.name AS owner_user_name, i.due_date, i.done, i.done_at, i.done_by, i.note, i.sequence, i.created_at, i.updated_at`;
@@ -47,7 +48,7 @@ export function parseItem(body = {}, { partial = false } = {}) {
   str('note', 2000, '메모');
   if (body.due_date !== undefined) {
     if (body.due_date === null || body.due_date === '') fields.due_date = null;
-    else if (typeof body.due_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.due_date) || Number.isNaN(Date.parse(`${body.due_date}T00:00:00Z`))) errors.due_date = '기한은 YYYY-MM-DD 형식으로 입력해 주세요.';
+    else if (typeof body.due_date !== 'string' || !isDate(body.due_date)) errors.due_date = '기한은 YYYY-MM-DD 형식으로 입력해 주세요.';
     else fields.due_date = body.due_date;
   }
   if (body.done !== undefined) {

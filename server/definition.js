@@ -13,7 +13,7 @@
  *   confirm (POST …/confirm) re-stamps completed_at; reopen (POST …/reopen) sets the step back to TODO.
  */
 import { randomUUID, createHash } from 'node:crypto';
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { updateStep } from './guide.js';
 import { parseTraits } from './validate.js';
 import { TRAIT_FIELDS } from '../public/app/shared/project-traits.js';
@@ -60,7 +60,6 @@ export const parseOrgType = (v) => { const t = String(v ?? '').trim().toLowerCas
 
 const str = (v, max) => { const s = typeof v === 'string' ? v.trim() : ''; return max && s.length > max ? s.slice(0, max) : s; };
 const parse = (s, fb) => { try { const v = JSON.parse(s); return v ?? fb; } catch { return fb; } };
-const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 
 /** A 착수보고회 never saved starts with the default 준비 체크 and 안건 example (spec US-1). */
 const kickoffOf = (raw) => {

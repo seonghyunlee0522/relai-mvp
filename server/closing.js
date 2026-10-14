@@ -11,14 +11,13 @@
  * Nothing here is a ticket: 운영 이관 items get an owner only (no due date, no workflow). A closed project is never locked.
  */
 import { randomUUID } from 'node:crypto';
-import { ValidationError } from './validate.js';
+import { ValidationError, isDate } from './validate.js';
 import { todayKst } from '../public/app/shared/kst-date.js';
 import { updateStep } from './guide.js';
 import { ensureRow } from './definition.js';
 import { goLiveOf } from './golive.js';
 
 const now = () => new Date().toISOString();
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 const parse = (v) => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
 const err422 = (code, message, fields) => { const e = new ValidationError(fields); e.status = 422; e.code = code; e.message = message; return e; };
 const ORG_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };

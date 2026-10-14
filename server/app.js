@@ -373,6 +373,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         }
         // Phase 6 US-3: 오픈 completes only through the 오픈 dialog (오픈일 + 남은 항목 운영 이관 — POST …/go-live)
         if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'GO_LIVE') return fail(res, 409, 'go_live_required', '오픈은 오픈 완료 처리에서 오픈일과 남은 항목을 정해 완료합니다.');
+        // Phase 6 US-2: 검수 completes only when the whole scope is accepted (no hand-marking 1건 검수 as 완료)
+        if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'ACCEPTANCE' && !Q.acceptanceGateMet(await Q.acceptanceStats(db, project.id))) return fail(res, 409, 'acceptance_required', '범위 내 요구사항이 모두 승인된 검수에 들어가야 완료됩니다. 검수에서 고객 승인을 기록하세요.');
         // Phase 7 US-3: 운영 인수 = 인수자 · 인수일 (+ 운영 이관 담당) — the same record as POST …/handover
         if (st && st.phase_key === 'OPERATIONS' && st.step_key === 'HANDOVER') {
           if (!req.body.handover || typeof req.body.handover !== 'object') return fail(res, 422, 'handover_required', '인수자와 인수일을 입력해야 운영 인수를 완료할 수 있습니다.', { fields: { receiver: '인수자를 고르세요.', date: '인수일을 입력하세요.' } });
