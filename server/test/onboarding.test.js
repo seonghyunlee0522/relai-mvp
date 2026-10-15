@@ -14,12 +14,12 @@ const linkOf = (msg) => (msg.text.match(/https:\/\/relai\.test\/invite\/([A-Za-z
 const lastToken = () => linkOf(mail.last());
 // Direct signups start unverified and cannot send invitations (auth hardening) — the inviting owners/admins below verify first.
 const verify = (db, ...uids) => Promise.all(uids.map((id) => db.run('UPDATE users SET email_verified_at = now() WHERE id = ?', [id])));
-async function admin(client, db, email = 'root@relai.test') { const c = client(); const s = await c('POST', '/api/auth/signup', { name: '운영자', email, password: 'passw0rd!' }); await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]); return { c, uid: s.json.user.id }; }
-const signup = async (client, { name, email, invite_token }) => { const c = client(); const r = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!', invite_token }); return { c, r }; };
+async function admin(client, db, email = 'root@relai.test') { const c = client(); const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email, password: 'passw0rd!' }); await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]); return { c, uid: s.json.user.id }; }
+const signup = async (client, { name, email, invite_token }) => { const c = client(); const r = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name, email, password: 'passw0rd!', invite_token }); return { c, r }; };
 const login = async (client, email) => { const c = client(); const r = await c('POST', '/api/auth/login', { email, password: 'passw0rd!' }); return { c, r }; };
 /** Runs the Google round trip for a client: start (intent/invite) → fake code → callback. Returns the callback response + Location. */
-async function googleLogin(c, claims, { intent = 'login', invite = null, nonceOverride = null, rawIdToken = null, stateOverride = null } = {}) {
-  const start = await c('GET', `/api/auth/google/start?intent=${intent}${invite ? `&invite=${encodeURIComponent(invite)}` : ''}`);
+async function googleLogin(c, claims, { intent = 'login', invite = null, nonceOverride = null, rawIdToken = null, stateOverride = null, consent = true } = {}) {
+  const start = await c('GET', `/api/auth/google/start?intent=${intent}${invite ? `&invite=${encodeURIComponent(invite)}` : ''}${consent ? '&consent=1' : ''}`);
   const url = new URL(start.headers?.location || start.location || '', 'http://localhost');
   const state = stateOverride ?? url.searchParams.get('state'); const nonce = nonceOverride ?? url.searchParams.get('nonce');
   const code = google.issueCode({ ...claims, nonce, rawIdToken });
@@ -211,7 +211,7 @@ test('google: new signup (personal workspace), same verified e-mail links to pas
   r = await googleLogin(client(), { sub: 'g-804', email: 'z@corp.com', aud: 'other-client' }); assert.match(r.location, /error=google_id_token_invalid/);
   assert.equal(Number((await db.get(`SELECT COUNT(*) n FROM users WHERE email = 'z@corp.com'`)).n), 0);
   // state single use: replaying the callback fails
-  const rc = client(); const st2 = await rc('GET', '/api/auth/google/start?intent=login'); const u2 = new URL(st2.headers?.location || st2.location, 'http://localhost');
+  const rc = client(); const st2 = await rc('GET', '/api/auth/google/start?intent=login&consent=1'); const u2 = new URL(st2.headers?.location || st2.location, 'http://localhost');
   code = google.issueCode({ sub: 'g-805', email: 'y@corp.com', nonce: u2.searchParams.get('nonce') });
   r = await rc('GET', `/api/auth/google/callback?code=${code}&state=${encodeURIComponent(u2.searchParams.get('state'))}`); assert.equal(r.headers?.location || r.location, '/app');
   code = google.issueCode({ sub: 'g-805', email: 'y@corp.com', nonce: u2.searchParams.get('nonce') });

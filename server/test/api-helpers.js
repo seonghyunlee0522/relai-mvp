@@ -26,7 +26,7 @@ export const project = (o = {}) => ({ name: '테스트 프로젝트', client_nam
 
 export async function setup(client, email = 'u@x.com', name = '홍길동') {
   const c = client();
-  const s = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!' });
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name, email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id; const uid = s.json.user.id;
   const p = (await c('POST', `/api/workspaces/${w}/projects`, project())).json.project;
   const purl = `/api/workspaces/${w}/projects/${p.id}`;
@@ -35,7 +35,7 @@ export async function setup(client, email = 'u@x.com', name = '홍길동') {
 /** Signs up `email` and adds them to A's workspace with the given role. */
 export async function addMember(client, A, email, name, role = 'MEMBER') {
   const c = client();
-  const s = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!' });
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name, email, password: 'passw0rd!' });
   const r = await A.c('POST', `/api/workspaces/${A.w}/members`, { email, role });
   if (r.status !== 201) throw new Error(`addMember failed: ${r.status}`);
   return { c, uid: s.json.user.id };

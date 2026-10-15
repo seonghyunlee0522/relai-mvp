@@ -2773,3 +2773,22 @@ body:has(.scrim) #main .btn--primary,
   .rhead .seg--lg button{white-space:nowrap;padding-left:10px;padding-right:10px}
   .rhead .seg--lg .tag-later{display:none}
 }
+
+/* ---------- B9: signup consent + public legal footer (shared/legal-info.js) ---------- */
+.consent{border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;margin:4px 0 18px;font-size:var(--fs-md);min-width:0}
+.consent label{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.consent input[type=checkbox]{width:16px;height:16px;margin:0;flex:none;accent-color:var(--blue)}
+.consent__all{padding-bottom:10px;margin-bottom:8px;border-bottom:1px solid var(--border-soft);width:100%}
+.consent__row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0}
+.consent__row .link{font-size:var(--fs-sm);flex:none}
+.consent .req{color:var(--blue-deep);font-weight:600}
+.consent .err{margin:0 0 2px 24px}
+.consent__d{margin:2px 0 4px 24px;font-size:var(--fs-sm);color:var(--text-2)}
+.consent__d summary{cursor:pointer;color:var(--text-3)}
+.consent__d dl{margin:8px 0 0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px}
+.consent__d dt{color:var(--text-3);white-space:nowrap}.consent__d dd{margin:0}
+.auth__gnote{margin-top:10px;text-align:center}
+.legal-foot{margin-top:40px;padding-top:18px;border-top:1px solid var(--border-soft);font-size:12px;line-height:1.7;color:var(--text-3)}
+.legal-foot__links{display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:6px}.legal-foot__links a{color:var(--text-2);text-decoration:none}.legal-foot__links a:hover{text-decoration:underline}
+.legal-biz{margin:0;display:flex;flex-wrap:wrap;gap:0 12px}.legal-biz__k{color:var(--text-2)}.legal-biz a{color:inherit}
+.legal-foot__c{margin:6px 0 0}

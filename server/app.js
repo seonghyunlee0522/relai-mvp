@@ -42,7 +42,7 @@ import { mountAuthRoutes } from './auth/routes.js';
 import { mountAccountSecurityRoutes, sendVerificationEmail } from './auth/account-security.js';
 import { mountMaintenanceRoutes } from './maintenance.js';
 import { mountAccountRoutes, recordLogin } from './auth/account.js';
-import { createDirectSignupUser, createUser, touchIdentity, normEmail } from './accounts.js';
+import { createDirectSignupUser, createUser, touchIdentity, normEmail, recordConsent } from './accounts.js';
 import * as I from './invitations.js';
 import { writeAudit } from './admin.js';
 import { mountOnboardingRoutes } from './onboarding-routes.js';
@@ -55,6 +55,8 @@ import { ensureAccount } from './ai/credits.js';
 import { assertWithinLimit, PlanLimitError } from './billing/limits.js';
 import { providerFromEnv } from './billing/provider.js';
 import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
+import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
+import { PLANS } from './plans.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
@@ -191,6 +193,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (await signupLimit.blocked(ip)) return fail(res, 429, 'rate_limited', '잠시 후 다시 시도해 주세요.');
     await signupLimit.hit(ip);
     const { name, email, password } = parseSignup(req.body);
+    const consent = consentFromBody(req.body);   // B9: 이용약관 + 개인정보 수집·이용 are both required
+    if (!consent) return fail(res, 422, 'consent_required', CONSENT_ERROR.message, { fields: CONSENT_ERROR.fields(req.body) });
     if (await q.userByEmail.get(email)) return fail(res, 409, 'email_taken', '이미 가입된 이메일입니다.', { fields: { email: '이미 가입된 이메일입니다.' } });
     // Signup through an invitation link: the server reads the invitation (never workspace/role from the browser); the e-mail must match;
     // the new user gets NO personal workspace — the invitation decides (platform → new customer workspace as OWNER, member → membership).
@@ -209,6 +213,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
           const user = { id: userId, email, status: 'ACTIVE' };
           accepted = await I.acceptInvite(db, invite, user);
         } else ({ userId } = await createDirectSignupUser(db, { email, name, passwordHash: password_hash }));
+        await recordConsent(db, userId, consent);
         await writeAudit(db, { adminUserId: userId, action: 'USER_CREATED', targetType: 'USER', targetId: userId, metadata: { email, method: 'PASSWORD', invitation_id: invite ? invite.id : null }, actorKind: 'USER' });
       });
     } catch (e) {
@@ -1338,6 +1343,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /* ---------- pages ---------- */
   const pub = resolve(here, '../public');
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
+  mountLegal(app, { pub, plans: PLANS });   // /, /terms, /privacy, /pricing (B9)
   app.get(['/login', '/signup'], (req, res) => {
     if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect('/app');
     res.sendFile(resolve(pub, 'app/index.html'));

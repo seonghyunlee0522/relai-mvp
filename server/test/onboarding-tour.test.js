@@ -6,7 +6,7 @@ import { projectGuidance } from '../guidance.js';
 import { activationState } from '../activation.js';
 
 const OB = (A) => `/api/workspaces/${A.w}/onboarding`;
-const fresh = async (client, email, name = '신규') => { const c = client(); const s = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!' }); return { c, w: s.json.workspaces[0].id, uid: s.json.user.id }; };
+const fresh = async (client, email, name = '신규') => { const c = client(); const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name, email, password: 'passw0rd!' }); return { c, w: s.json.workspaces[0].id, uid: s.json.user.id }; };
 async function completeDefinition(A) {
   await A.c('PUT', `${A.purl}/definition`, { goal: '목표', success_criteria: ['기준'], scope_in: ['범위'], stakeholders: [{ name: '김', org: 'ACME', org_type: '고객사' }], key_dates: [{ title: '오픈', date: '2027-01-01' }], operations: { meetings: '주간' } });
   for (const k of ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS']) assert.equal((await A.c('POST', `${A.purl}/definition/sections/${k}/complete`, {})).status, 200, k);
@@ -200,7 +200,7 @@ test('activation: project 0 / created / defined / activated / active; admin work
   assert.equal(activationState(f({ projects: 1, defined_projects: 1, activated_projects: 1 }), { now }).state, 'ACTIVE');
   assert.equal(activationState(f({ projects: 1, activated_projects: 1, last_active_at: '2026-08-01T00:00:00Z' }), { now }).state, 'ACTIVATED');
   // via API
-  const root = client(); const s = await root('POST', '/api/auth/signup', { name: '운영자', email: 'root@x.com', password: 'passw0rd!' }); await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]);
+  const root = client(); const s = await root('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'root@x.com', password: 'passw0rd!' }); await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]);
   const N = await fresh(client, 'act@x.com');
   const ws = async () => (await root('GET', '/api/admin/workspaces?size=100')).json.items.find((w) => w.id === N.w);
   assert.equal((await ws()).activation.state, 'WORKSPACE_READY', '29. project 0');

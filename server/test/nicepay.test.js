@@ -228,7 +228,7 @@ test('one-time checkout: order priced on the server, pay page, signed return →
   assert.equal(new Date((await sub(db, A.w)).current_period_end).getTime(), new Date(s.current_period_end).getTime());
   // seats: TEAM members limited to 3 purchased seats
   await addMember(client, A, 'b@x.com', '박나다');
-  await client()('POST', '/api/auth/signup', { name: '최다라', email: 'c@x.com', password: 'passw0rd!' });
+  await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '최다라', email: 'c@x.com', password: 'passw0rd!' });
   const m4 = await A.c('POST', `/api/workspaces/${A.w}/members`, { email: 'c@x.com', role: 'MEMBER' });
   assert.equal(m4.status, 402); assert.equal(m4.json.error.limit.seats, true); assert.equal(m4.json.error.limit.limit, 3);
   assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing.usage.dims.find((d) => d.key === 'members').limit, 3);
@@ -265,7 +265,7 @@ test('approval network failure → net cancel, order failed; refund by operator 
   const o3 = await buy('MONTHLY'); await returnPost(windowResult(o3));
   let s = await sub(db, A.w); assert.ok(Math.abs(months(new Date(), s.current_period_end) - 13) < 0.2);
   // operator refund of the 1-month extension
-  const ops = client(); const u = await ops('POST', '/api/auth/signup', { name: '운영자', email: 'ops@relai.io', password: 'passw0rd!' });
+  const ops = client(); const u = await ops('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'ops@relai.io', password: 'passw0rd!' });
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [u.json.user.id]);
   const p3 = await db.get('SELECT id FROM payments WHERE moid = ?', [o3.id]);
   assert.equal((await A.c('POST', `/api/billing/admin/payments/${p3.id}/refund`, { reason: '중복 결제' })).status, 403);

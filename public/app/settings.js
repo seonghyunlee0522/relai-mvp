@@ -116,6 +116,7 @@ export async function settingsPage(main = $('#main')) {
     <div class="panel" id="profile"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd><form id="mef" class="inline-form"><input class="input input--sm" name="name" value="${state.user.name}" maxlength="50" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form></dd>
       <dt>이메일</dt><dd>${state.user.email}</dd>
+      <dt>약관 · 정책</dt><dd><a class="link" href="/terms" target="_blank" rel="noopener">이용약관</a> · <a class="link" href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a></dd>
       ${raw(account ? html`<dt>로그인 방법</dt><dd>${account.login_methods.map((m) => (m.provider === 'GOOGLE' ? 'Google' : '비밀번호')).join(' · ') || '-'}</dd>` : '')}</dl>
       ${raw(account ? html`<div class="actions" style="margin-top:14px">${raw(account.has_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 변경</button>'
         : account.can_set_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 설정</button>' : '<small class="dim">이메일 인증 후 비밀번호를 설정할 수 있습니다.</small>')}

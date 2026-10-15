@@ -24,7 +24,7 @@ async function boot() {
 const project = (o = {}) => ({ name: 'P', client_name: '테스트 고객사', project_type: 'NEW_BUILD', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28', ...o });
 async function setup(client, email = 'u@x.com') {
   const c = client();
-  const s = await c('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '홍길동', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id; const uid = s.json.user.id;
   const p = (await c('POST', `/api/workspaces/${w}/projects`, project())).json.project;
   const purl = `/api/workspaces/${w}/projects/${p.id}`;

@@ -180,6 +180,7 @@ export const migrations = [
     await reset(`${steps('OPERATIONS', 'HANDOVER')}) AND NOT EXISTS ${rec('handover')}`);
     await reset(`${steps('OPERATIONS', 'CLOSE')}) AND note NOT LIKE '%[외부 완료보고서]%' AND NOT EXISTS (SELECT 1 FROM weekly_reports w WHERE w.project_id = ${pidOf} AND w.report_type = 'COMPLETION' AND w.status = 'FINAL')`);
   } },
+  { version: 40, name: 'B9 signup consent: users.terms_agreed_at/terms_version/privacy_agreed_at/privacy_version + auth_oauth_states.consent — DDL in schema.sql', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

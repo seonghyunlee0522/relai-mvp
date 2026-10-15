@@ -29,13 +29,13 @@ const project = (o = {}) => ({ name: 'A사 AI 상담 시스템 구축', client_n
 test('signup creates workspace + OWNER membership, session persists, logout revokes', async () => {
   const { server, client, db } = await boot();
   const c = client();
-  const r = await c('POST', '/api/auth/signup', { name: '이성현', email: 'A@x.com', password: 'passw0rd!' });
+  const r = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '이성현', email: 'A@x.com', password: 'passw0rd!' });
   assert.equal(r.status, 201);
   assert.equal(r.json.workspaces[0].name, '이성현님의 Workspace');
   assert.equal(r.json.workspaces[0].role, 'OWNER');
   assert.match(r.headers.get('set-cookie'), /HttpOnly/);
   assert.equal((await c('GET', '/api/me')).status, 200);
-  assert.equal((await c('POST', '/api/auth/signup', { name: 'x', email: 'a@x.com', password: 'passw0rd!' })).status, 409);
+  assert.equal((await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: 'x', email: 'a@x.com', password: 'passw0rd!' })).status, 409);
   assert.equal((await c('POST', '/api/auth/logout', {})).status, 200);
   assert.equal((await db.get('SELECT COUNT(*) n FROM sessions')).n, 0);
   server.close();
@@ -55,8 +55,8 @@ test('unauthenticated API and /app are blocked', async () => {
 test('login: wrong password rejected, correct works, weak signup rejected', async () => {
   const { server, client } = await boot();
   const a = client();
-  assert.equal((await a('POST', '/api/auth/signup', { name: 'n', email: 'u@x.com', password: 'short' })).status, 400);
-  await a('POST', '/api/auth/signup', { name: 'n', email: 'u@x.com', password: 'passw0rd!' });
+  assert.equal((await a('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: 'n', email: 'u@x.com', password: 'short' })).status, 400);
+  await a('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: 'n', email: 'u@x.com', password: 'passw0rd!' });
   const b = client();
   assert.equal((await b('POST', '/api/auth/login', { email: 'u@x.com', password: 'wrong-pass1' })).status, 401);
   assert.equal((await b('POST', '/api/auth/login', { email: 'U@x.com', password: 'passw0rd!' })).status, 200);
@@ -66,7 +66,7 @@ test('login: wrong password rejected, correct works, weak signup rejected', asyn
 test('project CRUD defaults, validation, edit, archive (no delete)', async () => {
   const { server, client } = await boot();
   const c = client();
-  const { json } = await c('POST', '/api/auth/signup', { name: 'n', email: 'u@x.com', password: 'passw0rd!' });
+  const { json } = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: 'n', email: 'u@x.com', password: 'passw0rd!' });
   const w = json.workspaces[0].id;
   assert.equal((await c('POST', `/api/workspaces/${w}/projects`, project({ planned_end_date: '2026-01-01' }))).status, 400);
   assert.equal((await c('POST', `/api/workspaces/${w}/projects`, project({ client_name: '' }))).status, 400);
@@ -88,8 +88,8 @@ test('project CRUD defaults, validation, edit, archive (no delete)', async () =>
 test('tenant isolation: other workspace members cannot read/modify/create', async () => {
   const { server, client, db } = await boot();
   const a = client(); const b = client();
-  const A = (await a('POST', '/api/auth/signup', { name: 'A', email: 'a@x.com', password: 'passw0rd!' })).json;
-  const B = (await b('POST', '/api/auth/signup', { name: 'B', email: 'b@x.com', password: 'passw0rd!' })).json;
+  const A = (await a('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: 'A', email: 'a@x.com', password: 'passw0rd!' })).json;
+  const B = (await b('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: 'B', email: 'b@x.com', password: 'passw0rd!' })).json;
   const wa = A.workspaces[0].id; const wb = B.workspaces[0].id;
   const p = (await a('POST', `/api/workspaces/${wa}/projects`, project())).json.project;
   // B using A's workspace id

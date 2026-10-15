@@ -38,7 +38,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
 
   const email = `p3-${Date.now()}@relai.test`;
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '홍길동', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id;
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
   /** A project through 01 + 02 and now in 03, with `n` confirmed in-scope requirements. */

@@ -28,7 +28,7 @@ const project = (o = {}) => ({ name: 'P', client_name: '테스트 고객사', pr
 
 async function userWithProject(client, email = 'u@x.com') {
   const c = client();
-  const s = await c('POST', '/api/auth/signup', { name: 'n', email, password: 'passw0rd!' });
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: 'n', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id;
   const r = await c('POST', `/api/workspaces/${w}/projects`, project());
   return { c, w, p: r.json.project, url: `/api/workspaces/${w}/projects/${r.json.project.id}` };

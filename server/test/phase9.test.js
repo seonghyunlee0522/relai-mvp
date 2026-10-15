@@ -27,7 +27,7 @@ async function boot() {
 const ymd = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 async function setup(client, email) {
   const c = client();
-  const s = await c('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '홍길동', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id; const uid = s.json.user.id;
   const p = (await c('POST', `/api/workspaces/${w}/projects`, { name: 'P', client_name: '테스트 고객사', project_type: 'NEW_BUILD', planned_start_date: '2026-09-01', planned_end_date: '2027-02-28' })).json.project;
   const purl = `/api/workspaces/${w}/projects/${p.id}`;
