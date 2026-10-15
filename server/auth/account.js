@@ -180,7 +180,7 @@ export function mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, se
       await closeWorkspace(db, cur, user);
       // The app needs a workspace to open: an owner left with none gets a fresh empty one (account deletion is the way out).
       const left = await db.get(`SELECT 1 FROM workspace_members m JOIN workspaces x ON x.id = m.workspace_id WHERE m.user_id = ? AND x.status <> 'CLOSED' LIMIT 1`, [user.id]);
-      return left ? null : createWorkspaceForOwner(db, { ownerId: user.id, name: `${user.name}님의 Workspace` });
+      return left ? null : createWorkspaceForOwner(db, { ownerId: user.id, name: `${user.name}님의 워크스페이스` });
     });
     if (fallback === undefined) return fail(res, 404, 'not_found', '찾을 수 없습니다.');
     res.json({ ok: true, purge_after: new Date(Date.now() + PURGE_DAYS * 86400e3).toISOString(), fallback_workspace_id: fallback });

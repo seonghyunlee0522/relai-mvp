@@ -104,10 +104,10 @@ export function qualityHealth(f, R = HEALTH_RULES.quality) {
   if (n(t.last_fail)) reasons.push(`최근 실패한 테스트 ${t.last_fail}건`);
   if (n(a.rework)) reasons.push(`보완 필요 검수 ${a.rework}건`);
   if (n(i.critical_open)) return { status: STATUS.CRITICAL, reasons };
-  if (R.verify_phases.includes(f.phase) && n(t.last_fail) >= R.crit_fail_tests_min_in_verify) return { status: STATUS.CRITICAL, reasons: [...reasons, `시험/전환 단계에서 Fail Test 다수`] };
+  if (R.verify_phases.includes(f.phase) && n(t.last_fail) >= R.crit_fail_tests_min_in_verify) return { status: STATUS.CRITICAL, reasons: [...reasons, `시험/전환 단계에서 실패 테스트 다수`] };
   if (reasons.length) return { status: STATUS.WARNING, reasons };
   if (n(i.open) === 0 && n(t.total) === 0 && n(a.total) === 0) return { status: STATUS.UNKNOWN, reasons: ['이슈·테스트·검수 데이터가 아직 없습니다.'], hint: '품질 상태는 이슈, 테스트, 검수가 등록되면 계산됩니다.' };
-  return { status: STATUS.GOOD, reasons: ['Critical/High 이슈, Fail Test, 보완 필요 검수가 없습니다.'] };
+  return { status: STATUS.GOOD, reasons: ['심각·높음 이슈, 실패 테스트, 보완 필요 검수가 없습니다.'] };
 }
 
 export function changeHealth(f, R = HEALTH_RULES.change) {

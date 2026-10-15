@@ -10,7 +10,7 @@ import { statusChip, prText } from '../shared/badges.js';
 import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, phoneFilters } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
-import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
+import { drawerFoot, drawerHead, bindEscape, bindListNav, deskFoot, moreFields, navBtns } from '../shared/drawer.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
 import { state } from '../core/state.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
@@ -25,6 +25,7 @@ export async function changesPage(id) {
   const carry = carryIndex(g);   // Phase 6 US-3: 운영 이관 (오픈 기록)
   const p = g.project;
   const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
+  const desk = !isPhone(); let moreOpen = false;   // R3b: desktop detail = the R2 480px side drawer
   document.title = `변경 요청 — ${p.name} — RELAI`;
   const cApi = (s = '') => wsApi(`/${id}/changes${s}`);
   const params = () => new URLSearchParams(location.search);
@@ -83,8 +84,8 @@ export async function changesPage(id) {
             <td class="num">${c.cost_impact ? fmtKRW(c.cost_impact) : raw('<span class="dim">-</span>')}</td>
             <td class="dim">${fmtShort(c.updated_at)}</td></tr>`).join(''))}</tbody></table>`
           : hasFilter ? emptyFiltered('변경 요청')
-          : emptyState({ title: '아직 등록된 변경 요청이 없습니다.', body: '프로젝트 진행 중 들어오는 추가·변경 요청을 기록하면 영향 요구사항과 WBS, 일정·비용 영향을 함께 관리할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 변경 요청 등록' } }))}</div>
-        <aside class="drawer drawer--cr ${sel && apv ? 'drawer--side' : ''}" id="drawer" ${sel || creating ? '' : 'hidden'} ${raw(sel && apv ? 'data-mode="approval"' : '')}>${raw(creating ? drawerCreate() : sel && apv ? drawerApproval() : sel ? drawerDetail() : '')}</aside>
+          : emptyState({ title: '고객의 추가·변경 요청을 등록하면 일정·비용 영향과 승인을 함께 관리할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 변경 요청 등록' } }))}</div>
+        <aside class="drawer ${sel && apv ? 'drawer--cr drawer--side' : desk && sel && !creating ? 'drawer--lg' : 'drawer--cr'}" id="drawer" ${sel || creating ? '' : 'hidden'} ${raw(sel && apv ? 'data-mode="approval"' : '')}>${raw(creating ? drawerCreate() : sel && apv ? drawerApproval() : sel ? drawerDetail() : '')}</aside>
       </div>
     </div>`;
     bind(); bindCoach(main);
@@ -188,11 +189,11 @@ export async function changesPage(id) {
     const liveImp = c.impacts.filter((x) => !x.archived_at); const archImp = c.impacts.length - liveImp.length;
     const fieldsRo = ro || st === 'IMPLEMENTED' || st === 'REJECTED';
     const decision = () => {
-      if (st === 'DRAFT') return html`<div class="decision"><p>작성 중인 변경 요청입니다. 내용과 영향을 정리한 뒤 검토를 요청하세요.</p>${raw(ro ? '' : '<button class="btn btn--primary" data-tr="submit">검토 요청</button>')}</div>`;
+      if (st === 'DRAFT') return html`<div class="decision"><p>작성 중인 변경 요청입니다. 내용과 영향을 정리한 뒤 검토를 요청하세요.</p>${raw(ro || desk ? '' : '<button class="btn btn--primary" data-tr="submit">검토 요청</button>')}</div>`;
       if (st === 'UNDER_REVIEW') return html`<div class="decision decision--review"><p><b>검토 중인 변경 요청입니다.</b> ${c.submitted_at ? fmtShort(c.submitted_at) + ' 검토 요청' : ''}</p>
         ${raw(c.approver_name ? html`<p class="hint">지정 승인자: <b>${c.approver_name}</b></p>` : '')}
         ${raw(ro ? '' : c.review && !c.review.allowed ? html`<p class="hint">${c.review.reason === 'author' ? '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. 소유자·관리자 또는 지정 승인자가 결정합니다.' : '승인·반려는 소유자·관리자 또는 지정 승인자만 할 수 있습니다.'}</p>`
-          : html`<p class="hint" style="margin:0 0 8px">고객 결정을 받아 기록하세요. 승인은 고객이 누가·언제·어떻게 승인했는지와 함께 남습니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--secondary" data-tr="reject">반려</button></div>`)}</div>`;
+          : html`<p class="hint" style="margin:0 0 8px">고객 결정을 받아 기록하세요. 승인은 고객이 누가·언제·어떻게 승인했는지와 함께 남습니다.</p>${raw(desk ? '' : '<div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--secondary" data-tr="reject">반려</button></div>')}`)}</div>`;
       if (st === 'APPROVED') {
         const firstReq = liveReq[0]; const firstImp = liveImp[0];
         return html`<div class="decision decision--ok">${raw(approvedLine(c))}${c.decision_note ? raw(html`<p><q>${c.decision_note}</q></p>`) : ''}
@@ -200,7 +201,7 @@ export async function changesPage(id) {
           <a href="/app/projects/${p.id}/requirements?cr=${c.id}${firstReq ? '&sel=' + firstReq.requirement_id : ''}" data-link>관련 요구사항 <b>${liveReq.length}</b></a>
           <a href="/app/projects/${p.id}/wbs?cr=${c.id}${firstImp ? '&sel=' + firstImp.wbs_item_id : ''}" data-link>영향 WBS <b>${liveImp.length}</b></a></p>
         <p>각 화면에서 직접 반영하세요. 요구사항 수정은 이 변경 요청을 출처로 변경 이력에 남습니다. 반영이 끝나면 '반영 완료'로 처리하세요.</p>
-        <div class="actions" style="margin-top:0"><a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/requirements?cr=${c.id}${firstReq ? '&sel=' + firstReq.requirement_id : ''}" data-link>요구사항에서 반영</a><a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/wbs?cr=${c.id}${firstImp ? '&sel=' + firstImp.wbs_item_id : ''}" data-link>WBS에서 반영</a>${raw(ro ? '' : '<button class="btn btn--primary btn--sm" data-tr="implement">반영 완료</button>')}</div></div>`;
+        <div class="actions" style="margin-top:0"><a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/requirements?cr=${c.id}${firstReq ? '&sel=' + firstReq.requirement_id : ''}" data-link>요구사항에서 반영</a><a class="btn btn--secondary btn--sm" href="/app/projects/${p.id}/wbs?cr=${c.id}${firstImp ? '&sel=' + firstImp.wbs_item_id : ''}" data-link>WBS에서 반영</a>${raw(ro || desk ? '' : '<button class="btn btn--primary btn--sm" data-tr="implement">반영 완료</button>')}</div></div>`;
       }
       if (st === 'IMPLEMENTED') return html`<div class="decision decision--ok"><p><b>반영 완료된 변경 요청입니다.</b> ${c.implemented_at ? fmtShort(c.implemented_at) + ' 반영' : ''}${c.decision_note ? raw(html`<br><q>${c.decision_note}</q>`) : ''}</p>${raw(approvedLine(c))}</div>`;
       return html`<div class="decision decision--no"><p><b>반려된 변경 요청입니다.</b> ${c.reviewed_by_name || ''} · ${c.rejected_at ? fmtShort(c.rejected_at) : ''}${c.decision_note ? raw(html`<br><q>${c.decision_note}</q>`) : ''}</p></div>`;
@@ -221,9 +222,32 @@ export async function changesPage(id) {
           return html`<b>${L[f] || f}</b> ${v(h.old_value)} → ${v(h.new_value)} <small>${h.changed_by_name || ''}</small>`; }
       }
     };
-    return html`${raw(drawerHead(c.display_id, statusChip(CR_STATUS, CR_STATUS_CHIP, st), { archived: Boolean(c.archived_at) }))}
+    const dis = fieldsRo ? 'disabled' : '';
+    const fld = (label, inner) => html`<div class="dfield"><span>${label}</span><div>${raw(inner)}</div></div>`;
+    const reqF = fld('요청자', html`<input class="input input--sm" data-field="requester_name" value="${c.requester_name}" maxlength="100" placeholder="이름" list="cr-people" autocomplete="off" ${dis}>${raw(peopleList())}`);
+    const restF = fld('요청 사유', html`<textarea class="textarea" data-field="reason" maxlength="2000" style="min-height:56px;font-size:14px" placeholder="요청 사유" ${dis}>${c.reason}</textarea>`)
+      + fld('요청자 조직', html`<input class="input input--sm" data-field="requester_organization" value="${c.requester_organization}" maxlength="100" placeholder="조직" ${dis}>`)
+      + fld('요청일', html`<input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${dis}>`)
+      + fld('내부 처리자', html`<select class="select select--sm" data-field="approver_user_id" title="소유자·관리자 외에 이 변경 요청을 처리할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">${approverDefault(members)}</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select>`);
+    /* R3b footer actions = the decision's buttons (검토 요청 · 반려 + 승인 · 반영 완료) */
+    const footActs = ro ? '' : st === 'DRAFT' ? '<button type="button" class="btn btn--primary btn--sm" data-tr="submit">검토 요청</button>'
+      : st === 'UNDER_REVIEW' && !(c.review && !c.review.allowed) ? '<button type="button" class="btn btn--secondary btn--sm" data-tr="reject">반려</button><button type="button" class="btn btn--primary btn--sm" data-tr="approve">승인</button>'
+      : st === 'APPROVED' ? '<button type="button" class="btn btn--primary btn--sm" data-tr="implement">반영 완료</button>' : '';
+    const deskInfo = () => html`<div class="dstack">${raw(carryLine(carry, 'CR', c.id))}
+      <input class="dtitle" data-field="title" value="${c.title}" maxlength="200" ${dis} aria-label="제목">
+      ${raw(decision())}
+      <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${dis} aria-label="설명">${c.description}</textarea>
+      <div class="dgrid">${raw(fld('우선순위', html`<select class="select select--sm" data-field="priority" ${dis}>${raw(opt(CR_PRIORITY, c.priority))}</select>`))}${raw(reqF)}</div>
+      ${raw(moreFields(restF, moreOpen))}
+      <div class="dsave" id="dsave"></div>
+      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·Risk를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
+      ${raw(impactSummary(c))}
+      <div class="dgrid">${raw(fld('일정 영향 (일)', html`<input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${dis}>`))}
+        ${raw(fld('추가 공수 (MD)', html`<input class="input input--sm" type="number" min="0" step="0.5" data-field="effort_impact_md" value="${c.effort_impact_md ?? ''}" placeholder="0" ${dis}>`))}
+        ${raw(fld('비용 영향 (₩)', html`<input class="input input--sm" type="number" min="0" step="1000" data-field="cost_impact" value="${c.cost_impact ?? ''}" placeholder="0" ${dis}>`))}</div></div>`;
+    return html`${raw(drawerHead(c.display_id, statusChip(CR_STATUS, CR_STATUS_CHIP, st), { archived: Boolean(c.archived_at), nav: desk ? navBtns(rows.map((r) => r.id), c.id, '변경 요청') : '' }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: '영향 범위', count: liveReq.length + liveImp.length }, { key: 'hist', label: '변경 이력', count: c.history.length }], dtab))}
-    <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
+    <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>${raw(desk ? deskInfo() : html`
       ${raw(carryLine(carry, 'CR', c.id))}
       <input class="dtitle" data-field="title" value="${c.title}" maxlength="200" ${fieldsRo ? 'disabled' : ''} aria-label="제목">
       ${raw(decision())}
@@ -244,7 +268,7 @@ export async function changesPage(id) {
         <div class="dfield"><span>일정 영향 (일)</span><div><input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>추가 공수 (MD)</span><div><input class="input input--sm" type="number" min="0" step="0.5" data-field="effort_impact_md" value="${c.effort_impact_md ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>비용 영향 (₩)</span><div><input class="input input--sm" type="number" min="0" step="1000" data-field="cost_impact" value="${c.cost_impact ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
-      </div>
+      </div>`)}
 
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>
@@ -270,7 +294,7 @@ export async function changesPage(id) {
       </section>
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(c.history.length ? html`<ol class="hist">${raw(c.history.map((h) => html`<li><time>${fmtShort(h.changed_at)}</time><span>${raw(histText(h))}</span></li>`).join(''))}</ol>` : '<p class="hint">변경 이력이 없습니다.</p>')}</section>
     </div>
-    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(c.created_at)} · ${c.created_by_name || ''}`, label: '변경 요청 보관', id: 'carchive' }))}`;
+    ${raw(desk ? deskFoot({ ro, meta: `등록 ${fmtShort(c.created_at)} · ${c.created_by_name || ''}`, archId: 'carchive', right: footActs }) : drawerFoot({ ro, meta: `등록 ${fmtShort(c.created_at)} · ${c.created_by_name || ''}`, label: '변경 요청 보관', id: 'carchive' }))}`;
   };
   const lt = (v) => String(v || '').replace(/\b(MODIFIES|ADDS|REMOVES|SCHEDULE|SCOPE|REWORK|NEW_WORK|NONE)\b/g, (m) => RELATION_TYPE[m] || IMPACT_TYPE[m] || m);
 
@@ -315,8 +339,10 @@ export async function changesPage(id) {
   };
 
   const bindDetail = () => {
-    const c = sel; const status = $('#dsave');
-    bindDtabs(main.querySelector('.drawer'), (k) => { dtab = k; });
+    const c = sel; const status = $('#dsave'); const dr = main.querySelector('.drawer');
+    bindDtabs(dr, (k) => { dtab = k; });
+    if (desk) bindListNav(dr, rows.map((r) => r.id), c.id, async (nid) => { apv = null; apvMode = null; await loadSel(nid); draw(); });
+    const dm = dr.querySelector('[data-dmore]'); if (dm) dm.ontoggle = () => { moreOpen = dm.open; };
     const apply = async (d) => { sel = d.change; summary = d.summary; g.changes = summary; await load(); draw(); };
     const ai1 = $('#ai-impact'); if (ai1) ai1.onclick = () => openImpactDialog({ pid: id, change: c, onDone: apply });
     const save = async (field, value) => {

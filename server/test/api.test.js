@@ -31,7 +31,7 @@ test('signup creates workspace + OWNER membership, session persists, logout revo
   const c = client();
   const r = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '이성현', email: 'A@x.com', password: 'passw0rd!' });
   assert.equal(r.status, 201);
-  assert.equal(r.json.workspaces[0].name, '이성현님의 Workspace');
+  assert.equal(r.json.workspaces[0].name, '이성현님의 워크스페이스');
   assert.equal(r.json.workspaces[0].role, 'OWNER');
   assert.match(r.headers.get('set-cookie'), /HttpOnly/);
   assert.equal((await c('GET', '/api/me')).status, 200);

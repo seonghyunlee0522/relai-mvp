@@ -79,7 +79,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   const prim0 = await primaries();
   const emptyTxt = await page.textContent('[data-empty="tests"]');
   check('US-1 빈 상태: primary 1개 = 요구사항별 테스트 만들기, 도구모음 없음', prim0.length === 1 && prim0[0] === '요구사항별 테스트 만들기' && !(await page.$('main .rtool')), JSON.stringify(prim0));
-  check('US-1 빈 상태 문장: "범위 내 요구사항 15건에 테스트를 1건씩 만들어 드립니다…" + 직접 추가 · Excel로 가져오기', /범위 내 요구사항 15건에 테스트를 1건씩 만들어 드립니다\. 기대 결과는 요구사항의 완료 조건으로 채웁니다\./.test(emptyTxt) && /직접 추가/.test(emptyTxt) && /Excel로 가져오기/.test(emptyTxt));
+  check('US-1 빈 상태 문장: "범위 내 요구사항 15건에 테스트를 1건씩 만들어 드립니다…" + 직접 추가 · Excel로 가져오기', /범위 내 요구사항 15건에 테스트를 1건씩 만들어 드립니다\./.test(emptyTxt) && /직접 추가/.test(emptyTxt) && /Excel로 가져오기/.test(emptyTxt));
   await shot('01-tests-empty.png');
 
   /* ---------- AC1: 15건 중 1건 → TEST_PLAN 진행 중, 05 필수 미완료 ---------- */

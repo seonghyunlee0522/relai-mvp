@@ -9,7 +9,7 @@ import { ACC_ACTIONS, ACC_ACTION_LABEL, ACC_STATUS, ACC_STATUS_CHIP, ISSUE_STATU
 import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, phoneFilters } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
-import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
+import { drawerFoot, drawerHead, bindEscape, bindListNav, deskFoot, moreFields, navBtns } from '../shared/drawer.js';
 import { statusChip, prText } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
@@ -26,6 +26,7 @@ export async function testsPage(id) {
   const g = await api('GET', wsApi(`/${id}`));
   const p = g.project;
   const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
+  const desk = !isPhone(); let moreOpen = false;   // R3b: desktop detail = the R2 480px side drawer
   const { members } = await api('GET', `/api/workspaces/${state.workspace.id}/members`);
   const params = () => new URLSearchParams(location.search);
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
@@ -107,8 +108,8 @@ export async function testsPage(id) {
           : rows.length ? (T === 'cases' ? caseTable() : accTable())
           : hasFilter ? emptyFiltered(T === 'cases' ? '테스트' : '검수')
           : T === 'cases' ? emptyCases()
-          : emptyState({ title: '아직 등록된 검수가 없습니다.', body: '검수 대상 요구사항과 테스트를 묶어 고객에게 검수를 요청하고 결과를 기록하세요.', cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }) + html`<p class="hint" style="text-align:center">검수 ${raw(term('acceptance'))} · 고객 인수 테스트 ${raw(term('uat'))}</p>`)}</div>
-        <aside class="drawer drawer--cr ${sel && apv ? 'drawer--side' : ''}" id="drawer" ${sel || creating ? '' : 'hidden'} ${raw(sel && apv ? 'data-mode="approval"' : '')}>${raw(creating ? (isAcc() ? createAcc() : createTest()) : sel && apv && isAcc() ? drawerAccApproval() : sel ? (isAcc() ? detailAcc() : detailTest()) : '')}</aside>
+          : emptyState({ title: raw(html`검수 대상 요구사항과 테스트를 묶어 고객에게 검수(UAT${raw(term('uat'))})를 요청하세요.`), cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }))}</div>
+        <aside class="drawer ${sel && apv ? 'drawer--cr drawer--side' : desk && sel && !creating ? 'drawer--lg' : 'drawer--cr'}" id="drawer" ${sel || creating ? '' : 'hidden'} ${raw(sel && apv ? 'data-mode="approval"' : '')}>${raw(creating ? (isAcc() ? createAcc() : createTest()) : sel && apv && isAcc() ? drawerAccApproval() : sel ? (isAcc() ? detailAcc() : detailTest()) : '')}</aside>
       </div></div>`;
     bind(); bindCoach(main);
   };
@@ -116,8 +117,8 @@ export async function testsPage(id) {
   /* US-1: the empty list offers one primary — 요구사항별 테스트 만들기 (rule-based, like the Phase 3 WBS skeleton); 직접 추가 · Excel are links */
   const emptyCases = () => {
     const k = Number(ts.in_scope_untested) || 0;
-    if (!k || archived) return emptyState({ title: '아직 테스트가 없습니다', body: '범위 내 요구사항을 확정하면 요구사항마다 테스트를 1건씩 만들어 드립니다. 직접 추가할 수도 있습니다.', cta: archived ? null : { id: 'add2', label: '테스트 추가' } });
-    return html`<div class="empty" data-empty="tests"><span class="wempty__ic" aria-hidden="true">✓</span><h2>아직 테스트가 없습니다</h2><p>범위 내 요구사항 ${k}건에 테스트를 1건씩 만들어 드립니다. 기대 결과는 요구사항의 완료 조건으로 채웁니다.</p>
+    if (!k || archived) return emptyState({ title: '범위 내 요구사항을 확정하면 요구사항마다 테스트를 1건씩 만들어 드립니다.', cta: archived ? null : { id: 'add2', label: '테스트 추가' } });
+    return html`<div class="empty" data-empty="tests"><span class="wempty__ic" aria-hidden="true">✓</span><h2>범위 내 요구사항 ${k}건에 테스트를 1건씩 만들어 드립니다.</h2>
       <button class="btn btn--primary btn--lg" id="gen">요구사항별 테스트 만들기</button>
       <p class="tempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button></p></div>`;
   };
@@ -242,7 +243,8 @@ export async function testsPage(id) {
   const detailTest = () => {
     const x = sel; const ro = archived || Boolean(x.archived_at);
     const last = x.executions[0] || null;
-    return html`${raw(drawerHead(x.display_id, resBadge(last ? last.result : null) + prText(x.priority), { archived: Boolean(x.archived_at) }))}
+    const nav = desk ? navBtns(rows.map((r) => r.id), x.id, '테스트') : '';
+    return html`${raw(drawerHead(x.display_id, resBadge(last ? last.result : null) + prText(x.priority), { archived: Boolean(x.archived_at), nav }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'exec', label: '실행 이력', count: x.executions.length }, { key: 'links', label: '연결', count: testLinkCount(x) }, { key: 'hist', label: '변경 이력', count: x.history.length }], dtab))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       ${raw(carryLineOf('TEST', x.id))}
@@ -252,14 +254,16 @@ export async function testsPage(id) {
         <div class="dfield"><span>최근 결과</span><div class="hint" style="height:36px;display:flex;align-items:center;gap:6px" data-last>${raw(last ? html`${raw(resBadge(last.result))} <span>#${last.execution_number} · ${execLine(last)}</span>` : '아직 실행 전')}</div></div>
         <div class="dfield"><span>우선순위</span><div><select class="select select--sm" data-field="priority" ${ro ? 'disabled' : ''}>${raw(opt(TC_PRIORITY, x.priority))}</select></div></div>
         <div class="dfield"><span>담당자</span><div><select class="select select--sm" data-field="owner_user_id" ${ro ? 'disabled' : ''}>${raw(ownerOpts(x.owner_user_id || ''))}</select></div></div>
-        <div class="dfield"><span>상태</span><div><select class="select select--sm" data-field="status" ${ro ? 'disabled' : ''}>${raw(opt(TC_STATUS, x.status))}</select></div></div>
+        ${raw(desk ? '' : html`<div class="dfield"><span>상태</span><div><select class="select select--sm" data-field="status" ${ro ? 'disabled' : ''}>${raw(opt(TC_STATUS, x.status))}</select></div></div>`)}
       </div>
-      <div class="dfield" style="margin-top:10px"><span>사전 조건</span><div><textarea class="textarea" data-field="precondition" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="테스트 전에 갖춰야 할 조건" ${ro ? 'disabled' : ''}>${x.precondition}</textarea></div></div>
+      ${raw(desk ? moreFields(html`<div class="dfield"><span>상태</span><div><select class="select select--sm" data-field="status" ${ro ? 'disabled' : ''}>${raw(opt(TC_STATUS, x.status))}</select></div></div>
+        <div class="dfield"><span>사전 조건</span><div><textarea class="textarea" data-field="precondition" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="테스트 전에 갖춰야 할 조건" ${ro ? 'disabled' : ''}>${x.precondition}</textarea></div></div>`, moreOpen)
+      : html`<div class="dfield" style="margin-top:10px"><span>사전 조건</span><div><textarea class="textarea" data-field="precondition" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="테스트 전에 갖춰야 할 조건" ${ro ? 'disabled' : ''}>${x.precondition}</textarea></div></div>`)}
       <h4 class="dh">테스트 절차 <em>${x.steps.length}</em>${raw(ro ? '' : '<button class="link linkbtn" id="steps-save" style="margin-left:auto;width:auto;font-size:12.5px" hidden>절차 저장</button>')}</h4>
       <div id="steps-wrap">${raw(stepsEditor(x.steps, ro))}</div>
       <div class="dfield" style="margin-top:10px"><span>기대 결과</span><div><textarea class="textarea" data-field="expected_result" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="기대 결과를 적어 주세요" ${ro ? 'disabled' : ''}>${x.expected_result}</textarea></div></div>
       <div class="dsave" id="dsave"></div>
-      ${raw(ro ? '' : html`<div class="decision decision--review"><p><b>이 테스트를 실행했나요?</b> 결과(통과 / 실패 / 막힘)와 실제 결과를 기록하세요. 기록은 수정되지 않고 실행 이력으로 쌓입니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="run">테스트 실행</button></div></div>`)}
+      ${raw(ro || desk ? '' : html`<div class="decision decision--review"><p><b>이 테스트를 실행했나요?</b> 결과(통과 / 실패 / 막힘)와 실제 결과를 기록하세요. 기록은 수정되지 않고 실행 이력으로 쌓입니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="run">테스트 실행</button></div></div>`)}
       </section>
       <section data-pane="exec" ${dtab === 'exec' ? '' : 'hidden'}>
       ${raw(x.executions.length ? html`<ol class="exec">${raw(x.executions.map((e) => html`<li class="exec__i exec--${e.result.toLowerCase()}"><details ${e === last ? 'open' : ''}><summary><span class="exec__n">#${e.execution_number}</span>${raw(resBadge(e.result))}<span class="exec__who" data-exec-line>${execLine(e)}</span>
@@ -273,7 +277,7 @@ export async function testsPage(id) {
       </section>
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section>
     </div>
-    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '테스트 보관' }))}`;
+    ${raw(desk ? deskFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, right: '<button type="button" class="btn btn--primary btn--sm" id="run" title="결과(통과 / 실패 / 막힘)를 기록합니다">테스트 실행</button>' }) : drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '테스트 보관' }))}`;
   };
 
   /* ---------- Phase 6 US-1: 검수 승인 = 고객 승인 기록 (공용 승인 Drawer) ---------- */
@@ -334,7 +338,8 @@ export async function testsPage(id) {
     const liveTests = x.tests.filter((t) => !t.archived_at);
     const failTests = liveTests.filter((t) => t.last_result === 'FAIL'); const openIssues = liveTests.filter((t) => t.open_issue);
     const final = x.status === 'ACCEPTED' || x.status === 'REJECTED';
-    return html`${raw(drawerHead(x.display_id, statusChip(ACC_STATUS, ACC_STATUS_CHIP, x.status), { archived: Boolean(x.archived_at) }))}
+    const accBtn = (a) => html`<button type="button" class="btn ${a === 'accept' || a === 'submit' || a === 'resubmit' ? 'btn--primary' : a === 'reject' ? 'btn--danger' : 'btn--secondary'} btn--sm" data-act="${a}">${ACC_ACTION_LABEL[a]}</button>`;
+    return html`${raw(drawerHead(x.display_id, statusChip(ACC_STATUS, ACC_STATUS_CHIP, x.status), { archived: Boolean(x.archived_at), nav: desk ? navBtns(rows.map((r) => r.id), x.id, '검수') : '' }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: '대상·테스트', count: x.requirements.filter((r) => !r.archived_at).length + liveTests.length }, { key: 'hist', label: '변경 이력', count: x.history.length }], dtab))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       ${raw(carryLineOf('ACCEPTANCE', x.id))}
@@ -342,16 +347,15 @@ export async function testsPage(id) {
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="검수 범위와 기준을 적어두세요." ${ro || final ? 'disabled' : ''}>${x.description}</textarea>
       <div class="dgrid">
         <div class="dfield"><span>검수 기한</span><div><input class="input input--sm" type="date" data-field="due_date" value="${x.due_date || ''}" ${ro || final ? 'disabled' : ''}></div></div>
-        <div class="dfield"><span>요청일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.requested_at)}</div></div>
-        <div class="dfield"><span>승인일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.accepted_at)}</div></div>
-        <div class="dfield"><span>반려일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.rejected_at)}</div></div>
+        ${raw(desk ? '' : accDates(x))}
       </div>
+      ${raw(desk ? moreFields(accDates(x), moreOpen) : '')}
       ${raw(x.status === 'ACCEPTED' ? accApprovedLine(x, ro) : '')}
       <div class="dsave" id="dsave"></div>
       ${raw(x.decision_note ? html`<div class="decision ${x.status === 'ACCEPTED' ? 'decision--ok' : x.status === 'REJECTED' || x.status === 'REWORK_REQUIRED' ? 'decision--no' : ''}"><p><b>결정 사유</b></p><p><q>${x.decision_note}</q></p></div>` : '')}
       ${raw(actions.length ? html`<div class="decision decision--review">
         ${raw(x.status === 'DRAFT' ? '<p><b>검수 준비가 끝났나요?</b> 대상 요구사항과 테스트를 연결한 뒤 고객에게 검수를 요청하세요.</p>' : x.status === 'REQUESTED' ? html`<p><b>고객 검수 결과를 기록하세요.</b>${raw(failTests.length || openIssues.length ? html` <span class="warn-inline">실패 테스트 ${failTests.length}건${openIssues.length ? ` · 처리 중인 이슈 ${openIssues.length}건` : ''}이 남아 있습니다.</span>` : ' 연결된 테스트에 남은 실패가 없습니다.')}</p>` : '<p><b>보완이 끝났나요?</b> 보완 사항을 처리한 뒤 다시 검수를 요청하세요.</p>')}
-        <div class="actions" style="margin-top:0">${raw(actions.map((a) => html`<button class="btn ${a === 'accept' || a === 'submit' || a === 'resubmit' ? 'btn--primary' : a === 'reject' ? 'btn--danger' : 'btn--secondary'} btn--sm" data-act="${a}">${ACC_ACTION_LABEL[a]}</button>`).join(''))}</div></div>` : '')}
+        ${raw(desk ? '' : html`<div class="actions" style="margin-top:0">${raw(actions.map(accBtn).join(''))}</div>`)}</div>` : '')}
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>
       <h4 class="dh">대상 요구사항 <em>${x.requirements.filter((r) => !r.archived_at).length}</em></h4>
@@ -365,8 +369,11 @@ export async function testsPage(id) {
       </section>
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section>
     </div>
-    ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)} · ${x.created_by_name || ''}`, label: '검수 보관' }))}`;
+    ${raw(desk ? deskFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, right: [...actions].reverse().map(accBtn).join('') }) : drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)} · ${x.created_by_name || ''}`, label: '검수 보관' }))}`;
   };
+  const accDates = (x) => html`<div class="dfield"><span>요청일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.requested_at)}</div></div>
+        <div class="dfield"><span>승인일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.accepted_at)}</div></div>
+        <div class="dfield"><span>반려일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.rejected_at)}</div></div>`;
 
   /** Execution dialog (US-2 · US-4): 결과 → 실제 결과 → 메모 → 수행자·수행일 → (통과 + 열린 결함 이슈) 해결 체크박스. Resolves the POST body or null. */
   const runDialog = (x) => new Promise((resolve) => {
@@ -494,8 +501,10 @@ export async function testsPage(id) {
     return pk ? { ...pk, row: rows2.find((r) => r.id === pk.id) } : null;
   };
   const bindDetailTest = () => {
-    const x = sel; const status = $('#dsave');
-    bindDtabs(main.querySelector('.drawer'), (k) => { dtab = k; });
+    const x = sel; const status = $('#dsave'); const dr = main.querySelector('.drawer');
+    bindDtabs(dr, (k) => { dtab = k; });
+    if (desk) bindListNav(dr, rows.map((r) => r.id), x.id, async (nid) => { apv = null; apvMode = null; await loadSel(nid); draw(); });
+    const dm = dr.querySelector('[data-dmore]'); if (dm) dm.ontoggle = () => { moreOpen = dm.open; };
     const apply = async (d) => { sel = d.test; ts = d.tests; g.tests = ts; await load(); draw(); };
     const save = async (field, value) => {
       status.textContent = '저장 중…';
@@ -545,8 +554,10 @@ export async function testsPage(id) {
     };
   };
   const bindDetailAcc = () => {
-    const x = sel; const status = $('#dsave');
-    bindDtabs(main.querySelector('.drawer'), (k) => { dtab = k; });
+    const x = sel; const status = $('#dsave'); const dr = main.querySelector('.drawer');
+    bindDtabs(dr, (k) => { dtab = k; });
+    if (desk) bindListNav(dr, rows.map((r) => r.id), x.id, async (nid) => { apv = null; apvMode = null; await loadSel(nid); draw(); });
+    const dm = dr.querySelector('[data-dmore]'); if (dm) dm.ontoggle = () => { moreOpen = dm.open; };
     const apply = async (d) => { sel = d.acceptance; ac = d.acceptances; g.acceptances = ac; await load(); draw(); };
     const save = async (field, value) => {
       status.textContent = '저장 중…';

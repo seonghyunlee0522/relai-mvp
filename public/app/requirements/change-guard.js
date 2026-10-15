@@ -39,12 +39,16 @@ export function changePromptDialog({ adding = false, diff = '' } = {}) {
   });
 }
 
-/** Create the DRAFT change request (existing API) and show "변경 요청 CR-00N 초안을 만들었습니다 …" with 열기 →. */
-export async function createChangeDraft(pid, { title, lines, requirementIds = [], relation = 'MODIFIES' }) {
+/** Create the DRAFT change request (existing API, 영향 WBS pre-filled from the requirements' WBS links) and open it (R3b F8 · F9). */
+export async function createChangeDraft(pid, { title, lines, requirementIds = [], relation = 'MODIFIES', open = true }) {
   const description = ['제안 내용 (변경 전 → 후)', ...lines].join('\n');
-  const res = await api('POST', wsApi(`/${pid}/changes`), { title: title.slice(0, 200), description, requirements: requirementIds.map((id) => ({ requirement_id: id, relation_type: relation })) });
+  const res = await api('POST', wsApi(`/${pid}/changes`), { title: title.slice(0, 200), description, requirements: requirementIds.map((id) => ({ requirement_id: id, relation_type: relation })), impacts_from_requirements: true });   // R3b F8
   const c = res.change;
-  toastAction(`변경 요청 ${c.display_id} 초안을 만들었습니다. 승인되면 요구사항을 수정하세요.`, { label: '열기 →', ms: 8000, onAction: () => navigate(`/app/projects/${pid}/changes?sel=${c.id}`) });
+  // R3b F9: open the new CR's drawer right away (after the caller's synchronous clean-up); bulk edits that keep working pass open:false → toast link
+  const go = () => navigate(`/app/projects/${pid}/changes?sel=${c.id}`);
+  if (!open) { toastAction(`변경 요청 ${c.display_id} 초안을 만들었습니다. 승인되면 요구사항을 수정하세요.`, { label: '변경 요청 열기', ms: 12000, onAction: go }); return c; }
+  const back = location.pathname + location.search;
+  setTimeout(() => { go(); toastAction(`변경 요청 ${c.display_id} 초안을 만들었습니다. 승인되면 요구사항을 수정하세요.`, { label: '요구사항으로 돌아가기', ms: 8000, onAction: () => navigate(back) }); }, 0);
   return c;
 }
 

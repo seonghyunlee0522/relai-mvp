@@ -10,19 +10,19 @@ const shell = (title, inner, support) => `<!doctype html><html lang="ko"><body s
 const button = (href, label) => `<p style="margin:20px 0"><a href="${esc(href)}" style="display:inline-block;background:#1B4FD8;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px">${esc(label)}</a></p><p style="font-size:12px;color:#667085;word-break:break-all">버튼이 열리지 않으면 링크를 복사해 브라우저에 붙여넣으세요:<br>${esc(href)}</p>`;
 
 export function platformInviteEmail({ workspaceName, inviteeName, link, expiresAt, support }) {
-  const subject = `[RELAI] ${workspaceName} Workspace 생성 초대`;
+  const subject = `[RELAI] ${workspaceName} 워크스페이스 생성 초대`;
   const until = new Date(expiresAt).toLocaleDateString('ko-KR');
-  const html = shell('RELAI 사용을 시작하도록 초대되었습니다', `<p>${inviteeName ? `${esc(inviteeName)}님, ` : ''}<b>${esc(workspaceName)}</b> Workspace를 RELAI에서 생성하고 프로젝트 관리를 시작하세요.</p>
-    <p>아래 버튼을 눌러 Google 계정 또는 이메일로 가입하면 <b>${esc(workspaceName)}</b> Workspace가 만들어지고 회원님이 OWNER가 됩니다.</p>${button(link, '초대 확인하고 시작하기')}<p style="font-size:13px;color:#667085">이 초대는 ${until}까지 유효하며, 초대받은 이메일 계정으로만 수락할 수 있습니다.</p>`, support);
-  const text = `RELAI 사용을 시작하도록 초대되었습니다.\n\nWorkspace: ${workspaceName}\n\n아래 링크에서 가입 또는 로그인 후 초대를 수락하세요 (${until}까지 유효):\n${link}\n`;
+  const html = shell('RELAI 사용을 시작하도록 초대되었습니다', `<p>${inviteeName ? `${esc(inviteeName)}님, ` : ''}<b>${esc(workspaceName)}</b> 워크스페이스를 RELAI에서 생성하고 프로젝트 관리를 시작하세요.</p>
+    <p>아래 버튼을 눌러 Google 계정 또는 이메일로 가입하면 <b>${esc(workspaceName)}</b> 워크스페이스가 만들어지고 회원님이 소유자가 됩니다.</p>${button(link, '초대 확인하고 시작하기')}<p style="font-size:13px;color:#667085">이 초대는 ${until}까지 유효하며, 초대받은 이메일 계정으로만 수락할 수 있습니다.</p>`, support);
+  const text = `RELAI 사용을 시작하도록 초대되었습니다.\n\n워크스페이스: ${workspaceName}\n\n아래 링크에서 가입 또는 로그인 후 초대를 수락하세요 (${until}까지 유효):\n${link}\n`;
   return { subject, html, text };
 }
 export function memberInviteEmail({ workspaceName, inviterName, roleLabel, link, expiresAt, support }) {
-  const subject = `[RELAI] ${workspaceName} Workspace에 초대되었습니다`;
+  const subject = `[RELAI] ${workspaceName} 워크스페이스에 초대되었습니다`;
   const until = new Date(expiresAt).toLocaleDateString('ko-KR');
-  const html = shell(`${workspaceName} Workspace에 초대되었습니다`, `<p><b>${esc(inviterName || 'Workspace 관리자')}</b>님이 <b>${esc(workspaceName)}</b> Workspace에 초대했습니다.</p>
+  const html = shell(`${workspaceName} 워크스페이스에 초대되었습니다`, `<p><b>${esc(inviterName || '워크스페이스 관리자')}</b>님이 <b>${esc(workspaceName)}</b> 워크스페이스에 초대했습니다.</p>
     <p>역할: <b>${esc(roleLabel)}</b></p>${button(link, '초대 확인')}<p style="font-size:13px;color:#667085">이 초대는 ${until}까지 유효하며, 초대받은 이메일 계정으로 가입하거나 로그인해야 수락할 수 있습니다.</p>`, support);
-  const text = `${inviterName || 'Workspace 관리자'}님이 ${workspaceName} Workspace에 초대했습니다.\n역할: ${roleLabel}\n\n초대 확인 (${until}까지 유효):\n${link}\n`;
+  const text = `${inviterName || '워크스페이스 관리자'}님이 ${workspaceName} 워크스페이스에 초대했습니다.\n역할: ${roleLabel}\n\n초대 확인 (${until}까지 유효):\n${link}\n`;
   return { subject, html, text };
 }
 export function passwordResetEmail({ link, minutes, support }) {
@@ -43,10 +43,10 @@ export function verifyEmailEmail({ name, link, hours, support }) {
 export function renewalReminderEmail({ workspaceName, periodEnd, seats, link, support }) {
   const until = new Date(periodEnd).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
   const subject = `[RELAI] ${workspaceName} Team 플랜 이용 기간이 ${until}에 끝납니다`;
-  const html = shell('Team 플랜 이용 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> Workspace의 Team 플랜${seats ? `(사용자 ${esc(seats)}명)` : ''} 이용 기간이 <b>${esc(until)}</b>에 끝납니다.</p>
+  const html = shell('Team 플랜 이용 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 Team 플랜${seats ? `(사용자 ${esc(seats)}명)` : ''} 이용 기간이 <b>${esc(until)}</b>에 끝납니다.</p>
     <p>자동 결제되지 않는 상품이라 연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다. 데이터는 삭제되지 않으며 새 항목 추가만 제한됩니다.</p>${link ? button(link, '이용 기간 연장하기') : ''}
-    <p style="font-size:13px;color:#667085">연장은 Workspace OWNER가 설정 › 플랜 · 결제에서 할 수 있습니다. 남은 기간은 그대로 이어집니다.</p>`, support);
-  const text = `${workspaceName} Workspace의 Team 플랜 이용 기간이 ${until}에 끝납니다.\n연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다(데이터는 유지).\n${link ? `\n연장하기: ${link}\n` : ''}`;
+    <p style="font-size:13px;color:#667085">연장은 워크스페이스 소유자가 설정 › 플랜 · 결제에서 할 수 있습니다. 남은 기간은 그대로 이어집니다.</p>`, support);
+  const text = `${workspaceName} 워크스페이스의 Team 플랜 이용 기간이 ${until}에 끝납니다.\n연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다(데이터는 유지).\n${link ? `\n연장하기: ${link}\n` : ''}`;
   return { subject, html, text };
 }
 
@@ -56,28 +56,28 @@ const credits = (n) => `${Number(n).toLocaleString('ko-KR')} 크레딧`;
 
 export function lowBalanceEmail({ workspaceName, balance, threshold, link, support }) {
   const subject = `[RELAI] ${workspaceName} AI 크레딧 잔액이 ${credits(threshold)} 아래로 내려갔습니다`;
-  const html = shell('AI 크레딧 잔액이 얼마 남지 않았습니다', `<p><b>${esc(workspaceName)}</b> Workspace의 AI 크레딧 잔액이 <b>${esc(credits(balance))} (${esc(krw(balance * 10))})</b>입니다.</p>
+  const html = shell('AI 크레딧 잔액이 얼마 남지 않았습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 AI 크레딧 잔액이 <b>${esc(credits(balance))} (${esc(krw(balance * 10))})</b>입니다.</p>
     <p>잔액이 0이 되면 AI 기능(요구사항 추출, WBS 초안, 영향 분석, 질문)을 쓸 수 없습니다. 다른 기능은 그대로 쓸 수 있습니다.</p>${link ? button(link, '크레딧 충전하기') : ''}
-    <p style="font-size:13px;color:#667085">충전은 Workspace OWNER가 설정 › AI 크레딧에서 할 수 있습니다. 이 안내는 충전 후 다시 ${esc(credits(threshold))} 아래로 내려갈 때만 다시 보내 드립니다.</p>`, support);
-  const text = `${workspaceName} Workspace의 AI 크레딧 잔액이 ${credits(balance)} (${krw(balance * 10)})입니다.\n잔액이 0이 되면 AI 기능을 쓸 수 없습니다.\n${link ? `\n충전하기: ${link}\n` : ''}`;
+    <p style="font-size:13px;color:#667085">충전은 워크스페이스 소유자가 설정 › AI 크레딧에서 할 수 있습니다. 이 안내는 충전 후 다시 ${esc(credits(threshold))} 아래로 내려갈 때만 다시 보내 드립니다.</p>`, support);
+  const text = `${workspaceName} 워크스페이스의 AI 크레딧 잔액이 ${credits(balance)} (${krw(balance * 10)})입니다.\n잔액이 0이 되면 AI 기능을 쓸 수 없습니다.\n${link ? `\n충전하기: ${link}\n` : ''}`;
   return { subject, html, text };
 }
 
 export function earlyAccessEndingEmail({ workspaceName, until, days, teamMonthly, link, support }) {
   const day = new Date(until).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
   const subject = `[RELAI] ${workspaceName} 얼리 액세스 무료 기간이 ${days}일 뒤(${day}) 끝납니다`;
-  const html = shell('얼리 액세스 무료 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> Workspace의 얼리 액세스(전체 기능 무료) 기간이 <b>${esc(day)}</b>에 끝납니다.</p>
+  const html = shell('얼리 액세스 무료 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 얼리 액세스(전체 기능 무료) 기간이 <b>${esc(day)}</b>에 끝납니다.</p>
     <p>이후에도 프로젝트·멤버·요구사항을 제한 없이 쓰려면 Team 플랜(${esc(krw(teamMonthly))}/월, 부가세 별도)이 필요합니다. 결제하지 않으면 Free 플랜 한도가 적용되며, 한도를 넘는 기존 데이터는 삭제되지 않고 읽기 전용으로 남습니다.</p>
     <p>남은 AI 크레딧은 그대로 쓸 수 있습니다.</p>${link ? button(link, '플랜 확인하기') : ''}`, support);
-  const text = `${workspaceName} Workspace의 얼리 액세스 무료 기간이 ${day}에 끝납니다.\n이후 Team 플랜(${krw(teamMonthly)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다(데이터는 유지).\nAI 크레딧은 그대로 쓸 수 있습니다.\n${link ? `\n${link}\n` : ''}`;
+  const text = `${workspaceName} 워크스페이스의 얼리 액세스 무료 기간이 ${day}에 끝납니다.\n이후 Team 플랜(${krw(teamMonthly)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다(데이터는 유지).\nAI 크레딧은 그대로 쓸 수 있습니다.\n${link ? `\n${link}\n` : ''}`;
   return { subject, html, text };
 }
 
 export function creditRefundRequestEmail({ workspaceName, workspaceId, requester, refundable, note }) {
   const subject = `[RELAI] AI 크레딧 환불 요청 — ${workspaceName}`;
-  const html = shell('AI 크레딧 환불 요청', `<p>Workspace <b>${esc(workspaceName)}</b> (${esc(workspaceId)})</p><p>요청자: ${esc(requester)}</p>
+  const html = shell('AI 크레딧 환불 요청', `<p>워크스페이스 <b>${esc(workspaceName)}</b> (${esc(workspaceId)})</p><p>요청자: ${esc(requester)}</p>
     <p>환불 가능한 미사용 구매 크레딧: <b>${esc(credits(refundable))}</b></p>${note ? `<p>메모: ${esc(note)}</p>` : ''}
-    <p style="font-size:13px;color:#667085">Admin 콘솔 › Workspace › AI 크레딧 환불에서 처리합니다.</p>`, '');
-  const text = `Workspace ${workspaceName} (${workspaceId})\n요청자: ${requester}\n환불 가능: ${credits(refundable)}\n${note ? `메모: ${note}\n` : ''}`;
+    <p style="font-size:13px;color:#667085">관리자 콘솔 › 워크스페이스 › AI 크레딧 환불에서 처리합니다.</p>`, '');
+  const text = `워크스페이스 ${workspaceName} (${workspaceId})\n요청자: ${requester}\n환불 가능: ${credits(refundable)}\n${note ? `메모: ${note}\n` : ''}`;
   return { subject, html, text };
 }

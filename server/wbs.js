@@ -95,7 +95,7 @@ export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
   if (out.owner_user_id !== undefined && out.owner_stakeholder_id === undefined) out.owner_stakeholder_id = null;
   if (out.owner_stakeholder_id && out.owner_user_id === undefined) out.owner_user_id = null;
   if (out.owner_user_id && out.owner_stakeholder_id) f.owner_user_id = '담당자는 RELAI 사용자와 팀원 중 한 명만 지정할 수 있습니다.';
-  if (given('lifecycle_phase')) { const v = b.lifecycle_phase || null; if (v !== null && !LIFECYCLE_PHASES.includes(v)) f.lifecycle_phase = 'Lifecycle 단계 값이 올바르지 않습니다.'; else out.lifecycle_phase = v; }
+  if (given('lifecycle_phase')) { const v = b.lifecycle_phase || null; if (v !== null && !LIFECYCLE_PHASES.includes(v)) f.lifecycle_phase = '단계 값이 올바르지 않습니다.'; else out.lifecycle_phase = v; }
   if (given('weight')) { const n = Number(b.weight); if (!Number.isInteger(n) || n < 0 || n > 1000) f.weight = '가중치는 0~1000 사이의 정수여야 합니다.'; else out.weight = n; }
   if (given('status')) { if (!WBS_STATUSES.includes(b.status)) f.status = '상태 값이 올바르지 않습니다.'; else out.status = b.status; }
   if (b.progress !== undefined) {

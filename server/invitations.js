@@ -87,7 +87,7 @@ const dupError = (e) => (e && e.code === '23505' && /uq_inv_/.test(e.constraint 
 /** SYSTEM_ADMIN → new customer. Any e-mail domain is accepted; an existing RELAI account is fine too (they will log in to accept). */
 export async function createPlatformInvite(db, { email, workspaceName, inviteeName = '', note = '' }, admin, env = process.env) {
   const em = checkEmail(email); const ws = String(workspaceName || '').trim();
-  if (!ws || ws.length > 100) throw new ValidationError({ workspace_name: 'Workspace 이름을 1~100자로 입력하세요.' });
+  if (!ws || ws.length > 100) throw new ValidationError({ workspace_name: '워크스페이스 이름을 1~100자로 입력하세요.' });
   const dup = await db.get(`SELECT id FROM invitations WHERE type = 'WORKSPACE_CREATE' AND email = ? AND status = 'PENDING' AND expires_at >= now()`, [em]);
   if (dup) throw new InviteError(409, 'invite_pending', '이미 초대가 진행 중입니다. 재발송을 사용하세요.', { invitation_id: dup.id });
   await db.run(`UPDATE invitations SET status = 'EXPIRED', updated_at = now() WHERE type = 'WORKSPACE_CREATE' AND email = ? AND status = 'PENDING' AND expires_at < now()`, [em]);
@@ -106,10 +106,10 @@ export async function createMemberInvite(db, { workspaceId, email, role }, actor
   if (!['MEMBER', 'ADMIN'].includes(r)) throw new ValidationError({ role: '초대 역할은 MEMBER 또는 ADMIN만 가능합니다. OWNER는 멤버 설정에서 역할을 변경해 부여하세요.' });
   if (r === 'ADMIN' && actorRole !== 'OWNER') throw new InviteError(403, 'forbidden', 'ADMIN 초대는 OWNER만 할 수 있습니다.');
   const ws = await db.get('SELECT id, name, status FROM workspaces WHERE id = ?', [workspaceId]);
-  if (!ws) throw new InviteError(404, 'not_found', 'Workspace를 찾을 수 없습니다.');
-  if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 Workspace에서는 초대할 수 없습니다.');
+  if (!ws) throw new InviteError(404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
+  if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 워크스페이스에서는 초대할 수 없습니다.');
   const member = await db.get('SELECT 1 FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND u.email = ?', [workspaceId, em]);
-  if (member) throw new InviteError(409, 'already_member', '이미 Workspace 멤버입니다.');
+  if (member) throw new InviteError(409, 'already_member', '이미 워크스페이스 멤버입니다.');
   await assertWithinLimit(db, workspaceId, 'members');   // no invite when the plan has no free seat (acceptance re-checks)
   const dup = await db.get(`SELECT id FROM invitations WHERE type = 'WORKSPACE_MEMBER' AND workspace_id = ? AND email = ? AND status = 'PENDING' AND expires_at >= now()`, [workspaceId, em]);
   if (dup) throw new InviteError(409, 'invite_pending', '이미 초대가 진행 중입니다. 재발송을 사용하세요.', { invitation_id: dup.id });
@@ -127,7 +127,7 @@ export async function createMemberInvite(db, { workspaceId, email, role }, actor
 /** New token, old one invalid, expiry renewed, mail sent again. */
 export async function resendInvite(db, inv, actor, env = process.env) {
   if (inv.status !== 'PENDING' && inv.status !== 'EXPIRED') throw new InviteError(409, 'invite_not_pending', '진행 중인 초대만 재발송할 수 있습니다.');
-  if (inv.type === 'WORKSPACE_MEMBER' && inv.target_workspace_status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 Workspace의 초대는 재발송할 수 없습니다.');
+  if (inv.type === 'WORKSPACE_MEMBER' && inv.target_workspace_status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 워크스페이스의 초대는 재발송할 수 없습니다.');
   const token = newToken();
   await db.run(`UPDATE invitations SET token_hash = ?, expires_at = ?, status = 'PENDING', updated_at = now() WHERE id = ?`, [hashToken(token, env), expiry(env), inv.id]);
   await writeAudit(db, { adminUserId: actor.id, action: inv.type === 'WORKSPACE_CREATE' ? 'PLATFORM_INVITE_RESENT' : 'WORKSPACE_INVITE_RESENT', targetType: 'INVITATION', targetId: inv.id, metadata: { email: inv.email }, actorKind: inv.type === 'WORKSPACE_CREATE' ? 'ADMIN' : 'USER' });
@@ -169,8 +169,8 @@ export async function acceptWorkspaceMemberInvite(db, invitationId, user) {
   const inv = await lockForAccept(db, invitationId, user);
   if (inv.type !== 'WORKSPACE_MEMBER') throw new InviteError(400, 'invite_type', '초대 유형이 올바르지 않습니다.');
   const ws = await db.get('SELECT id, name, status FROM workspaces WHERE id = ?', [inv.workspace_id]);
-  if (!ws) throw new InviteError(410, 'workspace_gone', 'Workspace가 더 이상 존재하지 않습니다.');
-  if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 Workspace의 초대는 수락할 수 없습니다.');
+  if (!ws) throw new InviteError(410, 'workspace_gone', '워크스페이스가 더 이상 존재하지 않습니다.');
+  if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 워크스페이스의 초대는 수락할 수 없습니다.');
   const existing = await db.get('SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [ws.id, user.id]);
   if (!existing) {
     await assertWithinLimit(db, ws.id, 'members');   // plan limit (402): the invite stays PENDING so it can be accepted after an upgrade

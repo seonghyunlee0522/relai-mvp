@@ -58,15 +58,15 @@ export async function attentionAll(db, projectId) {
   const ihref = (r) => `issues?sel=${r.id}`; const rhref = (r) => `issues?tab=risks&sel=${r.id}`;
   const ISSUE_OPEN = `project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED')`;
   const issues = (await db.all(`SELECT id, display_id, title, severity, due_date, (due_date IS NOT NULL AND due_date < ${TODAY})::int AS overdue FROM issues WHERE ${ISSUE_OPEN} AND (severity IN ('CRITICAL','HIGH') OR (due_date IS NOT NULL AND due_date < ${TODAY})) ORDER BY due_date, updated_at DESC`, [projectId]));
-  push('CRITICAL_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'CRITICAL'), (i) => `Critical 이슈${i.overdue ? ` · 기한 ${i.due_date} 초과` : ''}`);
-  push('OVERDUE_HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && i.overdue), (i) => `High 이슈 · 기한 ${i.due_date} 초과`);
-  push('HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && !i.overdue), 'High 이슈');
+  push('CRITICAL_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'CRITICAL'), (i) => `심각 이슈${i.overdue ? ` · 기한 ${i.due_date} 초과` : ''}`);
+  push('OVERDUE_HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && i.overdue), (i) => `높음 이슈 · 기한 ${i.due_date} 초과`);
+  push('HIGH_ISSUE', 'ISSUE', ihref, issues.filter((i) => i.severity === 'HIGH' && !i.overdue), '높음 이슈');
   push('OVERDUE_ISSUE', 'ISSUE', ihref, issues.filter((i) => !['CRITICAL', 'HIGH'].includes(i.severity) && i.overdue), (i) => `기한 초과 이슈 · 기한 ${i.due_date}`);
   const risks = (await db.all(`SELECT id, display_id, title, risk_level, review_date, (review_date IS NOT NULL AND review_date < ${TODAY})::int AS review_overdue FROM risks WHERE project_id = ? AND archived_at IS NULL AND status IN ('OPEN','MONITORING') AND (risk_level IN ('CRITICAL','HIGH') OR (review_date IS NOT NULL AND review_date < ${TODAY})) ORDER BY updated_at DESC`, [projectId]));
-  push('CRITICAL_RISK', 'RISK', rhref, risks.filter((r) => r.risk_level === 'CRITICAL'), 'Critical Risk');
-  push('HIGH_RISK', 'RISK', rhref, risks.filter((r) => r.risk_level === 'HIGH'), 'High Risk');
+  push('CRITICAL_RISK', 'RISK', rhref, risks.filter((r) => r.risk_level === 'CRITICAL'), '심각 리스크');   // R3b copy pass: Korean labels (weekly report · 건강도)
+  push('HIGH_RISK', 'RISK', rhref, risks.filter((r) => r.risk_level === 'HIGH'), '높음 리스크');
   push('REVIEW_OVERDUE_RISK', 'RISK', rhref, risks.filter((r) => r.review_overdue && !['CRITICAL', 'HIGH'].includes(r.risk_level)), (r) => `리스크 검토일 ${r.review_date} 초과`);
-  push('FAIL_TEST', 'TEST', (r) => `tests?sel=${r.id}`, (await db.all(`SELECT t.id, t.display_id, t.title FROM test_cases t WHERE t.project_id = ? AND t.archived_at IS NULL AND ${LAST} = 'FAIL' ORDER BY t.updated_at DESC`, [projectId])), 'Latest Fail Test');
+  push('FAIL_TEST', 'TEST', (r) => `tests?sel=${r.id}`, (await db.all(`SELECT t.id, t.display_id, t.title FROM test_cases t WHERE t.project_id = ? AND t.archived_at IS NULL AND ${LAST} = 'FAIL' ORDER BY t.updated_at DESC`, [projectId])), '최근 실패 테스트');
   const accs = (await db.all(`SELECT id, display_id, title, status, due_date FROM acceptances WHERE project_id = ? AND archived_at IS NULL AND (status = 'REWORK_REQUIRED' OR (status = 'REQUESTED' AND due_date IS NOT NULL AND due_date < ${TODAY})) ORDER BY updated_at DESC`, [projectId]));
   push('REWORK_ACCEPTANCE', 'ACCEPTANCE', (r) => `tests?tab=acceptance&sel=${r.id}`, accs.filter((a) => a.status === 'REWORK_REQUIRED'), '보완 필요 검수');
   push('OVERDUE_ACCEPTANCE', 'ACCEPTANCE', (r) => `tests?tab=acceptance&sel=${r.id}`, accs.filter((a) => a.status !== 'REWORK_REQUIRED'), (a) => `검수 기한 ${a.due_date} 초과`);
@@ -96,7 +96,7 @@ export async function upcomingDates(db, projectId, { days = 7, limit = 20, from 
     [`SELECT 'WBS', 'WBS_END', w.id, w.wbs_code, w.title, w.planned_end_date, '종료 예정' FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type = 'TASK' AND ${LEAF_SQL('w')} AND w.status != 'COMPLETED' AND ${range('w.planned_end_date')}`],
     [`SELECT 'WBS', 'MILESTONE', id, wbs_code, title, milestone_date, '마일스톤' FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'MILESTONE' AND status != 'COMPLETED' AND ${range('milestone_date')}`],
     [`SELECT 'ISSUE', 'ISSUE_DUE', id, display_id, title, due_date, '이슈 기한' FROM issues WHERE project_id = ? AND archived_at IS NULL AND status NOT IN ('RESOLVED','CLOSED') AND ${range('due_date')}`],
-    [`SELECT 'RISK', 'RISK_REVIEW', id, display_id, title, review_date, 'Risk Review' FROM risks WHERE project_id = ? AND archived_at IS NULL AND status IN ('OPEN','MONITORING') AND ${range('review_date')}`],
+    [`SELECT 'RISK', 'RISK_REVIEW', id, display_id, title, review_date, '리스크 검토' FROM risks WHERE project_id = ? AND archived_at IS NULL AND status IN ('OPEN','MONITORING') AND ${range('review_date')}`],
     [`SELECT 'ACCEPTANCE', 'ACCEPTANCE_DUE', id, display_id, title, due_date, '검수 기한' FROM acceptances WHERE project_id = ? AND archived_at IS NULL AND status IN ('DRAFT','REQUESTED','REWORK_REQUIRED') AND ${range('due_date')}`],
     // BUG-003: 프로젝트 정의 > 주요 일정 (JSON array on project_definitions.key_dates) and the project's own planned end.
     [`SELECT 'DEFINITION', 'KEY_DATE', kd.id, NULL, kd.title, kd.d, '주요 일정' FROM (

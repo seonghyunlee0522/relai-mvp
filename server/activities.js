@@ -119,7 +119,7 @@ function analysisDesign(key, ctx) {
       const bp = w.by_phase || {}; const nondev = n(bp.TESTING) + n(bp.TRANSITION_GO_LIVE) + n(bp.OPERATIONS);
       if (n(w.tasks) === 0) return dep;
       return nondev ? ok(`시험·전환·운영 단계 작업 ${nondev}건이 WBS에 포함되어 있습니다.`, act('WBS 보기 →', u()))
-        : none('작업의 Lifecycle 단계를 지정하면 기능 개발 외 작업(테스트·이관·교육·전환)이 빠졌는지 확인할 수 있습니다.', act('작업 추가 →', u('?new=1')));
+        : none('작업의 단계를 지정하면 기능 개발 외 작업(테스트·이관·교육·전환)이 빠졌는지 확인할 수 있습니다.', act('작업 추가 →', u('?new=1')));
     }
     default: return manual('');
   }

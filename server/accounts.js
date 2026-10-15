@@ -39,9 +39,9 @@ export async function createWorkspaceForOwner(db, { ownerId, name }) {
   await ensureAccount(db, wsId);   // AI credit account (trial / dev starter credits per policy)
   return wsId;
 }
-/** Direct signup: user + "{name}님의 Workspace". Returns { userId, workspaceId }. */
+/** Direct signup: user + "{name}님의 워크스페이스". Returns { userId, workspaceId }. */
 export async function createDirectSignupUser(db, { email, name, passwordHash = null, identity = null, emailVerifiedAt = null }) {
   const userId = await createUser(db, { email, name, passwordHash, identity, emailVerifiedAt });
-  const workspaceId = await createWorkspaceForOwner(db, { ownerId: userId, name: `${String(name).trim()}님의 Workspace` });
+  const workspaceId = await createWorkspaceForOwner(db, { ownerId: userId, name: `${String(name).trim()}님의 워크스페이스` });
   return { userId, workspaceId };
 }

@@ -99,7 +99,7 @@ export function projectGuidance(ctx) {
       return out('INIT_DONE', '프로젝트 정의가 완료되었습니다', '출발 기준이 정리되었습니다. 요구사항을 초기에 명확히 정리하면 설계·개발 단계의 범위 변경과 재작업을 크게 줄일 수 있습니다.', '요구사항은 WBS, 테스트, 검수와 연결되는 프로젝트의 기준입니다.', move || act('요구사항 입력 시작 →', u('/requirements?new=1')), move ? act('요구사항 입력 시작 →', u('/requirements?new=1')) : null, nextPhaseText);
     }
     case 'REQUIREMENTS': {
-      if (n(req.total) === 0) return out('REQ_EMPTY', '요구사항을 수집하고 정리하세요', '요구사항을 초기에 명확히 정리하면 설계·개발 단계의 범위 변경과 재작업을 크게 줄일 수 있습니다. 직접 입력, Excel 가져오기, AI 추출(사용 가능 시)을 Requirements 화면에서 선택할 수 있습니다.', '요구사항은 프로젝트 범위와 검수 기준이 되며 WBS·테스트와 연결됩니다.', act('요구사항 입력 시작 →', u('/requirements?new=1')), null, '요구사항이 준비되면 분류와 범위를 정리합니다.');
+      if (n(req.total) === 0) return out('REQ_EMPTY', '요구사항을 수집하고 정리하세요', '요구사항을 초기에 명확히 정리하면 설계·개발 단계의 범위 변경과 재작업을 크게 줄일 수 있습니다. 직접 입력, Excel 가져오기, AI 추출(사용 가능 시)을 요구사항 화면에서 선택할 수 있습니다.', '요구사항은 프로젝트 범위와 검수 기준이 되며 WBS·테스트와 연결됩니다.', act('요구사항 입력 시작 →', u('/requirements?new=1')), null, '요구사항이 준비되면 분류와 범위를 정리합니다.');
       if (n(req.type_unspecified)) return out('REQ_CLASSIFY', '요구사항을 분류하세요', `유형이 지정되지 않은 요구사항 ${req.type_unspecified}건이 있습니다. 기능·비기능·인터페이스·데이터 구분이 있어야 설계와 테스트 범위를 빠짐없이 잡을 수 있습니다.`, '기능·비기능·인터페이스·데이터 구분이 있어야 설계와 테스트 범위를 정할 수 있습니다.', act('요구사항 분류 →', u('/requirements?type=UNSPECIFIED')), n(req.priority_unspecified) ? act('우선순위 설정 →', u('/requirements?priority=UNSPECIFIED')) : null, '분류가 끝나면 범위를 확정합니다.');
       // Phase 2: 범위 확정 shows the Charter 제외 범위 (no auto matching); 확정 and 승인 both lead to the 승인 기록 Drawer
       const excl = (definition?.scope_out || []).length ? ` ${scopeOutHint(definition.scope_out)}` : '';
