@@ -116,7 +116,7 @@ test('member invitation: OWNER→MEMBER/ADMIN, ADMIN→MEMBER only, MEMBER forbi
   assert.equal((await O.c('POST', W, { email: 'dev2@acme.co.kr', role: 'OWNER' })).status, 400);
   r = await O.c('GET', W); assert.equal(r.json.invitations.length, 2);
   // landing shows inviter + role, no workspace creation on accept; new user via signup → MEMBER/ADMIN of ACME only
-  r = await client()('GET', `/api/invitations/${devT}`); assert.equal(r.json.invitation.type, 'WORKSPACE_MEMBER'); assert.equal(r.json.invitation.inviter_name, '홍길동'); assert.equal(r.json.invitation.role_label, 'Admin'); assert.match(r.json.invitation.workspace_name, /님의 Workspace/);
+  r = await client()('GET', `/api/invitations/${devT}`); assert.equal(r.json.invitation.type, 'WORKSPACE_MEMBER'); assert.equal(r.json.invitation.inviter_name, '홍길동'); assert.equal(r.json.invitation.role_label, '관리자'); assert.match(r.json.invitation.workspace_name, /님의 Workspace/);
   const before = Number((await db.get('SELECT COUNT(*) n FROM workspaces')).n);
   const { r: sr } = await signup(client, { name: '개발자', email: 'dev@acme.co.kr', invite_token: devT }); assert.equal(sr.status, 201, JSON.stringify(sr.json));
   assert.equal(sr.json.workspaces.length, 1); assert.equal(sr.json.workspaces[0].id, O.w); assert.equal(sr.json.workspaces[0].role, 'ADMIN');

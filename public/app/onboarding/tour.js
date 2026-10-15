@@ -121,7 +121,7 @@ const usable = (o) => (o.tour.steps || []).filter((s) => s.available !== false &
 const currentPid = () => (location.pathname.match(/^\/app\/projects\/(?!new)([\w-]+)/) || [])[1] || null;
 const inProject = (route) => /^\/app\/projects\/(?!new)[\w-]+/.test(route || '');
 const withPid = (route) => { const pid = currentPid(); return pid && inProject(route) ? String(route).replace(/^\/app\/projects\/[\w-]+/, `/app/projects/${pid}`) : route; };
-const samePage = (route) => location.pathname.replace(/\/$/, '') === String(withPid(route) || '').replace(/\/$/, '');
+const samePage = (route) => { const r = String(withPid(route) || ''); const [rp, rq] = r.split('?'); return location.pathname.replace(/\/$/, '') === rp.replace(/\/$/, '') && (!rq || new URLSearchParams(location.search).get('tab') === new URLSearchParams(rq).get('tab')); };   // R3: '/app/settings?tab=team' = the 팀원 tab
 const waitRender = () => new Promise((res) => { const done = () => { document.removeEventListener('relai:rendered', done); res(); }; document.addEventListener('relai:rendered', done); setTimeout(done, 4000); });
 async function findTarget(id) {
   if (!id) return null;

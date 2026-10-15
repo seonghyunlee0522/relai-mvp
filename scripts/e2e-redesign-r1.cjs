@@ -168,7 +168,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.goto(`${BASE}${U}/wbs`); await settle();
   const pill = await page.$('#verify-pill');
   check('A10 email-verify shows as a top-bar pill, not a banner', Boolean(pill) && (await pill.isVisible()) && !(await page.isVisible('#verifybar').catch(() => false)));
-  await page.goto(`${BASE}/app/settings`); await page.waitForSelector('#invite-btn', { timeout: 8000 }).catch(() => {});
+  await page.goto(`${BASE}/app/settings?tab=team`); await page.waitForSelector('#invite-btn', { timeout: 8000 }).catch(() => {});
   const inv = await page.evaluate(() => { const b = document.querySelector('#invite-btn'); return b ? { dis: b.disabled, title: b.title } : null; });
   const invApi = await api('POST', `/api/workspaces/${w}/invitations`, { email: `x-${Date.now()}@relai.test`, role: 'MEMBER' });
   check('A10 unverified: invite still blocked with the same message (button + API 403 email_unverified)', inv && inv.dis && /이메일 인증 후 사용할 수 있습니다/.test(inv.title) && invApi.status === 403 && invApi.json.error.code === 'email_unverified', JSON.stringify({ inv, s: invApi.status }));

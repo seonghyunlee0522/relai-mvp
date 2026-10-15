@@ -33,7 +33,7 @@ export const TOUR_STEPS = {
     { key: 'REQUIREMENTS', route: '/app/projects/:pid', target: 'rail-requirements', title: '요구사항', body: '요구사항은 프로젝트 범위와 검수 기준입니다. 직접 입력, Excel, AI 추출로 등록할 수 있습니다.', placement: 'right', needsProject: true },
     { key: 'WBS', route: '/app/projects/:pid', target: 'rail-schedule', title: '일정 — WBS', body: '요구사항을 실제 작업 단위로 나누고 담당자와 일정을 정합니다. 일정 메뉴 하나에서 작업 목록 · 간트 · 구현 현황을 봅니다.', placement: 'right', needsProject: true },
     { key: 'TESTS', route: '/app/projects/:pid', target: 'rail-tests', title: '시험', body: '구현 결과를 요구사항 기준으로 검증합니다. 검수(인수 승인)는 시험 › 검수 탭에서 기록합니다.', placement: 'right', needsProject: true },
-    { key: 'MEMBERS', route: '/app/settings', target: 'invite-members', title: '팀원 초대', body: '동료를 초대하면 같은 Workspace에서 프로젝트를 함께 진행할 수 있습니다. 초대는 이메일로 발송됩니다.', placement: 'left', fallback: 'center', needsPermission: 'member_manage' },
+    { key: 'MEMBERS', route: '/app/settings?tab=team', target: 'invite-members', title: '팀원 초대', body: '동료를 초대하면 같은 Workspace에서 프로젝트를 함께 진행할 수 있습니다. 초대는 이메일로 발송됩니다.', placement: 'left', fallback: 'center', needsPermission: 'member_manage' },
   ],
   MEMBER: [
     { key: 'HOME', route: '/app', target: 'nav-home', title: 'Home — 참여 중인 프로젝트', body: 'Home에서 참여 중인 프로젝트와 현재 단계를 확인하고, 프로젝트를 열어 담당 업무를 봅니다.', placement: 'right', fallback: 'center' },

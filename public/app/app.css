@@ -3096,3 +3096,30 @@ html:not(.is-phone) .hgrid{grid-template-columns:repeat(auto-fit,minmax(min(400p
 html:not(.is-phone) .apage{max-width:none}
 html:not(.is-phone) .chl{grid-template-columns:minmax(0,1fr) clamp(272px,18vw,360px)}
 html:not(.is-phone) .inline-form .input{flex:0 1 480px}
+
+/* ===== Redesign R3a (보고서 view + 설정 tabs) — desktop only; keep this block together for merging ===== */
+/* report view: 다운로드 ▾ · 복사 ▾ dropdowns (native <details>) */
+.rmenu{position:relative;display:inline-flex}
+.rmenu>summary{list-style:none;cursor:pointer}.rmenu>summary::-webkit-details-marker{display:none}
+.rmenu[open]>summary{background:var(--bg-alt)}
+.rmenu__list{position:absolute;top:calc(100% + 6px);right:0;z-index:90;min-width:160px;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh-pop);padding:6px;font-size:var(--fs-sm)}
+.rmenu__list button{display:block;width:100%;padding:7px 10px;border:0;border-radius:var(--r);background:none;text-align:left;color:var(--navy);cursor:pointer;font:inherit;white-space:nowrap}
+.rmenu__list button:hover,.rmenu__list button:focus-visible{background:var(--bg-alt);outline:none}
+html:not(.is-phone) .doc__actions{flex-wrap:nowrap;align-items:center}
+/* 설정: four tabs, a title + purpose + one primary per tab, merged 팀원 table, collapsed 위험 구역 */
+html:not(.is-phone) .page--settings .stabs--settings{padding:0;margin:0 0 20px;background:none}
+.stab-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:0 0 16px}
+.stab-head h2{margin:0;font-size:var(--fs-lg);color:var(--navy)}
+.stab-head__p{margin:4px 0 0;color:var(--text-2);font-size:var(--fs-sm)}
+#teamtbl tr.is-invite td{background:var(--bg-alt)}
+.danger-zone{margin-top:28px;border:1px solid var(--border);border-radius:var(--r-lg);background:#fff}
+.danger-zone>summary{padding:14px 20px;cursor:pointer;font-weight:600;color:#B42318;display:flex;gap:10px;align-items:baseline}
+.danger-zone>summary small{font-weight:400}
+.danger-zone[open]>summary{border-bottom:1px solid var(--border-soft)}
+.danger-zone__b{padding:4px 20px}
+.danger-zone__row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0}
+.danger-zone__row+.danger-zone__row{border-top:1px solid var(--border-soft)}
+.danger-zone__row .hint{margin:2px 0 0}
+/* 보고서 › 주간보고: the page header already carries the title and purpose — the list keeps only its buttons */
+html:not(.is-phone) .rpl .ovsec__h>h2,html:not(.is-phone) .rpl .ovsec__h>.ovsec__ctx{display:none}
+html:not(.is-phone) .rpl .ovsec__h{justify-content:flex-end}

@@ -43,14 +43,17 @@ export async function reportPage(pid, rid, main = $('#main')) {
   const draw = () => {
     const ro = report.status === 'FINAL' || archived; const sc = report.structured_content;
     main.innerHTML = html`${raw(projectHead(proj, g, { tab: done ? 'close' : 'overview-reports', title: kind }))}<div class="page page--doc">
-      <a class="crumb" href="/app/projects/${pid}" data-link>← ${proj.name}</a>
-      ${raw(done ? '' : coachMark('WEEKLY_REPORT_INTRO'))}
+      ${raw(isPhone() ? html`<a class="crumb" href="/app/projects/${pid}" data-link>← ${proj.name}</a>` : '')}
+      ${raw(done || !isPhone() ? '' : coachMark('WEEKLY_REPORT_INTRO'))}
       <div class="doc__bar">
         <div class="doc__meta"><span class="chip ${RS[report.status][1]}">${RS[report.status][0]}</span>
           ${raw(done ? html`<span>${kind} ${raw(term('completion_report'))}</span>` : '')}<span>${done ? '프로젝트 기간' : '보고 기간'} <b>${sc.period.start} ~ ${sc.period.end}</b></span><span>생성 ${fmtDT(report.generated_at)}</span>${raw(report.finalized_at ? html`<span>확정 ${fmtDT(report.finalized_at)}</span>` : '')}<span id="dsave" class="doc__save"></span></div>
         <div class="doc__actions">
-          <button class="btn btn--secondary btn--sm" data-dl="pdf" data-phone-ok>PDF 다운로드</button><button class="btn btn--secondary btn--sm" data-dl="docx" data-phone-ok>Word 다운로드</button>
-          <button class="btn btn--secondary btn--sm" id="copy-md">복사 (Markdown)</button><button class="btn btn--secondary btn--sm" id="copy-txt">복사 (텍스트)</button>
+          ${raw(isPhone() ? `<button class="btn btn--secondary btn--sm" data-dl="pdf" data-phone-ok>PDF 다운로드</button><button class="btn btn--secondary btn--sm" data-dl="docx" data-phone-ok>Word 다운로드</button>
+          <button class="btn btn--secondary btn--sm" id="copy-md">복사 (Markdown)</button><button class="btn btn--secondary btn--sm" id="copy-txt">복사 (텍스트)</button>`
+          // Redesign R3 §5.6 (desktop): three header buttons — 다운로드 ▾ (PDF · Word) · 복사 ▾ (Markdown · 텍스트) · 확정/다시 편집
+          : `<details class="rmenu" id="dl-menu"><summary class="btn btn--secondary btn--sm">다운로드 ▾</summary><div class="rmenu__list" role="menu"><button type="button" role="menuitem" data-dl="pdf">PDF</button><button type="button" role="menuitem" data-dl="docx">Word</button></div></details>
+          <details class="rmenu" id="cp-menu"><summary class="btn btn--secondary btn--sm">복사 ▾</summary><div class="rmenu__list" role="menu"><button type="button" role="menuitem" id="copy-md">Markdown</button><button type="button" role="menuitem" id="copy-txt">텍스트</button></div></details>`)}
           ${raw(archived ? '' : report.status === 'DRAFT' ? '<button class="btn btn--primary btn--sm" id="finalize">보고서 확정</button>' : '<button class="btn btn--secondary btn--sm" id="reopen">다시 편집</button>')}
         </div></div>
       ${raw(isArch ? '<div class="notice">보관된 프로젝트의 보고서는 조회만 할 수 있습니다.</div>' : '')}
@@ -79,6 +82,12 @@ export async function reportPage(pid, rid, main = $('#main')) {
   };
   const bind = () => {
     bindCoach(main);
+    // desktop dropdowns: one open at a time, closed after a pick or an outside click / Esc
+    const menus = [...main.querySelectorAll('details.rmenu')];
+    menus.forEach((d) => { d.ontoggle = () => { if (d.open) menus.forEach((o) => { if (o !== d) o.open = false; }); }; d.querySelectorAll('[role=menuitem]').forEach((b) => b.addEventListener('click', () => { d.open = false; })); });
+    if (menus.length && !reportPage.wired) { reportPage.wired = true;
+      document.addEventListener('click', (e) => { if (!e.target.closest('details.rmenu')) document.querySelectorAll('details.rmenu[open]').forEach((d) => { d.open = false; }); });
+      document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; const o = document.querySelector('details.rmenu[open]'); if (o) { o.open = false; o.querySelector('summary').focus(); } }); }
     $('#copy-md').onclick = () => copy(report.rendered_content, 'Markdown');
     main.querySelectorAll('[data-dl]').forEach((b) => b.onclick = async () => {
       b.disabled = true;

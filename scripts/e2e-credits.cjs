@@ -69,7 +69,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   const home = await text('#home-credits');
   check('Home: AI 크레딧 500 (₩5,000) 무료 제공 + 얼리 액세스', /AI 크레딧 500 \(₩5,000\) 무료 제공/.test(home) && /얼리 액세스 \d{4}\.\d{2}\.\d{2}까지 무료/.test(home), home);
   await shot('01-home.png');
-  await page.goto(BASE + '/app/settings'); await page.waitForSelector('#billing', { timeout: 8000 });
+  await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing', { timeout: 8000 });
   const plan = await text('#billing .panel__h');
   check('AC1 settings: 플랜 = 얼리 액세스 · <date>까지, no Team 구매 form', /얼리 액세스 · \d{4}\.\d{2}\.\d{2}까지/.test(plan) && !(await page.$('#bill-buy')), plan);
   check('settings: AI 크레딧 panel (잔액 500 크레딧 (₩5,000))', /잔액 500 크레딧 \(₩5,000\)/.test(await text('#ai-credits')));
