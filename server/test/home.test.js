@@ -18,7 +18,7 @@ test('home: cards carry the same guidance as the project GET, list rows only for
   const r = await A.c('GET', `/api/workspaces/${A.w}/projects/home`);
   assert.equal(r.status, 200);
   const ids = r.json.projects.map((c) => c.id);
-  assert.deepEqual(ids.sort(), [p1.id, p4.id].sort());
+  assert.deepEqual([...ids].sort(), [p1.id, p4.id].sort());   // sort a copy: ids keeps the API order for the ACTION-before-WAITING check
   assert.deepEqual(r.json.completed.map((c) => c.id), [p2.id]);
   assert.ok(!ids.includes(p3.id) && !r.json.completed.some((c) => c.id === p3.id));
 
