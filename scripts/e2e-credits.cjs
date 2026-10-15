@@ -45,6 +45,25 @@ const q = (s) => String(s).replace(/'/g, "''");
   const cr = (await api('POST', `${PP}/changes`, { title: '결제 수단 추가' })).json.change;
   const CR = `/api/workspaces/${W}/credits`;
 
+  // Q21-2: server with AI off (AI_OFF=1 run: AI_ENABLED=false or no AI_PROVIDER) → no pack is sold; the dashboard, ledger and CSV stay
+  if (process.env.AI_OFF === '1') {
+    check('AI off: /ai/status enabled:false', (await api('GET', `${PP}/ai/status`)).json?.enabled === false);
+    await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary', { timeout: 8000 });
+    const off = await text('[data-ai-off]');
+    check('AI off: 충전 panel says "AI 기능 준비 중입니다. 충전은 AI가 켜지면 열립니다."', off.trim() === 'AI 기능 준비 중입니다. 충전은 AI가 켜지면 열립니다.', off);
+    check('AI off: no pack buttons, no top 크레딧 충전 button', !(await page.$('[data-pack]')) && !(await page.$('#cr-buy-top')));
+    check('AI off: dashboard + ledger still shown (잔액 500, +500 row)', /500 크레딧/.test(await text('#cr-balance')) && Boolean(await page.$('#cr-log tbody tr')));
+    const co = await api('POST', `${CR}/checkout`, { pack: 'P10' });
+    check('AI off: checkout 409 ai_disabled "AI 기능 준비 중에는 크레딧을 충전할 수 없습니다."', co.status === 409 && co.json?.error?.code === 'ai_disabled' && co.json.error.message === 'AI 기능 준비 중에는 크레딧을 충전할 수 없습니다.', JSON.stringify(co.json));
+    check('AI off: no CREDIT_PACK order created', sql(`SELECT count(*) FROM billing_orders WHERE workspace_id = '${q(W)}' AND kind = 'CREDIT_PACK'`) === '0');
+    const csv = await page.request.fetch(`${BASE}${CR}/ledger.csv`); check('AI off: ledger CSV 200', csv.status() === 200);
+    await shot('00-ai-off.png');
+    await browser.close();
+    const fails = results.filter(([, ok]) => !ok); log(`\n${results.length - fails.length}/${results.length} passed`);
+    process.exit(fails.length ? 1 : 0);
+  }
+  check('AI on: credits summary ai_enabled:true (packs on sale)', (await api('GET', `${CR}/summary`)).json?.credits?.ai_enabled === true);
+
   // starter credits + early access visible on Home, settings, and the AI 크레딧 page (founder: show the free starter credits clearly)
   await page.goto(BASE + '/app'); await page.waitForSelector('#home-credits a', { timeout: 8000 }).catch(() => {});
   const home = await text('#home-credits');

@@ -26,8 +26,9 @@ export async function creditsPage(main = $('#main')) {
   await loadLedger();
 
   const starterUses = () => { const p = Object.fromEntries(s.prices.map((x) => [x.feature, x.credits])); return `요구사항 추출 ${Math.floor(s.starter_credits / p.REQUIREMENT_EXTRACTION)}회 또는 질문 ${Math.floor(s.starter_credits / p.PROJECT_QA)}회`; };
+  const canTopUp = () => s.can_buy && s.ai_enabled !== false;   // AI off server-side → no pack is sold (checkout 409 ai_disabled)
   const head = () => html`<div class="page__head"><div><a class="link" href="/app/settings" data-link>← 설정</a><h1 style="margin-top:4px">AI 크레딧</h1>${raw(s.can_buy ? pcLine('충전과 환불 요청은 PC에서 할 수 있습니다') : '')}</div>
-    ${raw(s.can_buy && !isPhone() ? '<a class="btn btn--primary" href="#cr-buy" id="cr-buy-top">크레딧 충전</a>' : '')}</div>`;
+    ${raw(canTopUp() && !isPhone() ? '<a class="btn btn--primary" href="#cr-buy" id="cr-buy-top">크레딧 충전</a>' : '')}</div>`;
   const summary = () => {
     const tm = s.this_month; const lm = s.last_month;
     const used = tm.by_feature.filter((x) => x.runs > 0);
@@ -38,8 +39,8 @@ export async function creditsPage(main = $('#main')) {
         <div class="cr-kpi"><span class="cr-kpi__l">이번 달 사용 <small class="dim">(${tm.month})</small></span><b class="cr-kpi__v" id="cr-month">${n(tm.used)} 크레딧</b><span class="cr-kpi__w">${krw(tm.krw)}</span>
           <small class="dim">지난달 ${n(lm.used)} 크레딧 (${krw(lm.krw)})</small></div>
       </div>
-      ${raw(s.empty ? html`<p class="cr-warn" role="status">크레딧이 없어 AI 기능을 쓸 수 없습니다. ${raw(s.can_buy ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : 'Workspace 소유자에게 충전을 요청하세요.')}</p>`
-        : s.low ? html`<p class="cr-warn" role="status">잔액이 ${n(s.low_balance_threshold)} 크레딧(${krw(s.low_balance_threshold * s.credit_price_krw)}) 아래입니다. ${raw(s.can_buy ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : '소유자에게 충전을 요청하세요.')}</p>`
+      ${raw(s.empty ? html`<p class="cr-warn" role="status">크레딧이 없어 AI 기능을 쓸 수 없습니다. ${raw(canTopUp() ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : s.can_buy ? '' : 'Workspace 소유자에게 충전을 요청하세요.')}</p>`
+        : s.low ? html`<p class="cr-warn" role="status">잔액이 ${n(s.low_balance_threshold)} 크레딧(${krw(s.low_balance_threshold * s.credit_price_krw)}) 아래입니다. ${raw(canTopUp() ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : s.can_buy ? '' : '소유자에게 충전을 요청하세요.')}</p>`
           : html`<p class="hint">잔액이 ${n(s.low_balance_threshold)} 크레딧(${krw(s.low_balance_threshold * s.credit_price_krw)}) 아래로 내려가면 소유자에게 메일로 알려 드립니다.</p>`)}
       ${raw(s.purchased_remaining === 0 && s.free_remaining > 0 ? html`<p class="cr-gift">무료 시작 크레딧 <b>${n(s.starter_credits)} 크레딧 (${krw(s.starter_credits * s.credit_price_krw)})</b>을 드렸습니다 — ${starterUses()}를 해 볼 수 있습니다.</p>` : '')}
       <p class="cr-feat"><span class="dim">이번 달 기능별</span> ${raw(used.length ? used.map((x) => html`<span class="cr-feat__i">${x.label} ${n(x.runs)}회 <b>${n(x.credits)}</b></span>`).join('<span class="dim">·</span>') : '<span class="dim">아직 사용한 AI 기능이 없습니다.</span>')}</p>
@@ -52,6 +53,7 @@ export async function creditsPage(main = $('#main')) {
   const buy = () => html`<div class="panel" style="margin-top:16px" id="cr-buy"><div class="panel__h">크레딧 충전</div><div class="panel__b">
     ${raw(!s.can_buy ? '<p class="hint">충전과 환불 요청은 Workspace 소유자가 할 수 있습니다.</p>'
       : isPhone() ? '<p class="hint" data-phone-pay>결제는 PC에서 할 수 있습니다.</p>'
+      : s.ai_enabled === false ? '<p class="hint" data-ai-off>AI 기능 준비 중입니다. 충전은 AI가 켜지면 열립니다.</p>'
       : !s.provider_available ? '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>'
         : html`<div class="cr-packs">${raw(s.packs.map((p) => html`<button type="button" class="cr-pack" data-pack="${p.key}"><b>${krw(p.amount)}</b><span>${n(p.credits)} 크레딧</span><small>공급가액 ${krw(p.supply)} + 부가세 ${krw(p.vat)}</small></button>`).join(''))}</div>
           ${raw(state.user?.email_verified === false ? '<p class="hint">이메일 인증 후 충전할 수 있습니다.</p>' : '')}`)}
