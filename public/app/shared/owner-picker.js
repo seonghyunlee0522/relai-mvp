@@ -30,3 +30,5 @@ export const performerOptions = (members, performers, cur) => performerChoices(m
   ? html`<optgroup label="${o.group}">${raw(o.options.map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join(''))}</optgroup>` : '')).join('');
 /** "{execution body} → { performer_user_id | performer_stakeholder_id }" from one picker value. */
 export const performerBody = (v) => (/^s:/.test(v || '') ? { performer_stakeholder_id: v.slice(2) } : /^u:/.test(v || '') ? { performer_user_id: v.slice(2) } : {});
+/** 내부 처리자 not chosen → the OWNER/ADMIN members decide: name them, not the role alone (demo finding: the select read '소유자·관리자'). */
+export const approverDefault = (members) => { const names = (members || []).filter((m) => m.role === 'OWNER' || m.role === 'ADMIN').map((m) => m.name).filter(Boolean); return names.length ? `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` 외 ${names.length - 3}명` : ''} (소유자·관리자)` : '소유자·관리자'; };

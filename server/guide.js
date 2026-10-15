@@ -74,7 +74,9 @@ export async function loadGuide(db, project, ctx = null) {
   const current = out.find((p) => p.is_current) || null;
   // A phase before the current one has been left for the next step — shown as ended (✓) even if some activities stayed open.
   // Display only: status stays IN_PROGRESS for such a phase (transitionTo), so the open activities are still visible.
-  for (const p of out) { p.is_passed = Boolean(current && p.sequence < current.sequence); p.display_state = phaseDisplayState(p); }
+  // A closed project (종료, status COMPLETED) is finished: its current phase (07) reads ✓, not the blue 'current' dot (same quiet rule as Phase 7 M1).
+  const closed = project.status === 'COMPLETED';
+  for (const p of out) { p.is_passed = Boolean(current && p.sequence < current.sequence); p.display_state = closed && p.is_current ? 'done' : phaseDisplayState(p); }
   const next = current ? out.find((p) => p.sequence === current.sequence + 1) || null : null;
   return { phases: out, current_phase: current, next_phase: next, history };
 }

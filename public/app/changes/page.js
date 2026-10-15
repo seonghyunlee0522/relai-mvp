@@ -16,6 +16,7 @@ import { approvalFields, collectApproval, approvalBody, approvalErrors, approval
 import { md } from '../shared/kst-date.js';
 import { term } from '../project/initiation.js';
 import { carryIndex, carryTag, carryLine } from '../project/golive.js';
+import { approverDefault } from '../shared/owner-picker.js';
 
 export async function changesPage(id) {
   const main = $('#main');
@@ -232,7 +233,7 @@ export async function changesPage(id) {
         <div class="dfield"><span>요청자 조직</span><div><input class="input input--sm" data-field="requester_organization" value="${c.requester_organization}" maxlength="100" placeholder="조직" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>우선순위</span><div><select class="select select--sm" data-field="priority" ${fieldsRo ? 'disabled' : ''}>${raw(opt(CR_PRIORITY, c.priority))}</select></div></div>
         <div class="dfield"><span>요청일</span><div><input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${fieldsRo ? 'disabled' : ''}></div></div>
-        <div class="dfield"><span>내부 처리자</span><div><select class="select select--sm" data-field="approver_user_id" title="소유자·관리자 외에 이 변경 요청을 처리할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">소유자·관리자</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select></div></div>
+        <div class="dfield"><span>내부 처리자</span><div><select class="select select--sm" data-field="approver_user_id" title="소유자·관리자 외에 이 변경 요청을 처리할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">${approverDefault(members)}</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select></div></div>
       </div>
       <div class="dsave" id="dsave"></div>
 

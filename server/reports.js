@@ -16,6 +16,7 @@ import { projectHealth, STATUS_LABEL } from './health.js';
 import { LEAF_SQL, OWNER_NAME_SQL } from './wbs.js';
 import { accApprovalView } from './testing.js';
 import { priorGapsText } from './closing.js';
+import { goLiveMilestone } from './golive.js';
 import { diffDays, weekKst, todayKst } from '../public/app/shared/kst-date.js';
 
 const TODAY = 'CURRENT_DATE';
@@ -287,8 +288,7 @@ export async function buildCompletionData(db, project, { gaps = [], goLive = nul
   const pid = project.id;
   const def = (await db.get('SELECT goal FROM project_definitions WHERE project_id = ?', [pid])) || {};
   const goal = String(def.goal || '').split('\n').map((x) => x.trim()).find(Boolean) || '';
-  const ms = await db.get(`SELECT original_planned_end_date, milestone_date FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'MILESTONE'
-    AND (btrim(title) = '오픈' OR lifecycle_phase = 'TRANSITION_GO_LIVE') ORDER BY milestone_date DESC NULLS LAST, created_at DESC LIMIT 1`, [pid]);
+  const ms = await goLiveMilestone(db, pid);   // 01 주요 일정 / 뼈대 '…오픈' milestone (a FINAL report keeps the text it was frozen with)
   const req = await db.get(`SELECT COALESCE(SUM((scope = 'IN_SCOPE' AND status = 'CONFIRMED')::int), 0) AS in_scope, COALESCE(SUM((scope = 'OUT_OF_SCOPE')::int), 0) AS out_of_scope
     FROM requirements WHERE project_id = ? AND archived_at IS NULL`, [pid]);
   const cr = await db.get(`SELECT COALESCE(SUM((status IN ('APPROVED','IMPLEMENTED'))::int), 0) AS approved, COALESCE(SUM((status = 'IMPLEMENTED')::int), 0) AS implemented

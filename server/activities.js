@@ -126,7 +126,7 @@ function analysisDesign(key, ctx) {
 }
 
 function development(key, ctx) {
-  const w = ctx.stats.wbs || {}; const is = ctx.stats.issues || {}; const c = ctx.stats.changes || {};
+  const w = ctx.stats.wbs || {}; let is = ctx.stats.issues || {}; const c = ctx.stats.changes || {};
   const u = (qs = '') => `/app/projects/${ctx.pid}/wbs${qs}`; const iu = (qs = '') => `/app/projects/${ctx.pid}/issues${qs}`;
   switch (key) {
     case 'PROGRESS': {
@@ -140,6 +140,8 @@ function development(key, ctx) {
       : n(ctx.overdue_tasks) ? prog(`종료 예정일이 지난 작업 ${ctx.overdue_tasks}건이 있습니다.`, act('지연 작업 확인 →', u('?f=overdue')), { crit: true })
       : ok('종료 예정일이 지난 미완료 작업이 없습니다.', act('WBS 보기 →', u('?ctx=monitor')));
     case 'ISSUES': {
+      // Issues raised from a failed test belong to 05 결함 조치 (DEFECTS), not to 04 — a finished 04 stays ✓ while a test defect is open.
+      if (n(is.test_total)) { const d = (k) => Math.max(0, n(is[k]) - n(is[`test_${k}`])); is = { ...is, total: d('total'), active: d('active'), critical: d('critical'), blocked: d('blocked') }; }
       // US-5: no issue at all → the manual 완료 처리 button (a project without problems must still be able to close this required activity)
       if (n(is.total) === 0) return { ...manual('아직 기록된 이슈가 없습니다. 문제가 없었다면 완료 처리하세요.', act('이슈 등록 →', iu('?new=1'))), row_text: true };
       if (n(is.active)) { const parts = [`열린 이슈 ${is.active}건`]; if (n(is.critical)) parts.push(`심각 ${is.critical}건`); if (n(is.blocked)) parts.push(`차단됨 ${is.blocked}건`);
