@@ -86,7 +86,7 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
 
   /* ================= phone 375×812 ================= */
   const ROUTES = [
-    ['home', '/app'], ['projects', '/app/projects'], ['settings', '/app/settings'],
+    ['home', '/app'], ['projects', '/app/projects'], ['settings', '/app/settings'], ['credits', '/app/settings/credits'],
     ['next', A.url], ['next-01', `${A.url}?phase=INITIATION`], ['overview', `${A.url}/overview`], ['definition', `${A.url}/definition`], ['charter', `${A.url}/charter`],
     ['requirements', `${A.url}/requirements`], ['wbs', `${A.url}/wbs`], ['issues', `${A.url}/issues`], ['changes', `${A.url}/changes`],
     ['tests', `${A.url}/tests`], ['coverage', `${A.url}/tests?tab=coverage`], ['checklist', `${A.url}/checklist?phase=TRANSITION_GO_LIVE`],
@@ -125,9 +125,18 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
     const inProject = u.startsWith('/app/projects/');
     check(`A2 375 ${name}: tab bar ${inProject ? 5 : 3} tabs ≥ 44px, one active`, a.tabs === (inProject ? 5 : 3) && a.tabH >= 44, `${a.tabs} ${a.tabH} active=${a.activeTab.trim()}`);
     const viewer = name === 'report' || name === 'completion';
-    if (inProject || name === 'home' || name === 'settings') check(`A4 375 ${name}: ${viewer ? 'no' : 'exactly one'} PC line`, a.pclines === (viewer ? 0 : 1), String(a.pclines));
+    if (inProject || name === 'home' || name === 'settings' || name === 'credits') check(`A4 375 ${name}: ${viewer ? 'no' : 'exactly one'} PC line`, a.pclines === (viewer ? 0 : 1), String(a.pclines));
     if (a.tiny.length) log(`  note ${name} text < 12px:`, JSON.stringify(a.tiny));
   }
+  /* ---------- A17 설정 › AI 크레딧 on a phone: the dashboard is readable, 충전 / 환불 요청 are PC-only ---------- */
+  await go('/app/settings/credits');
+  const crd = await mp.evaluate(() => ({ sum: Boolean(document.querySelector('#cr-summary')), log: Boolean(document.querySelector('#cr-log tbody tr')),
+    packs: document.querySelectorAll('[data-pack]').length, refund: Boolean(document.querySelector('#cr-refund')), top: Boolean(document.querySelector('#cr-buy-top')),
+    pay: (document.querySelector('[data-phone-pay]')?.textContent || '').trim(), filters: document.querySelectorAll('.cr-filt select').length,
+    csv: Boolean(document.querySelector('#cr-csv')), cells: [...document.querySelectorAll('.cr-price tbody td')].filter((td) => td.offsetParent).length }));
+  check('A17 375 AI 크레딧: summary + price table + usage log readable', crd.sum && crd.log && crd.cells >= 6, JSON.stringify(crd));
+  check('A17 375 AI 크레딧: no pack button / 충전 / 환불 요청; "결제는 PC에서"', crd.packs === 0 && !crd.refund && !crd.top && /결제는 PC에서/.test(crd.pay), JSON.stringify(crd));
+  check('A17 375 AI 크레딧: month/project/user filters stay live + CSV link', crd.filters === 3 && crd.csv, JSON.stringify(crd));
   log('AUDIT', JSON.stringify(Object.fromEntries(Object.entries(AUD).map(([k, v]) => [k, v.bad.length ? v.bad : v.sw]))));
 
   /* ---------- A2 더보기 · A3 top bar ---------- */

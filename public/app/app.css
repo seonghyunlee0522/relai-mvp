@@ -2987,7 +2987,7 @@ html.is-phone .rhead .seg{height:32px}
 .cr-krw-m{display:none}
 .ai-credit.is-low{color:var(--warn-fg)}
 @media (max-width:767px){
-  .cr-kpis{grid-template-columns:1fr}.cr-packs{grid-template-columns:1fr}.cr-filt{padding:10px 12px 0}.cr-filt .select{flex:1 1 40%}.cr-total{margin:10px 12px}
+  .cr-kpis{grid-template-columns:1fr}.cr-packs{grid-template-columns:1fr}.cr-filt{padding:10px 12px 0}.cr-filt .select{flex:1 1 40%;min-width:0;max-width:100%;text-overflow:ellipsis}.cr-total{margin:10px 12px}
   .cr-log th:nth-child(3),.cr-log td:nth-child(3),.cr-log th:nth-child(6),.cr-log td:nth-child(6),.cr-log th:nth-child(7),.cr-log td:nth-child(7){display:none}
   .cr-log .cr-krw-m{display:block;font-size:var(--fs-2xs);color:var(--text-3);white-space:nowrap}.cr-log td,.cr-log th{padding:8px 8px}
   .cr-log td{white-space:normal}
