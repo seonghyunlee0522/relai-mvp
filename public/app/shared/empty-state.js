@@ -11,4 +11,5 @@ export function emptyState({ title, body = '', cta = null, small = false, filter
   return html`<div class="empty ${small ? 'empty--sm' : ''}"><h2>${title}</h2>${raw(body ? html`<p>${body}</p>` : '')}${raw(btn)}</div>`;
 }
 /** Filtered list came back empty. */
-export const emptyFiltered = (what, clearId = 'clear2') => emptyState({ title: `조건에 맞는 ${what}이(가) 없습니다.`, body: '검색어나 필터를 바꿔보세요.', cta: { id: clearId, label: '필터 초기화' }, small: true, filter: true });
+const iGa = (w) => { const c = w.charCodeAt(w.length - 1) - 0xac00; return c < 0 || c > 11171 ? '이(가)' : c % 28 ? '이' : '가'; };   // 요구사항이 · 이슈가 (Jim B3)
+export const emptyFiltered = (what, clearId = 'clear2') => emptyState({ title: `조건에 맞는 ${what}${iGa(what)} 없습니다.`, body: '검색어나 필터를 바꿔보세요.', cta: { id: clearId, label: '필터 초기화' }, small: true, filter: true });

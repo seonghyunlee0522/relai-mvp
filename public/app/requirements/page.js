@@ -7,6 +7,7 @@ import { projectHead } from '../project/guide.js';
 import { resBadge, statusChip, subtle, prText, verifyChip } from '../shared/badges.js';
 import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, moreFilters, isPhone } from '../shared/filters.js';
 import { emptyFiltered } from '../shared/empty-state.js';
+import { isClassify } from '../shared/lifecycle.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
 import { traceStrip } from '../shared/trace-strip.js';
@@ -37,7 +38,7 @@ export async function requirementsPage(id) {
   const rApi = (s = '') => wsApi(`/${id}/requirements${s}`);
   const meId = state.user.id;
   const desk = !isPhone();   // Redesign R2: quiet toolbar, 5 default columns, 480px side drawer — desktop only; the phone keeps today's view
-  const classifyView = () => { const q = new URLSearchParams(location.search); return q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED'; };   // the 분류·우선순위 tab
+  const classifyView = () => isClassify(new URLSearchParams(location.search));   // the 분류·우선순위 tab
   const baselineApproved = Boolean(baseline && baseline.status === 'COMPLETED');   // 범위 column: shown while 02 is open, hidden by default once the baseline is approved (Jim M2)
 
   const params = () => new URLSearchParams(location.search);
@@ -209,7 +210,7 @@ export async function requirementsPage(id) {
     // K18: on phones 상태 · 범위 move into the 필터 sheet (search + 필터 + one primary stay in the toolbar)
     const phone = isPhone(); const quick = html`${raw(filterSelect('status', '상태', REQ_STATUS, q.get('status')))}${raw(filterSelect('scope', '범위', REQ_SCOPE, q.get('scope')))}`;
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED' ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
+      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : isClassify(q) ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived && wbsPhase() ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
       ${raw(summary.total && wbsPhase() ? coachMark('REQ_TRACE_INTRO') : '')}

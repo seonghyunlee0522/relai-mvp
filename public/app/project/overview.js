@@ -11,6 +11,7 @@ import { pcLine } from '../core/device.js';
 import { daysUntil, exceptions, scheduleState, varianceText, varianceTone } from './status.js';
 import { relTime } from '../shared/jira.js';
 import { toast } from '../shared/dialogs.js';
+import { openActivity } from './actions.js';
 
 const ATT_TYPE = { ISSUE: '이슈', RISK: '리스크', TEST: '테스트', CHANGE: '변경 요청', WBS: 'WBS', ACCEPTANCE: '검수', REQUIREMENT: '요구사항' };
 const H_CLS = { GOOD: 'is-good', WARNING: 'is-warn', CRITICAL: 'is-crit', UNKNOWN: 'is-unknown' };
@@ -130,7 +131,7 @@ export async function overviewPage(id, main = $('#main')) {
     ${raw(healthLine(snap.health))}
     <div class="ov__row4">${raw(upcomingSection(snap, p.id))}${raw(activitySection(dash, p.id))}</div>
   </div>`;
-  const aa = $('#act-all'); if (aa) aa.onclick = () => { const b = document.querySelector('.wsh__act [data-act="activity"]'); if (b) b.click(); };
+  const aa = $('#act-all'); if (aa) aa.onclick = () => openActivity(p.id);   // Jim B2: the old header button (.wsh__act) is gone — open the panel directly
   const more = $('#att-more');
   if (more) more.onclick = async () => { more.disabled = true; try { const all = await api('GET', wsApi(`/${id}/attention`)); const list = $('#att .ovatt__list'); if (list) list.outerHTML = attentionRows(all.items, p.id); more.remove(); } catch (e) { toast(e.message); more.disabled = false; } };
 }

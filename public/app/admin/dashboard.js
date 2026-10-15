@@ -23,7 +23,7 @@ export async function adminDashboardPage(main = $('#main')) {
   if (a.suspended_users.total) attn.push([`정지된 사용자 (${a.suspended_users.total})`, a.suspended_users.items.map((u) => ({ href: `/admin/users/${u.id}`, t: `${u.name} · ${u.email}`, s: '정지', at: u.suspended_at, tone: 'bad' }))]);
   if (a.suspended_workspaces.total) attn.push([`정지된 워크스페이스 (${a.suspended_workspaces.total})`, a.suspended_workspaces.items.map((w) => ({ href: `/admin/workspaces/${w.id}`, t: w.name, s: '정지', at: w.suspended_at, tone: 'bad' }))]);
   if (a.workspaces_without_active_owner.length) attn.push(['활성 소유자가 없는 워크스페이스', a.workspaces_without_active_owner.map((w) => ({ href: `/admin/workspaces/${w.id}`, t: w.name, s: '소유자 전원 정지 — 데이터는 유지됨', tone: 'warn' }))]);
-  if (a.near_limit.length) attn.push(['Free 플랜 한도 90% 이상', a.near_limit.map((w) => ({ href: `/admin/workspaces/${w.id}`, t: w.name, s: w.dims.filter((x) => x.pct !== null && x.pct >= 90).map((x) => `${x.label} ${x.used}/${x.limit}`).join(' · '), tone: 'warn' }))]);
+  if (a.near_limit.length) attn.push(['Free 플랜 한도 90% 이상', a.near_limit.map((w) => ({ href: `/admin/workspaces/${w.workspace_id}`, t: w.name, s: w.dims.filter((x) => x.pct !== null && x.pct >= 90).map((x) => `${x.label} ${x.used}/${x.limit}`).join(' · '), tone: 'warn' }))]);
   main.innerHTML = html`<div class="apage">
     ${raw(head('대시보드', html`<span class="hint">${b ? '결제 연동됨' : '결제 미연동 — 결제 지표는 결제 연동 후 표시됩니다'}</span>`))}
     ${raw(kpis(cards))}

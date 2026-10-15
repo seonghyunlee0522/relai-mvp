@@ -417,10 +417,11 @@ export async function wbsPage(id) {
   const focusGhost = () => { const inp = main.querySelector('[data-ghost]'); if (inp) { inp.focus(); inp.scrollIntoView({ block: 'nearest' }); } };
   const openGhost = (parent_id, item_type = 'TASK') => {
     if (archived) return;
-    if (view() === 'gantt') { setParam('view', ''); }
+    const fromGantt = view() === 'gantt';   // Jim B4: read before leaving 간트 — after setParam view() is 'list' and the grid isn't mounted yet
+    if (fromGantt) setParam('view', '');
     ghost = { parent_id: parent_id || null, item_type };
     if (parent_id) collapsed.delete(parent_id);
-    syncRows(); if (!items.length || view() === 'gantt') { draw(); } else { grid.refresh(); focusGhost(); }
+    syncRows(); if (!items.length || fromGantt) { draw(); } else { grid.refresh(); focusGhost(); }
   };
   const closeGhost = () => { ghost = null; syncRows(); if (!items.length) draw(); else grid.refresh(); };
   /* BUG-005: the server refuses to turn a leaf that has its own schedule/progress into a group without being told what to

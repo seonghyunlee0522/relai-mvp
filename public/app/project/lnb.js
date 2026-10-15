@@ -12,6 +12,7 @@ import { navigate } from '../core/router.js';
 import { DOORS, HOME_ITEMS, PHASE_ITEMS, PM_ITEMS, doorOf, phaseOfPath } from '../shared/lifecycle.js';
 import { isPhone } from '../core/device.js';
 import { phaseState, phaseTip } from './status.js';
+import { openActivity } from './actions.js';
 
 const ICON = {
   next: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10h11M11 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -94,7 +95,7 @@ function wire() {
     }
     const ac = e.target.closest('[data-lnb-action]');
     if (ac) {
-      if (ac.dataset.lnbAction === 'activity') { const b = document.querySelector('.wsh__act [data-act="activity"]'); if (b) b.click(); }
+      if (ac.dataset.lnbAction === 'activity') { const pidEl = ac.closest('[data-lnb-pid]'); if (pidEl) openActivity(pidEl.dataset.lnbPid); }   // Jim B2: .wsh__act is gone
     }
   });
 }

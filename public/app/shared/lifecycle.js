@@ -21,6 +21,8 @@ export const PHASE_SHORT = Object.fromEntries(LIFECYCLE_PHASES.map((p) => [p.key
 
 const P = (pid, s = '') => `/app/projects/${pid}${s}`;
 const q = (qs, k, v) => (v === undefined ? qs.has(k) : qs.get(k) === v);
+/** 분류·우선순위 tab: `?view=classify` (all requirements, Jim B3) or the 미지정 filter that 지금 할 일 links to. */
+export const isClassify = (qs) => q(qs, 'view', 'classify') || qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED';
 const isPath = (path, pid, suffix) => path === P(pid, suffix) || path === `${P(pid, suffix)}/`;
 /** 06/07 activity without its own work screen → its checklist (public/app/project/checklist.js). */
 const CL = (pid, key, label, activity) => ({ key, label, href: P(pid, `/checklist?activity=${activity}`), match: (path, qs) => isPath(path, pid, '/checklist') && q(qs, 'activity', activity) });
@@ -49,8 +51,8 @@ export const PHASE_ITEMS = {
     { key: 'approval', label: '착수 결과 승인', href: P(pid, '/definition?activity=APPROVAL'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'APPROVAL') },
   ],
   REQUIREMENTS: (pid) => [
-    { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') && !(qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED') },
-    { key: 'req-classify', label: '요구사항 분류 / 우선순위', href: P(pid, '/requirements?type=UNSPECIFIED'), match: (path, qs) => isPath(path, pid, '/requirements') && (qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED') },
+    { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') && !isClassify(qs) },
+    { key: 'req-classify', label: '요구사항 분류 / 우선순위', href: P(pid, '/requirements?view=classify'), match: (path, qs) => isPath(path, pid, '/requirements') && isClassify(qs) },
     { key: 'req-trace', label: '요구사항 추적', href: P(pid, '/requirements?view=trace'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') },
   ],
   ANALYSIS_DESIGN: (pid) => [
@@ -116,7 +118,7 @@ export const DOORS = (pid) => [
   ] },
   { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), tabs: [
     T('requirements', '목록', P(pid, '/requirements'), '고객이 원하는 기능과 조건을 모으고 확정합니다.', 'REQUIREMENTS'),
-    T('req-classify', '분류·우선순위', P(pid, '/requirements?type=UNSPECIFIED'), '요구사항의 유형과 우선순위를 정합니다.', 'REQUIREMENTS'),
+    T('req-classify', '분류·우선순위', P(pid, '/requirements?view=classify'), '요구사항의 유형과 우선순위를 정합니다.', 'REQUIREMENTS'),
     T('req-trace', '추적', P(pid, '/requirements?view=trace'), '요구사항이 작업과 시험까지 이어졌는지 확인합니다.', 'REQUIREMENTS'),
   ] },
   { key: 'schedule', label: '일정', href: P(pid, '/wbs'), tabs: [
@@ -153,7 +155,7 @@ export function doorOf(pid, path, qs, hint = null) {
   if (sub === '/definition') { const a = qs.get('activity'); const m = { STAKEHOLDERS: 'stakeholders', MILESTONES: 'milestones', OPERATIONS: 'operations', KICKOFF: 'kickoff', APPROVAL: 'approval' }; return pick('plan', m[a] || 'definition'); }
   if (sub === '/requirements') {
     if (q(qs, 'view', 'trace')) return q(qs, 'scope', 'IN_SCOPE') ? pick('schedule', 'wbs-trace') : pick('requirements', 'req-trace');
-    return qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED' ? pick('requirements', 'req-classify') : pick('requirements', 'requirements');
+    return isClassify(qs) ? pick('requirements', 'req-classify') : pick('requirements', 'requirements');
   }
   if (sub === '/wbs') return q(qs, 'phase', 'DEVELOPMENT') ? pick('schedule', 'dev-status') : q(qs, 'view', 'gantt') ? pick('schedule', 'gantt') : pick('schedule', 'wbs');
   if (sub === '/tests') return pick('tests', q(qs, 'tab', 'coverage') ? 'test-plan' : q(qs, 'tab', 'acceptance') ? 'acceptance' : q(qs, 'last_result', 'FAIL') ? 'defects' : 'tests');
