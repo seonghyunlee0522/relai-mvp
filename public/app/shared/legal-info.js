@@ -19,7 +19,7 @@ export const LEGAL = {
   /** Version recorded with each signup consent. Bump when the text of /terms or /privacy changes. */
   termsVersion: '2026-10-15',
   privacyVersion: '2026-10-15',
-  dbLocation: 'TODO_DB_REGION',         // 국외 이전 표: Neon 프로젝트 리전의 국가 (Neon console → Project settings → Region). Vercel functions run in sin1 (vercel.json)
+  dbLocation: '해외 클라우드 데이터센터(리전 확인 후 고지)',         // 국외 이전 표: Neon 프로젝트 리전의 국가 (Neon console → Project settings → Region). Vercel functions run in sin1 (vercel.json)
   courtSeat:'수원지방법원 성남지원',     // 관할: 회사 소재지(성남시 수정구) 관할 법원
 };
 

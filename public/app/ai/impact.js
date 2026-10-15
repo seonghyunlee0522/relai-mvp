@@ -5,7 +5,7 @@ import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { toast } from '../shared/dialogs.js';
 import { IMPACT_TYPE, RELATION_TYPE, RESULT, RISK_LEVEL } from '../shared/constants.js';
-import { aiDialog, aiNotice, aiStatus, canRun, confChip, reportError, warningsHtml } from '../shared/ai.js';
+import { aiDialog, runLine, aiNotice, aiStatus, canRun, confChip, reportError, warningsHtml } from '../shared/ai.js';
 
 const opt = (map, cur) => Object.entries(map).map(([v, l]) => html`<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('');
 
@@ -30,7 +30,7 @@ export async function openImpactDialog({ pid, change, onDone }) {
       <div class="aim__m"><div class="aim__t"><a class="mono" href="/app/projects/${pid}/${x.href}" data-link target="_blank">${x.display_id}</a><b>${x.title}</b>${raw(confChip(x.confidence))}${raw(x.already ? '<span class="chip chip--done">이미 연결됨</span>' : '')}${raw(extra ? extra(x, i) : '')}</div><p class="aim__r">${x.reason}</p></div></li>`).join(''))}</ul>` : '<p class="hint">해당 없음</p>')}</section>`;
   const draw = () => {
     const sel = () => res.affected_requirements.filter((x) => x._sel).length + res.affected_wbs.filter((x) => x._sel).length + res.possible_risks.filter((x) => x._sel).length;
-    d.body.innerHTML = html`<div class="aid__sum"><b>영향 후보</b>${raw(res.run ? html`<small class="dim"> · ${res.run.credit_cost} 크레딧 (₩${(res.run.credit_cost * 10).toLocaleString('ko-KR')}) 사용 · 잔액 ${res.run.balance}</small>` : '')}</div>
+    d.body.innerHTML = html`<div class="aid__sum"><b>영향 후보</b>${raw(runLine(res.run, d))}</div>
       ${raw(warningsHtml(res.warnings))}
       ${raw(res.summary ? html`<div class="aid__summary"><b>AI 요약</b><p>${res.summary}</p></div>` : '')}
       ${raw(group('관련 요구사항 후보', 'affected_requirements', res.affected_requirements, (x, i) => (x.already ? '' : html`<select class="select select--xs" data-rel="${i}" aria-label="관계 유형">${raw(opt(RELATION_TYPE, 'MODIFIES'))}</select>`)))}

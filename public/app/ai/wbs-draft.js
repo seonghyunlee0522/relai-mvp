@@ -5,7 +5,7 @@ import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { toast } from '../shared/dialogs.js';
 import { REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, WBS_TYPE } from '../shared/constants.js';
-import { aiDialog, aiNotice, aiStatus, canRun, reportError, warningsHtml } from '../shared/ai.js';
+import { aiDialog, runLine, aiNotice, aiStatus, canRun, reportError, warningsHtml } from '../shared/ai.js';
 
 export async function openWbsDraftDialog({ pid, onDone }) {
   const [st, reqRes] = await Promise.all([aiStatus(pid, { fresh: true }), api('GET', wsApi(`/${pid}/requirements`))]);
@@ -40,7 +40,7 @@ export async function openWbsDraftDialog({ pid, onDone }) {
   const drawTree = (r) => {
     const list = ordered();
     const selCount = () => items.filter((i) => i._sel).length;
-    d.body.innerHTML = html`<div class="aid__sum"><b>WBS 초안 ${list.length}건</b>${raw(r.run ? html`<small class="dim"> · ${r.run.credit_cost} 크레딧 (₩${(r.run.credit_cost * 10).toLocaleString('ko-KR')}) 사용 · 잔액 ${r.run.balance}</small>` : '')}<span class="aid__sp"></span><label class="toggle"><input type="checkbox" id="ai-all" checked> 전체 선택</label></div>
+    d.body.innerHTML = html`<div class="aid__sum"><b>WBS 초안 ${list.length}건</b>${raw(runLine(r.run, d))}<span class="aid__sp"></span><label class="toggle"><input type="checkbox" id="ai-all" checked> 전체 선택</label></div>
       ${raw(warningsHtml(r.warnings))}
       ${raw(r.notes?.length ? html`<ul class="aid__notes">${raw(r.notes.map((n) => html`<li>${n}</li>`).join(''))}</ul>` : '')}
       <div class="wtree" id="ai-tree">${raw(list.map((it) => html`<div class="wtree__r ${it._sel ? 'is-sel' : ''}" data-t="${it.temp_id}" style="--d:${depthOf(it) - 1}">

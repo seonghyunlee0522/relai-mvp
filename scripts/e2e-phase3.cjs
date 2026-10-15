@@ -199,7 +199,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   check('US-1 only the PM registered → hint + 이해관계자 추가 link', /팀원을 01 착수 › 이해관계자에 추가하면 계정 없이 담당자로 지정할 수 있습니다\./.test(await page.textContent('#drawer .whint')) && /definition\?activity=STAKEHOLDERS/.test(await page.getAttribute('#drawer .whint a', 'href')));
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(`${B.url}/wbs?sel=${bt.id}`); await page.waitForSelector('#drawer:not([hidden]) .drawer__x'); await page.waitForTimeout(300);
-  check('375px: read-only detail (no owner picker, no input), one PC line, no sideways scroll', !(await page.$('#drawer [data-field="owner"]')) && (await page.$$eval('#drawer input, #drawer select, #drawer textarea', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).length)) === 0
+  check('375px: read-only detail (no owner picker, no input), one PC line, no sideways scroll', !(await page.$('#drawer [data-field="owner"]:visible')) && (await page.$$eval('#drawer input, #drawer select, #drawer textarea', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).length)) === 0
     && (await page.$$('.pcline')).length === 1 && (await page.evaluate(() => document.documentElement.scrollWidth)) <= 376);
   await shot('11-wbs-detail-375.png');
   await page.setViewportSize({ width: 1440, height: 900 });

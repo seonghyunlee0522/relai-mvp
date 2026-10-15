@@ -6,7 +6,7 @@ import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { REQ_PRIORITY, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, REQ_TYPE } from '../shared/constants.js';
-import { aiDialog, aiNotice, aiStatus, canRun, reportError, warningsHtml } from '../shared/ai.js';
+import { aiDialog, runLine, aiNotice, aiStatus, canRun, reportError, warningsHtml } from '../shared/ai.js';
 
 const STEPS = ['대상 확인', '추가 확인', 'AI 초안 생성', '초안 검토', 'Coverage 검토', 'WBS 반영'];
 const COV = { COVERED: ['✓', '충족', 'is-ok'], PARTIAL: ['△', '부분', 'is-warn'], MISSING: ['✕', '누락', 'is-crit'], NOT_APPLICABLE: ['–', '해당 없음', 'is-muted'], UNKNOWN: ['?', '미확인', 'is-muted'] };
@@ -112,7 +112,7 @@ export async function openWbsPlanner({ pid, onDone }) {
   const drawTree = (run = null) => {
     step = 4; const list = ordered(); const c = counts();
     d.body.innerHTML = html`${raw(stepsBar())}
-      <div class="aid__sum"><b>AI WBS 초안 ${list.length}건</b>${raw(run ? html`<small class="dim"> · ${run.credit_cost} 크레딧 (₩${(run.credit_cost * 10).toLocaleString('ko-KR')}) 사용 · 잔액 ${run.balance}</small>` : '')}<span class="aid__sp"></span>
+      <div class="aid__sum"><b>AI WBS 초안 ${list.length}건</b>${raw(runLine(run, d))}<span class="aid__sp"></span>
         <span class="wpz__legend"><span class="chip chip--active">REQ</span> 요구사항 구현 <span class="chip chip--muted">수행</span> 프로젝트 수행 업무 <span class="chip chip--hold">유사</span> 기존 WBS와 유사</span>
         <label class="toggle"><input type="checkbox" id="wp-all" ${items.every((i) => i.selected) ? 'checked' : ''}> 전체 선택</label></div>
       ${raw(warningsHtml(plan.draft.warnings))}${raw(plan.draft.notes?.length ? html`<ul class="aid__notes">${raw(plan.draft.notes.map((n) => html`<li>${n}</li>`).join(''))}</ul>` : '')}

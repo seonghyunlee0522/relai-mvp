@@ -47,7 +47,7 @@ export async function settingsPage(main = $('#main')) {
     const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 워크스페이스 소유자만 할 수 있습니다.</p>'
       : html`${raw(co.can_purchase && billing.provider_available ? buyForm() : '')}<div class="actions" style="margin-top:14px">${raw(canCancel && s.auto_renew ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
         ${raw(billing.provider_available ? '' : '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>')}`;
-    const early = billing.plan === 'EARLY' ? html`<p class="cr-early" id="early-line"><b>얼리 액세스 · ${fmtDay(billing.early_access_until)}까지</b> — RELAI 전체 기능을 무료로 씁니다. AI는 쓴 만큼만 크레딧으로 냅니다. 이후에는 Team 플랜(${won(PLAN_TEAM_MONTHLY)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다 (데이터는 삭제되지 않습니다).</p>` : '';
+    const early = billing.plan === 'EARLY' ? html`<p class="cr-early" id="early-line">RELAI 전체 기능을 무료로 씁니다. AI는 쓴 만큼만 크레딧으로 냅니다. 이후에는 Team 플랜(${won(PLAN_TEAM_MONTHLY)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다 (데이터는 삭제되지 않습니다).</p>` : '';
     return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan === 'EARLY' ? `얼리 액세스 · ${fmtDay(billing.early_access_until)}까지` : billing.plan_label}</span></div><div class="panel__b">
       ${raw(early)}${raw(billing.plan === 'EARLY' ? '' : usageBars(billing.usage))}${raw(lines)}${raw(billing.plan === 'EARLY' && !s ? '' : actions)}</div></div>`;
   };
