@@ -54,7 +54,7 @@ export const CREDIT_PACKS = [
   { key: 'P100', amount: 100000, credits: 10000 },
 ];
 /** Below this balance the page and the AI cost line turn amber and the OWNER gets one e-mail (re-armed by a purchase). */
-export const LOW_BALANCE_CREDITS = envInt(process.env.AI_LOW_BALANCE_CREDITS, 500);
+export const LOW_BALANCE_CREDITS = envInt(process.env.AI_LOW_BALANCE_CREDITS, 200);
 /** Refunds of unused purchased credits: full within REFUND_FULL_DAYS of an untouched pack, else less REFUND_FEE_PCT. */
 export const REFUND_FULL_DAYS = 7;
 export const REFUND_FEE_PCT = 10;

@@ -41,7 +41,7 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   /* ================= seed ================= */
   const email = `mob-${Date.now()}@relai.test`; const password = 'passw0rd!';
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '김하늘', email, password });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '김하늘', email, password });
   const w = s.json.workspaces[0].id;
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
   const toPhase = async (A, keys) => { for (const key of keys) { const ph = (await api('GET', A.P)).json.phases.find((x) => x.phase_key === key); await api('POST', `${A.P}/phases/${ph.id}/activate`, { reason: 'NEXT' }); } };
@@ -263,7 +263,7 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   const inv = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'ko-KR', isMobile: true, hasTouch: true });
   const ip = await inv.newPage();
   await ip.goto(BASE + '/login');
-  await ip.request.post(BASE + '/api/auth/signup', { data: { name: '박초대', email: invEmail, password } });
+  await ip.request.post(BASE + '/api/auth/signup', { data: { agree_terms: true, agree_privacy: true, name: '박초대', email: invEmail, password } });
   await ip.goto(`${BASE}/invite/${token}`); await ip.waitForSelector('#accept', { timeout: 8000 }).catch(() => {});
   await ip.screenshot({ path: `${SHOTS}/m-invite.png` });
   await ip.click('#accept').catch(() => {}); await ip.waitForTimeout(1500);

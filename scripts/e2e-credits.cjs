@@ -36,7 +36,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   // fresh owner (verified e-mail so packs can be bought), one project with requirements, one CR
   const email = `cr-${Date.now()}@relai.test`;
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '김하늘', email, password: 'passw0rd!' });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '김하늘', email, password: 'passw0rd!' });
   const W = s.json.workspaces[0].id; const UID = s.json.user.id;
   sql(`UPDATE users SET email_verified_at = now() WHERE id = '${q(UID)}'`);
   const P = (await api('POST', `/api/workspaces/${W}/projects`, { name: '한빛제약 챗봇', client_name: '한빛제약', project_type: 'NEW_BUILD', planned_start_date: '2026-11-01', planned_end_date: '2027-02-28' })).json.project;
@@ -62,7 +62,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   check('AC3 price table: 30/₩300 · 50/₩500 · 20/₩200 · 10/₩100', ['요구사항 추출30₩300', 'WBS 초안50₩500', '영향 분석20₩200', 'RELAI에게 물어보기10₩100'].every((x) => priceTbl.replace(/\s+/g, '').includes(x.replace(/\s+/g, ''))), priceTbl.replace(/\s+/g, ' '));
   await shot('03-credits-start.png');
 
-  // AC3: price line before each of the 4 AI entry points (after the first charge the balance is under 500, so the line also offers 충전)
+  // AC3: price line before each of the 4 AI entry points (starter 500 is above the 200 low-balance line, so no amber yet)
   const line = async () => (await text('.ai-credit')).replace(/\s+/g, ' ').trim();
   await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await page.click('#ai-extract', { timeout: 8000 });
   await page.waitForSelector('.dialog--ai .ai-credit');
@@ -109,7 +109,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   // AC7: filters + CSV, as a member sees it too (read-only)
   const mEmail = `crm-${Date.now()}@relai.test`;
   const mctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'ko-KR', acceptDownloads: true }); const mp = await mctx.newPage();
-  await mp.goto(BASE + '/login'); const ms = await api('POST', '/api/auth/signup', { name: '이수진', email: mEmail, password: 'passw0rd!' }, mp);
+  await mp.goto(BASE + '/login'); const ms = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '이수진', email: mEmail, password: 'passw0rd!' }, mp);
   await api('POST', `/api/workspaces/${W}/members`, { email: mEmail, role: 'MEMBER' });
   await mp.evaluate((w) => localStorage.setItem('relai.ws', w), W).catch(() => {});
   const mAsk = await api('POST', `${PP}/ai/ask`, { question: '멤버 질문입니다' }, mp);
@@ -131,12 +131,12 @@ const q = (s) => String(s).replace(/'/g, "''");
   check('member view: whole page readable, no pack buttons, owner-only note', !(await mp.$('[data-pack]')) && /소유자/.test(await mp.textContent('#cr-buy').catch(() => '')));
   await mp.screenshot({ path: `${SHOTS}/07-member-view.png`, fullPage: true });
 
-  // AC8: amber below 500 (operator adjustment through the Admin API, ledger kept consistent)
+  // AC8: amber below 200 (AI_LOW_BALANCE_CREDITS default) (operator adjustment through the Admin API, ledger kept consistent)
   sql(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = '${q(UID)}'`);
   const bal = () => Number(sql(`SELECT balance FROM workspace_credit_accounts WHERE workspace_id = '${q(W)}'`));
-  await api('POST', `/api/admin/workspaces/${W}/ai/credits`, { amount: -(bal() - 495), reason: 'e2e: low balance' });
+  await api('POST', `/api/admin/workspaces/${W}/ai/credits`, { amount: -(bal() - 195), reason: 'e2e: low balance' });
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary');
-  check('AC8 page amber under 500', Boolean(await page.$('.cr-sum.is-low')) && /아래입니다/.test(await text('.cr-warn')));
+  check('AC8 page amber under 200', Boolean(await page.$('.cr-sum.is-low')) && /아래입니다/.test(await text('.cr-warn')));
   await shot('08-low-balance.png');
   await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await page.click('#ai-extract'); await page.waitForSelector('.dialog--ai .ai-credit');
   check('AC8 AI cost line amber + 충전 link', Boolean(await page.$('.ai-credit.is-low')) && /충전/.test(await line()), await line());

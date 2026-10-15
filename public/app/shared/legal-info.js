@@ -11,8 +11,8 @@ export const LEGAL = {
   ceo: '이성현',
   bizNo: '551-25-02019',
   address: '경기도 성남시 수정구 위례동로 135, 8층 801-a-6호(창곡동, 신성위캐슬타워)',
-  mailOrderNo: '신고 준비 중',          // 통신판매업 신고번호 — replace with the issued number
-  contactEmail: 'TODO_EMAIL',           // 고객 문의 + 개인정보 보호책임자 연락처
+  mailOrderNo: '제 2026-성남수정-0767 호', // 통신판매업 신고번호
+  contactEmail: 'enj.shlee@gmail.com',  // 고객 문의 + 개인정보 보호책임자 연락처
   contactPhone: '',                     // optional; shown only when set
   privacyOfficer: { name: '이성현', title: '대표' },
   effectiveDate: '2026-10-15',          // 시행일 of both documents (YYYY-MM-DD)

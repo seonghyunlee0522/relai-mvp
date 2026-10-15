@@ -2986,7 +2986,7 @@ html.is-phone .rhead .seg{height:32px}
 .cr-log tbody tr,.cr-price tbody tr{cursor:default}
 .cr-krw-m{display:none}
 .ai-credit.is-low{color:var(--warn-fg)}
-@media (max-width:640px){
+@media (max-width:767px){
   .cr-kpis{grid-template-columns:1fr}.cr-packs{grid-template-columns:1fr}.cr-filt{padding:10px 12px 0}.cr-filt .select{flex:1 1 40%}.cr-total{margin:10px 12px}
   .cr-log th:nth-child(3),.cr-log td:nth-child(3),.cr-log th:nth-child(6),.cr-log td:nth-child(6),.cr-log th:nth-child(7),.cr-log td:nth-child(7){display:none}
   .cr-log .cr-krw-m{display:block;font-size:var(--fs-2xs);color:var(--text-3);white-space:nowrap}.cr-log td,.cr-log th{padding:8px 8px}
@@ -2995,3 +2995,10 @@ html.is-phone .rhead .seg{height:32px}
 #ai-credits b.is-warn{color:var(--warn-fg)}
 .ai-credit.is-short{white-space:normal}
 .home__credits.is-low{color:var(--warn-fg)}
+/* phone = view mode: the AI 크레딧 dashboard stays readable — its two small tables stay tables (not the 3-line cards) */
+html.is-phone .rtable.cr-price,html.is-phone .rtable.cr-log{display:table;width:100%}
+html.is-phone .rtable.cr-price thead,html.is-phone .rtable.cr-log thead{display:table-header-group}
+html.is-phone .rtable.cr-price tbody,html.is-phone .rtable.cr-log tbody{display:table-row-group}
+html.is-phone .rtable.cr-price tbody tr,html.is-phone .rtable.cr-log tbody tr{display:table-row;padding:0;border:0;border-radius:0;margin:0;background:none;min-height:0}
+html.is-phone .rtable.cr-price td,html.is-phone .rtable.cr-log td{display:table-cell;padding:8px;border-bottom:1px solid var(--border-soft);font-size:13px}
+html.is-phone .rtable.cr-log td:nth-child(3),html.is-phone .rtable.cr-log td:nth-child(6),html.is-phone .rtable.cr-log td:nth-child(7){display:none}

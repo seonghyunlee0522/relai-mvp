@@ -49,7 +49,7 @@ async function boot() {
 }
 async function owner(env, email = 'owner@x.com', name = '김하늘') {
   const c = env.client();
-  const s = await c('POST', '/api/auth/signup', { name, email, password: 'passw0rd!' });
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name, email, password: 'passw0rd!' });
   await env.db.run('UPDATE users SET email_verified_at = now() WHERE id = ?', [s.json.user.id]);
   const w = s.json.workspaces[0].id;
   const p = (await c('POST', `/api/workspaces/${w}/projects`, proj())).json.project;
@@ -168,7 +168,7 @@ test('AC4 + AC6: exact charge per action with one AI_USAGE row (feature, project
   const env = await boot(); const { db } = env;
   const A = await owner(env);
   const st = (await A.c('GET', `${A.purl}/ai/status`)).json;
-  assert.equal(st.costs.REQUIREMENT_EXTRACTION, 30); assert.equal(st.credit_price_krw, 10); assert.equal(st.low_balance_threshold, 500); assert.equal(st.credits.available, 500);
+  assert.equal(st.costs.REQUIREMENT_EXTRACTION, 30); assert.equal(st.credit_price_krw, 10); assert.equal(st.low_balance_threshold, 200); assert.equal(st.credits.available, 500);
   setFakeProvider(extractAnswer);
   const r = await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '회의록: 로그인과 결제 기능이 필요합니다.' });
   assert.equal(r.status, 200); assert.equal(r.json.run.credit_cost, 30); assert.equal(r.json.run.balance, 470);
@@ -227,7 +227,7 @@ test('AC5: OWNER buys ₩10,000 → order 9,091 + 909 → +1,000 PURCHASE with r
   assert.equal((await db.get('SELECT COUNT(*) AS n FROM subscriptions WHERE workspace_id = ?', [A.w])).n, 0);
   assert.equal(await effectivePlan(db, A.w), 'EARLY');
   // the operator's full-payment refund must not be used for packs (it would not take the credits back)
-  const admin = env.client(); const sa = await admin('POST', '/api/auth/signup', { name: '운영자', email: 'ops@x.com', password: 'passw0rd!' });
+  const admin = env.client(); const sa = await admin('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'ops@x.com', password: 'passw0rd!' });
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [sa.json.user.id]);
   const pay = await db.get('SELECT id FROM payments WHERE moid = ?', [order.id]);
   assert.equal((await admin('POST', `/api/billing/admin/payments/${pay.id}/refund`, { reason: 'x' })).json.error.code, 'use_credit_refund');
@@ -280,21 +280,25 @@ test('AC7 + AC11: dashboard totals = SUM over the ledger; month / project / user
   env.server.close();
 });
 
-test('AC8: crossing below 500 sends exactly one e-mail to the OWNER; a purchase re-arms it', async () => {
+test('AC8: a new user is not warned on the first action; crossing below 200 sends exactly one e-mail to the OWNER; a purchase re-arms it', async () => {
   const env = await boot(); const { db } = env;
   const A = await owner(env);
   await addMember(env.client, A, 'member@x.com', '이수진');
   setFakeProvider(answer);
-  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '첫 질문' })).status, 200);   // 500 → 490
-  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '두 번째' })).status, 200);   // 480: no second mail
-  let m = await mails(db, 'AI_CREDIT_LOW_BALANCE');
+  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '첫 질문' })).status, 200);   // 500 → 490: starter balance is not low
+  let m = await mails(db, 'AI_CREDIT_LOW_BALANCE'); assert.equal(m.length, 0);
+  assert.equal((await A.c('GET', `${A.cr}/summary`)).json.credits.low, false);
+  await applyCredits(db, { wid: A.w, amount: -285, type: 'ADJUSTMENT', reason: 'test' });   // 205
+  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '두 번째' })).status, 200);   // 195 → mail
+  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '세 번째' })).status, 200);   // 185: no second mail
+  m = await mails(db, 'AI_CREDIT_LOW_BALANCE');
   assert.deepEqual(m.map((x) => x.recipient), ['owner@x.com']);
   assert.equal((await A.c('GET', `${A.cr}/summary`)).json.credits.low, true);
-  await buy(env, A, 'P10');   // 1,480 → re-armed
+  await buy(env, A, 'P10');   // 1,185 → re-armed
   assert.equal((await db.get('SELECT low_balance_notified_at FROM workspace_credit_accounts WHERE workspace_id = ?', [A.w])).low_balance_notified_at, null);
   assert.equal((await A.c('GET', `${A.cr}/summary`)).json.credits.low, false);
-  await applyCredits(db, { wid: A.w, amount: -975, type: 'ADJUSTMENT', reason: 'test' });   // 505
-  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '세 번째' })).status, 200);   // 495 → second mail
+  await applyCredits(db, { wid: A.w, amount: -980, type: 'ADJUSTMENT', reason: 'test' });   // 205
+  assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '네 번째' })).status, 200);   // 195 → second mail
   m = await mails(db, 'AI_CREDIT_LOW_BALANCE'); assert.equal(m.length, 2);
   env.server.close();
 });
@@ -302,7 +306,7 @@ test('AC8: crossing below 500 sends exactly one e-mail to the OWNER; a purchase 
 test('AC9: operator refund — 2,000 unused purchased credits → ₩18,000 partial cancel, one REFUND −2,000 + audit; over the limit refused; free credits never; 7-day untouched pack 100%; failed cancel restored', async () => {
   const env = await boot(); const { db, provider } = env;
   const A = await owner(env);
-  const admin = env.client(); const sa = await admin('POST', '/api/auth/signup', { name: '운영자', email: 'ops@x.com', password: 'passw0rd!' });
+  const admin = env.client(); const sa = await admin('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'ops@x.com', password: 'passw0rd!' });
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [sa.json.user.id]);
   const url = `/api/billing/admin/workspaces/${A.w}/credit-refund`;
   assert.equal((await admin('GET', url)).json.refundable, 0);   // starter credits only → nothing refundable

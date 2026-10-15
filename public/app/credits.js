@@ -5,6 +5,7 @@ import { api } from './core/api.js';
 import { $, html, raw, fmtDT } from './core/dom.js';
 import { state } from './core/state.js';
 import { toast, confirmDialog } from './shared/dialogs.js';
+import { isPhone, pcLine } from './core/device.js';
 
 const n = (v) => Number(v || 0).toLocaleString('ko-KR');
 const krw = (v) => `₩${n(v)}`;
@@ -25,8 +26,8 @@ export async function creditsPage(main = $('#main')) {
   await loadLedger();
 
   const starterUses = () => { const p = Object.fromEntries(s.prices.map((x) => [x.feature, x.credits])); return `요구사항 추출 ${Math.floor(s.starter_credits / p.REQUIREMENT_EXTRACTION)}회 또는 질문 ${Math.floor(s.starter_credits / p.PROJECT_QA)}회`; };
-  const head = () => html`<div class="page__head"><div><a class="link" href="/app/settings" data-link>← 설정</a><h1 style="margin-top:4px">AI 크레딧</h1></div>
-    ${raw(s.can_buy ? '<a class="btn btn--primary" href="#cr-buy" id="cr-buy-top">크레딧 충전</a>' : '')}</div>`;
+  const head = () => html`<div class="page__head"><div><a class="link" href="/app/settings" data-link>← 설정</a><h1 style="margin-top:4px">AI 크레딧</h1>${raw(s.can_buy ? pcLine('충전과 환불 요청은 PC에서 할 수 있습니다') : '')}</div>
+    ${raw(s.can_buy && !isPhone() ? '<a class="btn btn--primary" href="#cr-buy" id="cr-buy-top">크레딧 충전</a>' : '')}</div>`;
   const summary = () => {
     const tm = s.this_month; const lm = s.last_month;
     const used = tm.by_feature.filter((x) => x.runs > 0);
@@ -50,19 +51,20 @@ export async function creditsPage(main = $('#main')) {
     <p class="hint" style="margin-top:8px">한 번 실행할 때마다 정해진 크레딧만 차감합니다. 실행 전에 가격을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p></div></div>`;
   const buy = () => html`<div class="panel" style="margin-top:16px" id="cr-buy"><div class="panel__h">크레딧 충전</div><div class="panel__b">
     ${raw(!s.can_buy ? '<p class="hint">충전과 환불 요청은 Workspace 소유자가 할 수 있습니다.</p>'
+      : isPhone() ? '<p class="hint" data-phone-pay>결제는 PC에서 할 수 있습니다.</p>'
       : !s.provider_available ? '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>'
         : html`<div class="cr-packs">${raw(s.packs.map((p) => html`<button type="button" class="cr-pack" data-pack="${p.key}"><b>${krw(p.amount)}</b><span>${n(p.credits)} 크레딧</span><small>공급가액 ${krw(p.supply)} + 부가세 ${krw(p.vat)}</small></button>`).join(''))}</div>
           ${raw(state.user?.email_verified === false ? '<p class="hint">이메일 인증 후 충전할 수 있습니다.</p>' : '')}`)}
     <p class="hint" style="margin-top:10px">무료 크레딧을 먼저 쓰고 구매한 크레딧은 그다음에 씁니다. 구매한 크레딧은 ${s.purchased_valid_years}년간 유효하며 자동 결제되지 않습니다.
       환불: 구매 후 ${s.refund_policy.full_days}일 안에 쓰지 않은 상품은 전액, 그 밖의 미사용 구매 크레딧은 수수료 ${s.refund_policy.fee_pct}%를 뺀 금액을 돌려 드립니다. 무료 크레딧은 환불되지 않습니다.${s.sandbox ? ' (테스트 결제 환경)' : ''}</p>
-    ${raw(s.can_buy && s.refundable > 0 ? html`<p style="margin-top:8px"><button type="button" class="link linkbtn" id="cr-refund">환불 요청</button> <small class="dim">환불 가능한 미사용 구매 크레딧 ${n(s.refundable)}</small></p>` : '')}</div></div>`;
+    ${raw(s.can_buy && s.refundable > 0 && !isPhone() ? html`<p style="margin-top:8px"><button type="button" class="link linkbtn" id="cr-refund">환불 요청</button> <small class="dim">환불 가능한 미사용 구매 크레딧 ${n(s.refundable)}</small></p>` : '')}</div></div>`;
   const opt = (v, label, cur) => html`<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${label}</option>`;
   const log = () => {
     const fl = led.filters; const months = [...new Set([s.this_month.month, ...fl.months])].sort().reverse();
     const t = led.totals;
     const csv = `/api/workspaces/${wid}/credits/ledger.csv?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`;
     return html`<div class="panel" style="margin-top:16px" id="cr-log"><div class="panel__h">사용 내역</div>
-      <div class="cr-filt"><select class="select select--sm" name="month" aria-label="월">${raw(opt('', '전체 기간', f.month))}${raw(months.map((m) => opt(m, m, f.month)).join(''))}</select>
+      <div class="cr-filt" data-phone-ok><select class="select select--sm" name="month" aria-label="월">${raw(opt('', '전체 기간', f.month))}${raw(months.map((m) => opt(m, m, f.month)).join(''))}</select>
         <select class="select select--sm" name="project" aria-label="프로젝트">${raw(opt('', '모든 프로젝트', f.project))}${raw(fl.projects.map((p) => opt(p.id, p.name, f.project)).join(''))}</select>
         <select class="select select--sm" name="user" aria-label="사용자">${raw(opt('', '모든 사용자', f.user))}${raw(fl.users.map((u) => opt(u.id, u.name, f.user)).join(''))}</select>
         <span class="panel__sp"></span><a class="btn btn--secondary btn--sm" href="${csv}" download id="cr-csv">CSV 내려받기</a></div>
