@@ -15,6 +15,7 @@
   gtag('config', 'AW-18437024959');
 </script>
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="/assets/public.css">
 <style>
 :root{
   --blue:#2E51C4; --blue-deep:#243F9C; --blue-rgb:46,81,196;   /* primary toned down 2026-10-06 (was #1E5EFF / #1748D1) */ --blue-soft:#8297D9; --navy:#101828;
@@ -355,7 +356,6 @@ p{margin:0}
 .pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,360px));gap:20px;justify-content:center}
 @media (max-width:1020px){.pgrid{grid-template-columns:minmax(0,420px)}}
 .plan__s{margin-top:-10px;font-size:13px;color:var(--muted)}
-.pricing__offer{margin:0 auto 22px;text-align:center;font-size:14.5px;color:var(--blue-deep)}
 .plan{background:#fff;border:1px solid var(--border);border-radius:14px;padding:30px 28px;display:flex;flex-direction:column;gap:18px;box-shadow:var(--sh-card)}
 .plan--team{border-color:var(--border-blue);box-shadow:var(--sh-hover)}
 .plan__n{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue-deep)}
@@ -846,7 +846,8 @@ p{margin:0}
       <h2 class="h2">작게 시작하고,<br>팀이 커지면 Team으로.</h2>
       <p class="lead" style="margin-top:18px">Free로 프로젝트 하나를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 Team 플랜으로 한도 없이 사용하세요.</p>
     </div>
-    <p class="pricing__offer reveal" id="early-access"><b>얼리 액세스</b> · 12개월 동안 RELAI 전체 기능 무료 · AI는 쓴 만큼만 (1 크레딧 = 10원, 부가세 포함) · 가입하면 <b>AI 크레딧 500 무료</b></p>
+    <!-- 프로모션은 관리자 › 프로모션(placement landing)에서 바꾼다 — server/promotions.js가 요청마다 채운다 -->
+    <div class="pricing__promo reveal" id="early-access"><!--PROMO:landing--></div>
     <!-- 가격은 server/plans.js(PLANS.TEAM base_monthly · extra_user_monthly, FOUNDING_OFFER)와 같은 값이어야 한다 -->
     <div class="pgrid reveal">
       <div class="plan">

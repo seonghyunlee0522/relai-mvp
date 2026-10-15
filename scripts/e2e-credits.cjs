@@ -195,7 +195,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   await page.goto(BASE + '/'); await page.waitForTimeout(400);
   await page.evaluate(() => document.querySelectorAll('.reveal').forEach((e) => e.classList.add('is-in')));
   const landing = await page.textContent('#pricing');
-  check('landing: 얼리 액세스 line + AI price block', /얼리 액세스/.test(landing) && /1 크레딧 = 10원/.test(landing) && /AI 요구사항 추출 30 크레딧 \(₩300\)/.test(landing));
+  check('landing: 얼리 액세스 line + AI price block', /얼리 액세스/.test(landing) && /1 크레딧 = (10원|₩10)/.test(landing) && /AI 요구사항 추출 30 크레딧 \(₩300\)/.test(landing));
   await page.locator('#pricing').screenshot({ path: `${SHOTS}/12-landing-pricing-375.png` });
 
   await browser.close();

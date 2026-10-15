@@ -39,6 +39,7 @@ import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, mountRepor
 import { ImportFileError } from './xlsx.js';
 import { requireAction, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
+import { mountPublicPromotionRoutes, promoBlockHtml } from './promotions.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
@@ -274,6 +275,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- admin console API (operator role only; see admin-routes.js) ---------- */
   mountAdminRoutes(app, db, { requireAuth, wrap, fail });
+  mountPublicPromotionRoutes(app, db, { wrap });   // GET /api/promotions?placement= (public; migration 47)
   mountAnalyticsRoutes(app, db, { requireAuth, wrap });
 
   /* ---------- projects (always workspace-scoped) ---------- */
@@ -1386,7 +1388,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
   // Landing visit: anonymous count only (no user, no IP); signed-in users and bots are not counted.
   const onLanding = (req) => (req.method === 'GET' && !req.user && !isBot(req.get('user-agent')) ? track(db, 'landing_visit') : null);
-  mountLegal(app, { pub, plans: PLANS, onLanding });   // /, /terms, /privacy, /pricing (B9)
+  mountLegal(app, { pub, plans: PLANS, onLanding, landingPromo: () => promoBlockHtml(db, 'landing') });   // /, /terms, /privacy, /pricing (B9)
   app.get(['/login', '/signup'], (req, res) => {
     if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect('/app');
     sendApp(req, res);

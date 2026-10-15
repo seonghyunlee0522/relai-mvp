@@ -6,6 +6,7 @@ import { $, html, raw, fmtDT } from './core/dom.js';
 import { state } from './core/state.js';
 import { toast, confirmDialog } from './shared/dialogs.js';
 import { isPhone, pcLine } from './core/device.js';
+import { loadPromos, promoHtml } from './shared/promo.js';
 
 const n = (v) => Number(v || 0).toLocaleString('ko-KR');
 const krw = (v) => `₩${n(v)}`;
@@ -20,6 +21,7 @@ export async function creditsPage(main = $('#main')) {
   const qp = new URLSearchParams(location.search);
   if (qp.get('checkout')) { toast(CHECKOUT_MSG[qp.get('checkout')] || '결제를 처리하고 있습니다.'); history.replaceState(null, '', '/app/settings/credits'); }
   let s = (await api('GET', `/api/workspaces/${wid}/credits/summary`)).credits;
+  const promos = await loadPromos('credits');   // 관리자 › 프로모션 (placement credits); {until} = this workspace's early-access end
   const f = { month: s.this_month.month, project: '', user: '' };
   let led = null;
   const loadLedger = async () => { const p = new URLSearchParams(Object.entries(f).filter(([, v]) => v)); led = await api('GET', `/api/workspaces/${wid}/credits/ledger?${p}`); };
@@ -80,7 +82,7 @@ export async function creditsPage(main = $('#main')) {
   };
   const draw = () => {
     main.innerHTML = html`<div class="page page--narrow page--credits">${raw(head())}
-      ${raw(s.plan === 'EARLY' ? html`<p class="cr-early"><b>얼리 액세스</b> · ${day(s.early_access_until)}까지 RELAI 전체 기능 무료 — AI는 쓴 만큼만 크레딧으로 냅니다.</p>` : '')}
+      ${raw(html`<div class="cr-promo">${raw(promoHtml(promos, { placement: 'credits', until: s.plan === 'EARLY' ? day(s.early_access_until) : null }))}</div>`)}
       ${raw(summary())}${raw(payOff() ? '' : buy())}${raw(prices())}${raw(log())}</div>`;
     main.querySelectorAll('[data-pack]').forEach((b) => b.onclick = async () => {
       if (state.user?.email_verified === false) return toast('이메일 인증 후 충전할 수 있습니다.');

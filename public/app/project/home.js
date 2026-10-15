@@ -16,6 +16,7 @@ import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 import { pickJosa } from '../shared/josa.js';
 import { upcomingList, activityList } from './next.js';
 import { isSample, sampleChip, deleteAllSamples } from './samples.js';
+import { loadPromos, promoHtml } from '../shared/promo.js';
 
 /** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
 const wsName = (v) => String(v || '').replace(/ Workspace$/, ' 워크스페이스');
@@ -199,6 +200,8 @@ export async function homePage(main = $('#main')) {
   // AI credits at a glance (AI-credits-only billing): balance + early access, linked to 설정 › AI 크레딧. Never blocks Home.
   api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
     const el = $('#home-credits', main); if (!el) return;
-    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>AI 크레딧 ${c.balance.toLocaleString('ko-KR')} (₩${c.balance_krw.toLocaleString('ko-KR')})${c.purchased_remaining === 0 && c.free_remaining > 0 ? ' 무료 제공' : ''}</a>${raw(c.plan === 'EARLY' && c.early_access_until ? html` · 얼리 액세스 ${fmtDT(c.early_access_until).slice(0, 10)}까지 무료` : '')}`;
+    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>AI 크레딧 ${c.balance.toLocaleString('ko-KR')} (₩${c.balance_krw.toLocaleString('ko-KR')})${c.purchased_remaining === 0 && c.free_remaining > 0 ? ' 무료 제공' : ''}</a><span class="home__promo"></span>`;
+    // the offer next to the balance comes from 관리자 › 프로모션 (placement home); {until} = this workspace's early-access end
+    loadPromos('home').then((list) => { const p = promoHtml(list, { placement: 'home', variant: 'line', until: c.plan === 'EARLY' && c.early_access_until ? fmtDT(c.early_access_until).slice(0, 10) : null }); const slot = $('.home__promo', el); if (slot && p) slot.innerHTML = ` · ${p}`; });
   }).catch(() => {});
 }

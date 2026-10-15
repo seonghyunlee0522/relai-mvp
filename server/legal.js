@@ -383,7 +383,7 @@ ${legalFooterHtml(L)}
 }
 
 /** Mounts /terms, /privacy, /pricing and the landing page (with the footer filled in). Call before express.static. */
-export function mountLegal(app, { pub, plans, onLanding = null }) {
+export function mountLegal(app, { pub, plans, onLanding = null, landingPromo = null }) {
   const cache = {};
   const page = (kind) => (cache[kind] ||= legalPage(kind, { plans }));
   for (const kind of Object.keys(PAGES)) {
@@ -394,7 +394,8 @@ export function mountLegal(app, { pub, plans, onLanding = null }) {
   app.get(['/', '/index.html'], async (req, res) => {
     if (onLanding) await onLanding(req);
     landing ||= readFileSync(resolve(pub, 'index.html'), 'utf8').replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
-    res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req) + ga4For(req)));
+    const promo = landingPromo ? await landingPromo() : '';   // 관리자 › 프로모션 (placement landing), rendered per request
+    res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req) + ga4For(req)).replace('<!--PROMO:landing-->', promo));
   });
 }
 

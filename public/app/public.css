@@ -1,0 +1,111 @@
+/* ============================================================================================================================
+ * Public surfaces (founder feedback 2026-10-15, part A): shared promotion component, the login/signup value panel, right-aligned
+ * auth actions. Kept in its own file so the in-app stylesheet (app.css) stays untouched. Loaded by app/index.html and the landing.
+ * Every selector is scoped to .promo*, .sell*, or .auth — nothing global.
+ * ========================================================================================================================== */
+
+/* ---------- promotions (public/app/shared/promo.js) ---------- */
+.promo{display:grid;gap:12px;grid-template-columns:repeat(var(--promo-cols,3),minmax(0,1fr))}
+.promo--n1{--promo-cols:1}.promo--n2{--promo-cols:2}.promo--n3{--promo-cols:3}.promo--n4{--promo-cols:2}
+.promo-card{position:relative;display:flex;flex-direction:column;gap:6px;min-width:0;padding:16px 18px;background:#fff;border:1px solid var(--border,#E4EAF2);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.promo-card:first-child{border-color:var(--border-blue,#C7D0EE);background:linear-gradient(180deg,#F5F7FD,#fff)}
+.promo-card__badge{align-self:flex-start;font-size:12px;font-weight:700;line-height:1;color:var(--blue-deep,#243F9C);background:var(--bg-tint,#F2F4FB);border:1px solid var(--border-blue,#C7D0EE);border-radius:999px;padding:5px 10px}
+.promo-card__t{font-size:16px;font-weight:800;line-height:1.35;letter-spacing:-.02em;color:var(--navy,#101828)}
+.promo-card__d{margin:0;font-size:13.5px;line-height:1.6;color:var(--text-2,#475467)}
+.promo-card__a{margin-top:auto;padding-top:6px;display:flex;justify-content:flex-end}
+.promo-card__btn{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:8px;background:var(--blue,#2E51C4);color:#fff;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap}
+.promo-card__btn:hover{background:var(--blue-deep,#243F9C)}
+.promo-line__sep{color:var(--text-3,#667085)}
+@media (max-width:767px){.promo{--promo-cols:1!important}}
+
+/* landing pricing: the cards sit above the plan grid */
+.pricing__promo{max-width:920px;margin:0 auto 28px}
+.pricing__promo .promo-card{padding:20px 22px}
+.pricing__promo .promo-card__t{font-size:18px}
+/* 설정 › AI 크레딧 */
+.cr-promo{margin:0 0 16px}
+
+/* ---------- login / signup value panel (.sell) ---------- */
+.auth .auth__side.sell{display:flex;align-items:center;justify-content:center;padding:56px 56px;color:#E4E7EC;border-left:0;
+  background:radial-gradient(640px 360px at 100% 0,rgba(46,81,196,.55) 0,transparent 70%),radial-gradient(520px 320px at 0 100%,rgba(46,81,196,.25) 0,transparent 70%),linear-gradient(150deg,#0B1324 0,#101828 55%,#1D2939 100%)}
+.sell__in{width:100%;max-width:520px}
+.sell .sell__eyebrow{display:inline-flex;align-items:center;gap:8px;margin:0 0 18px;font-size:13px;font-weight:700;letter-spacing:.02em;color:#B9C6F0}
+.sell__eyebrow i{width:8px;height:8px;border-radius:50%;background:#5B7BE0;box-shadow:0 0 0 4px rgba(91,123,224,.25)}
+.auth .auth__side.sell h2{margin:0 0 14px;font-size:34px;line-height:1.28;letter-spacing:-.035em;color:#fff}
+.sell h2 em{font-style:normal;color:#9DB2F5}
+.auth .auth__side.sell .sell__lead{margin:0 0 26px;font-size:15.5px;line-height:1.7;color:#C3CAD6}
+.sell__ben{list-style:none;margin:0 0 26px;padding:0;display:grid;gap:14px}
+.sell__ben li{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:start}
+.sell__ben .sell__ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(91,123,224,.18);border:1px solid rgba(157,178,245,.3);color:#C9D5FA}
+.sell__ben b{display:block;font-size:15px;font-weight:700;color:#fff;margin-bottom:2px}
+.sell__ben span{display:block;font-size:13.5px;line-height:1.6;color:#AEB7C6}
+
+/* product visual: a styled 지금 할 일 window */
+.sell__shot{margin:0 0 24px;background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.35);overflow:hidden;color:var(--text,#101828)}
+.sell__bar{display:flex;align-items:center;gap:6px;padding:9px 12px;background:#F2F4F7;border-bottom:1px solid #E4E7EC;font-size:11.5px;color:#667085}
+.sell__bar i{width:8px;height:8px;border-radius:50%;background:#D0D5DD}
+.sell__bar span{margin-left:8px;font-weight:600}
+.sell__body{padding:14px 16px 16px}
+.sell__steps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:0 0 12px;padding:0;list-style:none}
+.sell__steps li{font-size:10.5px;line-height:1.3;color:#98A2B3;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sell__steps li::before{content:"";display:block;height:4px;border-radius:2px;background:#E4E7EC;margin-bottom:5px}
+.sell__steps li.is-done::before{background:#16A36A}
+.sell__steps li.is-cur{color:#243F9C;font-weight:700}
+.sell__steps li.is-cur::before{background:#2E51C4}
+.sell__todo{border:1px solid #C7D0EE;background:#F5F7FD;border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center}
+.sell__todo small{grid-column:1/-1;font-size:11.5px;font-weight:700;color:#2E51C4}
+.sell__todo b{font-size:14.5px;color:#101828;letter-spacing:-.02em}
+.sell__todo em{font-style:normal;font-size:12px;font-weight:700;color:#fff;background:#2E51C4;border-radius:6px;padding:5px 9px;white-space:nowrap}
+.sell__todo p{grid-column:1/-1;margin:2px 0 0;font-size:12px;color:#475467}
+.sell__kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.sell__kpi div{border:1px solid #EEF2F7;border-radius:8px;padding:8px 10px}
+.sell__kpi span{display:block;font-size:11px;color:#667085}
+.sell__kpi b{font-size:15px;color:#101828}
+.sell__kpi b small{font-size:11px;font-weight:600;color:#16A36A;margin-left:3px}
+
+/* promo cards on the dark panel */
+:is(.sell,.sell-m) .promo{gap:10px}
+:is(.sell,.sell-m) .promo-card{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);box-shadow:none;padding:14px 14px}
+:is(.sell,.sell-m) .promo-card:first-child{background:rgba(91,123,224,.16);border-color:rgba(157,178,245,.45)}
+:is(.sell,.sell-m) .promo-card__badge{color:#C9D5FA;background:rgba(91,123,224,.22);border-color:rgba(157,178,245,.35)}
+:is(.sell,.sell-m) .promo-card__t{color:#fff;font-size:14.5px}
+:is(.sell,.sell-m) .promo-card__d{color:#AEB7C6;font-size:12.5px}
+:is(.sell,.sell-m) .promo:not(:empty){margin-bottom:20px}
+.sell .sell__trust,.sell-m .sell__trust{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0;font-size:12.5px;color:#98A2B3}
+.sell__trust span::before{content:"✓";margin-right:5px;color:#6CE9A6;font-weight:700}
+
+/* < 900px the side panel is hidden by app.css; the same value block sits under the form instead (.sell-m) */
+.sell-m{display:none}
+@media (max-width:900px){
+  .auth .auth__side.sell{display:none}
+  .sell-m{display:block;margin:28px 0 8px;padding:22px 18px;border-radius:16px;color:#E4E7EC;
+    background:radial-gradient(360px 200px at 100% 0,rgba(46,81,196,.6) 0,transparent 70%),linear-gradient(150deg,#0B1324 0,#101828 60%,#1D2939 100%)}
+  .sell-m h2{margin:0 0 16px;font-size:20px;line-height:1.35;color:#fff}
+  .sell-m .sell__ben{margin-bottom:20px;gap:12px}
+  .sell-m .sell__ben b{font-size:14.5px}
+  .sell-m .sell__ben span{font-size:13px}
+  .sell-m .promo-card{padding:14px}
+}
+
+/* ---------- right-aligned auth actions (founder ask #5), PC/tablet; phones keep the full-width thumb button ---------- */
+@media (min-width:768px){
+  .auth .auth__form form>.btn--block,.auth .auth__form>.btn--block,.auth .auth__form .btn--google{display:flex;width:fit-content;min-width:200px;margin-left:auto;padding-left:22px;padding-right:22px}
+  .auth .auth__alt{text-align:right}
+}
+
+/* ---------- 관리자 › 프로모션 (public/app/admin/promotions.js) ---------- */
+.apromo{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:12px;align-items:start}
+.apromo #promo-tbl tr.is-sel td{background:var(--bg-tint,#F2F4FB)}
+.apromo__ed{position:sticky;top:12px}
+.apromo__f{padding:12px 14px 14px}
+.apromo__f .field{margin-bottom:10px}
+.apromo__row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.apromo__pl{border:0;padding:0;margin:0 0 10px}
+.apromo__pl legend{font-size:var(--fs-sm,13px);font-weight:600;margin-bottom:6px;padding:0}
+.apromo__pl label{display:inline-flex;align-items:center;gap:5px;margin:0 14px 6px 0;font-size:var(--fs-sm,13px)}
+.apromo__on{display:flex;align-items:center;gap:6px;font-size:var(--fs-sm,13px);margin-bottom:12px}
+.apromo__pv{border:1px dashed var(--border,#E4EAF2);border-radius:10px;padding:10px;background:var(--bg-alt,#F8FAFD);margin-bottom:12px}
+.apromo__pvh{font-size:12px;font-weight:700;color:var(--text-3,#667085);margin-bottom:8px}
+.apromo__acts{display:flex;gap:8px;align-items:center;justify-content:flex-end}
+.apromo__sp{flex:1}
+@media (max-width:1100px){.apromo{grid-template-columns:1fr}.apromo__ed{position:static}}

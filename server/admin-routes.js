@@ -11,6 +11,7 @@ import { aiUsageOverview, workspaceAiUsage, grantCredits } from './ai/admin.js';
 import { adminIntegrations } from './integrations/routes.js';
 import { mountAdminInvitationRoutes } from './auth/routes.js';
 import { funnelReport, funnelCsv } from './analytics.js';
+import { mountAdminPromotionRoutes } from './promotions.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -66,6 +67,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
     res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="relai-funnel-${r.range.from}_${r.range.to}.csv"`, 'Cache-Control': 'no-store' });
     res.send(funnelCsv(r));
   }));
+
+  /* Promotions (migration 47): marketing offers shown on signup/login/landing/credits/home — display only. */
+  mountAdminPromotionRoutes(app, db, { guard, wrap, fail });
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 

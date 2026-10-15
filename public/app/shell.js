@@ -93,6 +93,13 @@ export function phoneHead(p, g, pill) {
   strip.hidden = false;
 }
 
+/** True once, on the first page after signup (?welcome=1); the flag is dropped from the URL so a reload or Back never repeats it. */
+function firstRun() {
+  const qp = new URLSearchParams(location.search); if (qp.get('welcome') !== '1') return false;
+  qp.delete('welcome'); history.replaceState(history.state, '', `${location.pathname}${qp.toString() ? `?${qp}` : ''}${location.hash}`);
+  return true;
+}
+
 export async function shell(path, view, token = null) {
   const stale = () => token !== null && !isCurrent(token);
   wireOnce();
@@ -145,8 +152,10 @@ export async function shell(path, view, token = null) {
   try { await view(main); } catch (e) { main.innerHTML = html`<div class="page"><div class="empty"><h2>${e.status === 404 ? '찾을 수 없습니다' : '문제가 발생했습니다'}</h2><p>${e.message}</p><a class="btn btn--primary" href="/app/projects" data-link>프로젝트로 돌아가기</a></div></div>`; }
   if (stale()) return;
   // Phase 14: pages are rendered → resume an in-progress tour, help button inside the workspace header.
-  // No automatic welcome dialog or tour (design §4 #6): the tour starts only from "1분 둘러보기" (Home) or 도움말.
+  // First-run guide (founder 2026-10-15): right after signup (/app?welcome=1) the product tour opens ONCE for a new owner whose
+  // tour was never started — sample projects or not. Every later visit: only "1분 둘러보기" (Home) or 도움말 › RELAI 가이드.
   wireHelp(main);
   document.dispatchEvent(new CustomEvent('relai:rendered', { detail: { path } }));
+  if (firstRun()) { const o = ob.peek(); if (o && o.audience === 'OWNER_NEW' && o.tour?.status === 'NOT_STARTED' && !$('.scrim')) { tour.start(); return; } }
   tour.onRender();
 }

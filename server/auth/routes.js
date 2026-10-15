@@ -89,7 +89,7 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
     if (!user || user.status !== 'ACTIVE') return res.redirect('/login?suspended=1');
     await afterLogin(req, res, user, 'GOOGLE');
     if (r.created) { await track(db, 'signup', { userId: user.id, workspaceId: r.workspaceId || null }); if (user.email_verified_at) await track(db, 'email_verified', { userId: user.id }); }
-    res.redirect(r.returnPath || '/app');
+    res.redirect(r.returnPath || (r.created ? '/app?welcome=1' : '/app'));   // new Google account → first-run guide opens once (shell.js)
   }));
 
   /* ---------- invitation landing / accept ---------- */

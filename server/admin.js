@@ -18,7 +18,7 @@ import { GRANTS_PLAN_SQL } from './billing/subscriptions.js';
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
 export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
 export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
-export const AUDIT_ACTIONS = ['SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS',
+export const AUDIT_ACTIONS = ['PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS',
   'PLATFORM_INVITE_CREATED', 'PLATFORM_INVITE_RESENT', 'PLATFORM_INVITE_REVOKED', 'PLATFORM_INVITE_ACCEPTED', 'WORKSPACE_INVITE_CREATED', 'WORKSPACE_INVITE_RESENT', 'WORKSPACE_INVITE_REVOKED', 'WORKSPACE_INVITE_ACCEPTED',
   'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'WORKSPACE_CREATED_FROM_INVITE',
   'ONBOARDING_STARTED', 'ONBOARDING_SKIPPED', 'ONBOARDING_COMPLETED', 'FIRST_PROJECT_CREATED', 'FIRST_REQUIREMENT_CREATED', 'FIRST_WBS_CREATED'];
@@ -190,7 +190,7 @@ export async function listAudit(db, q = {}) {
   const where = []; const params = [];
   const action = oneOf(q.action, AUDIT_ACTIONS); if (action) { where.push('a.action = ?'); params.push(action); }
   if (q.admin) { where.push('(a.admin_user_id = ? OR adm.email ILIKE ?)'); params.push(String(q.admin), like(q.admin)); }
-  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
+  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT', 'PROMOTION']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
   // Operator actions by default; account/invitation events raised by regular users (Phase 13) are a separate view (actor_kind=USER) or `all`.
   const ak = q.actor_kind === 'all' ? '' : oneOf(q.actor_kind, ['ADMIN', 'USER']) || 'ADMIN';
   if (ak && !q.target_id) { where.push('a.actor_kind = ?'); params.push(ak); }

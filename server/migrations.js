@@ -194,6 +194,7 @@ export const migrations = [
   } },
   { version: 44, name: 'v1 fixes: comments.author_label (schema.sql) — sample comments show 샘플, not the user who received the samples', up() {} },
   { version: 46, name: 'Product analytics: analytics_events (+ once-per-user milestone index) and analytics_active_days — first-party, ids only (schema.sql)', up() {} },
+  { version: 47, name: 'Promotions: promotions table + launch-offer seed (schema.sql) — display only, edited in 관리자 › 프로모션', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

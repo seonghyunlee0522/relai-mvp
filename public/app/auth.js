@@ -5,6 +5,7 @@ import { state } from './core/state.js';
 import { showErrors } from './shared/dialogs.js';
 import { LIFECYCLE_PHASES } from './shared/lifecycle.js';
 import { CONSENT_PRIVACY_ROWS, legalFooterHtml } from './shared/legal-info.js';
+import { loadPromos, promoHtml } from './shared/promo.js';
 
 /** The 7 lifecycle phases (docs/lifecycle-v2.md); the auth side panels list these, never the retired 일정/실행/검수 names. */
 export const PHASES = LIFECYCLE_PHASES.map((p) => p.long);
@@ -27,23 +28,46 @@ const consentBlock = () => html`<fieldset class="consent" id="consent"><legend c
   <div class="err" data-for="agree_privacy"></div></fieldset>`;
 const consentErrors = (form) => ({ ...(form.agree_terms.checked ? {} : { agree_terms: '이용약관에 동의해 주세요.' }), ...(form.agree_privacy.checked ? {} : { agree_privacy: '개인정보 수집·이용에 동의해 주세요.' }) });
 
-/* Signup direction A — "가입하면 바로 보게 될 화면": a What's Next preview instead of a slogan. */
-const signupSide = () => html`<aside class="auth__side su-a">
-  <div class="su-a__inner">
-    <p class="su-eyebrow">가입하면 바로 보게 될 화면</p>
-    <h2>막히는 순간마다,<br>다음 순서를 먼저 보여줍니다.</h2>
-    <div class="su-a__card" aria-hidden="true">
-      <div class="su-a__head"><b>지금 할 일</b><span>01 착수</span></div>
-      <ol class="su-a__steps">${raw(PHASES.map((p, i) => html`<li class="${i === 0 ? 'is-current' : ''}"><i>${String(i + 1).padStart(2, '0')}</i>${p}</li>`).join(''))}</ol>
-      <div class="su-a__todo">
-        <p class="su-a__k">지금 할 일</p>
-        <p class="su-a__t">프로젝트 목표와 범위 정리하기</p>
-        <p class="su-a__d">범위를 먼저 정해 두면 요구사항 정의 단계에서 고객과의 논의가 흔들리지 않습니다.</p>
-        <span class="su-a__cta">프로젝트 정의 시작 →</span>
-      </div>
-    </div>
-    <p class="su-a__foot"><b>얼리 액세스</b> · 12개월 동안 전체 기능 무료 · 가입하면 <b>AI 크레딧 500 (₩5,000)</b> 무료 · AI는 쓴 만큼만 (1 크레딧 = ₩10)</p>
+/* Login/signup value panel (founder 2026-10-15): sell the product — value headline, 3 concrete benefits, a product visual
+ * (지금 할 일 + 7단계), the current offer (관리자 › 프로모션, placement signup/login) and a trust line. < 900px the same pieces
+ * sit under the form (.sell-m) because app.css hides the side panel there. */
+const ICONS = {
+  next: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  flow: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3v6"/></svg>',
+  ai: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z"/></svg>',
+};
+const BENEFITS = [
+  ['next', '오늘 할 일을 먼저 알려줍니다', '착수부터 운영까지 7단계마다 해야 할 일과 바로 가는 버튼. PM 경험이 없어도 순서대로 진행합니다.'],
+  ['flow', '요구사항부터 검수까지 한 흐름', '요구사항 · WBS · 시험 · 변경 · 주간보고가 서로 이어져, 빠진 것과 늦어지는 것을 바로 찾습니다.'],
+  ['ai', 'AI가 초안을 몇 분 만에', '문서에서 요구사항 추출, WBS 초안, 변경 영향 분석. 실행 전에 드는 크레딧을 먼저 보여 드립니다.'],
+];
+const benefitsHtml = () => html`<ul class="sell__ben">${raw(BENEFITS.map(([ic, t, d]) => html`<li><i class="sell__ic">${raw(ICONS[ic])}</i><div><b>${t}</b><span>${d}</span></div></li>`).join(''))}</ul>`;
+const trustHtml = () => '<p class="sell__trust"><span>카드 등록 없이 시작</span><span>설치 없이 웹에서</span><span>언제든 Excel · Word로 내보내기</span></p>';
+const productShot = () => html`<div class="sell__shot" aria-hidden="true">
+    <div class="sell__bar"><i></i><i></i><i></i><span>지금 할 일 · 한빛제약 AI 고객상담 챗봇</span></div>
+    <div class="sell__body">
+      <ol class="sell__steps">${raw(LIFECYCLE_PHASES.map((p, i) => html`<li class="${i < 2 ? 'is-done' : i === 2 ? 'is-cur' : ''}">${String(i + 1).padStart(2, '0')}</li>`).join(''))}</ol>
+      <div class="sell__todo"><small>✦ 지금 할 일 · 03 분석·설계</small><b>화면 설계를 확정하세요</b><em>설계 검토 →</em><p>요구사항 16건이 확정되었습니다. 화면 설계를 확정하면 WBS 일정이 이어집니다.</p></div>
+      <div class="sell__kpi"><div><span>요구사항</span><b>16<small>확정</small></b></div><div><span>WBS 작업</span><b>42<small>38%</small></b></div><div><span>다음 주요 일정</span><b>D-12</b></div></div>
+    </div></div>`;
+const sidePanel = (isSignup) => html`<aside class="auth__side sell" aria-label="RELAI 소개"><div class="sell__in">
+    <p class="sell__eyebrow"><i></i>IT 프로젝트 관리 SaaS · RELAI</p>
+    <h2>처음 맡은 프로젝트도<br><em>끝까지 놓치지 않게.</em></h2>
+    <p class="sell__lead">착수부터 운영까지 7단계, 오늘 해야 할 일을 RELAI가 먼저 짚어 드립니다.</p>
+    ${raw(benefitsHtml())}
+    ${raw(productShot())}
+    <div data-promo-slot="${isSignup ? 'signup' : 'login'}"></div>
+    ${raw(trustHtml())}
   </div></aside>`;
+/** < 900px: benefits + offer + trust under the form (the brand band on top already shows the product). */
+const valueMobile = (isSignup) => html`<section class="sell-m" aria-label="RELAI 소개"><h2>처음 맡은 프로젝트도 끝까지 놓치지 않게.</h2>
+  ${raw(benefitsHtml())}<div data-promo-slot="${isSignup ? 'signup' : 'login'}"></div>${raw(trustHtml())}</section>`;
+/** Fills every promo slot on the page from 관리자 › 프로모션 (one request per placement; nothing shows when there is no offer). */
+async function fillPromos() {
+  const slots = [...document.querySelectorAll('[data-promo-slot]')]; if (!slots.length) return;
+  const placement = slots[0].dataset.promoSlot; const list = await loadPromos(placement);
+  slots.forEach((el) => { if (el.isConnected) el.innerHTML = promoHtml(list, { placement }); });
+}
 /** Small screens hide the side panel, so the 7 phases move under the headline. */
 const signupMobile = () => html`<div class="su-mobile su-a-m" aria-label="프로젝트 7단계">${raw(PHASES.map((p, i) => html`<span class="${i === 0 ? 'is-current' : ''}"><i>${i + 1}</i>${p}</span>`).join(''))}</div>`;
 
@@ -78,7 +102,7 @@ export async function authPage(mode) {
       ${raw(phoneBand(isSignup))}
       <a class="logo" href="/">RELAI</a>
       <h1>${isSignup ? (invite && !invite.invalid ? '초대받은 계정 만들기' : raw('처음 맡은 프로젝트,<br>다음 할 일부터 알려드릴게요.')) : '다시 만나서 반갑습니다'}</h1>
-      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : '프로젝트 관리 방법을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다. 얼리 액세스로 12개월 무료이고, AI 크레딧 500(₩5,000)을 무료로 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
+      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : '프로젝트 관리 방법을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
       ${raw(isSignup ? signupMobile() : '')}
       <form id="f" novalidate>
         <div class="form-err" id="ferr" role="alert" hidden></div>
@@ -100,15 +124,13 @@ export async function authPage(mode) {
       ${raw(google.enabled && !isSignup ? '<p class="hint auth__gnote">Google 계정으로 처음 이용하면 회원가입 화면에서 이용약관과 개인정보 수집·이용에 동의한 뒤 계속합니다.</p>' : '')}
       <p class="auth__alt">${isSignup ? '이미 계정이 있나요?' : '아직 계정이 없나요?'}
         <a class="link" href="${isSignup ? `/login${inviteToken ? `?next=${encodeURIComponent(`/invite/${inviteToken}`)}` : ''}` : `/signup${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`}">${isSignup ? '로그인' : '회원가입'}</a></p>
+      ${raw(valueMobile(isSignup))}
       ${raw(legalFooterHtml())}
     </main>
-    ${raw(isSignup ? signupSide() : html`<aside class="auth__side"><blockquote>
-      <h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
-      <p>RELAI가 프로젝트의 시작부터 종료까지 다음에 해야 할 일을 안내합니다.</p>
-      <div class="auth__phases">${raw(PHASES.map((p) => html`<span>${p}</span>`).join(''))}</div>
-    </blockquote></aside>`)}</div>`;
+    ${raw(sidePanel(isSignup))}</div>`;
   const form = $('#f');
   $(isSignup ? '#name' : '#email').focus();
+  fillPromos();
   if (isSignup) {
     const boxes = [...form.querySelectorAll('[data-agree]')]; const all = $('#agree-all');
     const clear = () => boxes.forEach((b) => { if (b.checked) form.querySelector(`.err[data-for="${b.name}"]`).textContent = ''; });
@@ -139,7 +161,7 @@ export async function authPage(mode) {
       const data = await api('POST', `/api/auth/${mode}`, d);
       Object.assign(state, data); state.workspace = data.workspaces.find((w) => data.accepted && w.id === data.accepted.workspace_id) || data.workspaces[0];
       if (isSignup) await gaSignUp();
-      const dest = safeNext || '/app';
+      const dest = safeNext || (isSignup ? '/app?welcome=1' : '/app');   // ?welcome=1 → the first-run guide opens once (shell.js)
       navigate(dest, { replace: true });
     } catch (err) {
       btn.disabled = false;
