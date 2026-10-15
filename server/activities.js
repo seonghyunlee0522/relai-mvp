@@ -100,7 +100,7 @@ function analysisDesign(key, ctx) {
       return ok(`범위 내 요구사항 ${r.in_scope}건이 모두 WBS와 연결되었습니다.`, act('Trace 보기 →', `/app/projects/${ctx.pid}/requirements?view=trace`), { trace: n(w.tasks_unlinked) ? `${w.tasks_unlinked_scope === 'DEVELOPMENT' ? '구현 작업 중 ' : ''}요구사항과 연결되지 않은 작업 ${w.tasks_unlinked}건` : null });   // US-5: only 구현 tasks once tasks are tagged
     }
     case 'ASSIGN': return n(w.tasks) === 0 ? dep
-      : n(w.tasks_without_owner) ? prog(`${w.tasks}건 중 ${w.tasks_without_owner}건에 담당자가 없습니다.`, act('담당자 지정 →', u('?f=no_owner')))
+      : n(w.tasks_without_owner) ? prog(`${w.tasks}건 중 ${w.tasks_without_owner}건에 담당자가 없습니다.`, act('담당자 지정 →', u('?f=no_owner&select=owner')))
       : ok('모든 작업에 담당자가 지정되었습니다.', act('WBS 보기 →', u()));
     case 'PLAN': return n(w.tasks) === 0 ? dep
       : n(w.tasks_without_dates) ? prog(`${w.tasks_without_dates}건의 작업에 일정이 없습니다.`, act('일정 입력 →', u('?f=no_dates')))

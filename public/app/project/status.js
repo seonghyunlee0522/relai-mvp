@@ -73,7 +73,7 @@ export function exceptions(g, pid) {
     ['CHANGE_APPROVED', '승인 후 미반영 변경', n(c.approved_unimplemented), u('/changes?status=APPROVED'), 'warn', ''],
     ['CHANGE_REVIEW', '검토 중 변경', n(c.under_review), u('/changes?status=UNDER_REVIEW'), 'warn', ''],
     ['UNLINKED_REQ', 'WBS 미연결 Requirement', n(r.in_scope_unlinked), u('/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked'), 'warn', '범위 내 요구사항 기준'],
-    ['NO_OWNER', '담당자 미지정', n(w.tasks_without_owner), u('/wbs?f=no_owner'), 'warn', ''],
+    ['NO_OWNER', '담당자 미지정', n(w.tasks_without_owner), u('/wbs?f=no_owner&select=owner'), 'warn', ''],
     ['NO_DATES', '일정 미입력', n(w.tasks_without_dates), u('/wbs?f=no_dates'), 'warn', ''],
   ].filter((x) => x[2] > 0).map(([key, label, count, href, tone, sub]) => ({ key, label, count, href, tone, sub }));
   return { rows, total: rows.reduce((s, x) => s + x.count, 0) };

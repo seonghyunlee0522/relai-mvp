@@ -279,6 +279,8 @@ export function createGrid(cfg) {
     /** Show / hide the checkbox column (turning it off clears the selection). */
     setSelectMode(on) { select = canSelect && Boolean(on); if (!select) { st.selected.clear(); st.anchor = null; notify(); } refresh(); },
     selectedIds: () => [...st.selected],
+    /** Pre-tick rows (e.g. Jim P1-1: the tasks without an owner); only while the checkbox column is on. */
+    select(ids) { if (!select) return; ids.forEach((i) => st.selected.add(String(i))); syncSelectionUi(); notify(); },
     /** Visible (filtered, sorted) row ids across all pages — used for prev/next navigation in the detail view. */
     orderedIds: () => sortedRows().map((r) => String(cfg.rowId(r))),
   };

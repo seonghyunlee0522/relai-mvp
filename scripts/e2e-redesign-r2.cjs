@@ -235,7 +235,20 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   check('R2-9 WBS: keyboard ↓ moves to the next item', /^3$/.test((await page.textContent('#drawer .drawer__h .mono')).trim()), await page.textContent('#drawer .drawer__h .mono'));
   await page.keyboard.press('Escape');
 
-  // ---- M3: 담당자 지정 row → one owner on 10 WBS items in ≤ 4 clicks
+  // ---- M3 / Jim P1-1: 담당자 지정 (row or blue card) → 일정 with the unowned tasks pre-ticked + the owner bar → one owner on 10 WBS items in ≤ 4 clicks
+  { // the blue card path (a 03 project whose next step is 담당자 지정): card → pre-ticked tasks → 담당자 → 적용 = 3 clicks
+    const P4 = await mk('담당자 지정 카드 프로젝트', '(주)누리'); const T4 = [];
+    for (let i = 0; i < 3; i++) T4.push((await api('POST', `${pa(P4.id)}/wbs`, { title: `카드 작업 ${i + 1}`, planned_start_date: day(1), planned_end_date: day(9) })).json.item);
+    await activate(P4.id, 'ANALYSIS_DESIGN'); await go(`/app/projects/${P4.id}`, '[data-next-card]');
+    const card = await page.$('[data-next-card] .btn--primary'); const cardHref = card ? await card.getAttribute('href') : '';
+    check('P1-1 the 03 blue card 담당자 지정 opens ?select=owner (not the bare ?f=no_owner list)', /f=no_owner/.test(cardHref || '') && /select=owner/.test(cardHref || ''), cardHref);
+    if (card) {
+      await card.click(); await settle('#grid'); await page.waitForSelector('.bulk [data-bv]', { timeout: 5000 }).catch(() => {});
+      await page.selectOption('.bulk [data-bv]', uid).catch(() => {}); await page.click('.bulk [data-bapply]').catch(() => {}); await page.waitForTimeout(1500);
+      const own4 = (await api('GET', `${pa(P4.id)}/wbs`)).json.items.filter((x) => x.item_type === 'TASK' && x.owner_user_id === uid).length;
+      check('P1-1 card → 담당자 → 적용 (3 clicks) sets the owner on every unowned task', own4 === 3, String(own4));
+    }
+  }
   await go(`/app/projects/${P2.id}`, '.nxp');
   let clicks = 0;
   const assign = await page.$('.np__row[data-step-key="ASSIGN"] .np__open');
@@ -243,8 +256,10 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   if (assign) {
     await assign.click(); clicks++; await settle('#grid');
     check('M3 일정 opens in multi-select mode with the owner bar (?select=owner)', /select=owner/.test(page.url()) && (await page.$$('#grid [data-pick]')).length >= 10 && await vis('[data-owner-bar]') === 1);
-    await page.click('#grid [data-all]'); clicks++;
-    await page.waitForSelector('.bulk [data-bv]');
+    await page.waitForSelector('.bulk [data-bv]', { timeout: 5000 }).catch(() => {});
+    const pre = await page.$$eval('#grid tbody tr[data-id] [data-pick]', (els) => els.filter((e) => e.checked).map((e) => e.closest('tr').dataset.id));
+    check('P1-1 the 10 tasks without an owner arrive pre-ticked and the owner bar is open', pre.length === 10 && T.every((t) => pre.includes(t.id)) && await vis('.bulk [data-bv]') === 1, JSON.stringify({ pre: pre.length }));
+    await shot('p1-1-owner-preticked.png');
     const fieldPre = await page.$eval('.bulk [data-bf]', (s) => s.value);
     await page.selectOption('.bulk [data-bv]', uid); clicks++;
     await page.click('.bulk [data-bapply]'); clicks++;
@@ -253,6 +268,46 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
     const owned = items.filter((x) => x.owner_user_id === uid).length;
     check(`M3 one owner set on 10 WBS items in ${clicks} clicks (bulk field preset to 담당자)`, owned === 10 && clicks <= 4 && fieldPre === 'owner_user_id', JSON.stringify({ owned, clicks, fieldPre }));
   }
+
+  // ================= Jim R2+R3a acceptance fixes =================
+  // P1-2: 요구사항 분류 → 분류·우선순위 shows 유형 (and 우선순위); the drawer has 유형 at the top while the 02 분류 step is open
+  const U = (await api('POST', `${pa(P.id)}/requirements`, { title: '상담 이력 엑셀 내보내기', scope: 'IN_SCOPE', priority: 'MEDIUM' })).json.requirement;
+  await go(`/app/projects/${P.id}`, '.nxp');
+  const clsRow = await page.$('.np__row[data-step-key="CLASSIFY"] .np__open');
+  if (clsRow) { await clsRow.click(); await settle('#grid'); } else await go(`/app/projects/${P.id}/requirements?type=UNSPECIFIED`, '#grid');
+  const cc = await colsOf();
+  check('P1-2 요구사항 분류 row opens 분류·우선순위 with the 유형 and 우선순위 columns shown', Boolean(clsRow) && /type=UNSPECIFIED/.test(page.url()) && cc.includes('유형') && cc.includes('우선순위'), JSON.stringify({ row: Boolean(clsRow), url: page.url(), cc }));
+  await page.click(`#grid tr[data-id="${U.id}"] td.ttl`); await page.waitForSelector('#drawer:not([hidden]) .dstack'); await page.waitForTimeout(300);
+  const ty = await page.evaluate(() => { const e = document.querySelector('#drawer [data-field="type"]'); return { vis: Boolean(e && e.checkVisibility()), inMore: Boolean(e && e.closest('[data-dmore]')) }; });
+  check('P1-2 drawer: 유형 at the top level (not under 세부 정보 더보기) while 분류 is open', ty.vis && !ty.inMore, JSON.stringify(ty));
+  await shot('p1-2-classify.png');
+  await page.selectOption('#drawer [data-field="type"]', 'FUNCTIONAL'); await page.waitForTimeout(1200);
+  check('P1-2 유형 set from the drawer', (await api('GET', `${pa(P.id)}/requirements/${U.id}`)).json.requirement.type === 'FUNCTIONAL');
+  await go(`/app/projects/${P.id}/requirements`, '#grid');
+  check('P1-2 the plain 요구사항 list keeps its 6 default columns (유형 not forced)', !(await colsOf()).includes('유형'));
+
+  // P2-3: an empty 기간 cell says 날짜 지정 and opens the drawer on 계획 시작일
+  const ND = (await api('POST', `${pa(P2.id)}/wbs`, { title: '일정 미정 작업' })).json.item;
+  await go(`/app/projects/${P2.id}/wbs`, '#grid');
+  const emptyTxt = await page.$eval(`#grid tr[data-id="${ND.id}"] [data-period-empty]`, (e) => e.textContent.trim()).catch(() => '');
+  const datedEmpty = await page.$$(`#grid tr[data-id="${T[1].id}"] [data-period-empty]`);
+  check('P2-3 empty 기간 shows "날짜 지정"; dated rows do not', emptyTxt === '날짜 지정' && datedEmpty.length === 0, emptyTxt);
+  await page.click(`#grid tr[data-id="${ND.id}"] [data-period-empty]`); await page.waitForSelector('#drawer:not([hidden])'); await page.waitForTimeout(500);
+  check('P2-3 날짜 지정 opens the drawer with 계획 시작일 focused', await page.evaluate(() => document.activeElement && document.activeElement.dataset.field === 'planned_start_date'));
+  await page.keyboard.press('Escape');
+
+  // P2-5: 보고서 › 주간보고 has no 완료보고서 생성 before 07 (the closed project still has it — e2e-redesign-r1 A4)
+  await go(`/app/projects/${P2.id}/reports`, '#rp-new');
+  check('P2-5 03 project: 주간보고 list shows 이번 주 주간보고 만들기 but no 완료보고서 생성', (await vis('#rp-new')) === 1 && (await page.$$('#rp-done')).length === 0);
+
+  // P2-2: a closed project (M, closed by the 07 rows above) shows no 다가오는 일정
+  if (process.env.DATABASE_URL) require('child_process').execFileSync('psql', [process.env.DATABASE_URL, '-qc', `UPDATE projects SET status='COMPLETED', closed_on=CURRENT_DATE WHERE id='${M.id}' AND status <> 'COMPLETED'`]);
+  const mSt = (await api('GET', pa(M.id))).json.project.status;
+  await go(`/app/projects/${M.id}`, '.nxside');
+  await page.waitForTimeout(600);
+  check('P2-2 closed project: 지금 할 일 has no 다가오는 일정 (최근 활동 stays)', mSt === 'COMPLETED' && (await page.$$('[data-upcoming], #nx-up')).length === 0 && (await page.$$('#nx-act')).length === 1, mSt);
+  await go(`/app/projects/${P2.id}`, '.nxside');
+  check('P2-2 an active project keeps 다가오는 일정', (await page.$$('[data-upcoming] #nx-up')).length === 1);
 
   // ================= P3s =================
   await go(`/app/projects/${P.id}/issues`, '.phead-wrap');

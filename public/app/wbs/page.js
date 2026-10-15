@@ -176,7 +176,7 @@ export async function wbsPage(id) {
   const periodShift = (r) => (grid.isShown('end') ? '' : shiftLine(r));   // the restored 계획 종료 column carries the note — never twice
   const periodCol = () => (desk ? [{ key: 'period', label: '기간', width: 130, render: (r) => { if (r._ghost) return '';
     if (r.item_type === 'MILESTONE') return html`${raw(dateCell(r.milestone_date, false, r.past_end))}${raw(periodShift(r))}`;
-    const s0 = r.planned_start; const e0 = r.planned_end; if (!s0 && !e0) return dim();
+    const s0 = r.planned_start; const e0 = r.planned_end; if (!s0 && !e0) return isLeafTask(r) && !roRow(r) ? '<span class="wper wper--empty" data-period-empty title="눌러서 계획 시작·종료일을 입력합니다">날짜 지정</span>' : dim();   // Jim P2-3: an empty 기간 says it can be clicked
     return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''} ${r.rollup ? 'dim' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${raw(r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : '')}${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(periodShift(r))}`; } }] : []);
   const grid = createGrid({
     key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
@@ -385,7 +385,7 @@ export async function wbsPage(id) {
       ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. ${ctxCr.impacts && ctxCr.impacts.length ? `영향 WBS ${ctxCr.impacts.length}건만 표시합니다.` : '영향 WBS가 등록되지 않아 전체를 표시합니다.'} 반영이 끝나면 변경 요청을 '반영 완료'로 바꾸세요.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
       ${raw(items.length && desk ? deskTool(v, q, f) : '')}
-      ${raw(items.length && ownerMode && desk && !archived ? html`<div class="ownbar" data-owner-bar><b>담당자 지정</b><span>작업을 선택하면 아래에 담당자 막대가 열립니다. 표 맨 위 체크박스로 보이는 작업을 모두 선택할 수 있습니다.</span></div>` : '')}
+      ${raw(items.length && ownerMode && desk && !archived ? html`<div class="ownbar" data-owner-bar><b>담당자 지정</b><span>담당자가 없는 작업을 미리 선택했습니다. 아래에서 담당자를 고르고 적용하세요. 체크박스로 선택을 바꿀 수 있습니다.</span></div>` : '')}
       ${raw(items.length && !desk ? html`<div class="rtool">
         <div class="seg" role="tablist"><button class="${v === 'list' ? 'is-on' : ''}" data-view="list" role="tab">WBS</button><button class="${v === 'gantt' ? 'is-on' : ''}" data-view="gantt" role="tab">Gantt</button></div><span class="wterms">${raw(term('wbs'))}${raw(term('gantt'))}</span>
         ${raw(v === 'gantt' ? '<span class="gtools"><button class="btn btn--secondary btn--sm" id="gfit">전체 일정</button><button class="btn btn--secondary btn--sm" id="gtoday">오늘</button></span>' : '')}
@@ -536,6 +536,7 @@ export async function wbsPage(id) {
   };
 
   const bind = () => {
+    const gEl = main.querySelector('#grid'); if (gEl) gEl.addEventListener('pointerdown', (e) => { wantDates = Boolean(e.target.closest('[data-period-empty]')); }, true);
     for (const idb of ['ai-wbs', 'ai-wbs2']) { const aw = $(`#${idb}`); if (aw) aw.onclick = () => openWbsPlanner({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
     main.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { setParam('view', b.dataset.view === 'gantt' ? 'gantt' : ''); if (b.dataset.view === 'gantt') gx.mode = 'fit'; ghost = null; syncRows(); draw(); });
     const gf = $('#gfit'); if (gf) gf.onclick = () => { gx.mode = 'fit'; placeGantt(); };
@@ -605,8 +606,11 @@ export async function wbsPage(id) {
   /* ---------- detail modal ---------- */
   const showDrawer = () => { const d = $('#drawer'); d.hidden = false; $('.rlayout').classList.add('has-drawer'); };
   const closeDrawer = () => { sel = null; setParam('sel', ''); const d = $('#drawer'); d.hidden = true; d.innerHTML = ''; $('.rlayout').classList.remove('has-drawer'); if (view() === 'gantt') draw(); else grid.refresh(); };
+  let wantDates = false;   // Jim P2-3: 날짜 지정 in an empty 기간 cell opens the drawer on 계획 시작일
   const openDetail = async (iid) => {
-    try { dtab = 'info'; await loadSel(iid); showDrawer(); drawDetail(); if (view() === 'gantt') draw(); else grid.refresh(); }
+    const dates = wantDates; wantDates = false;
+    try { dtab = 'info'; await loadSel(iid); showDrawer(); drawDetail(); if (view() === 'gantt') draw(); else grid.refresh();
+      if (dates) { const inp = $('#drawer [data-field="planned_start_date"]'); if (inp && !inp.disabled) inp.focus(); } }
     catch (e) { toast(e.message); }
   };
 
@@ -792,4 +796,5 @@ export async function wbsPage(id) {
   if (params().get('new') === '1' && !items.length) { for (const k of ['new', 'parent', 'type']) setParam(k, ''); }   // J3: an empty WBS shows the empty state only (its 직접 추가 opens the input)
   else if (params().get('new') === '1' && !archived) { ghost = { parent_id: params().get('parent') || null, item_type: params().get('type') === 'MILESTONE' ? 'MILESTONE' : 'TASK' }; for (const k of ['new', 'parent', 'type']) setParam(k, ''); syncRows(); }
   draw();
+  if (ownerMode && !archived) grid.select(items.filter((it) => isLeafTask(it) && !it.archived_at && !hasOwner(it)).map((it) => it.id));   // Jim P1-1: tasks without an owner come pre-ticked, the owner bar opens on them
 }

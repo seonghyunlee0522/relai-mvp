@@ -36,6 +36,7 @@ export async function requirementsPage(id) {
   const rApi = (s = '') => wsApi(`/${id}/requirements${s}`);
   const meId = state.user.id;
   const desk = !isPhone();   // Redesign R2: quiet toolbar, 5 default columns, 480px side drawer — desktop only; the phone keeps today's view
+  const classifyView = () => { const q = new URLSearchParams(location.search); return q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED'; };   // the 분류·우선순위 tab
   const baselineApproved = Boolean(baseline && baseline.status === 'COMPLETED');   // 범위 column: shown while 02 is open, hidden by default once the baseline is approved (Jim M2)
 
   const params = () => new URLSearchParams(location.search);
@@ -71,7 +72,7 @@ export async function requirementsPage(id) {
   const ro = (r) => archived || Boolean(r.archived_at);
   const listGrid = createGrid({
     key: desk ? `req.list.r2.${meId}` : 'req.list', rowId: (r) => r.id, tableClass: 'gtable--req', defaultSort: { key: 'display_id', dir: 'asc' }, pageSize: 100,   // R2: column choice remembered per user
-    selectMode: !desk || selMode, forceShow: () => (desk && params().get('scope') ? ['scope'] : []),   // filtering by 범위 always shows the 범위 column (Jim M2)
+    selectMode: !desk || selMode, forceShow: () => (!desk ? [] : [...(params().get('scope') ? ['scope'] : []), ...(classifyView() ? ['type', 'priority'] : [])]),   // filtering by 범위 always shows the 범위 column (Jim M2); 분류·우선순위 shows 유형 + 우선순위 (Jim P1-2)
     rowClass: (r) => (r.archived_at ? 'is-arch' : ''), canEdit: (r) => !ro(r),
     activeId: () => (sel ? sel.id : null),
     onOpen: (rid) => openDetail(rid),
@@ -423,18 +424,22 @@ export async function requirementsPage(id) {
             ${raw(readOnly ? (r.criteria.length ? '' : '<p class="hint">등록된 완료 조건이 없습니다.</p>') : html`<div class="crit-add"><input class="input input--sm" id="crit-in" maxlength="1000" placeholder="완료 조건을 입력하고 Enter"><button class="btn btn--secondary btn--sm" id="crit-add">추가</button></div>`)}`;
   /** Desktop drawer (R2 §5.4): 제목 · 설명 · 완료 조건 · 범위 · 우선순위 · 담당자; 상태 · 유형 · 요청자 · 소속 under 세부 정보 더보기. */
   let moreOpen = false;
+  // Jim P1-2: 유형 sits with 범위·우선순위 while the 02 분류 step is open (some 유형 미지정), on the 분류·우선순위 tab, or while it is 미지정
+  const typeTop = (r) => r.type === 'UNSPECIFIED' || classifyView() || Boolean(g.current_phase && g.current_phase.phase_key === 'REQUIREMENTS' && summary && Number(summary.type_unspecified) > 0);
+  const typeField = (r, readOnly) => fieldRow(html`유형 ${raw(term('nonfunctional'))}`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''} aria-label="유형">${raw(opt(REQ_TYPE, r.type))}</select>`);
   const deskInfo = (r, readOnly) => html`<div class="dstack">
     <input class="dtitle" data-field="title" value="${r.title}" maxlength="200" ${readOnly ? 'disabled' : ''} aria-label="제목">
     <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요. 예) 고객이 주문번호로 배송 상태를 조회한다." ${readOnly ? 'disabled' : ''} aria-label="설명">${r.description}</textarea>
     ${raw(critHtml(r, readOnly))}
     <div class="dgrid">
+      ${raw(typeTop(r) ? typeField(r, readOnly) : '')}
       ${raw(fieldRow(html`범위 ${raw(term('scope'))}`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''} aria-label="범위">${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
       ${raw(fieldRow('우선순위', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''} aria-label="우선순위">${raw(opt(REQ_PRIORITY, r.priority))}</select><small class="hint req-phint">${PRIORITY_HINT}</small>`))}
       ${raw(fieldRow('담당자', html`<select class="select select--sm" data-field="owner_user_id" ${readOnly ? 'disabled' : ''} aria-label="담당자">${raw(ownerOpts(r.owner_user_id || ''))}</select>`))}
     </div>
     <details class="dmore" data-dmore ${moreOpen ? 'open' : ''}><summary>세부 정보 더보기</summary><div class="dgrid">
       ${raw(fieldRow('상태', html`<select class="select select--sm" data-field="status" ${readOnly ? 'disabled' : ''} aria-label="상태">${raw(opt(REQ_STATUS, r.status))}</select>`))}
-      ${raw(fieldRow(html`유형 ${raw(term('nonfunctional'))}`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''} aria-label="유형">${raw(opt(REQ_TYPE, r.type))}</select>`))}
+      ${raw(typeTop(r) ? '' : typeField(r, readOnly))}
       ${raw(fieldRow('요청자', html`<input class="input input--sm" data-field="requester_name" value="${r.requester_name}" maxlength="100" placeholder="예) 김OO 책임" ${readOnly ? 'disabled' : ''}>`))}
       ${raw(fieldRow('요청자 소속', html`<input class="input input--sm" data-field="requester_organization" value="${r.requester_organization}" maxlength="100" placeholder="예) A사 IT팀" ${readOnly ? 'disabled' : ''}>`))}
     </div></details>

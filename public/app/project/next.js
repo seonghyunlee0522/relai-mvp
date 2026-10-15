@@ -196,7 +196,7 @@ const dActivityRow = (a, archived, isCurrent, browse = false, markable = false, 
   const cls = stateCls(a); const done = a.state === 'COMPLETED'; const skipped = a.state === 'SKIPPED' || a.status === 'SKIPPED';
   const manualDone = a.status === 'COMPLETED';
   let href = !archived && a.cta && !done && !skipped && (browse || markable || isCurrent || a.state === 'IN_PROGRESS') ? a.cta.href : null;
-  if (href && a.step_key === 'ASSIGN') href += `${href.includes('?') ? '&' : '?'}select=owner`;   // Jim M3: 일정 opens with checkboxes + the owner bar
+  if (href && a.step_key === 'ASSIGN' && !/select=owner/.test(href)) href += `${href.includes('?') ? '&' : '?'}select=owner`;   // Jim M3: 일정 opens with checkboxes + the owner bar
   let main = ''; const more = [];
   const mi = (inner) => html`<li role="none">${raw(inner)}</li>`;
   if (!archived) {
@@ -274,14 +274,14 @@ const dOtherPhasePanel = (g, ph, archived) => {
 const dday = (date) => { const d = daysUntil(date); return d === null ? '' : d < 0 ? `${-d}일 지남` : d === 0 ? '오늘' : `D-${d}`; };
 const ddTone = (date) => { const d = daysUntil(date); return d !== null && d <= 1 ? 'is-crit' : ''; };
 /** Right column: 다가오는 일정 (D-day; red only when overdue or ≤ 1 day) + 최근 활동 (→ 보고서 › 활동 기록). Filled after the first paint. */
-const sideCol = () => html`<aside class="nxside" aria-label="일정과 활동">
-  <section class="nxbox" aria-labelledby="nxUpT"><div class="nxbox__h"><h2 id="nxUpT">다가오는 일정</h2></div><div class="nxbox__b" id="nx-up"><p class="nxbox__none">불러오는 중…</p></div></section>
+const sideCol = (closed = false) => html`<aside class="nxside" aria-label="일정과 활동">
+  ${raw(closed ? '' : html`<section class="nxbox" aria-labelledby="nxUpT" data-upcoming><div class="nxbox__h"><h2 id="nxUpT">다가오는 일정</h2></div><div class="nxbox__b" id="nx-up"><p class="nxbox__none">불러오는 중…</p></div></section>`)}
   <section class="nxbox" aria-labelledby="nxAcT"><div class="nxbox__h"><h2 id="nxAcT">최근 활동</h2><button type="button" class="link linkbtn nxbox__more" data-stab-action="activity">전체 보기</button></div><div class="nxbox__b" id="nx-act"><p class="nxbox__none">불러오는 중…</p></div></section>
 </aside>`;
 export const upcomingList = (items, pid) => (items.length ? html`<ol class="nxup">${raw(items.map((x) => html`<li><a href="/app/projects/${x.pid || pid}/${x.href}" data-link><span class="nxup__t">${x.title}<small>${x.sub || x.label || ''}</small></span><b class="nxup__d ${ddTone(x.date)}" title="${x.date}">${dday(x.date)}</b></a></li>`).join(''))}</ol>` : '<p class="nxbox__none">다가오는 일정이 없습니다.</p>');
 export const activityList = (items, pid) => (items.length ? html`<ol class="nxact">${raw(items.map((e) => html`<li><a href="/app/projects/${e.pid || pid}/${e.href}" data-link><span class="nxact__t">${raw(e.display_id ? html`<span class="mono">${e.display_id}</span> ` : '')}${e.title || ''}${e.summary ? ` · ${e.summary}` : ''}</span><small>${[e.actor_name, e.project, relTime(e.at)].filter(Boolean).join(' · ')}</small></a></li>`).join(''))}</ol>` : '<p class="nxbox__none">아직 기록된 활동이 없습니다.</p>');
 const fillSide = async (main, id) => {
-  const [up, act] = await Promise.all([api('GET', wsApi(`/${id}/upcoming?days=30`)).catch(() => ({ items: [] })), api('GET', wsApi(`/${id}/activity?limit=5`)).catch(() => ({ items: [] }))]);
+  const [up, act] = await Promise.all([(main.querySelector('#nx-up') ? api('GET', wsApi(`/${id}/upcoming?days=30`)) : Promise.resolve({ items: [] })).catch(() => ({ items: [] })), api('GET', wsApi(`/${id}/activity?limit=5`)).catch(() => ({ items: [] }))]);
   const a = main.querySelector('#nx-up'); if (a) a.innerHTML = upcomingList((up.items || []).slice(0, 5), id);
   const b = main.querySelector('#nx-act'); if (b) b.innerHTML = activityList((act.items || []).slice(0, 5), id);
 };
@@ -321,7 +321,7 @@ export async function nextPage(id, main = $('#main')) {
       ${raw(desk ? '' : view ? otherPhasePanel(g, view, archived) : g.project.status === 'COMPLETED' ? html`<details class="closed__ph"><summary>단계 업무 보기</summary>${raw(phasePanel(g, p, archived))}</details>` : phasePanel(g, p, archived))}
       ${raw(desk ? html`${raw(view || g.project.status === 'COMPLETED' ? '' : countTiles(g, p.id))}
         ${raw(view ? '' : g.project.status === 'COMPLETED' ? closedPanel(g) : dGuideCard(g, p, archived, created))}
-        <div class="nxcols"><div class="nxmain">${raw(view ? dOtherPhasePanel(g, view, archived) : g.project.status === 'COMPLETED' ? html`<details class="closed__ph"><summary>단계 업무 보기</summary>${raw(dPhasePanel(g, p, archived))}</details>` : dPhasePanel(g, p, archived))}</div>${raw(sideCol())}</div>` : '')}
+        <div class="nxcols"><div class="nxmain">${raw(view ? dOtherPhasePanel(g, view, archived) : g.project.status === 'COMPLETED' ? html`<details class="closed__ph"><summary>단계 업무 보기</summary>${raw(dPhasePanel(g, p, archived))}</details>` : dPhasePanel(g, p, archived))}</div>${raw(sideCol(g.project.status === 'COMPLETED'))}</div>` : '')}
     </div>`;
     if (desk) fillSide(main, id);
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { g = await api('GET', wsApi(`/${id}`)); draw(); } };
