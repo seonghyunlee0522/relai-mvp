@@ -12,7 +12,8 @@ import { randomUUID } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { newToken, sha256 } from './../security.js';
 import { encrypt, decrypt } from '../integrations/crypto.js';
-import { createUser, createDirectSignupUser, addIdentity, touchIdentity, normEmail } from '../accounts.js';
+import { createUser, createDirectSignupUser, addIdentity, touchIdentity, normEmail, recordConsent } from '../accounts.js';
+import { currentConsent } from '../legal.js';
 import { writeAudit } from '../admin.js';
 
 export class GoogleAuthError extends Error { constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; } }
@@ -86,14 +87,14 @@ export function setGoogleProvider(p) { override = p; }
 const stateHash = (s, env) => sha256(`gstate:${env.SESSION_SECRET || ''}:${s}`);
 const nonceHash = (s, env) => sha256(`gnonce:${env.SESSION_SECRET || ''}:${s}`);
 /** Creates a pending state. intent: LOGIN | SIGNUP | INVITE (+ invitationId). returnPath is encrypted (it may carry an invite token). */
-export async function startGoogleAuth(db, { intent = 'LOGIN', invitationId = null, returnPath = '/app', loginHint = null } = {}, env = process.env) {
+export async function startGoogleAuth(db, { intent = 'LOGIN', invitationId = null, returnPath = '/app', loginHint = null, consent = false } = {}, env = process.env) {
   const cfg = googleConfig(env); const p = getGoogleProvider(env);
   if (!cfg.configured && p.name !== 'fake') throw new GoogleAuthError('google_not_configured', 'Google 로그인이 아직 설정되지 않았습니다.', 503);
   const state = newToken(); const nonce = newToken(); const verifier = newToken() + newToken();
   const challenge = sha256b64u(verifier);
   await db.run('DELETE FROM auth_oauth_states WHERE expires_at < now()');
-  await db.run('INSERT INTO auth_oauth_states (state_hash, nonce_hash, code_verifier_encrypted, intent, invitation_id, return_path_encrypted, expires_at) VALUES (?,?,?,?,?,?,?)',
-    [stateHash(state, env), nonceHash(nonce, env), encrypt(verifier, env), intent, invitationId, encrypt(String(returnPath || '/app'), env), new Date(Date.now() + cfg.stateTtlMs).toISOString()]);
+  await db.run('INSERT INTO auth_oauth_states (state_hash, nonce_hash, code_verifier_encrypted, intent, invitation_id, return_path_encrypted, expires_at, consent) VALUES (?,?,?,?,?,?,?,?)',
+    [stateHash(state, env), nonceHash(nonce, env), encrypt(verifier, env), intent, invitationId, encrypt(String(returnPath || '/app'), env), new Date(Date.now() + cfg.stateTtlMs).toISOString(), Boolean(consent)]);
   if (p.name === 'fake') { p.pendingNonce = nonce; p.pendingState = state; }
   return { url: p.authorizeUrl({ state, nonce, codeChallenge: challenge, loginHint }), state };
 }
@@ -138,10 +139,13 @@ export async function finishGoogleAuth(db, { state, code, tx }, env = process.en
       return { userId: existing.id, created: false, linked: true };
     }
     if (!verified) throw new GoogleAuthError('google_email_unverified', 'Google 계정의 이메일이 인증되지 않았습니다.', 403);
+    // B9: a new account needs 이용약관 + 개인정보 수집·이용 consent, given on the signup page before leaving for Google.
+    if (!row.consent) { const e = new GoogleAuthError('consent_required', '이용약관과 개인정보 수집·이용에 동의한 뒤 Google로 가입해 주세요.', 422); e.returnPath = returnPath; throw e; }
     const identity = { provider: 'GOOGLE', subject: sub, email, verified: true };
     let userId;
     if (row.intent === 'INVITE') userId = await createUser(db, { email, name, identity, emailVerifiedAt: new Date().toISOString() });   // the invitation decides the workspace
     else ({ userId } = await createDirectSignupUser(db, { email, name, identity, emailVerifiedAt: new Date().toISOString() }));
+    await recordConsent(db, userId, currentConsent());
     await writeAudit(db, { adminUserId: userId, action: 'USER_CREATED', targetType: 'USER', targetId: userId, metadata: { email, method: 'GOOGLE', intent: row.intent }, actorKind: 'USER' });
     return { userId, created: true, linked: false };
   });

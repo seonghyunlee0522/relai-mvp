@@ -28,7 +28,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
 
   const email = `p2-${Date.now()}@relai.test`;
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '홍길동', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id;
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
   /** A project already through 01 (approved) and in 02, with Charter 제외 범위 and 외부 연계 있음. */

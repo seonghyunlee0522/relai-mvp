@@ -10,7 +10,7 @@ const grant = (db, uid) => db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN'
 /** Signs up a service operator (system_role granted straight in the DB, exactly like scripts/grant-system-admin.js). */
 async function operator(db, client, email = 'ops@relai.io') {
   const c = client();
-  const s = await c('POST', '/api/auth/signup', { name: '운영자', email, password: 'passw0rd!' });
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email, password: 'passw0rd!' });
   await grant(db, s.json.user.id);
   await c('POST', '/api/auth/login', { email, password: 'passw0rd!' });   // re-login so req.user carries the new role
   return { c, uid: s.json.user.id, email };
@@ -49,7 +49,7 @@ test('users: list with aggregates (no N+1 inputs), pagination, search, status/ro
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
   const A = await setup(client, 'a@x.com', '김가나'); await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째 프로젝트' }));
-  for (let i = 0; i < 6; i++) await client()('POST', '/api/auth/signup', { name: `유저${i}`, email: `u${i}@x.com`, password: 'passw0rd!' });
+  for (let i = 0; i < 6; i++) await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: `유저${i}`, email: `u${i}@x.com`, password: 'passw0rd!' });
   const all = (await ops.c('GET', '/api/admin/users?size=100')).json;
   assert.equal(all.total, 8);                                                                  // ops + A + 6 (signup rate limit is 10/h per IP)
   const a = all.items.find((u) => u.email === 'a@x.com');
@@ -174,7 +174,7 @@ test('usage: aggregation + limit %, tiers (warn ≥80, attention ≥90), sorts; 
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
   const A = await setup(client, 'a@x.com', '김가나');                           // 1 project = 100 % of FREE (limit 1) → attention
-  const Bs = await client()('POST', '/api/auth/signup', { name: '박나다', email: 'b@x.com', password: 'passw0rd!' });   // no project → ok
+  const Bs = await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '박나다', email: 'b@x.com', password: 'passw0rd!' });   // no project → ok
   const Bw = Bs.json.workspaces[0].id;
   const u = (await ops.c('GET', '/api/admin/usage?sort=projects')).json;
   assert.equal(u.items[0].workspace_id, A.w); assert.equal(u.items[0].tier, 'attention'); assert.equal(u.items[0].max_pct, 100);
@@ -206,7 +206,7 @@ test('audit: pagination, filters (action, admin, target type), search by email /
   const ops = await operator(db, client);
   const ops2 = await operator(db, client, 'ops2@relai.io');
   const users = [];
-  for (let i = 0; i < 7; i++) { const s = await client()('POST', '/api/auth/signup', { name: `유저${i}`, email: `u${i}@x.com`, password: 'passw0rd!' }); users.push(s.json); }
+  for (let i = 0; i < 7; i++) { const s = await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: `유저${i}`, email: `u${i}@x.com`, password: 'passw0rd!' }); users.push(s.json); }
   for (const u of users) await ops.c('POST', `/api/admin/users/${u.user.id}/suspend`, { reason: `r${u.user.name}` });
   for (const u of users.slice(0, 3)) await ops2.c('POST', `/api/admin/users/${u.user.id}/reactivate`, {});
   await ops2.c('POST', `/api/admin/workspaces/${users[0].workspaces[0].id}/suspend`, {});

@@ -17,10 +17,45 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   page.on('pageerror', (e) => log('PAGEERROR', e.message));
   const api = async (method, path, body) => { const r = await page.request.fetch(BASE + path, { method, data: body, headers: { 'Content-Type': 'application/json' } }); let j = null; try { j = await r.json(); } catch {} return { status: r.status(), json: j }; };
 
+  // 0. B9 — signup consent + legal pages + business footer (own context, so the main flow below keeps its own session)
+  {
+    const lc = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'ko-KR' }); const lp = await lc.newPage();
+    lp.on('pageerror', (e) => log('PAGEERROR', e.message));
+    const noConsent = await lp.request.fetch(BASE + '/api/auth/signup', { method: 'POST', data: { name: '동의없음', email: `p1-nc-${Date.now()}@relai.test`, password: 'passw0rd!' }, headers: { 'Content-Type': 'application/json' } });
+    check('B9 API: signup without consent → 422 consent_required', noConsent.status() === 422 && (await noConsent.json()).error.code === 'consent_required', String(noConsent.status()));
+    await lp.goto(BASE + '/signup'); await lp.waitForSelector('#consent');
+    const foot = await lp.textContent('.legal-foot');
+    check('B9 signup footer: 상호 · 대표 · 사업자등록번호 · 주소 · 통신판매업 · 문의', ['릴레이(RELAI)', '이성현', '551-25-02019', '위례동로 135', '통신판매업 신고번호', '문의'].every((s) => foot.includes(s)), foot.replace(/\s+/g, ' ').slice(0, 160));
+    check('B9 signup: 이용약관 / 개인정보 links', Boolean(await lp.$('#consent a[href="/terms"]')) && Boolean(await lp.$('#consent a[href="/privacy"]')));
+    const ue = `p1-ui-${Date.now()}@relai.test`;
+    await lp.fill('#name', '동의테스트'); await lp.fill('#email', ue); await lp.fill('#password', 'passw0rd!');
+    await lp.click('button[type=submit]'); await lp.waitForTimeout(500);
+    check('B9 signup without consent stays on /signup with field errors', /\/signup/.test(lp.url()) && /이용약관에 동의/.test(await lp.textContent('.err[data-for="agree_terms"]')) && /개인정보 수집·이용에 동의/.test(await lp.textContent('.err[data-for="agree_privacy"]')));
+    await lp.check('#agree-all');
+    check('B9 전체 동의 checks both', (await lp.isChecked('[name="agree_terms"]')) && (await lp.isChecked('[name="agree_privacy"]')));
+    await lp.screenshot({ path: `${SHOTS}/b9-signup-consent.png` });
+    await lp.click('button[type=submit]'); await lp.waitForURL(/\/app/, { timeout: 8000 }).catch(() => {});
+    check('B9 signup with consent → /app', /\/app/.test(lp.url()), lp.url());
+    await lp.goto(BASE + '/app/settings'); await lp.waitForSelector('#profile', { timeout: 8000 }).catch(() => {});
+    check('B9 settings links 이용약관 / 개인정보처리방침', Boolean(await lp.$('#profile a[href="/terms"]')) && Boolean(await lp.$('#profile a[href="/privacy"]')));
+    await lc.close();
+    for (const width of [375, 1440]) {
+      const vc = await browser.newContext({ viewport: { width, height: 800 }, locale: 'ko-KR' }); const vp = await vc.newPage();
+      for (const path of ['/terms', '/privacy', '/', '/login']) {
+        const r = await vp.goto(BASE + path); await vp.waitForSelector('.legal-foot', { timeout: 8000 }).catch(() => {});
+        const t = await vp.textContent('.legal-foot').catch(() => '');
+        const sw = await vp.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        check(`B9 ${path} @${width}: 200, business footer, no horizontal scroll`, r.status() === 200 && t.includes('551-25-02019') && sw <= 1, `scroll+${sw}`);
+        if (path !== '/') await vp.screenshot({ path: `${SHOTS}/b9${path.replace('/', '-') || '-landing'}-${width}.png`, fullPage: path === '/login' });
+      }
+      await vc.close();
+    }
+  }
+
   // fresh owner, 0 projects
   const email = `p1-${Date.now()}@relai.test`;
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '홍길동', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id;
   // 1. tour: CREATE_PROJECT step highlighted → the real button is clickable (QA B1)
   await page.goto(BASE + '/app');

@@ -12,7 +12,7 @@ setEmailProvider(fakeEmailProvider());
 const google = fakeGoogleProvider(); setGoogleProvider(google);
 
 async function googleSignup(c, claims) {
-  const start = await c('GET', '/api/auth/google/start?intent=signup');
+  const start = await c('GET', '/api/auth/google/start?intent=signup&consent=1');
   const url = new URL(start.location, 'http://localhost');
   const code = google.issueCode({ email_verified: true, name: 'G User', ...claims, nonce: url.searchParams.get('nonce') });
   const cb = await c('GET', `/api/auth/google/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(url.searchParams.get('state'))}`);
@@ -95,7 +95,7 @@ test('account deletion: re-auth, blocked while sole OWNER with members, then ano
   // A is now the only member → deletion goes through and takes the workspace along
   r = await A.c('DELETE', '/api/me', { password: 'passw0rd!' }); assert.equal(r.status, 200); assert.deepEqual(r.json.workspaces_deleted.map((w) => w.id), [A.w]);
   // the same address can sign up again as a brand-new account
-  const again = await client()('POST', '/api/auth/signup', { name: '새사람', email: 'del@x.com', password: 'passw0rd!' }); assert.equal(again.status, 201); assert.notEqual(again.json.user.id, A.uid);
+  const again = await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '새사람', email: 'del@x.com', password: 'passw0rd!' }); assert.equal(again.status, 201); assert.notEqual(again.json.user.id, A.uid);
 });
 
 test('account deletion: refused for a running paid subscription; Google-only re-auth needs a recent sign-in', async () => {

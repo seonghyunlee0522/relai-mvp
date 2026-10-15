@@ -1300,3 +1300,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_weekly_reports_completion ON weekly_reports
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS closed_on date;                -- US-2: 프로젝트 종료일 (status = 'COMPLETED')
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS warranty_end_on date;          --       하자보수 종료일 (optional; default 종료일 + 12개월)
 ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS handover TEXT NOT NULL DEFAULT '{}';   -- US-3: 운영 인수 {receiver_user_id|receiver_stakeholder_id, date, by, by_name, at}
+
+/* ---------- Signup consent (B9, migration v40) ---------- */
+-- When the user agreed to 이용약관 / 개인정보 수집·이용 and to which version (public/app/shared/legal-info.js). NULL = signed up before v40.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_agreed_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_agreed_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_version TEXT;
+-- Google sign-in: consent given on the signup page before leaving for Google; a brand-new Google account needs it.
+ALTER TABLE auth_oauth_states ADD COLUMN IF NOT EXISTS consent boolean NOT NULL DEFAULT false;

@@ -4,17 +4,28 @@ import { navigate } from './core/router.js';
 import { state } from './core/state.js';
 import { showErrors } from './shared/dialogs.js';
 import { LIFECYCLE_PHASES } from './shared/lifecycle.js';
+import { CONSENT_PRIVACY_ROWS, legalFooterHtml } from './shared/legal-info.js';
 
 /** The 7 lifecycle phases (docs/lifecycle-v2.md); the auth side panels list these, never the retired 일정/실행/검수 names. */
 export const PHASES = LIFECYCLE_PHASES.map((p) => p.long);
 
 const ERRORS = { google_denied: 'Google 로그인이 취소되었습니다.', oauth_state_invalid: 'Google 로그인 세션이 유효하지 않습니다. 다시 시도해 주세요.', oauth_state_expired: 'Google 로그인 세션이 만료되었습니다. 다시 시도해 주세요.',
   google_not_configured: 'Google 로그인이 아직 설정되지 않았습니다.', google_email_unverified: 'Google 계정의 이메일이 인증되지 않아 로그인할 수 없습니다.', google_id_token_invalid: 'Google 인증에 실패했습니다. 다시 시도해 주세요.', google_nonce_mismatch: 'Google 인증에 실패했습니다. 다시 시도해 주세요.',
-  google_exchange_failed: 'Google 인증에 실패했습니다. 다시 시도해 주세요.', google_unavailable: 'Google에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.', google_profile_incomplete: 'Google 계정 정보(이메일)를 가져올 수 없습니다.', account_suspended: '정지된 계정입니다. 운영자에게 문의해 주세요.', invite_invalid: '초대 링크가 유효하지 않습니다. 초대한 분에게 새 링크를 요청해 주세요.', rate_limited: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.' };
+  google_exchange_failed: 'Google 인증에 실패했습니다. 다시 시도해 주세요.', google_unavailable: 'Google에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.', google_profile_incomplete: 'Google 계정 정보(이메일)를 가져올 수 없습니다.', account_suspended: '정지된 계정입니다. 운영자에게 문의해 주세요.', invite_invalid: '초대 링크가 유효하지 않습니다. 초대한 분에게 새 링크를 요청해 주세요.', consent_required: 'Google 계정으로 가입하려면 아래 이용약관과 개인정보 수집·이용에 동의한 뒤 다시 Google로 계속해 주세요.', rate_limited: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.' };
 
 /** Google button + divider, inserted under the password form on both pages (and the invite landing). */
 export const googleButton = (href, { label = 'Google로 계속하기', divider = true } = {}) => html`${raw(divider ? '<div class="auth__or" role="separator"><span>또는</span></div>' : '')}
   <a class="btn btn--secondary btn--lg btn--block btn--google" href="${href}" id="google-btn" data-google><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.5-4.1 7-10.2 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.6A14.5 14.5 0 0 1 9.7 24c0-1.6.3-3.1.8-4.6l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.7-2.1 15.6-5.7l-7.6-5.9c-2.1 1.4-4.8 2.3-8 2.3-6.3 0-11.6-4.1-13.5-9.9l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>${label}</a>`;
+
+/** B9: required consents on signup (이용약관 + 개인정보 수집·이용). The server refuses signup without both (422). */
+const consentBlock = () => html`<fieldset class="consent" id="consent"><legend class="sr-only">약관 동의</legend>
+  <label class="consent__all"><input type="checkbox" id="agree-all"> <b>전체 동의</b></label>
+  <div class="consent__row"><label><input type="checkbox" name="agree_terms" value="true" data-agree> <span class="req">[필수]</span> 이용약관 동의</label><a class="link" href="/terms" target="_blank" rel="noopener">보기</a></div>
+  <div class="err" data-for="agree_terms"></div>
+  <div class="consent__row"><label><input type="checkbox" name="agree_privacy" value="true" data-agree> <span class="req">[필수]</span> 개인정보 수집·이용 동의</label><a class="link" href="/privacy" target="_blank" rel="noopener">처리방침</a></div>
+  <details class="consent__d"><summary>수집·이용 내용 보기</summary><dl>${raw(CONSENT_PRIVACY_ROWS.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl></details>
+  <div class="err" data-for="agree_privacy"></div></fieldset>`;
+const consentErrors = (form) => ({ ...(form.agree_terms.checked ? {} : { agree_terms: '이용약관에 동의해 주세요.' }), ...(form.agree_privacy.checked ? {} : { agree_privacy: '개인정보 수집·이용에 동의해 주세요.' }) });
 
 /* Signup direction A — "가입하면 바로 보게 될 화면": a What's Next preview instead of a slogan. */
 const signupSide = () => html`<aside class="auth__side su-a">
@@ -72,11 +83,14 @@ export async function authPage(mode) {
         <div class="field"><label for="password">비밀번호 <span class="req">*</span></label>
           <input class="input" id="password" name="password" type="password" autocomplete="${isSignup ? 'new-password' : 'current-password'}">
           ${raw(isSignup ? '<div class="hint">영문과 숫자를 포함해 8자 이상</div>' : '<div class="hint"><a class="link" href="/forgot-password">비밀번호를 잊으셨나요?</a></div>')}<div class="err" data-for="password"></div></div>
+        ${raw(isSignup ? consentBlock() : '')}
         <button class="btn btn--primary btn--lg btn--block" type="submit">${isSignup ? (invite && !invite.invalid ? '가입하고 초대 수락하기' : '무료로 첫 프로젝트 시작하기') : '로그인'}</button>
       </form>
       ${raw(google.enabled ? googleButton(googleHref) : '')}
+      ${raw(google.enabled && !isSignup ? '<p class="hint auth__gnote">Google 계정으로 처음 이용하면 회원가입 화면에서 이용약관과 개인정보 수집·이용에 동의한 뒤 계속합니다.</p>' : '')}
       <p class="auth__alt">${isSignup ? '이미 계정이 있나요?' : '아직 계정이 없나요?'}
         <a class="link" href="${isSignup ? `/login${inviteToken ? `?next=${encodeURIComponent(`/invite/${inviteToken}`)}` : ''}` : `/signup${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`}">${isSignup ? '로그인' : '회원가입'}</a></p>
+      ${raw(legalFooterHtml())}
     </main>
     ${raw(isSignup ? signupSide() : html`<aside class="auth__side"><blockquote>
       <h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
@@ -85,6 +99,19 @@ export async function authPage(mode) {
     </blockquote></aside>`)}</div>`;
   const form = $('#f');
   $(isSignup ? '#name' : '#email').focus();
+  if (isSignup) {
+    const boxes = [...form.querySelectorAll('[data-agree]')]; const all = $('#agree-all');
+    const clear = () => boxes.forEach((b) => { if (b.checked) form.querySelector(`.err[data-for="${b.name}"]`).textContent = ''; });
+    all.onchange = () => { boxes.forEach((b) => { b.checked = all.checked; }); clear(); };
+    boxes.forEach((b) => { b.onchange = () => { all.checked = boxes.every((x) => x.checked); clear(); }; });
+    // Google: the same consent before leaving for Google; the server only creates a new account when consent=1 came back.
+    const g = $('#google-btn');
+    if (g) g.addEventListener('click', (e) => {
+      const errs = consentErrors(form);
+      if (Object.keys(errs).length) { e.preventDefault(); showErrors(form, errs, 'Google로 계속하려면 이용약관과 개인정보 수집·이용에 동의해 주세요.'); $('#consent').scrollIntoView({ block: 'center' }); return; }
+      g.href = `${googleHref}&consent=1`;
+    });
+  }
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(form));
@@ -93,6 +120,7 @@ export async function authPage(mode) {
     if (isSignup && !d.name.trim()) local.name = '이름을 입력해 주세요.';
     if (!d.email.trim()) local.email = '이메일을 입력해 주세요.';
     if (!d.password) local.password = '비밀번호를 입력해 주세요.';
+    if (isSignup) Object.assign(local, consentErrors(form));
     if (isSignup && d.password && (d.password.length < 8 || !/[A-Za-z]/.test(d.password) || !/\d/.test(d.password))) local.password = '비밀번호는 영문과 숫자를 포함해 8자 이상이어야 합니다.';
     if (Object.keys(local).length) return showErrors(form, local);
     const btn = $('button[type=submit]', form); btn.disabled = true;
@@ -112,7 +140,7 @@ export async function authPage(mode) {
 /* ---------- account security: forgot / reset password, e-mail verification (work with or without a session) ---------- */
 const authCard = (title, sub, body) => html`<div class="auth"><main class="auth__form">
     <a class="logo" href="/">RELAI</a><h1>${title}</h1><p class="sub">${sub}</p>${raw(body)}
-    <p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p></main>
+    <p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p>${raw(legalFooterHtml())}</main>
   <aside class="auth__side"><blockquote><h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
     <p>RELAI가 프로젝트의 시작부터 종료까지 다음에 해야 할 일을 안내합니다.</p></blockquote></aside></div>`;
 const linkToken = () => { const t = new URLSearchParams(location.search).get('token') || ''; history.replaceState(null, '', location.pathname); return t; };   // keep the token out of history

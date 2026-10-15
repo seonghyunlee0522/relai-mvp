@@ -47,7 +47,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
 
   const email = `p5-${Date.now()}@relai.test`;
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '홍길동', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id; const me = s.json.user.id;
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
   const mkProject = async (name) => {

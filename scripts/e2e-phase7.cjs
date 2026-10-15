@@ -48,7 +48,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
 
   const email = `p7-${Date.now()}@relai.test`;
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '정하늘', email, password: 'passw0rd!' });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '정하늘', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id; const uid = s.json.user.id;
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
   const mkProject = async (name, extra = {}) => {

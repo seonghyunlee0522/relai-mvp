@@ -19,6 +19,9 @@ export async function createUser(db, { email, name, passwordHash = null, identit
   if (identity) await addIdentity(db, { userId: id, ...identity });
   return id;
 }
+/** Signup consent (B9): when the user agreed and to which version of /terms and /privacy. */
+export const recordConsent = (db, userId, { termsVersion, privacyVersion }) => db.run(
+  'UPDATE users SET terms_agreed_at = now(), terms_version = ?, privacy_agreed_at = now(), privacy_version = ? WHERE id = ?', [termsVersion, privacyVersion, userId]);
 export async function addIdentity(db, { userId, provider, subject, email = null, verified = false }) {
   const id = randomUUID();
   await db.run('INSERT INTO user_identities (id, user_id, provider, provider_subject, email, email_verified, last_used_at) VALUES (?,?,?,?,?,?,now())', [id, userId, provider, String(subject), email ? normEmail(email) : null, Boolean(verified)]);

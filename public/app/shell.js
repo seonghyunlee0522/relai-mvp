@@ -1,3 +1,4 @@
+import { LEGAL } from './shared/legal-info.js';
 import { api } from './core/api.js';
 import { isCurrent } from './core/router.js';
 import { $, html, raw, root } from './core/dom.js';
@@ -47,7 +48,7 @@ const globalNav = () => html`<a class="logo" href="/app" data-link><span class="
   </div>`;
 
 /** Compact in-app footer (§40): name + copyright + contact. The detailed business footer lives on the landing page only. */
-export const appFooter = () => html`<footer class="appfoot"><span>RELAI · © ${new Date().getFullYear()}</span><a href="mailto:enj.shlee@gmail.com">문의</a></footer>`;
+export const appFooter = () => html`<footer class="appfoot"><span>RELAI · © ${new Date().getFullYear()}</span><a href="/terms" target="_blank" rel="noopener">이용약관</a><a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a><a href="mailto:${LEGAL.contactEmail}">문의</a></footer>`;
 
 const wireSideButtons = () => {
   const lo = $('#logout'); if (lo) lo.onclick = async () => { try { await api('POST', '/api/auth/logout', {}); } finally { state.user = null; location.href = '/login'; } };

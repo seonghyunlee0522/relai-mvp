@@ -75,7 +75,7 @@ test('FREE limits: projects / requirements / WBS / weekly reports / members answ
   assert.equal((await A.c('POST', `${P}/weekly-reports/generate`, { period_start: '2026-10-05', period_end: '2026-10-11' })).status, 402);
   // members: 3 (owner + 2); direct add and invitation both refused at the limit
   await addMember(client, A, 'b@x.com', '박나다'); await addMember(client, A, 'c@x.com', '최다라');
-  await client()('POST', '/api/auth/signup', { name: '정라마', email: 'd@x.com', password: 'passw0rd!' });
+  await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '정라마', email: 'd@x.com', password: 'passw0rd!' });
   const m4 = await A.c('POST', `/api/workspaces/${A.w}/members`, { email: 'd@x.com', role: 'MEMBER' });
   assert.equal(m4.status, 402); assert.equal(m4.json.error.limit.dimension, 'members');
   await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // invites need a verified sender (auth hardening); the plan limit is what is tested here
@@ -183,7 +183,7 @@ test('admin console lights up from real billing rows: TEAM workspace, usage plan
   const A = await setup(client, 'a@x.com', '김가나');
   await setup(client, 'b@x.com', '박나다');
   await deliver(activate(provider, A.w));
-  const ops = client(); const s = await ops('POST', '/api/auth/signup', { name: '운영자', email: 'ops@relai.io', password: 'passw0rd!' });
+  const ops = client(); const s = await ops('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'ops@relai.io', password: 'passw0rd!' });
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]);
   const d = (await ops('GET', '/api/admin/dashboard')).json;
   assert.equal(d.billing.implemented, true); assert.equal(d.kpis.team_workspaces, 1); assert.equal(d.funnel_7d.paid, 1);

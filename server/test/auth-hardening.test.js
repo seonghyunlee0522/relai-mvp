@@ -109,7 +109,7 @@ test('e-mail verification: direct signup is unverified and cannot invite; link v
 
   // invitation signup: verified at creation, no verification mail
   const inviteT = (mail.last().text.match(/https:\/\/relai\.test\/invite\/([A-Za-z0-9_-]+)/) || [])[1];
-  const f = client(); r = await f('POST', '/api/auth/signup', { name: '친구', email: 'friend@x.com', password: 'passw0rd!', invite_token: inviteT });
+  const f = client(); r = await f('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '친구', email: 'friend@x.com', password: 'passw0rd!', invite_token: inviteT });
   assert.equal(r.status, 201); assert.equal(r.json.user.email_verified, true); assert.equal(mailsTo('friend@x.com', 'EMAIL_VERIFY').length, 0);
   server.close();
 });

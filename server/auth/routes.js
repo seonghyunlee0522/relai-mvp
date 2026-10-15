@@ -1,7 +1,7 @@
 /**
  * Phase 13 routes: Google sign-in, invitation landing/accept, workspace member invitations, admin platform invitations.
  *   GET  /api/auth/providers                         { google: { enabled } }
- *   GET  /api/auth/google/start?intent=&invite=&next=   → 302 Google consent (rate-limited per IP)
+ *   GET  /api/auth/google/start?intent=&invite=&next=&consent=1 → 302 Google consent (rate-limited per IP; consent=1 = 약관 동의, needed for a new account)
  *   GET  /api/auth/google/callback?code&state        → RELAI session + 302 return path
  *   GET  /api/invitations/:token                     public landing model (masked e-mail)
  *   POST /api/invitations/:token/accept              requireAuth; e-mail must match; explicit acceptance
@@ -69,7 +69,7 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
       if (!inv || inv.status !== 'PENDING') return res.redirect('/login?error=invite_invalid');
       intent = 'INVITE'; invitationId = inv.id; returnPath = `/invite/${String(req.query.invite)}`;
     }
-    try { const r = await startGoogleAuth(db, { intent, invitationId, returnPath, loginHint: req.query.login_hint ? String(req.query.login_hint).slice(0, 254) : null }); return res.redirect(r.url); }
+    try { const r = await startGoogleAuth(db, { intent, invitationId, returnPath, loginHint: req.query.login_hint ? String(req.query.login_hint).slice(0, 254) : null, consent: req.query.consent === '1' }); return res.redirect(r.url); }
     catch (e) { if (e instanceof GoogleAuthError) return res.redirect(`/login?error=${encodeURIComponent(e.code)}`); throw e; }
   }));
   app.get('/api/auth/google/callback', wrap(async (req, res) => {
@@ -77,7 +77,13 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
     if (error) return res.redirect('/login?error=google_denied');   // never echo code/state
     let r;
     try { r = await finishGoogleAuth(db, { state: String(state || ''), code: String(code || ''), tx }); }
-    catch (e) { if (e instanceof GoogleAuthError) return res.redirect(`/login?error=${encodeURIComponent(e.code)}`); throw e; }
+    catch (e) {
+      if (e instanceof GoogleAuthError && e.code === 'consent_required') {   // B9: new Google account without consent → signup page (keeps the invite)
+        const inv = /^\/invite\/([A-Za-z0-9_-]+)\/?$/.exec(e.returnPath || '');
+        return res.redirect(`/signup?error=consent_required${inv ? `&invite=${inv[1]}` : ''}`);
+      }
+      if (e instanceof GoogleAuthError) return res.redirect(`/login?error=${encodeURIComponent(e.code)}`); throw e;
+    }
     const user = await db.get('SELECT * FROM users WHERE id = ?', [r.userId]);
     if (!user || user.status !== 'ACTIVE') return res.redirect('/login?suspended=1');
     await afterLogin(req, res, user, 'GOOGLE');

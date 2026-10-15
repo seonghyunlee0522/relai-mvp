@@ -49,7 +49,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
 
   const email = `p4-${Date.now()}@relai.test`;
   await page.goto(BASE + '/login');
-  const s = await api('POST', '/api/auth/signup', { name: '홍길동', email, password: 'passw0rd!' });
+  const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '홍길동', email, password: 'passw0rd!' });
   const w = s.json.workspaces[0].id;
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
   const mkProject = async (name) => {
