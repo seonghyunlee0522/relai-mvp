@@ -951,7 +951,8 @@ window.relayEvents = [];
 function track(name, props){
   var d = Object.assign({event:name, ts:new Date().toISOString()}, base, props||{});
   window.relayEvents.push(d); window.dataLayer.push(d);
-  if (typeof window.gtag === 'function') window.gtag('event', name, d);
+  // GA4 (server/ga4.js) sends its own page_view; forwarding this one too would count every landing visit twice.
+  if (typeof window.gtag === 'function' && !(name === 'page_view' && window.RELAI_GA4)) window.gtag('event', name, d);
   console.log('[relay]', name, d);
 }
 window.relayTrack = track;

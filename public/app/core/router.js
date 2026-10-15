@@ -8,6 +8,9 @@ let navSeq = 0;
 export const navToken = () => navSeq;
 export const isCurrent = (token) => token === navSeq;
 export function replaceIfCurrent(token, path) { if (isCurrent(token)) history.replaceState(null, '', path); }
+/* GA4 (server/ga4.js) is only served on /login and /signup. The SPA moves on to /app with pushState, so switch the tag off for
+ * good as soon as the path leaves those pages: no in-app page_view ever reaches Google. */
+function gaGuard() { const id = window.RELAI_GA4; if (id && !['/login', '/signup'].includes(location.pathname)) window[`ga-disable-${id}`] = true; }
 export function navigate(path, { replace = false } = {}) {
   history[replace ? 'replaceState' : 'pushState'](null, '', path);
   render();
@@ -31,6 +34,7 @@ export let shellFn = null; let authFn = null; let inviteFn = null; let accountFn
 export function registerRoutes(list, { shell, auth, invite = null, account = {} }) { routes = list; shellFn = shell; authFn = auth; inviteFn = invite; accountFns = account; }
 export async function render() {
   const token = ++navSeq;
+  gaGuard();
   const path = location.pathname;
   if (/^\/(login|signup)\/?$/.test(path)) return authFn(path.startsWith('/signup') ? 'signup' : 'login');
   const acct = path.match(/^\/(forgot-password|reset-password|verify-email)\/?$/);   // account-security pages: with or without a session
