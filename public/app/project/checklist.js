@@ -14,7 +14,7 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { state } from '../core/state.js';
 import { goLiveDialog } from './golive.js';
 
-const PHASES = ['TRANSITION_GO_LIVE', 'OPERATIONS'];
+const PHASES = ['DEVELOPMENT', 'TRANSITION_GO_LIVE', 'OPERATIONS'];   // 04: 주요 의사결정 기록 (F6) is a decision log on this screen
 /** Activities of a phase that carry a checklist: manual ones the server pointed at this screen. */
 const listActs = (ph) => (ph.steps || []).filter((a) => a.checklist);
 const stCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? 'prog' : 'todo');
@@ -55,9 +55,16 @@ export async function checklistPage(id) {
       ${raw(cur === '__text' ? html`<input class="input clk__in" data-f="owner" value="${it.owner}" maxlength="100" placeholder="담당 (직접 입력)" ${dis} aria-label="담당 직접 입력">` : '')}</div>`;
   };
 
-  const itemRow = (it) => {
-    const overdue = !it.done && it.due_date && it.due_date < todayLocal();
+  const itemRow = (it, dec = false) => {
+    const overdue = !dec && !it.done && it.due_date && it.due_date < todayLocal();
     const dis = ro ? 'disabled' : '';
+    if (dec) return html`<tr class="clk__row" data-item="${it.id}">
+      <td><input class="input clk__in clk__date" type="date" data-f="due_date" value="${it.due_date || ''}" ${dis} aria-label="결정일"></td>
+      <td><input class="input clk__in" data-f="title" value="${it.title}" maxlength="200" ${dis} aria-label="결정 내용"></td>
+      <td>${raw(ownerCell(it, dis))}</td>
+      <td><input class="input clk__in" data-f="note" value="${it.note}" maxlength="2000" placeholder="메모" ${dis} aria-label="메모"></td>
+      <td class="clk__x">${raw(ro ? '' : html`<button type="button" class="link linkbtn clk__del" data-del="${it.id}" title="결정 삭제" aria-label="결정 삭제">✕</button>`)}</td>
+    </tr>`;
     return html`<tr class="clk__row ${it.done ? 'is-done' : ''}" data-item="${it.id}">
       <td class="clk__ck"><input type="checkbox" data-f="done" ${it.done ? 'checked' : ''} ${dis} aria-label="완료"></td>
       <td><input class="input clk__in" data-f="title" value="${it.title}" maxlength="200" ${dis} aria-label="항목"></td>
@@ -75,6 +82,7 @@ export async function checklistPage(id) {
     history.replaceState(null, '', `/app/projects/${id}/checklist?activity=${a.step_key}`);
     document.title = `${a.title} — ${p.name} — RELAI`;
     const items = r.items.filter((it) => it.step_id === a.id);
+    const dec = a.step_key === 'DECISIONS';   // F6: decision log — 결정일 · 결정 내용 · 결정자 · 메모, every row counts as recorded (done)
     const done = items.filter((it) => it.done).length;
     const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED;
     const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
@@ -95,13 +103,20 @@ export async function checklistPage(id) {
           <div class="clk__marks">${raw(marks)}</div>
         </header>
         <p class="clk__d">${a.description}</p>
-        <p class="clk__crit"><b>완료 기준</b> ${a.completion_criteria}${raw(items.length ? html` · <span class="clk__cnt">체크리스트 ${done}/${items.length} 완료</span>` : '')}</p>
+        <p class="clk__crit"><b>완료 기준</b> ${a.completion_criteria}${raw(items.length ? html` · <span class="clk__cnt">${dec ? `기록된 결정 ${items.length}건` : `체크리스트 ${done}/${items.length} 완료`}</span>` : '')}</p>
         ${raw(a.state === 'IN_PROGRESS' && a.text && !/^체크리스트/.test(a.text) ? html`<p class="clk__hint">${a.text}</p>` : '')}
-        ${raw(items.length ? html`<table class="clk__tbl"><thead><tr><th class="clk__ck" aria-label="완료"></th><th>항목</th><th class="clk__w-owner">담당</th><th class="clk__w-due">기한</th><th>메모</th><th class="clk__x"></th></tr></thead>
+        ${raw(dec ? (items.length ? html`<table class="clk__tbl" data-decisions><thead><tr><th class="clk__w-due">결정일</th><th>결정 내용</th><th class="clk__w-owner">결정자</th><th>메모</th><th class="clk__x"></th></tr></thead>
+          <tbody>${raw(items.map((it) => itemRow(it, true)).join(''))}</tbody></table>` : '<div class="clk__empty"><b>아직 기록된 의사결정이 없습니다.</b><p>프로젝트 방향에 영향을 준 결정을 결정일, 결정 내용, 결정자와 함께 남겨 두세요. 1건 이상 기록하면 이 업무가 완료로 표시됩니다.</p></div>')
+          : items.length ? html`<table class="clk__tbl"><thead><tr><th class="clk__ck" aria-label="완료"></th><th>항목</th><th class="clk__w-owner">담당</th><th class="clk__w-due">기한</th><th>메모</th><th class="clk__x"></th></tr></thead>
           <tbody>${raw(items.map(itemRow).join(''))}</tbody></table>`
           : html`<div class="clk__empty"><b>아직 체크리스트 항목이 없습니다.</b><p>항목을 추가하면 담당과 기한을 정하고 진행 상황을 기록할 수 있습니다. ${a.go_live ? "오픈은 '완료 처리'에서 오픈일과 남은 항목을 정해 기록합니다." : a.handover ? "운영 인수는 '인수 완료 처리'에서 인수자와 인수일을 정해 기록합니다." : '모든 항목을 완료하면 이 업무가 완료로 표시됩니다.'}</p>
             ${raw(ro ? '' : '<button type="button" class="btn btn--secondary btn--sm" data-defaults>기본 항목으로 시작</button>')}</div>`)}
-        ${raw(ro ? '' : html`<form class="clk__add" data-add autocomplete="off">
+        ${raw(ro ? '' : dec ? html`<form class="clk__add" data-add data-dec autocomplete="off">
+          <input class="input clk__w-due" type="date" name="due_date" value="${todayLocal()}" aria-label="결정일">
+          <input class="input" name="title" maxlength="200" placeholder="결정 내용" aria-label="결정 내용" required>
+          <span class="clk__w-owner clk__own"><select class="select" name="owner_ref" aria-label="결정자" data-add-own>${raw(ownerOpts(''))}</select><input class="input" name="owner" maxlength="100" placeholder="결정자 (직접 입력)" aria-label="결정자 직접 입력" hidden></span>
+          <input class="input" name="note" maxlength="2000" placeholder="메모" aria-label="메모">
+          <button type="submit" class="btn btn--secondary btn--sm">+ 결정 기록</button></form>` : html`<form class="clk__add" data-add autocomplete="off">
           <input class="input" name="title" maxlength="200" placeholder="새 항목" aria-label="새 항목" required>
           <span class="clk__w-owner clk__own"><select class="select" name="owner_ref" aria-label="담당" data-add-own>${raw(ownerOpts(''))}</select><input class="input" name="owner" maxlength="100" placeholder="담당 (직접 입력)" aria-label="담당 직접 입력" hidden></span>
           <input class="input clk__w-due" type="date" name="due_date" aria-label="기한">
@@ -145,7 +160,7 @@ export async function checklistPage(id) {
     if (add) add.onsubmit = (e) => { e.preventDefault(); const fd = new FormData(add); const btn = add.querySelector('button');
       const ref = fd.get('owner_ref') || ''; const ownerBody = ref === '__text' ? { owner: fd.get('owner') || '' } : ref ? { owner_ref: ref } : {};
       run(btn, async () => {
-        await api('POST', wsApi(`/${id}/steps/${a.id}/checklist`), { title: fd.get('title'), ...ownerBody, due_date: fd.get('due_date') || null });
+        await api('POST', wsApi(`/${id}/steps/${a.id}/checklist`), { title: fd.get('title'), ...ownerBody, due_date: fd.get('due_date') || null, ...(add.dataset.dec !== undefined ? { done: true, note: fd.get('note') || '' } : {}) });
         await reload(); const t = main.querySelector('[data-add] [name=title]'); if (t) t.focus();
       }); };
     const defs = main.querySelector('[data-defaults]');

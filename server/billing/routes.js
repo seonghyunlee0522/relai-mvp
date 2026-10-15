@@ -16,7 +16,7 @@ import { workspaceUsage } from '../usage.js';
 import { writeAudit } from '../admin.js';
 import { emailConfig } from '../email/config.js';
 import { requireVerifiedEmail } from '../auth/account-security.js';
-import { BillingError } from './provider.js';
+import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE } from './provider.js';
 import { parseCard, safeEqual } from './nicepay.js';
 import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, foundingEligible, minUsers, MAX_USERS, publicOrder } from './orders.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
@@ -122,15 +122,16 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   const unavailable = (res) => fail(res, 503, 'billing_unavailable', '결제 기능이 아직 준비되지 않았습니다. 운영자에게 문의해 주세요.');
   const orderFail = (res, e) => fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {});
 
+  const paymentsOff = (res) => fail(res, 409, 'payments_disabled', PAYMENTS_OFF_MESSAGE);
   const summary = async (wid, role) => {
     const plan = await effectivePlan(db, wid);
     const subscription = (await getSubscription(db, wid)) || null;
     // One-time purchases can be extended at any time; a renewing (recurring) subscription cannot be bought twice.
     // Early access: TEAM checkout is hidden (code kept) — the app is free and AI is paid with credit packs.
-    const canPurchase = plan !== 'EARLY' && (plan === 'FREE' || (subscription && !subscription.auto_renew));
+    const canPurchase = paymentsEnabled() && plan !== 'EARLY' && (plan === 'FREE' || (subscription && !subscription.auto_renew));
     const early = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
     return { billing: { plan, plan_label: PLANS[plan].label, subscription, early_access_until: early?.early_access_until || null, usage: await workspaceUsage(db, wid, plan),
-      plans: catalogue(), dims: USAGE_DIMS, provider_available: Boolean(provider), can_manage: can(role, 'billing'),
+      plans: catalogue(), dims: USAGE_DIMS, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
       checkout: { can_purchase: Boolean(canPurchase), cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
         base_monthly: PLANS.TEAM.base_monthly, included_users: PLANS.TEAM.included_users, extra_user_monthly: PLANS.TEAM.extra_user_monthly,
         min_users: await minUsers(db, wid), max_users: MAX_USERS, founding_eligible: await foundingEligible(db, wid), founding: FOUNDING_OFFER, vat_rate: VAT_RATE, prices_exclude_vat: true,
@@ -145,6 +146,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
 
   /** Shared checkout validation: TEAM only, purchasable, provider present. Returns the quote or null after answering. */
   const prepare = async (req, res) => {
+    if (!paymentsEnabled()) { paymentsOff(res); return null; }
     const plan = String(req.body?.plan || 'TEAM');
     if (plan !== 'TEAM') { fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { plan: PLANS[plan]?.contact_sales ? 'Enterprise는 영업 문의로 계약합니다.' : '선택할 수 없는 플랜입니다.' } }); return null; }
     if (!provider) { unavailable(res); return null; }

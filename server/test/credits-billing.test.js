@@ -3,6 +3,7 @@
  * pack purchase through the signed webhook (replay, tamper, 403), the customer dashboard + CSV, the low-balance e-mail, operator refund. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+process.env.PAYMENTS_ENABLED ??= 'true';   // v1 ships with payments off (PAYMENTS_ENABLED); this suite exercises checkout
 import { testDb } from './helpers.js';
 import { createApp } from '../app.js';
 import { addMember } from './api-helpers.js';

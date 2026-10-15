@@ -2,6 +2,7 @@
  * B8 anonymous session probe without a 401, B10 the client contract behind disabling 결제하기/멤버 초대 for unverified users. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+process.env.PAYMENTS_ENABLED ??= 'true';   // v1 ships with payments off (PAYMENTS_ENABLED); this suite exercises checkout
 import { boot, setup } from './api-helpers.js';
 import { setEmailProvider } from '../email/service.js';
 import { fakeEmailProvider } from '../email/provider.js';

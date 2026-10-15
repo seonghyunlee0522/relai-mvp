@@ -2,6 +2,7 @@
  * against a stubbed NicePay API (injected fetch). Nothing here reaches NicePay. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+process.env.PAYMENTS_ENABLED ??= 'true';   // v1 ships with payments off (PAYMENTS_ENABLED); this suite exercises checkout
 import { createHash, createDecipheriv } from 'node:crypto';
 import { testDb } from './helpers.js';
 import { createApp } from '../app.js';

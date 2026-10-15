@@ -16,6 +16,7 @@ import { todayKst } from '../public/app/shared/kst-date.js';
 import { updateStep } from './guide.js';
 import { ensureRow } from './definition.js';
 import { goLiveOf } from './golive.js';
+import { LEAF_SQL } from './wbs.js';
 
 const now = () => new Date().toISOString();
 const parse = (v) => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
@@ -128,6 +129,13 @@ export async function recordHandover(db, project, body = {}, userId) {
 
 /** 07 필수 업무 (HANDOVER · CLOSE …) all done — the only state in which 프로젝트 종료 is allowed. `ops` = the resolved 07 phase from loadGuide. */
 export const closeGateMet = (ops) => Boolean(ops && ops.summary && ops.summary.gate_met);
+
+/** F5: WBS work still open at 종료 (leaf tasks + milestones not 완료) — the close dialog warns with the count, never blocks. */
+export async function openWbs(db, projectId) {
+  const r = await db.get(`SELECT COALESCE(SUM((w.item_type = 'TASK')::int), 0) AS tasks, COALESCE(SUM((w.item_type = 'MILESTONE')::int), 0) AS milestones FROM wbs_items w
+    WHERE w.project_id = ? AND w.archived_at IS NULL AND w.status <> 'COMPLETED' AND (w.item_type = 'MILESTONE' OR (w.item_type = 'TASK' AND ${LEAF_SQL('w')}))`, [projectId]);
+  return { tasks: Number(r.tasks), milestones: Number(r.milestones) };
+}
 
 export async function closeProject(db, project, body = {}, userId, ops) {
   const b = body && typeof body === 'object' ? body : {};

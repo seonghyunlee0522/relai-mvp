@@ -156,7 +156,7 @@ function development(key, ctx) {
         : ok(`변경 요청 ${c.total}건이 모두 처리되었습니다.`, act('변경 요청 보기 →', cu()));
     }
     case 'WEEKLY_REPORT': return weeklyReport(ctx);
-    case 'DECISIONS': return manual('프로젝트 방향에 영향을 주는 결정을 메모로 기록합니다.');
+    case 'DECISIONS': return manual('결정일, 결정 내용, 결정자를 기록합니다. 1건 이상 기록하면 완료로 표시됩니다.', cl(ctx, 'DECISIONS', '의사결정 기록 →'));
     default: return manual('');
   }
 }

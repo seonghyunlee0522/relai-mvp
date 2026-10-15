@@ -18,6 +18,11 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createNicepayProvider } from './nicepay.js';
 
+/** Payments are out of v1 (founder): PAYMENTS_ENABLED=true turns credit-pack and plan checkout on; anything else keeps them off.
+ *  Read per call so tests and a redeploy can flip it. Starter credits, the dashboard and the ledger never depend on it. */
+export const paymentsEnabled = () => /^(1|true|yes|on)$/i.test(String(process.env.PAYMENTS_ENABLED || '').trim());
+export const PAYMENTS_OFF_MESSAGE = '초기 고객은 무료로 이용합니다. 지금은 결제를 받지 않습니다.';
+
 export class BillingError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
 }

@@ -102,7 +102,7 @@ export function closeDialog(pid, g) {
   return new Promise((resolve) => {
     const today = todayKst(); let closed = today; let warranty = addMonths(today, 12); let wTouched = false;
     const carry = (g.go_live && g.go_live.carryovers) || []; const assigned = carry.filter((c) => c.owner_ref && c.owner_ref !== 'TBD').length;
-    const ready = closeReady(g);
+    const ready = closeReady(g); const openWbs = g.open_wbs || { tasks: 0, milestones: 0 };   // F5: warn, never block
     const start = String((g.project && g.project.planned_start_date) || '').slice(0, 10); const glDate = (g.go_live && g.go_live.date) || '';
     const floor = glDate ? { date: glDate, label: '오픈일' } : start && start <= today ? { date: start, label: '프로젝트 시작일' } : null;   // Q16-3 (same rule as server closing.js)
     const dateErr = (d) => (d > today ? '종료일은 오늘 이후 날짜로 정할 수 없습니다.' : floor && d && d < floor.date ? `종료일은 ${floor.label}(${floor.date})보다 앞설 수 없습니다.` : '');
@@ -114,6 +114,7 @@ export function closeDialog(pid, g) {
         <div class="field"><label for="cl-d">종료일 <span class="req">*</span></label><input class="input input--sm gl__date" type="date" id="cl-d" value="${closed}" ${floor ? raw(`min="${floor.date}"`) : ''} max="${today}" required><div class="err" data-cl-err="closed_on"></div></div>
         <div class="field"><label for="cl-w">하자보수 종료일 ${raw(term('warranty'))}</label><input class="input input--sm gl__date" type="date" id="cl-w" value="${warranty}"><small class="hint">기본: 종료일 + 12개월</small><div class="err" data-cl-err="warranty_end_on"></div></div>
         ${raw(carry.length ? html`<p class="cl__carry">남은 운영 이관 ${carry.length}건 (담당 지정 ${assigned}건)</p>` : '')}
+        ${raw(openWbs.tasks || openWbs.milestones ? html`<p class="gl__warn" data-cl-open><i class="st st--warn" aria-hidden="true">!</i>WBS에 아직 완료되지 않은 ${[openWbs.tasks ? `작업 ${openWbs.tasks}건` : '', openWbs.milestones ? `마일스톤 ${openWbs.milestones}건` : ''].filter(Boolean).join(' · ')}이 있습니다. 그대로 종료할 수도 있습니다. <a class="link" href="/app/projects/${pid}/wbs?f=open" data-cl-wbs>WBS에서 확인 →</a></p>` : '')}
         ${raw(ready ? '' : '<p class="gl__warn"><i class="st st--warn" aria-hidden="true">!</i>07 필수 업무(운영 이관 / 인수인계 · 프로젝트 종료 정리)를 마치면 종료할 수 있습니다.</p>')}
         <div class="err" data-cl-err="form"></div>
       </div>
@@ -123,6 +124,7 @@ export function closeDialog(pid, g) {
     $('#cl-d', el).oninput = (e) => { closed = e.target.value; $('[data-cl-err="closed_on"]', el).textContent = dateErr(closed); if (!wTouched && /^\d{4}-\d{2}-\d{2}$/.test(closed)) { warranty = addMonths(closed, 12); $('#cl-w', el).value = warranty; } };
     $('#cl-w', el).oninput = (e) => { wTouched = true; warranty = e.target.value; };
     $('[data-cl-later]', el).onclick = () => done(null);
+    const ow = $('[data-cl-wbs]', el); if (ow) ow.onclick = (e) => { e.preventDefault(); done(null); navigate(`/app/projects/${pid}/wbs?f=open`); };
     el.querySelector('form').onsubmit = async (e) => {
       e.preventDefault(); const ok = $('[data-cl-ok]', el); if (ok.disabled) return;
       if (!closed) { $('[data-cl-err="closed_on"]', el).textContent = '종료일을 입력하세요.'; return; }

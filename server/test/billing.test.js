@@ -1,6 +1,7 @@
 /* Phase 10 Billing: FREE plan limits on the product API (402), subscription webhooks (idempotent, signed), checkout/cancel, admin views. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+process.env.PAYMENTS_ENABLED ??= 'true';   // v1 ships with payments off (PAYMENTS_ENABLED); this suite exercises checkout
 import { testDb } from './helpers.js';
 import { createApp } from '../app.js';
 import { setup, addMember, project } from './api-helpers.js';

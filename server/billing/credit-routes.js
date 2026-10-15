@@ -20,7 +20,7 @@ import { getBalance, balanceSplit } from '../ai/credits.js';
 import { effectivePlan } from './subscriptions.js';
 import { OrderError, publicOrder } from './orders.js';
 import { createPackOrder, refundableCredits, refundQuoteFor, refundCredits } from './credit-packs.js';
-import { BillingError } from './provider.js';
+import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE } from './provider.js';
 
 const TZ = () => process.env.APP_TIMEZONE || 'Asia/Seoul';
 const CHARGED = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA'];
@@ -57,7 +57,7 @@ export async function creditSummary(db, wid, { role = null, provider = null } = 
     prices: CHARGED.map((f) => ({ feature: f, label: shortLabel(f), credits: featureCreditCost(f), krw: won(featureCreditCost(f)) })),
     packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount, ...splitVat(p.amount) })),
     starter_credits: aiConfig().trialCredits, purchased_valid_years: PURCHASED_VALID_YEARS, refund_policy: { full_days: REFUND_FULL_DAYS, fee_pct: REFUND_FEE_PCT },
-    can_buy: owner, ai_enabled: aiConfig().enabled, provider_available: Boolean(provider), sandbox: provider?.mode === 'sandbox', refundable: owner ? await refundableCredits(db, wid) : null,
+    can_buy: owner, ai_enabled: aiConfig().enabled, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), sandbox: provider?.mode === 'sandbox', refundable: owner ? await refundableCredits(db, wid) : null,
     plan, plan_label: PLANS[plan].label, early_access_until: w?.early_access_until || null,
   };
 }
@@ -126,6 +126,7 @@ export function mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, pro
   }));
 
   app.post(`${c}/checkout`, payer, wrap(async (req, res) => {
+    if (!paymentsEnabled()) return fail(res, 409, 'payments_disabled', PAYMENTS_OFF_MESSAGE);
     if (!provider) return fail(res, 503, 'billing_unavailable', '결제 기능이 아직 준비되지 않았습니다. 운영자에게 문의해 주세요.');
     // AI off server-side (no provider key / AI_ENABLED=false): credits could not be spent, so no pack is sold.
     if (!aiConfig().enabled) return fail(res, 409, 'ai_disabled', 'AI 기능 준비 중에는 크레딧을 충전할 수 없습니다.');

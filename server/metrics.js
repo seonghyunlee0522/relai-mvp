@@ -11,6 +11,7 @@ import * as X from './raid.js';
 import * as Q from './testing.js';
 import { projectHealth } from './health.js';
 import { LEAF_SQL } from './wbs.js';
+import { milestoneEvents, milestoneKind } from './milestone-sync.js';
 
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
@@ -105,7 +106,15 @@ export async function upcomingDates(db, projectId, { days = 7, limit = 20, from 
   ];
   for (const _ of parts) { args.push(projectId); bind(); }
   const HREF = { WBS: (r) => `wbs?sel=${r.id}`, ISSUE: (r) => `issues?sel=${r.id}`, RISK: (r) => `issues?tab=risks&sel=${r.id}`, ACCEPTANCE: (r) => `tests?tab=acceptance&sel=${r.id}`, DEFINITION: () => 'definition#sec-MILESTONES', PROJECT: () => 'edit' };
-  return (await db.all(`SELECT * FROM (${parts.map((p) => p[0]).join(' UNION ALL ')}) up ORDER BY date, type, display_id LIMIT ?`, [...args, limit])).map((r) => ({ ...r, href: HREF[r.type](r) }));
+  const rows = await db.all(`SELECT * FROM (${parts.map((p) => p[0]).join(' UNION ALL ')}) up ORDER BY date, type, display_id LIMIT ?`, [...args, limit]);
+  // F3: a 01 주요 일정 is not upcoming once it is a WBS milestone (that row speaks for it) or its event already happened (착수보고회 held …)
+  const kd = rows.filter((r) => r.kind === 'KEY_DATE'); let drop = new Set();
+  if (kd.length) {
+    const ms = new Set((await db.all(`SELECT title FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'MILESTONE'`, [projectId])).map((m) => m.title));
+    const ev = await milestoneEvents(db, projectId);
+    drop = new Set(kd.filter((r) => ms.has(r.title) || ev[milestoneKind(r.title)]));
+  }
+  return rows.filter((r) => !drop.has(r)).map((r) => ({ ...r, href: HREF[r.type](r) }));
 }
 
 /** Everything Phase 9 needs in one call. */

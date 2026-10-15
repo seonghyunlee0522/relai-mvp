@@ -26,8 +26,9 @@ export async function creditsPage(main = $('#main')) {
   await loadLedger();
 
   const starterUses = () => { const p = Object.fromEntries(s.prices.map((x) => [x.feature, x.credits])); return `요구사항 추출 ${Math.floor(s.starter_credits / p.REQUIREMENT_EXTRACTION)}회 또는 질문 ${Math.floor(s.starter_credits / p.PROJECT_QA)}회`; };
-  const canTopUp = () => s.can_buy && s.ai_enabled !== false;   // AI off server-side → no pack is sold (checkout 409 ai_disabled)
-  const head = () => html`<div class="page__head"><div><a class="link" href="/app/settings" data-link>← 설정</a><h1 style="margin-top:4px">AI 크레딧</h1>${raw(s.can_buy ? pcLine('충전과 환불 요청은 PC에서 할 수 있습니다') : '')}</div>
+  const payOff = () => s.payments_enabled === false;   // v1: payments off (PAYMENTS_ENABLED) → no pack is sold, no 충전 anywhere (checkout 409 payments_disabled)
+  const canTopUp = () => s.can_buy && s.ai_enabled !== false && !payOff();   // AI off server-side → no pack is sold (checkout 409 ai_disabled)
+  const head = () => html`<div class="page__head"><div><a class="link" href="/app/settings" data-link>← 설정</a><h1 style="margin-top:4px">AI 크레딧</h1>${raw(s.can_buy && !payOff() ? pcLine('충전과 환불 요청은 PC에서 할 수 있습니다') : '')}</div>
     ${raw(canTopUp() && !isPhone() ? '<a class="btn btn--primary" href="#cr-buy" id="cr-buy-top">크레딧 충전</a>' : '')}</div>`;
   const summary = () => {
     const tm = s.this_month; const lm = s.last_month;
@@ -80,7 +81,7 @@ export async function creditsPage(main = $('#main')) {
   const draw = () => {
     main.innerHTML = html`<div class="page page--narrow page--credits">${raw(head())}
       ${raw(s.plan === 'EARLY' ? html`<p class="cr-early"><b>얼리 액세스</b> · ${day(s.early_access_until)}까지 RELAI 전체 기능 무료 — AI는 쓴 만큼만 크레딧으로 냅니다.</p>` : '')}
-      ${raw(summary())}${raw(buy())}${raw(prices())}${raw(log())}</div>`;
+      ${raw(summary())}${raw(payOff() ? '' : buy())}${raw(prices())}${raw(log())}</div>`;
     main.querySelectorAll('[data-pack]').forEach((b) => b.onclick = async () => {
       if (state.user?.email_verified === false) return toast('이메일 인증 후 충전할 수 있습니다.');
       b.disabled = true;

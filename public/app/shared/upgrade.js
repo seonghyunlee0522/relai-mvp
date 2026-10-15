@@ -13,7 +13,8 @@ const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
 /** Team price line from the billing summary, or '' when it cannot be loaded. */
 async function teamPrice() {
   try {
-    const co = (await api('GET', `/api/workspaces/${state.workspace.id}/billing`)).billing?.checkout;
+    const b = (await api('GET', `/api/workspaces/${state.workspace.id}/billing`)).billing; const co = b?.checkout;
+    if (b?.payments_enabled === false) return null;   // v1: payments off → no upgrade offer
     return co?.base_monthly ? `Team: ${won(co.base_monthly)}/월 · Workspace 1개(소유자 포함) · 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월 (부가세 별도)` : '';
   } catch { return ''; }
 }
@@ -21,12 +22,16 @@ export async function showUpgradePrompt(err) {
   if (open) return; open = true;
   try {
     const l = err?.limit || {};
+    const price = state.workspace?.id ? await teamPrice() : '';
+    if (price === null) {   // payments off (v1): say what the limit is; no plan purchase / upgrade button
+      await noticeDialog({ title: l.seats ? '구매한 사용자 수에 도달했습니다' : 'Free 플랜 한도에 도달했습니다', bodyHtml: html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}<p class="dim" style="margin-top:8px">초기 고객은 무료로 이용합니다. 한도 조정이 필요하면 운영자에게 문의해 주세요.</p>` });
+      return;
+    }
     if (isPhone()) {   // phone = view mode: the limit + where to pay, and 닫기 only
       await noticeDialog({ title: l.seats ? '구매한 사용자 수에 도달했습니다' : 'Free 플랜 한도에 도달했습니다', bodyHtml: html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}<p style="margin-top:8px" data-pay-pc>결제는 PC에서 할 수 있습니다</p>` });
       return;
     }
     const isOwner = state.workspace?.role === 'OWNER';
-    const price = state.workspace?.id ? await teamPrice() : '';
     const body = html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>
       ${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}
       <p class="dim" style="margin-top:8px">${isOwner ? 'Team 플랜은 프로젝트·요구사항·WBS·주간보고 한도가 없고, 멤버는 구매한 사용자 수만큼 초대할 수 있습니다. 기존 데이터는 그대로 유지됩니다.' : '업그레이드는 Workspace OWNER가 할 수 있습니다. OWNER에게 Team 플랜 전환을 요청하세요.'}</p>

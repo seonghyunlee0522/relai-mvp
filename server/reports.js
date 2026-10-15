@@ -197,7 +197,7 @@ export function sectionsFromData(d) {
   const apl = Object.entries(ap).map(([k, v]) => `${ACC_STATUS[k] || k} ${v}`); if (apl.length) tl.push(`- 기간 내 검수 상태 변경: ${apl.join(', ')}`);
   out.test_acceptance = tl.join('\n');
   out.decisions = d.attention_items.length ? d.attention_items.map((a) => `- [${TYPE_KO[a.type] || a.type}] ${a.display_id} ${a.title} — ${a.meta}`).join('\n') : '- 확인 및 의사결정이 필요한 항목이 없습니다.';
-  out.next_week = d.next_week_plan.length ? d.next_week_plan.map((u) => `- ${md(u.date)} ${u.label}: ${u.display_id} ${u.title}`).join('\n') : '- 차주 예정된 일정(WBS 시작/종료, 마일스톤, 리스크 검토, 검수 기한)이 없습니다.';
+  out.next_week = d.next_week_plan.length ? d.next_week_plan.map((u) => `- ${md(u.date)} ${u.label}: ${[u.display_id, u.title].filter(Boolean).join(' ')}`).join('\n') : '- 차주 예정된 일정(WBS 시작/종료, 마일스톤, 리스크 검토, 검수 기한)이 없습니다.';
   return SECTIONS.map(([key, title]) => ({ key, title, body: out[key] }));
 }
 

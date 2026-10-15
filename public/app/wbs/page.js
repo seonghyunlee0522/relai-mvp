@@ -64,7 +64,7 @@ export async function wbsPage(id) {
   const collapsed = new Set(); const gx = { px: 16, mode: 'fit', left: 0, start: null }; // Gantt viewport: mode = fit | today | keep
   const view = () => (!onPhone() && params().get('view') === 'gantt' ? 'gantt' : 'list');   // phone: no Gantt (spec §4 — list + one line)
   const quick = () => params().get('f') || '';
-  const QUICK_LABEL = { no_owner: '담당자 미지정 작업', no_dates: '일정 미설정 작업', linked: '요구사항 연결됨', unlinked: '요구사항 미연결 작업', overdue: '지연 작업', over_end: '종료일 초과 작업' };
+  const QUICK_LABEL = { no_owner: '담당자 미지정 작업', no_dates: '일정 미설정 작업', linked: '요구사항 연결됨', unlinked: '요구사항 미연결 작업', overdue: '지연 작업', over_end: '종료일 초과 작업', open: '미완료 작업·마일스톤' };
   /* Phase 3 US-1: one owner value for both kinds — 'u:<user>' (RELAI 사용자) · 's:<stakeholder>' (팀원, 계정 없음) · '' (미지정) */
   const ownerKey = OP.ownerKey;
   const hasOwner = (it) => Boolean(it.owner_user_id || (it.owner_stakeholder_id && !it.owner_deleted));
@@ -94,6 +94,7 @@ export async function wbsPage(id) {
         let hit = !f || (f === 'linked' ? it.linked_req_count > 0
           : f === 'overdue' ? isOverdue(it)
           : f === 'over_end' ? Boolean(it.past_end)
+          : f === 'open' ? (isLeafTask(it) || it.item_type === 'MILESTONE') && it.status !== 'COMPLETED'
           : isLeafTask(it) && (f === 'no_owner' ? !hasOwner(it) : f === 'no_dates' ? (!it.planned_start_date || !it.planned_end_date) : f === 'unlinked' ? it.linked_req_count === 0 : true));
         if (q && !(it.title.toLowerCase().includes(q) || it.wbs_code.toLowerCase().startsWith(q))) hit = false;
         if (owner && (owner === 'none' ? hasOwner(it) : ownerKey(it) !== (owner.includes(':') ? owner : `u:${owner}`))) hit = false;
@@ -194,7 +195,7 @@ export async function wbsPage(id) {
       ...periodCol(), { key: 'start', label: '계획 시작', width: 118, hidden: desk, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
       { key: 'end', label: '계획 종료', width: 118, hidden: desk, edit: { type: 'date', field: 'planned_end_date', cls: (r) => (r.past_end ? 'cell--past' : r.computed_status === 'DELAYED' ? 'cell--late' : ''), title: (r) => (r.past_end ? PAST_END() : ''), prefix: (r) => (r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : ''), value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date), after: shiftLine }, render: (r) => (r._ghost ? '' : (r.item_type === 'MILESTONE' ? dateCell(r.milestone_date, false, r.past_end) : dateCell(r.planned_end, r.rollup, r.past_end)) + shiftLine(r)) },   // US-3: past the project end → warn colour + !, never red
       { key: 'astart', label: '실적 시작', width: 118, hidden: true, edit: { type: 'date', field: 'actual_start_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_start, r.rollup)) },
-      { key: 'aend', label: '실적 종료', width: 118, hidden: true, edit: { type: 'date', field: 'actual_end_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_end, r.rollup)) },
+      { key: 'aend', label: '실적 종료', width: 118, hidden: true, edit: { type: 'date', field: 'actual_end_date' }, render: (r) => (r._ghost ? '' : dateCell(r.actual_end, r.rollup)) },
       { key: 'progress', label: '진행률', width: desk ? 112 : 126, card: false, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress, display: (r) => progCell(r) },
         render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : progCell(r)) },
       { key: 'owner', label: '담당자', width: desk ? 140 : 176, edit: { type: 'select', field: 'owner', options: (r) => ownerChoices(ownerKey(r), true), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: noAcct },

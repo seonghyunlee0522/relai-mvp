@@ -398,6 +398,20 @@ export async function createWbs(db, project, input, userId, { skipRenumber = fal
 }
 
 /** opts.delayReason: US-1 reason for pushing a started / already-late item's end date later (422 delay_reason_required without it). */
+/** F4: 실적 시작 = the day a task first leaves 예정 (or gets progress > 0); 실적 종료 = the day it reaches 완료 / 100% (cleared when it is reopened).
+ *  Only fills what the caller left untouched and the item does not already have — dates typed in the drawer win. Pure (unit-tested). */
+export function autoActualDates(existing, next, today = todayStr()) {
+  const type = next.item_type || existing.item_type; if (type === 'SUMMARY') return {};
+  const status = next.status ?? existing.status; const progress = Number(next.progress ?? existing.progress) || 0;
+  const done = status === 'COMPLETED' || (type === 'TASK' && progress >= 100);
+  const started = done || status !== 'NOT_STARTED' || progress > 0;
+  const out = {};
+  if (type === 'TASK' && started && !existing.actual_start_date && next.actual_start_date === undefined) out.actual_start_date = today;
+  if (done && !existing.actual_end_date && next.actual_end_date === undefined) out.actual_end_date = today;
+  if (!done && existing.status === 'COMPLETED' && existing.actual_end_date && next.actual_end_date === undefined) out.actual_end_date = null;
+  return out;
+}
+
 export async function updateWbs(db, project, existing, input, userId = null, { delayReason = '' } = {}) {
   const sets = []; const vals = [];
   const next = { ...input };
@@ -413,6 +427,7 @@ export async function updateWbs(db, project, existing, input, userId = null, { d
     if (next.item_type !== 'MILESTONE') next.milestone_date = null;
     if (next.item_type === 'SUMMARY') next.progress = 0;
   }
+  const auto = autoActualDates(existing, next); Object.assign(next, auto);   // F4: derived, so no history row of its own (the status/progress row says it)
   // US-1: an end date pushed later on a started or already-late item needs a reason (rule shared with the client: needsDelayReason)
   const ef = endField({ item_type: next.item_type || existing.item_type });
   const before = existing[ef] || null; const after = next[ef] === undefined ? undefined : next[ef] || null;
@@ -425,7 +440,7 @@ export async function updateWbs(db, project, existing, input, userId = null, { d
   for (const [k, v] of Object.entries(next)) {
     if (v === undefined || v === existing[k]) continue;
     sets.push(`${k} = ?`); vals.push(v);
-    if (WBS_TRACKED.includes(k)) (await addWbsHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: v, note: k === ef && pushed ? reason.slice(0, 300) : null }, userId, ts));
+    if (WBS_TRACKED.includes(k) && !(k in auto)) (await addWbsHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: v, note: k === ef && pushed ? reason.slice(0, 300) : null }, userId, ts));
   }
   if (!sets.length) return false;
   sets.push('updated_at = ?'); vals.push(ts, existing.id);

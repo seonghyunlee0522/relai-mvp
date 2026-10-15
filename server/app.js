@@ -22,6 +22,7 @@ const safeFileName = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import * as SK from './wbs-skeleton.js';
+import { syncMilestones } from './milestone-sync.js';
 import * as T from './trace.js';
 import * as C from './changes.js';
 import * as X from './raid.js';
@@ -324,6 +325,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       handover: handover || null, completion_report: completionReport || null, prior_gaps: CLS.priorGaps(guide.phases), kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
       definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, scope_out: (def.definition.scope_out || []).map((x) => x.text).filter(Boolean), sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
+      open_wbs: project.current_phase === 'OPERATIONS' && project.status !== 'COMPLETED' ? await CLS.openWbs(db, project.id) : null,   // F5 close dialog
       jira: (await homeSummary(db, project.id)) };   // Phase 12: null unless the project is mapped to a Jira project
   };
 
@@ -446,7 +448,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.post(`${base}/:pid/close`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
     const ops = (await guideContext(project)).guide.phases.find((p) => p.phase_key === 'OPERATIONS');
-    const r = await tx(db, (d) => CLS.closeProject(d, project, req.body || {}, req.user.id, ops));
+    const r = await tx(db, async (d) => { await syncMilestones(d, project, req.user.id); return CLS.closeProject(d, project, req.body || {}, req.user.id, ops); });
     if (r.error === 'already_closed') return fail(res, 409, 'already_closed', '이미 종료된 프로젝트입니다.');
     if (r.error === 'gate') return fail(res, 409, 'close_gate', '07 필수 업무(운영 이관 / 인수인계 · 프로젝트 종료 정리)를 모두 마쳐야 프로젝트를 종료할 수 있습니다.');
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
@@ -513,7 +515,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     // The leaving phase is COMPLETED only when its REQUIRED activities are done — judged on derived state, not on checkboxes.
     const cur = (await guideContext(project)).guide.current_phase;
     const gateMet = cur && cur.summary ? cur.summary.gate_met : null;
-    const r = (await tx(db, async (db) => (await transitionTo(db, project, req.params.phid, req.user.id, reason, { gateMet }))));
+    const r = (await tx(db, async (db) => { const o = await transitionTo(db, project, req.params.phid, req.user.id, reason, { gateMet }); if (!o.error) await syncMilestones(db, project, req.user.id); return o; }));
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '단계를 찾을 수 없습니다.');
     if (r.error === 'already_current') return fail(res, 409, 'already_current', '이미 현재 단계입니다.');
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
@@ -532,7 +534,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.post(`${base}/:pid/definition/sections/:key/:action(complete|confirm|reopen|skip|resume)`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
     const body = ['complete', 'confirm'].includes(req.params.action) && req.body && typeof req.body === 'object' ? req.body : null;
-    const r = (await tx(db, async (db) => D.setSectionStatus(db, project, req.params.key, req.params.action, req.user.id, body)));
+    const r = (await tx(db, async (db) => { const o = await D.setSectionStatus(db, project, req.params.key, req.params.action, req.user.id, body); if (!o.error) await syncMilestones(db, project, req.user.id); return o; }));
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '섹션을 찾을 수 없습니다.');
     res.json({ ...(await D.loadDefinition(db, project)), guide: (await guideResponse(project)) });
   }));
@@ -1257,7 +1259,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
   app.post(`${abase}/:aid/transition`, guard, wrap(async (req, res) => {
     const ctx = (await aMutable(req, res)); if (!ctx) return;
-    const r = (await tx(db, async (db) => (await Q.transitionAcceptance(db, ctx.a, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id))));
+    const r = (await tx(db, async (db) => { const o = await Q.transitionAcceptance(db, ctx.a, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id); if (!o.error) await syncMilestones(db, ctx.project, req.user.id); return o; }));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
     if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${r.from})에서는 이 작업을 할 수 없습니다.`);
     res.json((await aResp(ctx.project, ctx.a.id)));
@@ -1304,7 +1306,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.post(`${wrbase}/generate`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
     const period = WR.parsePeriod(req.body || {});
-    const id = (await tx(db, async (db) => (await WR.generateReport(db, project, period, req.user.id))));
+    const id = (await tx(db, async (db) => { await syncMilestones(db, project, req.user.id); return WR.generateReport(db, project, period, req.user.id); }));
     res.status(201).json((await rResp(project, id)));
   }));
   // Phase 7 US-1: 완료보고서 — one per project (an existing one is opened, never duplicated); made from 07 운영 및 유지보수

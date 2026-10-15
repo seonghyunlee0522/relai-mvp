@@ -11,6 +11,7 @@ import { SCHEMAS, validateSchema, trimDeep } from './schemas.js';
 import { retryHint } from './prompts.js';
 import { CreditError, getBalance, releaseIfPending, reserveRun, settleRun } from './credits.js';
 import { effectivePlan } from '../billing/subscriptions.js';
+import { paymentsEnabled } from '../billing/provider.js';
 
 export class AiError extends Error {
   constructor(code, message, { status = 400, ...extra } = {}) { super(message); this.code = code; this.status = status; this.extra = extra; }
@@ -21,7 +22,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Public status for the frontend: flag, costs, notice, and this workspace's credit balance. */
 export async function aiStatus(db, wid) {
   const pub = publicConfig();
-  return { ...pub, plan: await effectivePlan(db, wid), credits: pub.enabled ? await getBalance(db, wid) : null, credit_price_krw: CREDIT_PRICE_KRW, low_balance_threshold: LOW_BALANCE_CREDITS };
+  return { ...pub, plan: await effectivePlan(db, wid), credits: pub.enabled ? await getBalance(db, wid) : null, credit_price_krw: CREDIT_PRICE_KRW, low_balance_threshold: LOW_BALANCE_CREDITS, payments_enabled: paymentsEnabled() };
 }
 
 async function checkLimits(db, cfg, { wid, userId }) {

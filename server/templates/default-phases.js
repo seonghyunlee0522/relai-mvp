@@ -90,7 +90,7 @@ export const DEFAULT_PHASES = [
       A('ISSUES', '이슈 관리', '진행을 막거나 늦추는 문제를 이슈로 기록하고 처리합니다.', '열려 있는 이슈가 없습니다.', 'REQUIRED', 'issues'),
       A('CHANGES', '변경 요청 관리', '요구사항·범위 변경 요청을 기록하고 영향도를 정리해 결정합니다.', '검토 중이거나 승인 후 미반영된 변경 요청이 없습니다.', 'RECOMMENDED', 'changes'),
       A('WEEKLY_REPORT', '주간보고 작성·공유', '매주 진행·지연·이슈·변경을 정리해 고객에게 보냅니다. 데이터로 초안이 만들어집니다.', '이번 주 주간보고가 확정되어 있습니다.', 'RECOMMENDED', 'reports'),   // Phase 4 US-3 (migration 35)
-      A('DECISIONS', '주요 의사결정 기록', '프로젝트 방향에 영향을 주는 결정을 기록해 둡니다.', '주요 의사결정이 메모로 기록되어 있습니다.', 'OPTIONAL', null),
+      A('DECISIONS', '주요 의사결정 기록', '프로젝트 방향에 영향을 주는 결정을 기록해 둡니다.', '주요 의사결정이 1건 이상 기록되어 있습니다.', 'OPTIONAL', null),
     ],
   },
   {
@@ -150,6 +150,7 @@ export const CHECKLIST_TEMPLATES = {
   MAINTENANCE: ['장애·요청 접수 경로 확정', '처리 절차와 에스컬레이션 정의', '유지보수 계약·범위 확인'],
   SLA: ['응답 시간 기준 합의', '복구 시간 기준 합의', 'SLA 측정·보고 방식 정의'],
   RELEASE_PLAN: ['정기 배포 주기 확정', '개선 요청 수집·우선순위 절차 정의', '배포 승인·공지 절차 정의'],
+  DECISIONS: [],   // F6: 04 의사결정 기록 = a decision log on the same screen (결정일 · 결정 내용 · 결정자 · 메모); no starter items
   CLOSE: ['프로젝트 결과 공유(완료 보고)', '미결 사항과 후속 조치 정리', LESSONS_ITEM, '산출물 최종본 전달'],
 };
 export const CHECKLIST_STEP_KEYS = new Set(Object.keys(CHECKLIST_TEMPLATES));
