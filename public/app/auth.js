@@ -69,15 +69,16 @@ export async function authPage(mode) {
   if (invite && invite.status && invite.status !== 'PENDING') invite = { invalid: true, status: invite.status };
   const safeNext = next && /^\/(app|invite|admin)(\/|\?|$)/.test(next) && !next.startsWith('//') ? next : '';
   const googleHref = `/api/auth/google/start?intent=${mode}${inviteToken && invite && !invite.invalid ? `&invite=${encodeURIComponent(inviteToken)}` : ''}${safeNext ? `&next=${encodeURIComponent(safeNext)}` : ''}`;
+  const wsName = (v) => String(v || '').replace(/ ?(Workspace|워크스페이스)$/, '');
   const inviteBanner = !invite ? '' : invite.invalid ? html`<div class="notice notice--warn" style="margin-bottom:14px">초대 링크가 ${invite.status === 'ACCEPTED' ? '이미 사용되었습니다' : invite.status === 'REVOKED' ? '취소되었습니다' : invite.status === 'EXPIRED' ? '만료되었습니다' : '유효하지 않습니다'}. 초대한 분에게 새 링크를 요청해 주세요. 일반 가입은 계속할 수 있습니다.</div>`
-    : html`<div class="notice notice--invite" style="margin-bottom:14px"><b>${invite.type === 'WORKSPACE_CREATE' ? `${invite.workspace_name} Workspace 생성 초대` : `${invite.workspace_name} Workspace 멤버 초대`}</b><br>
-      <span class="dim">${invite.email_masked} 로 초대되었습니다. 초대받은 이메일로 가입해야 하며, 가입 완료 시 ${raw(invite.type === 'WORKSPACE_CREATE' ? html`<b>${invite.workspace_name}</b> Workspace가 생성되고 OWNER가 됩니다.` : html`<b>${invite.workspace_name}</b> Workspace에 ${invite.role_label}로 참여합니다.`)}</span></div>`;
+    : html`<div class="notice notice--invite" style="margin-bottom:14px"><b>${invite.type === 'WORKSPACE_CREATE' ? `${wsName(invite.workspace_name)} 워크스페이스 생성 초대` : `${wsName(invite.workspace_name)} 워크스페이스 멤버 초대`}</b><br>
+      <span class="dim">${invite.email_masked} 로 초대되었습니다. 초대받은 이메일로 가입해야 하며, 가입 완료 시 ${raw(invite.type === 'WORKSPACE_CREATE' ? html`<b>${wsName(invite.workspace_name)}</b> 워크스페이스가 생성되고 소유자가 됩니다.` : html`<b>${wsName(invite.workspace_name)}</b> 워크스페이스에 ${invite.role_label}로 참여합니다.`)}</span></div>`;
   root.innerHTML = html`<div class="auth${isSignup ? ' auth--su-a' : ''}">
     <main class="auth__form">
       ${raw(phoneBand(isSignup))}
       <a class="logo" href="/">RELAI</a>
       <h1>${isSignup ? (invite && !invite.invalid ? '초대받은 계정 만들기' : raw('처음 맡은 프로젝트,<br>다음 할 일부터 알려드릴게요.')) : '다시 만나서 반갑습니다'}</h1>
-      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : 'PM 방법론을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다. 얼리 액세스로 12개월 무료이고, AI 크레딧 500(₩5,000)을 무료로 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
+      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : '프로젝트 관리 방법을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다. 얼리 액세스로 12개월 무료이고, AI 크레딧 500(₩5,000)을 무료로 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
       ${raw(isSignup ? signupMobile() : '')}
       <form id="f" novalidate>
         <div class="form-err" id="ferr" role="alert" hidden></div>

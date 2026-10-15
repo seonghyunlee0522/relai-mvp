@@ -42,7 +42,7 @@ const progressSection = (g, p) => {
         <div class="pva__r"><span>계획</span><span class="pbar"><i style="width:${planned ?? 0}%"></i></span><b>${pv(planned)}</b></div>
         <div class="pva__r pva__r--a"><span>실적</span><span class="pbar pbar--g"><i style="width:${actual}%"></i></span><b>${actual}%</b></div>
       </div>`)}
-    ${raw(g.jira ? html`<p class="ovs__jira">Jira <span class="mono">${g.jira.project_key}</span> · ${g.jira.total ? `완료 ${g.jira.done} / ${g.jira.total} 연결 (실행률 ${g.jira.rate}%)` : '연결된 Issue 없음'}${raw(g.jira.connection_status !== 'ACTIVE' ? ' <span class="chip chip--fail">연결 확인 필요</span>' : '')}</p>` : '')}
+    ${raw(g.jira ? html`<p class="ovs__jira">지라 <span class="mono">${g.jira.project_key}</span> · ${g.jira.total ? `완료 ${g.jira.done} / ${g.jira.total} 연결 (실행률 ${g.jira.rate}%)` : '연결된 이슈 없음'}${raw(g.jira.connection_status !== 'ACTIVE' ? ' <span class="chip chip--fail">연결 확인 필요</span>' : '')}</p>` : '')}
   </section>`;
 };
 
@@ -67,7 +67,7 @@ const scheduleCol = (g, p, dash) => {
     ${raw(kv('계획 종료일', p.planned_end_date || '-'))}
     ${raw(kv('남은 기간', left === null ? '-' : left < 0 ? `${-left}일 초과` : `${left}일`, { tone: left === null ? '' : left < 0 ? 'crit' : left <= 14 ? 'warn' : '', sub: p.planned_end_date && left !== null && left >= 0 ? `오늘 ${todayLocal()} 기준` : '' }))}
     ${raw(kv('지연 작업', `${n(w.overdue_tasks)}건`, { href: `${u}/wbs?f=overdue`, tone: n(w.overdue_tasks) ? 'crit' : '', sub: n(w.overdue_tasks) ? `최대 ${n(w.max_overdue_days)}일 지연` : '' }))}
-    ${raw(kv('주요 마일스톤', n(w.milestones) ? `${n(w.milestones_completed)} / ${n(w.milestones)} 완료` : '-', { href: `${u}/wbs?view=gantt`, tone: n(w.overdue_milestones) ? 'crit' : '', sub: n(w.overdue_milestones) ? `지난 마일스톤 ${w.overdue_milestones}건` : nextMs ? `다음: ${nextMs.title} (${nextMs.days_left === 0 ? '오늘' : `D-${nextMs.days_left}`})` : n(w.milestones) ? '' : '등록된 마일스톤 없음' }))}
+    ${raw(kv('주요 일정', n(w.milestones) ? `${n(w.milestones_completed)} / ${n(w.milestones)} 완료` : '-', { href: `${u}/wbs?view=gantt`, tone: n(w.overdue_milestones) ? 'crit' : '', sub: n(w.overdue_milestones) ? `지난 주요 일정 ${w.overdue_milestones}건` : nextMs ? `다음: ${nextMs.title} (${nextMs.days_left === 0 ? '오늘' : `D-${nextMs.days_left}`})` : n(w.milestones) ? '' : '등록된 주요 일정 없음' }))}
   </div>`;
 };
 const scopeCol = (g, p) => {
@@ -85,7 +85,7 @@ const qualityCol = (g, p) => {
   const u = `/app/projects/${p.id}`; const t = g.tests || {}; const a = g.acceptances || {}; const k = g.kpis || {}; const is = g.issues || {}; const rs = g.risks || {};
   const passRate = n(t.executed) ? Math.round((n(t.last_pass) / n(t.executed)) * 100) : null; const risks = n(rs.open) + n(rs.monitoring);
   return html`<div class="ovcol"><h3>품질</h3>
-    ${raw(kv('테스트 커버리지', pv(k.test_coverage), { href: `${u}/tests?tab=coverage`, sub: n(t.total) ? `테스트 ${t.total}건` : '등록된 테스트 없음' }))}
+    ${raw(kv('테스트 연결률', pv(k.test_coverage), { href: `${u}/tests?tab=coverage`, sub: n(t.total) ? `테스트 ${t.total}건` : '등록된 테스트 없음' }))}
     ${raw(kv('테스트 통과율', pv(passRate), { href: `${u}/tests?last_result=PASS`, tone: passRate === null ? '' : n(t.last_fail) ? 'crit' : 'good', sub: n(t.executed) ? `통과 ${n(t.last_pass)} · 실패 ${n(t.last_fail)} / 실행 ${t.executed}` : '' }))}
     ${raw(kv('미해결 이슈', `${n(is.active)}건`, { href: `${u}/issues`, tone: n(is.active) ? 'crit' : '', sub: n(is.critical) ? `심각 ${is.critical}건` : '' }))}
     ${raw(kv('리스크', `${risks}건`, { href: `${u}/issues?tab=risks`, tone: n(rs.high_or_critical) ? 'crit' : '', sub: n(rs.high_or_critical) ? `높음 이상 ${rs.high_or_critical}건` : '' }))}
@@ -105,7 +105,7 @@ const healthLine = (h) => {
 /* ---------- Upcoming / Activity ---------- */
 const upcomingSection = (snap, pid) => {
   const all = snap.upcoming || []; const up = all.slice(0, 6);
-  return html`<section class="ovsec ovup" aria-labelledby="upT"><div class="ovsec__h"><h2 id="upT">다가오는 일정</h2><small class="ovsec__ctx">7일 내 일정 · 마일스톤</small>${raw(up.length ? html`<em class="ovsec__n">${all.length}</em>` : '')}</div>
+  return html`<section class="ovsec ovup" aria-labelledby="upT"><div class="ovsec__h"><h2 id="upT">다가오는 일정</h2><small class="ovsec__ctx">7일 내 일정</small>${raw(up.length ? html`<em class="ovsec__n">${all.length}</em>` : '')}</div>
     ${raw(up.length ? html`<ol class="ovup__list">${raw(up.map((x) => html`<li><a href="/app/projects/${pid}/${x.href}" data-link><time>${fmtShort(x.date)}${x.date === todayLocal() ? ' 오늘' : ''}</time><span class="ovup__k">${x.label}</span><span class="ovup__t">${x.title}</span></a></li>`).join(''))}</ol>` : '<p class="ovnone">7일 내 예정된 일정이 없습니다.</p>')}
   </section>`;
 };
@@ -126,7 +126,7 @@ export async function overviewPage(id, main = $('#main')) {
     ${raw(p.status === 'ARCHIVED' ? '<div class="notice">보관된 프로젝트입니다. 현황은 조회만 할 수 있습니다.</div>' : pcLine())}
     ${raw(progressSection(g, p))}
     ${raw(attentionSection(g, snap, p.id))}
-    <section class="ovsec ovband" aria-label="Schedule · Scope · Quality">${raw(scheduleCol(g, p, dash))}${raw(scopeCol(g, p))}${raw(qualityCol(g, p))}</section>
+    <section class="ovsec ovband" aria-label="일정 · 범위 · 품질">${raw(scheduleCol(g, p, dash))}${raw(scopeCol(g, p))}${raw(qualityCol(g, p))}</section>
     ${raw(healthLine(snap.health))}
     <div class="ov__row4">${raw(upcomingSection(snap, p.id))}${raw(activitySection(dash, p.id))}</div>
   </div>`;

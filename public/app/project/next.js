@@ -341,7 +341,7 @@ export async function nextPage(id, main = $('#main')) {
     // 03 MILESTONES (US-4): 01 주요 일정 → WBS 마일스톤 in one click; the row turns ✓ 완료 on redraw
     main.querySelectorAll('[data-import-ms]').forEach((b) => b.onclick = async (e) => {
       e.stopPropagation(); b.disabled = true;
-      try { const r = await api('POST', wsApi(`/${id}/wbs/milestones/from-key-dates`), {}); g = await api('GET', wsApi(`/${id}`)); draw(); toast(r.created ? `마일스톤 ${r.created}건을 가져왔습니다.` : '이미 같은 마일스톤이 있습니다.'); }
+      try { const r = await api('POST', wsApi(`/${id}/wbs/milestones/from-key-dates`), {}); g = await api('GET', wsApi(`/${id}`)); draw(); toast(r.created ? `주요 일정 ${r.created}건을 가져왔습니다.` : '이미 같은 주요 일정이 있습니다.'); }
       catch (err) { toast(err.message); b.disabled = false; }
     });
     // Phase 6 US-3: 오픈 = the 오픈 dialog (오픈일 + 남은 항목 처리 / 운영 이관), never a plain 완료 처리

@@ -48,7 +48,7 @@ export const varianceTone = (v) => (v === null || v === undefined ? 'muted' : v 
 export function scheduleState(w) {
   if (!w || !n(w.tasks)) return { tone: 'muted', label: '-', detail: 'WBS가 등록되면 계산됩니다' };
   const od = n(w.overdue_tasks), om = n(w.overdue_milestones); const v = w.variance;
-  if (od || om) return { tone: 'crit', label: `${n(w.max_overdue_days)}일 지연`, detail: [od ? `지연 작업 ${od}건` : '', om ? `지난 마일스톤 ${om}건` : ''].filter(Boolean).join(' · ') };
+  if (od || om) return { tone: 'crit', label: `${n(w.max_overdue_days)}일 지연`, detail: [od ? `지연 작업 ${od}건` : '', om ? `지난 주요 일정 ${om}건` : ''].filter(Boolean).join(' · ') };
   if (v !== null && v !== undefined && v < -5) return { tone: 'crit', label: '진척 지연', detail: `계획 대비 ${varianceText(v)}` };
   if (v !== null && v !== undefined && v < 0) return { tone: 'warn', label: '약간 지연', detail: `계획 대비 ${varianceText(v)}` };
   if (n(w.tasks_without_dates)) return { tone: 'warn', label: '확인 필요', detail: `일정 미입력 ${w.tasks_without_dates}건` };
@@ -64,10 +64,10 @@ export function exceptions(g, pid) {
   const u = (p) => `/app/projects/${pid}${p}`;
   const is = g.issues || {}, rs = g.risks || {}, w = g.wbs || {}, t = g.tests || {}, a = g.acceptances || {}, c = g.changes || {}, r = g.requirements || {};
   const rows = [
-    ['ISSUE', '미해결 이슈', n(is.active), u(is.critical ? '/issues?severity=CRITICAL' : '/issues'), 'crit', is.critical ? `Critical ${is.critical}건` : ''],
-    ['RISK', '높음 이상 리스크', n(rs.high_or_critical), u('/issues?tab=risks&risk_level=HIGH,CRITICAL'), 'crit', rs.critical ? `Critical ${rs.critical}건` : ''],
+    ['ISSUE', '미해결 이슈', n(is.active), u(is.critical ? '/issues?severity=CRITICAL' : '/issues'), 'crit', is.critical ? `심각 ${is.critical}건` : ''],
+    ['RISK', '높음 이상 리스크', n(rs.high_or_critical), u('/issues?tab=risks&risk_level=HIGH,CRITICAL'), 'crit', rs.critical ? `심각 ${rs.critical}건` : ''],
     ['OVERDUE', '지연 작업', n(w.overdue_tasks), u('/wbs?f=overdue'), 'crit', ''],
-    ['MILESTONE', '지난 마일스톤', n(w.overdue_milestones), u('/wbs?view=gantt'), 'crit', ''],
+    ['MILESTONE', '지난 주요 일정', n(w.overdue_milestones), u('/wbs?view=gantt'), 'crit', ''],
     ['FAIL', '실패 테스트', n(t.last_fail), u('/tests?last_result=FAIL'), 'crit', ''],
     ['REWORK', '보완 필요 검수', n(a.rework), u('/tests?tab=acceptance&status=REWORK_REQUIRED'), 'warn', ''],
     ['CHANGE_APPROVED', '승인 후 미반영 변경', n(c.approved_unimplemented), u('/changes?status=APPROVED'), 'warn', ''],

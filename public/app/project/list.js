@@ -17,10 +17,10 @@ export const newWorkspaceHome = (o = null) => (canManage()
         <div class="hero__cta"><a class="btn btn--primary btn--lg" href="/app/projects/new" data-link data-tour-id="create-project">프로젝트 만들기</a><button type="button" class="link linkbtn" data-tour-start>1분 둘러보기</button></div></div>
       <ol class="hero__flow" aria-label="프로젝트 7단계">${raw(LIFECYCLE_PHASES.map((ph, i) => html`<li><i>${no2(i + 1)}</i>${ph.label}</li>`).join(''))}</ol>
     </section>`
-  : html`<section class="hero hero--member"><div class="hero__t"><h2>${state.workspace.name} 워크스페이스에 참여했습니다.</h2><p>아직 프로젝트가 없습니다. 워크스페이스 관리자(OWNER/ADMIN)가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.</p></div></section>`);
+  : html`<section class="hero hero--member"><div class="hero__t"><h2>${state.workspace.name} 워크스페이스에 참여했습니다.</h2><p>아직 프로젝트가 없습니다. 워크스페이스 관리자가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.</p></div></section>`);
 export const emptyState = () => newWorkspaceHome(ob.peek());
 export async function projectsPage(main = $("#main")) {
-  document.title = 'Projects — RELAI';
+  document.title = '프로젝트 — RELAI';
   let showArchived = false; let q = ''; let status = '';
   let all = [];
   const grid = createGrid({
@@ -33,7 +33,7 @@ export async function projectsPage(main = $("#main")) {
       { key: 'client', label: '고객사', width: 150, sort: (r) => r.client_name || '', render: (r) => r.client_name || '-' },
       { key: 'status', label: '상태', width: 90, sort: (r) => STATUS[r.status], render: (r) => html`<span class="chip ${STATUS_CHIP[r.status] || ''}">${STATUS[r.status]}</span>` },
       { key: 'phase', label: '현재 단계', width: 180, sort: (r) => r.current_phase_sequence, render: (r) => html`${no2(r.current_phase_sequence)} ${r.current_phase_name}` },
-      { key: 'lifecycle', label: 'Lifecycle', width: 150, sort: (r) => r.current_phase_sequence, render: (r) => html`<div class="lcpos" title="${no2(r.current_phase_sequence)} ${r.current_phase_name}">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < r.current_phase_sequence ? 'is-done' : i + 1 === r.current_phase_sequence ? 'is-cur' : ''}"></i>`).join(''))}</div>` },
+      { key: 'lifecycle', label: '진행 단계', width: 150, sort: (r) => r.current_phase_sequence, render: (r) => html`<div class="lcpos" title="${no2(r.current_phase_sequence)} ${r.current_phase_name}">${raw(Array.from({ length: 7 }, (_, i) => `<i class="${i + 1 < r.current_phase_sequence ? 'is-done' : i + 1 === r.current_phase_sequence ? 'is-cur' : ''}"></i>`).join(''))}</div>` },
       { key: 'start', label: '시작', width: 100, sort: (r) => r.planned_start_date, cls: 'mono', render: (r) => fmtDate(r.planned_start_date) },
       { key: 'end', label: '종료', width: 100, sort: (r) => r.planned_end_date, cls: 'mono', render: (r) => fmtDate(r.planned_end_date) },
     ],

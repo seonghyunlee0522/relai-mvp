@@ -10,28 +10,28 @@ import { toast } from '../shared/dialogs.js';
 import { state } from '../core/state.js';
 
 export const TERMS = {
-  charter: ['프로젝트 헌장', '프로젝트의 목적·범위·조직·일정을 한 장으로 정리한 기준 문서'],
+  charter: ['프로젝트 개요', '프로젝트의 목적·범위·조직·일정을 한 장으로 정리한 기준 문서'],
   change_request: ['변경 요청', '확정한 범위·일정·비용을 바꾸자는 요청. 고객 승인 후 반영합니다'],   // Phase 4 US-7
   original_plan: ['최초 계획일', '04 시작 때 잡혀 있던 종료일. 미룬 만큼 +일로 보입니다'],
   kickoff: ['착수보고회(킥오프)', '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 회의'],
   plan: ['사업수행계획서', '수행사가 고객에게 제출하는 프로젝트 수행 계획 문서. 착수 단계에서 승인받습니다'],
-  milestone: ['마일스톤', '착수보고·중간보고·검수·오픈처럼 반드시 지켜야 하는 프로젝트의 주요 시점'],
-  stakeholder: ['이해관계자', '프로젝트에 영향을 주거나 받는 사람(고객·수행사·협력사 담당자)'],
+  milestone: ['주요 일정', '착수보고·중간보고·검수·오픈처럼 반드시 지켜야 하는 프로젝트의 주요 시점'],
+  stakeholder: ['관계자', '프로젝트에 참여하거나 영향을 받는 사람(고객·수행사·협력사 담당자)'],
   sponsor: ['스폰서', '비용·결정 권한을 가진 고객 측 책임자'],
-  baseline: ['승인 / 기준선', '승인된 목표·범위·일정이 이후 변경관리·검수의 기준이 됩니다'],
+  baseline: ['승인 / 확정', '승인된 목표·범위·일정이 이후 변경관리·검수의 기준이 됩니다'],
   // 02 요구사항 정의 only (Phase 2 US-5)
-  req_baseline: ['기준선', '고객이 승인한 요구사항 목록. 이후 바뀌는 것은 변경 요청으로 관리합니다'],
+  req_baseline: ['확정본', '고객이 승인한 요구사항 목록. 이후 바뀌는 것은 변경 요청으로 관리합니다'],
   nonfunctional: ['비기능 요구사항', '기능이 아니라 성능·보안·가용성·운영처럼 시스템이 갖춰야 할 품질 조건에 대한 요구사항. 예: 화면 응답 3초 이내'],
   criteria: ['완료 조건', '이 요구사항이 다 됐다고 판단하는 기준. 검수 기준이 됩니다'],
   // 03 분석·설계 only (Phase 3 US-6)
   wbs: ['WBS', '프로젝트에서 해야 할 일을 잘게 나눈 작업 목록'],
   dependency: ['선행관계', '앞 작업이 끝나야 시작할 수 있는 관계'],
-  wbs_milestone: ['마일스톤', '고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'],
+  wbs_milestone: ['주요 일정', '고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'],
   gantt: ['간트', '작업의 시작일·종료일을 막대로 그린 일정표'],
   skeleton: ['WBS 뼈대', '요구사항과 꼭 필요한 시험·오픈 작업을 넣은 기본 작업 목록'],
   // 05 시험 only (Phase 5 US-7)
-  coverage: ['커버리지', '범위 내 요구사항 중 테스트가 연결된 비율'],
-  uat: ['UAT', '고객 현업이 직접 확인하는 인수 테스트'],
+  coverage: ['테스트 연결률', '범위 내 요구사항 중 테스트가 연결된 비율'],
+  uat: ['고객 인수 테스트(UAT)', '고객 현업이 직접 확인하는 인수 테스트'],
   // 06 전환 및 오픈 only (Phase 6 US-8)
   acceptance: ['검수', '고객이 결과물을 범위대로 받았다고 확인하는 절차. 보통 검수확인서 서명으로 끝납니다'],
   carryover: ['운영 이관', '오픈 뒤 운영 단계에서 처리하기로 넘긴 문제'],
@@ -76,7 +76,7 @@ export const APPROVAL_GATES = {
     body: '착수 결과(목표·범위·일정)를 고객이나 스폰서가 승인하지 않은 채 진행하면, 이후 요구사항과 검수 기준을 두고 다툼이 생기기 쉽습니다. 가능하면 사업수행계획서를 보내 승인을 먼저 받으세요.' },
   REQUIREMENTS: { step: 'BASELINE_APPROVAL', record: (pid) => `/app/projects/${pid}/requirements?approval=1`,
     title: '고객 승인 없이 분석·설계 단계로 넘어가려 합니다',
-    body: "요구사항 기준선을 고객이 승인하지 않은 채 진행하면, 설계·개발 중 '이건 요청한 적 없다/빠졌다'는 다툼이 생기기 쉽습니다. 요구사항 정의서를 보내 승인을 먼저 받으세요." },
+    body: "확정한 요구사항을 고객이 승인하지 않은 채 진행하면, 설계·개발 중 '이건 요청한 적 없다/빠졌다'는 다툼이 생기기 쉽습니다. 요구사항 정의서를 보내 승인을 먼저 받으세요." },
   // Phase 5 US-1: 05 → 06 with 요구사항별 테스트 준비 open — same dialog, test wording
   TESTING: { step: 'TEST_PLAN', record: (pid) => `/app/projects/${pid}/tests?tab=coverage`,
     title: '테스트가 없는 요구사항이 있는 채로 전환 및 오픈 단계로 넘어가려 합니다',
@@ -117,7 +117,7 @@ export const bypassNote = (prev, reason, gate = null) => {
 export const gateStep = (g, phaseKey, stepKey) => { const ph = (g.phases || []).find((x) => x.phase_key === phaseKey); return ph ? (ph.steps || []).find((s) => s.step_key === stepKey) || null : null; };
 export const approvalStep = (g) => gateStep(g, 'INITIATION', 'APPROVAL');
 /** Pre-31 / already-advanced projects: "착수 승인 기록 없음" once, on the 01 screen and the 01 area of What's Next only (spec D3). */
-const NO_APPROVAL = { INITIATION: '착수 승인 기록 없음 — 고객 승인을 받았다면 착수 결과 승인에 기록해 두세요.', REQUIREMENTS: '기준선 승인 기록 없음 — 고객 승인을 받았다면 요구사항 기준선 승인에 기록해 두세요.',
+const NO_APPROVAL = { INITIATION: '착수 승인 기록 없음 — 고객 승인을 받았다면 착수 결과 승인에 기록해 두세요.', REQUIREMENTS: '요구사항 확정 승인 기록 없음 — 고객 승인을 받았다면 요구사항 확정 승인에 기록해 두세요.',
   TESTING: '테스트 준비 미완료 — 범위 내 요구사항에 테스트를 연결하거나 제외 사유를 남겨 두세요.' };   // Phase 5: 05를 이미 지난 프로젝트 (05 영역에만)
 /** 02 (Phase 2): the same line once, in the 02 area of What's Next, for projects already past 02 without a baseline approval. */
 export const noApprovalLine = (g, phaseKey = 'INITIATION') => {

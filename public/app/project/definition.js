@@ -23,33 +23,33 @@ import { planMenu, bindPlanMenu, term, isMeasurable, noApprovalLine } from './in
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 
 const ORG_TYPE = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
-const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 킥오프/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 Steering Committee 승인']];
+const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 착수보고/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 운영위원회 승인']];
 /** Project Charter free-text fields (Label · 짧은 설명 · Textarea). Free text on purpose — structure comes later in a separate design.
  * [field, label, hint, placeholder, rows] grouped by the activity whose work screen edits them. */
 const CHARTER_TEXT = {
   SCOPE: [
-    ['deliverables', '주요 산출물', '납품·제출해야 하는 결과물', '예: 요구사항 정의서, 화면 설계서, 테스트 결과서, 운영 매뉴얼 (한 줄에 하나씩)', 3],
+    ['deliverables', '주요 결과물', '납품·제출해야 하는 문서·결과', '예: 요구사항 정의서, 화면 설계서, 테스트 결과서, 운영 매뉴얼 (한 줄에 하나씩)', 3],
     ['assumptions', '가정사항', '계획이 성립하기 위한 전제 조건', '예: 고객사가 필요한 API 접근 권한을 일정 내 제공한다.', 3],
     ['constraints', '제약사항', '수행을 제한하는 조건', '예: 고객사 내부망에서만 개발 가능 / 외부 SaaS 사용 불가 / 오픈 일정 변경 불가', 3],
-    ['initial_risks', '초기 리스크', '착수 시점에 인지한 주요 위험', '예: Legacy 시스템 문서 부족 / 고객사 의사결정 지연 가능성', 3],
+    ['initial_risks', '초기 리스크', '착수 시점에 인지한 주요 위험', '예: 기존 시스템 문서 부족 / 고객사 의사결정 지연 가능성', 3],
   ],
   OPERATIONS: [
     ['change_management', '변경관리 방식', '범위·일정 변경 요청의 검토·승인 절차', '예: 일정 또는 범위 영향이 있는 변경은 PM 검토 후 고객 승인', 2],
-    ['acceptance', '검수 / 완료 기준', '검수와 프로젝트 완료로 보는 조건', '예: UAT 완료 및 Critical 이슈 0건 / 운영 이관 완료 후 최종 검수', 2],
+    ['acceptance', '검수 / 완료 기준', '검수와 프로젝트 완료로 보는 조건', '예: 인수 테스트 완료 및 심각 이슈 0건 / 운영 이관 완료 후 최종 검수', 2],
   ],
 };
 const textField = ([f, label, hint, ph, rows]) => ({ f, label, hint, ph, rows });
 /** One-line purpose per activity (Main view). Validation wording stays inside the work screen. */
 const PURPOSE = {
   GOALS: '프로젝트 목표와 성공 기준을 정해 프로젝트가 무엇을 위해 진행되는지 명확히 합니다.',
-  SCOPE: '이번 프로젝트에서 하는 것과 하지 않는 것, 주요 산출물과 전제·제약·리스크를 정리해 범위 논쟁의 기준을 만듭니다.',
+  SCOPE: '이번 프로젝트에서 하는 것과 하지 않는 것, 주요 결과물과 전제·제약·리스크를 정리해 범위 논쟁의 기준을 만듭니다.',
   STAKEHOLDERS: '고객사·당사·협력사의 담당자와 역할을 정리해 누구와 무엇을 결정할지 분명히 합니다.',
   MILESTONES: '시작·종료 예정일과 반드시 지켜야 할 시점을 정리합니다. WBS의 세부 일정과는 다른 상위 일정입니다.',
   OPERATIONS: '회의·보고·소통·의사결정·변경관리·검수 방식을 정해 프로젝트 운영 규칙을 공유합니다.',
   KICKOFF: '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고, 결과를 기록합니다.',
   APPROVAL: '정리한 착수 결과를 고객·스폰서에게 승인받고 근거를 남깁니다. 승인된 내용이 이후 요구사항·변경·검수의 기준입니다.',
 };
-const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '범위 입력 →', STAKEHOLDERS: '이해관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →', KICKOFF: '착수보고회 준비 →', APPROVAL: '승인 기록 →' };
+const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '범위 입력 →', STAKEHOLDERS: '관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →', KICKOFF: '착수보고회 준비 →', APPROVAL: '승인 기록 →' };
 const WIDE = new Set(['STAKEHOLDERS', 'MILESTONES', 'KICKOFF', 'APPROVAL']);
 const SECTION_FIELDS = { PROFILE: TRAIT_FIELDS, GOALS: ['goal', 'success_criteria'], SCOPE: ['scope_in', 'scope_out', 'deliverables', 'assumptions', 'constraints', 'initial_risks'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations', 'change_management', 'acceptance'], KICKOFF: ['kickoff'], APPROVAL: ['approval'] };
 const METHODS = [['SIGNED', '서명본 수령'], ['EMAIL', '이메일 회신'], ['KICKOFF', '착수보고회에서 승인'], ['OTHER', '기타']];
@@ -116,7 +116,7 @@ export async function definitionPage(id) {
     return html`<section class="pv" aria-labelledby="pvT">
       <div class="pv__h"><span class="pv__no mono">01</span><h2 id="pvT">착수</h2>${raw(isCurrentPhase ? '<span class="np__cur">현재 단계</span>' : '')}<span class="pv__sp"></span>${raw(planMenu())}</div>
       <p class="pv__d">${ph ? ph.description : '프로젝트의 목표, 범위, 조직과 기본 계획을 정합니다.'}</p>
-      <p class="pv__terms">용어: <span>프로젝트 헌장 ${raw(term('charter'))}</span><span>이해관계자 ${raw(term('stakeholder'))}</span><span>마일스톤 ${raw(term('milestone'))}</span><span>착수보고회 ${raw(term('kickoff'))}</span><span>사업수행계획서 ${raw(term('plan'))}</span><span>스폰서 ${raw(term('sponsor'))}</span><span>승인/기준선 ${raw(term('baseline'))}</span></p>
+      <p class="pv__terms">용어: <span>프로젝트 개요 ${raw(term('charter'))}</span><span>관계자 ${raw(term('stakeholder'))}</span><span>주요 일정 ${raw(term('milestone'))}</span><span>착수보고회 ${raw(term('kickoff'))}</span><span>사업수행계획서 ${raw(term('plan'))}</span><span>스폰서 ${raw(term('sponsor'))}</span><span>승인/확정 ${raw(term('baseline'))}</span></p>
       ${raw(noApprovalLine(g))}
       <div class="pvp" data-row-profile>
         <div class="pvp__h"><div><b>프로젝트 기본 특성</b><small>프로젝트 유형과 수행 환경 · 생성 시 입력한 값이며 여기서 수정합니다.</small></div>${raw(ro ? '' : '<button type="button" class="link linkbtn pv__go" data-open="PROFILE">수정 →</button>')}</div>
@@ -130,7 +130,7 @@ export async function definitionPage(id) {
 
   /* ---------- Work Screen (drawer / full screen) ---------- */
   /** 성공 기준 품질 힌트 (rule-based): no number / % / date / 이내·이상·이하 → gray hint under the item. Never blocks completion. */
-  const scHint = (text) => (text && !isMeasurable(text) ? '측정할 수 있게 써 보세요. 예: \'검토 리드타임 평균 2영업일 이내\', \'UAT Critical 결함 0건\'' : '');
+  const scHint = (text) => (text && !isMeasurable(text) ? '측정할 수 있게 써 보세요. 예: \'검토 리드타임 평균 2영업일 이내\', \'인수 테스트 심각 결함 0건\'' : '');
   const listRows = (key, items, ph) => html`<ul class="def__list" data-list="${key}">${raw(items.map((it) => html`<li><input class="input input--sm" data-item="${key}" data-id="${it.id}" value="${it.text}" maxlength="500" placeholder="${ph}" ${ro ? 'disabled' : ''}>${raw(ro ? '' : html`<button type="button" class="def__x" data-del="${key}" data-id="${it.id}" aria-label="삭제">×</button>`)}${raw(key === 'success_criteria' ? html`<small class="def__schint" data-schint="${it.id}">${scHint(it.text)}</small>` : '')}</li>`).join(''))}</ul>
     ${raw(ro ? '' : html`<button type="button" class="link linkbtn def__add" data-add="${key}">+ 추가</button>`)}`;
   const hierarchy = (list) => {
@@ -150,9 +150,9 @@ export async function definitionPage(id) {
       case 'SCOPE': return html`<div class="field" data-field="scope_in"><label>수행 범위 <small class="dim">이번 프로젝트에서 하는 것</small></label>${raw(listRows('scope_in', d.scope_in, '예: 계약서 자동 검토 기능(국문 표준계약 5종)'))}</div>
         <div class="field" data-field="scope_out"><label>제외 범위 <small class="dim">하지 않기로 한 것</small></label>${raw(listRows('scope_out', d.scope_out, '예: 영문 계약서, 기존 ERP 연동'))}</div>
         ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(0, 1)))}
-        <div class="def__sub"><b>전제 · 제약 · 초기 리스크</b><small>프로젝트 헌장과 RELAI AI가 WBS·요구사항·변경 영향을 판단할 때 함께 고려합니다.</small></div>
+        <div class="def__sub"><b>전제 · 제약 · 초기 리스크</b><small>프로젝트 개요와 RELAI AI가 WBS·요구사항·변경 영향을 판단할 때 함께 고려합니다.</small></div>
         ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(1)))}
-        <p class="hint">완료 처리하려면 수행 범위를 1개 이상 입력합니다. 산출물·전제·제약·리스크는 선택 항목입니다.</p>`;
+        <p class="hint">완료 처리하려면 수행 범위를 1개 이상 입력합니다. 결과물·전제·제약·리스크는 선택 항목입니다.</p>`;
       case 'STAKEHOLDERS': return html`${raw(hierarchy(d.stakeholders))}
         <div class="def__tools">${raw(ro ? '' : html`<button type="button" class="btn btn--secondary btn--sm" id="sh-add">+ 직접 추가</button><button type="button" class="btn btn--secondary btn--sm" id="sh-xl">Excel 업로드</button><button type="button" class="link linkbtn def__tpl" id="sh-tpl">등록 템플릿 내려받기</button>`)}</div>
         <div class="def__tblwrap"><p class="hint def__shhelp">고객 측 의사결정자(스폰서 ${raw(term('sponsor'))})와 실무 책임자(고객 PM)를 꼭 넣으세요. 승인자로 선택됩니다.</p>
@@ -165,15 +165,15 @@ export async function definitionPage(id) {
             <td><input class="input input--sm" data-shf="role" value="${x.role || ''}" maxlength="100" placeholder="예: 고객 PM" ${ro ? 'disabled' : ''}></td>
             <td><input class="input input--sm" data-shf="area" value="${x.area || ''}" maxlength="200" placeholder="예: 요구사항 최종 승인" ${ro ? 'disabled' : ''}></td>
             <td>${raw(ro ? '' : html`<button type="button" class="def__x" data-shdel="${x.id}" aria-label="삭제">×</button>`)}</td></tr>`).join(''))}
-          ${raw(d.stakeholders.length ? '' : '<tr class="def__empty"><td colspan="7">아직 등록된 이해관계자가 없습니다. 직접 추가하거나 Excel 템플릿으로 한 번에 등록하세요.</td></tr>')}</tbody></table></div>
-        <p class="hint">완료 처리하려면 조직 구분과 이름이 있는 이해관계자를 1명 이상 등록합니다.</p>`;
+          ${raw(d.stakeholders.length ? '' : '<tr class="def__empty"><td colspan="7">아직 등록된 관계자가 없습니다. 직접 추가하거나 Excel 템플릿으로 한 번에 등록하세요.</td></tr>')}</tbody></table></div>
+        <p class="hint">완료 처리하려면 조직 구분과 이름이 있는 관계자를 1명 이상 등록합니다.</p>`;
       case 'MILESTONES': return html`<div class="def__dates" data-field="project_dates"><span>프로젝트 기간</span><b>${fmtShort(m.project_dates.planned_start_date)} ~ ${fmtShort(m.project_dates.planned_end_date)}</b>${raw(ro ? '' : html`<a class="link" href="${u}/edit" data-link>정보 수정</a>`)}</div>
-        <div class="field" data-field="key_dates"><label>주요 일정 · 마일스톤 <small class="dim">계약·보고·검수 등 반드시 지켜야 할 시점 — 프로젝트 헌장 타임라인에 표시됩니다</small></label>
-          <ul class="def__list def__list--dates">${raw(d.key_dates.map((x) => html`<li data-kd="${x.id}"><input class="input input--sm" type="date" data-kdf="date" value="${x.date}" ${ro ? 'disabled' : ''}><input class="input input--sm" data-kdf="title" value="${x.title}" maxlength="200" placeholder="예: 킥오프, 중간보고, 최종 검수" ${ro ? 'disabled' : ''}>${raw(ro ? '' : html`<button type="button" class="def__x" data-kddel="${x.id}" aria-label="삭제">×</button>`)}${raw(afterEnd(x.date))}</li>`).join(''))}</ul>
+        <div class="field" data-field="key_dates"><label>주요 일정 <small class="dim">계약·보고·검수 등 반드시 지켜야 할 시점 — 프로젝트 개요 타임라인에 표시됩니다</small></label>
+          <ul class="def__list def__list--dates">${raw(d.key_dates.map((x) => html`<li data-kd="${x.id}"><input class="input input--sm" type="date" data-kdf="date" value="${x.date}" ${ro ? 'disabled' : ''}><input class="input input--sm" data-kdf="title" value="${x.title}" maxlength="200" placeholder="예: 착수보고회, 중간보고, 최종 검수" ${ro ? 'disabled' : ''}>${raw(ro ? '' : html`<button type="button" class="def__x" data-kddel="${x.id}" aria-label="삭제">×</button>`)}${raw(afterEnd(x.date))}</li>`).join(''))}</ul>
           ${raw(ro ? '' : '<button type="button" class="link linkbtn def__add" id="kd-add">+ 일정 추가</button>')}</div>
-        <div class="field"><label>WBS 마일스톤 <small class="dim">분석·설계 단계에서 WBS에 등록한 마일스톤 (조회만)</small></label>
-          ${raw(m.wbs_milestones.length ? html`<ul class="def__ms">${raw(m.wbs_milestones.map((x) => html`<li><a href="${u}/wbs?sel=${x.id}" data-link><i class="wms">◆</i><span class="mono">${x.wbs_code}</span>${x.title}<time>${x.milestone_date ? fmtShort(x.milestone_date) : '날짜 미정'}</time></a></li>`).join(''))}</ul>` : '<p class="hint">아직 WBS 마일스톤이 없습니다.</p>')}</div>
-        <p class="hint">완료 처리하려면 주요 일정을 1개 이상 입력하거나 WBS에 마일스톤이 있어야 합니다.</p>`;
+        <div class="field"><label>WBS 주요 일정 <small class="dim">분석·설계 단계에서 WBS에 등록한 주요 일정 (조회만)</small></label>
+          ${raw(m.wbs_milestones.length ? html`<ul class="def__ms">${raw(m.wbs_milestones.map((x) => html`<li><a href="${u}/wbs?sel=${x.id}" data-link><i class="wms">◆</i><span class="mono">${x.wbs_code}</span>${x.title}<time>${x.milestone_date ? fmtShort(x.milestone_date) : '날짜 미정'}</time></a></li>`).join(''))}</ul>` : '<p class="hint">아직 WBS에 주요 일정이 없습니다.</p>')}</div>
+        <p class="hint">완료 처리하려면 주요 일정을 1개 이상 입력하거나 WBS에 주요 일정이 있어야 합니다.</p>`;
       case 'OPERATIONS': return html`${raw(OPS.map(([k, label, ph]) => html`<div class="field" data-field="${k}"><label>${label}</label><textarea class="textarea" data-op="${k}" rows="2" maxlength="2000" placeholder="${ph}" ${ro ? 'disabled' : ''}>${d.operations[k] || ''}</textarea></div>`).join(''))}
         ${raw(textAreas(CHARTER_TEXT.OPERATIONS))}
         <p class="hint">완료 처리하려면 회의·보고·소통·의사결정 중 1개 이상을 입력합니다. 변경관리·검수 기준은 선택 항목입니다.</p>`;
@@ -191,11 +191,11 @@ export async function definitionPage(id) {
     const prepDone = k.prep.filter((x) => x.done).length;
     return html`<div class="wd__tools">${raw(planMenu('사업수행계획서 초안 내려받기'))}<small class="dim">착수보고회 전에 사업수행계획서 초안을 고객에게 보내세요. ${raw(term('plan'))}</small></div>
       <div class="def__grid2">
-        <div class="field" data-field="kickoff.datetime"><label>일시 <span class="req">*</span></label><input class="input input--sm" type="datetime-local" data-kf="datetime" value="${k.datetime}" ${dis}>${raw(k._prefilled ? html`<small class="dim">마일스톤 '${k._prefilled}'에서 가져왔습니다. 시간을 확인하세요.</small>` : '')}</div>
+        <div class="field" data-field="kickoff.datetime"><label>일시 <span class="req">*</span></label><input class="input input--sm" type="datetime-local" data-kf="datetime" value="${k.datetime}" ${dis}>${raw(k._prefilled ? html`<small class="dim">주요 일정 '${k._prefilled}'에서 가져왔습니다. 시간을 확인하세요.</small>` : '')}</div>
         <div class="field" data-field="kickoff.place"><label>장소 / 방식</label><input class="input input--sm" data-kf="place" value="${k.place}" maxlength="200" placeholder="예: 고객사 대회의실 / Teams" ${dis}></div>
       </div>
-      <div class="field" data-field="kickoff.attendees"><label>참석자 <small class="dim">이해관계자 목록에서 선택</small></label>
-        ${raw(people.length ? html`<div class="kchk">${raw(people.map((x) => html`<label class="kchk__i"><input type="checkbox" data-katt="${x.id}" ${k.attendees.includes(x.id) ? 'checked' : ''} ${dis}> ${x.name}<small>${[x.org, x.role].filter(Boolean).join(' · ')}</small></label>`).join(''))}</div>` : '<p class="hint">이해관계자를 먼저 등록하면 여기에서 참석자를 선택할 수 있습니다.</p>')}</div>
+      <div class="field" data-field="kickoff.attendees"><label>참석자 <small class="dim">관계자 목록에서 선택</small></label>
+        ${raw(people.length ? html`<div class="kchk">${raw(people.map((x) => html`<label class="kchk__i"><input type="checkbox" data-katt="${x.id}" ${k.attendees.includes(x.id) ? 'checked' : ''} ${dis}> ${x.name}<small>${[x.org, x.role].filter(Boolean).join(' · ')}</small></label>`).join(''))}</div>` : '<p class="hint">관계자를 먼저 등록하면 여기에서 참석자를 선택할 수 있습니다.</p>')}</div>
       <div class="field" data-field="kickoff.prep"><label>준비 체크 <small class="dim">${prepDone}/${k.prep.length} 완료</small></label>
         ${raw(klist('prep', k.prep, (it) => html`<input type="checkbox" data-klf="done" ${it.done ? 'checked' : ''} ${dis} aria-label="완료"><input class="input input--sm" data-klf="text" value="${it.text}" maxlength="200" ${dis}>`, '+ 항목 추가'))}</div>
       <div class="field" data-field="kickoff.agenda"><label>안건</label><textarea class="textarea" data-kf="agenda" rows="5" maxlength="2000" ${dis}>${k.agenda}</textarea></div>
@@ -216,7 +216,7 @@ export async function definitionPage(id) {
       <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(planMenu())}</div>
         <dl><div><dt>목표</dt><dd>${d.goal || (d.success_criteria[0] && d.success_criteria[0].text) || '작성되지 않음'}</dd></div>
         <div><dt>범위</dt><dd>${d.scope_in.length ? `수행 ${d.scope_in.length}건 (${d.scope_in.slice(0, 2).map((x) => x.text).join(', ')}${d.scope_in.length > 2 ? ' …' : ''})${d.scope_out.length ? ` · 제외 ${d.scope_out.length}건` : ''}` : '작성되지 않음'}</dd></div>
-        <div><dt>일정</dt><dd>${pd.planned_start_date ? `${fmtShort(pd.planned_start_date)} ~ ${fmtShort(pd.planned_end_date)}` : '기간 미정'}${d.key_dates.length ? ` · 마일스톤 ${d.key_dates.length}건` : ''}</dd></div>
+        <div><dt>일정</dt><dd>${pd.planned_start_date ? `${fmtShort(pd.planned_start_date)} ~ ${fmtShort(pd.planned_end_date)}` : '기간 미정'}${d.key_dates.length ? ` · 주요 일정 ${d.key_dates.length}건` : ''}</dd></div>
         <div><dt>추진 조직</dt><dd>${(d.stakeholders || []).length ? ['CLIENT', 'OWN', 'PARTNER', 'OTHER'].filter((t) => nOrg(t)).map((t) => `${ORG_TYPE[t]} ${nOrg(t)}명`).join(' · ') : '작성되지 않음'}</dd></div></dl></div>
       ${raw(approvalFields(a, { people: d.stakeholders || [], methods, disabled: ro, approverHint: html`<small class="dim">스폰서 ${raw(term('sponsor'))} 또는 고객 PM</small>`, evidencePh: "예: 2026-11-03 이수진 차장 회신 메일 '사업수행계획서 v1.0 승인'" }))}
       <p class="hint">승인자·승인일·승인 방법·근거가 있어야 완료 처리할 수 있습니다. 승인 후 목표·범위·일정이나 승인자 정보가 바뀌면 '확인 필요'로 표시됩니다. ${raw(term('baseline'))}</p>`;
@@ -323,7 +323,7 @@ export async function definitionPage(id) {
     const el = document.createElement('div'); el.className = 'scrim';
     let rows = null; let columns = []; let summary = null; let busy = false; let fileName = '';
     const render = () => {
-      el.innerHTML = html`<div class="dialog dialog--wide xlm" role="dialog" aria-modal="true" aria-labelledby="xlT"><h3 id="xlT">이해관계자 Excel 업로드</h3>
+      el.innerHTML = html`<div class="dialog dialog--wide xlm" role="dialog" aria-modal="true" aria-labelledby="xlT"><h3 id="xlT">관계자 Excel 업로드</h3>
         ${raw(!rows ? html`<p>등록 템플릿(.xlsx)에 작성한 파일을 올리면 내용을 확인한 뒤 한 번에 등록합니다. 기존 목록에 추가됩니다.</p>
           <div class="drop ${busy ? 'is-busy' : ''}" id="xl-drop" tabindex="0" role="button"><b>${busy ? `${fileName} 읽는 중…` : 'Excel 파일(.xlsx)을 여기에 끌어다 놓거나 클릭해 선택하세요'}</b><input type="file" id="xl-file" accept=".xlsx" hidden></div>
           <div class="actions"><button type="button" class="link linkbtn" id="xl-tpl" style="width:auto">등록 템플릿 내려받기</button><span style="flex:1"></span><button type="button" class="btn btn--secondary" data-v="0">취소</button></div>`
@@ -333,7 +333,7 @@ export async function definitionPage(id) {
       const done = () => el.remove();
       el.querySelectorAll('[data-v="0"]').forEach((b) => b.onclick = done);
       el.onclick = (e) => { if (e.target === el) done(); };
-      const tpl = $('#xl-tpl', el); if (tpl) tpl.onclick = () => download(wsApi(`/${id}/definition/stakeholders/template.xlsx`), { filename: '이해관계자 등록 템플릿.xlsx' }).catch((e) => toast(e.message));
+      const tpl = $('#xl-tpl', el); if (tpl) tpl.onclick = () => download(wsApi(`/${id}/definition/stakeholders/template.xlsx`), { filename: '관계자 등록 템플릿.xlsx' }).catch((e) => toast(e.message));
       const drop = $('#xl-drop', el); const input = $('#xl-file', el);
       if (drop) {
         drop.onclick = () => input.click(); drop.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } };
@@ -379,7 +379,7 @@ export async function definitionPage(id) {
     el.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { collect(); d[b.dataset.del] = d[b.dataset.del].filter((x) => x.id !== b.dataset.id); markDirty(); drawDrawer(); });
     const sa = $('#sh-add'); if (sa) sa.onclick = () => { collect(); d.stakeholders.push({ id: uid(), org_type: '', org: '', department: '', name: '', role: '' }); markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll('tr[data-sh] [data-shf="name"]')].pop(); if (last) last.focus(); };
     const sx = $('#sh-xl'); if (sx) sx.onclick = () => { collect(); excelModal(); };
-    const stp = $('#sh-tpl'); if (stp) stp.onclick = () => download(wsApi(`/${id}/definition/stakeholders/template.xlsx`), { filename: '이해관계자 등록 템플릿.xlsx' }).catch((e) => toast(e.message));
+    const stp = $('#sh-tpl'); if (stp) stp.onclick = () => download(wsApi(`/${id}/definition/stakeholders/template.xlsx`), { filename: '관계자 등록 템플릿.xlsx' }).catch((e) => toast(e.message));
     el.querySelectorAll('[data-shdel]').forEach((b) => b.onclick = () => { collect(); d.stakeholders = d.stakeholders.filter((x) => x.id !== b.dataset.shdel); markDirty(); drawDrawer(); });
     el.querySelectorAll('[data-kladd]').forEach((b) => b.onclick = () => { collect(); const kind = b.dataset.kladd; d.kickoff[kind] = [...d.kickoff[kind], kind === 'followups' ? { id: uid(), text: '', owner: '', due: '', done: false } : kind === 'prep' ? { id: uid(), text: '', done: false } : { id: uid(), text: '' }]; markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll(`[data-kl="${kind}"] [data-klf="text"]`)].pop(); if (last) last.focus(); });
     el.querySelectorAll('[data-kldel]').forEach((b) => b.onclick = () => { collect(); d.kickoff[b.dataset.kldel] = d.kickoff[b.dataset.kldel].filter((x) => x.id !== b.dataset.id); markDirty(); drawDrawer(); });
