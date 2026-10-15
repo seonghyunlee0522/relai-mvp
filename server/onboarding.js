@@ -27,18 +27,18 @@ export const TOUR_STEPS = {
   OWNER: [
     { key: 'HOME', route: '/app', target: 'nav-home', title: '홈 — 지금 해야 할 일', body: '홈에서는 참여 중인 프로젝트와 각 프로젝트의 다음 할 일을 한눈에 봅니다.', placement: 'right', fallback: 'center' },
     { key: 'CREATE_PROJECT', route: '/app', target: 'create-project', title: '첫 프로젝트 만들기', body: '프로젝트를 시작하려면 먼저 새 프로젝트를 만들어 주세요. 이름, 고객사, 기간만 입력하면 됩니다.', placement: 'bottom', cta: { label: '프로젝트 만들기', href: '/app/projects/new' }, pauseUntilProject: true },
-    { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: '지금 할 일 — 지금 할 일', body: 'RELAI 안내가 현재 단계와 지금 가장 먼저 해야 할 일을 안내하고 실제 업무 화면으로 보냅니다. 막히면 여기로 돌아오세요. 전체 현황은 보고서 › 건강도에서 봅니다.', placement: 'bottom', needsProject: true },
+    { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: '지금 할 일', body: 'RELAI 안내가 현재 단계와 지금 가장 먼저 해야 할 일을 안내하고 실제 업무 화면으로 보냅니다. 막히면 여기로 돌아오세요. 전체 현황은 보고서 › 건강도에서 봅니다.', placement: 'bottom', needsProject: true },
     { key: 'LIFECYCLE', route: '/app/projects/:pid', target: 'phase-stepper', title: '프로젝트 단계', body: '착수 → 요구사항 정의 → 분석·설계 → 구현 → 시험 → 전환 및 오픈 → 운영 및 유지보수. 단계는 지금 할 일 화면 위쪽에만 표시됩니다. 현재 단계는 파란색, 완료 단계는 초록색이고, 왼쪽 메뉴 7개로 업무 화면에 갑니다.', placement: 'right', needsProject: true },
-    { key: 'DEFINITION', route: '/app/projects/:pid', target: 'rail-plan', title: '계획 — 프로젝트 정의', body: '착수 단계에서는 목표·범위·이해관계자·상위 일정·운영 방식을 정리합니다. 이것이 이후 모든 판단의 기준입니다.', placement: 'right', needsProject: true },
+    { key: 'DEFINITION', route: '/app/projects/:pid', target: 'rail-plan', title: '계획 — 프로젝트 정의', body: '착수 단계에서는 목표·범위·관계자·상위 일정·운영 방식을 정리합니다. 이것이 이후 모든 판단의 기준입니다.', placement: 'right', needsProject: true },
     { key: 'REQUIREMENTS', route: '/app/projects/:pid', target: 'rail-requirements', title: '요구사항', body: '요구사항은 프로젝트 범위와 검수 기준입니다. 직접 입력, Excel, AI 추출로 등록할 수 있습니다.', placement: 'right', needsProject: true },
-    { key: 'WBS', route: '/app/projects/:pid', target: 'rail-schedule', title: '일정 — WBS', body: '요구사항을 실제 작업 단위로 나누고 담당자와 일정을 정합니다. 일정 메뉴 하나에서 작업 목록 · 간트 · 구현 현황을 봅니다.', placement: 'right', needsProject: true },
+    { key: 'WBS', route: '/app/projects/:pid', target: 'rail-schedule', title: '일정 — 작업 목록(WBS)', body: '요구사항을 실제 작업 단위로 나누고 담당자와 일정을 정합니다. 일정 메뉴 하나에서 작업 목록 · 간트 · 구현 현황을 봅니다.', placement: 'right', needsProject: true },
     { key: 'TESTS', route: '/app/projects/:pid', target: 'rail-tests', title: '시험', body: '구현 결과를 요구사항 기준으로 검증합니다. 검수(인수 승인)는 시험 › 검수 탭에서 기록합니다.', placement: 'right', needsProject: true },
     { key: 'MEMBERS', route: '/app/settings?tab=team', target: 'invite-members', title: '팀원 초대', body: '동료를 초대하면 같은 워크스페이스에서 프로젝트를 함께 진행할 수 있습니다. 초대는 이메일로 발송됩니다.', placement: 'left', fallback: 'center', needsPermission: 'member_manage' },
   ],
   MEMBER: [
     { key: 'HOME', route: '/app', target: 'nav-home', title: '홈 — 참여 중인 프로젝트', body: '홈에서 참여 중인 프로젝트와 현재 단계를 확인하고, 프로젝트를 열어 담당 업무를 봅니다.', placement: 'right', fallback: 'center' },
     { key: 'PROJECT_HOME', route: '/app/projects/:pid', target: 'guidance', title: '지금 할 일', body: '현재 단계와 지금 할 일을 봅니다. 전체 현황은 보고서 › 건강도에 있습니다.', placement: 'bottom', needsProject: true },
-    { key: 'WBS', route: '/app/projects/:pid', target: 'rail-schedule', title: 'WBS — 내 업무', body: 'WBS에서 담당자 필터로 내 작업을 보고 진행률과 상태를 갱신합니다.', placement: 'right', needsProject: true },
+    { key: 'WBS', route: '/app/projects/:pid', target: 'rail-schedule', title: '작업 목록(WBS) — 내 업무', body: 'WBS에서 담당자 필터로 내 작업을 보고 진행률과 상태를 갱신합니다.', placement: 'right', needsProject: true },
     { key: 'TESTS', route: '/app/projects/:pid', target: 'rail-tests', title: '시험', body: '테스트 실행 결과를 기록합니다. 검수 결과는 시험 › 검수에서 기록합니다.', placement: 'right', needsProject: true },
   ],
 };
@@ -109,7 +109,7 @@ const shape = (r) => (r ? { status: r.status, current_step: r.current_step, comp
 /** Everything the client needs in ONE call (also embedded in /api/me-like contexts by the route). */
 export async function onboardingSummary(db, { user, workspaceId, role, permissions = {} }) {
   const f = await workspaceFacts(db, workspaceId);
-  if (!f) throw new OnboardingError(404, 'not_found', 'Workspace를 찾을 수 없습니다.');
+  if (!f) throw new OnboardingError(404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
   const manager = role === 'OWNER' || role === 'ADMIN';
   // First sight of this user × workspace decides the audience: a workspace that already has projects is an existing customer (backfill).
   const tourInit = f.projects > 0 && manager ? { status: 'COMPLETED', completed_at: new Date().toISOString(), meta: { backfilled: true } } : {};
@@ -145,7 +145,7 @@ export async function onboardingSummary(db, { user, workspaceId, role, permissio
 
 /* ---------- writes ---------- */
 export async function updateOnboarding(db, { user, workspaceId, key, action, step = null }) {
-  if (!ONBOARDING_KEYS.includes(key)) throw new OnboardingError(404, 'not_found', '알 수 없는 온보딩 항목입니다.');
+  if (!ONBOARDING_KEYS.includes(key)) throw new OnboardingError(404, 'not_found', '알 수 없는 시작 안내 항목입니다.');
   const row = await ensureRow(db, user.id, workspaceId, key);
   const now = new Date().toISOString();
   const completed = Array.isArray(row.completed_steps) ? row.completed_steps : [];

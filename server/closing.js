@@ -86,7 +86,7 @@ async function applyOwners(db, project, owners, { requireAll }) {
     const v = given.get(k);
     if (v === '' || v === null || v === undefined) { if (requireAll) missing.push(c.display_id); else { delete c.owner_user_id; delete c.owner_stakeholder_id; delete c.owner_tbd; } continue; }
     const ref = refOf(v);
-    if (!ref || !(await refValid(db, project, ref, sh))) throw new ValidationError({ owners: `${c.display_id} 운영 담당은 이 Workspace 멤버나 01 이해관계자 중에서 고르거나 미정으로 두세요.` });
+    if (!ref || !(await refValid(db, project, ref, sh))) throw new ValidationError({ owners: `${c.display_id} 운영 담당은 이 워크스페이스 멤버나 01 관계자 중에서 고르거나 미정으로 두세요.` });
     delete c.owner_user_id; delete c.owner_stakeholder_id; delete c.owner_tbd;
     if (ref.kind === 'u') c.owner_user_id = ref.id; else if (ref.kind === 's') c.owner_stakeholder_id = ref.id; else c.owner_tbd = true;
   }
@@ -114,7 +114,7 @@ export async function recordHandover(db, project, body = {}, userId) {
   if (Object.keys(f).length) throw err422('handover_required', '인수자와 인수일을 입력해야 운영 인수를 완료할 수 있습니다.', f);
   if (date > todayKst()) throw err422('invalid_handover_date', '인수일은 오늘 이후 날짜로 정할 수 없습니다.', { date: '인수일은 오늘 이후 날짜로 정할 수 없습니다.' });
   const sh = await stakeholdersOf(db, project.id);
-  if (!(await refValid(db, project, ref, sh))) throw err422('handover_required', '인수자는 이 Workspace 멤버나 01 이해관계자 중에서 고르세요.', { receiver: '인수자는 이 Workspace 멤버나 01 이해관계자 중에서 고르세요.' });
+  if (!(await refValid(db, project, ref, sh))) throw err422('handover_required', '인수자는 이 워크스페이스 멤버나 01 관계자 중에서 고르세요.', { receiver: '인수자는 이 워크스페이스 멤버나 01 관계자 중에서 고르세요.' });
   const step = await handoverStep(db, project.id);
   if (!step) return { error: 'not_found' };
   const list = await applyOwners(db, project, b.owners, { requireAll: true });

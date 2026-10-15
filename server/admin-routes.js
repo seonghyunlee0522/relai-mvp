@@ -31,7 +31,7 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
   app.post('/api/admin/users/:id/reactivate', guard, action((req) => A.reactivateUser(db, admin(req), req.params.id, req.body)));
 
   app.get('/api/admin/workspaces', guard, wrap(async (req, res) => res.json(await A.listWorkspaces(db, req.query))));
-  app.get('/api/admin/workspaces/:id', guard, wrap(async (req, res) => { const d = await A.getWorkspace(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', 'Workspace를 찾을 수 없습니다.'); }));
+  app.get('/api/admin/workspaces/:id', guard, wrap(async (req, res) => { const d = await A.getWorkspace(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', '워크스페이스를 찾을 수 없습니다.'); }));
   app.post('/api/admin/workspaces/:id/suspend', guard, action((req) => A.suspendWorkspace(db, admin(req), req.params.id, req.body)));
   app.post('/api/admin/workspaces/:id/reactivate', guard, action((req) => A.reactivateWorkspace(db, admin(req), req.params.id, req.body)));
 
@@ -43,13 +43,13 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   app.get('/api/admin/billing', guard, wrap(async (req, res) => res.json({ billing: await billingStatus(db), plans: PLANS })));
   app.get('/api/admin/subscriptions', guard, wrap(async (req, res) => { const { page, size } = A.paging(req.query); res.json({ ...(await listSubscriptions(db, { q: String(req.query.q || '').trim(), plan: req.query.plan, status: req.query.status, page, size })), page, size }); }));
-  app.get('/api/admin/subscriptions/:id', guard, wrap(async (req, res) => { const d = await getSubscription(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', 'Subscription을 찾을 수 없습니다.'); }));
+  app.get('/api/admin/subscriptions/:id', guard, wrap(async (req, res) => { const d = await getSubscription(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', '구독을 찾을 수 없습니다.'); }));
   app.get('/api/admin/payments', guard, wrap(async (req, res) => { const { page, size } = A.paging(req.query); res.json({ ...(await listPayments(db, { q: String(req.query.q || '').trim(), status: req.query.status, provider: req.query.provider, from: req.query.from, to: req.query.to, page, size })), page, size }); }));
-  app.get('/api/admin/payments/:id', guard, wrap(async (req, res) => { const d = await getPayment(db, req.params.id); return d ? res.json({ payment: d }) : fail(res, 404, 'not_found', 'Payment를 찾을 수 없습니다.'); }));
+  app.get('/api/admin/payments/:id', guard, wrap(async (req, res) => { const d = await getPayment(db, req.params.id); return d ? res.json({ payment: d }) : fail(res, 404, 'not_found', '결제 내역을 찾을 수 없습니다.'); }));
 
   /* AI usage + credits (Phase 11). Aggregates only — never project content. */
   app.get('/api/admin/ai/usage', guard, wrap(async (req, res) => res.json(await aiUsageOverview(db))));
-  app.get('/api/admin/workspaces/:id/ai', guard, wrap(async (req, res) => { const d = await workspaceAiUsage(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', 'Workspace를 찾을 수 없습니다.'); }));
+  app.get('/api/admin/workspaces/:id/ai', guard, wrap(async (req, res) => { const d = await workspaceAiUsage(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', '워크스페이스를 찾을 수 없습니다.'); }));
   app.post('/api/admin/workspaces/:id/ai/credits', guard, action((req) => grantCredits(db, admin(req), req.params.id, req.body)));
 
   /* Integrations (Phase 12): connection health + sync failures only; never credentials or issue content. */

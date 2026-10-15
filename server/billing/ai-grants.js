@@ -31,7 +31,7 @@ export async function grantMonthlyCredits(db, workspaceId) {
     await ensureAccount(t, workspaceId);
     await t.get('SELECT workspace_id FROM workspace_credit_accounts WHERE workspace_id = ? FOR UPDATE', [workspaceId]);
     if (await t.get('SELECT 1 FROM credit_ledger WHERE workspace_id = ? AND reference_type = ? AND reference_id = ?', [workspaceId, GRANT_REF, ref])) return null;
-    const out = await applyCredits(t, { wid: workspaceId, amount, type: 'PLAN_GRANT', reason: `${planOf(s.plan).label} 플랜 월간 AI Credit (${cycle}~)`, referenceType: GRANT_REF, referenceId: ref });
+    const out = await applyCredits(t, { wid: workspaceId, amount, type: 'PLAN_GRANT', reason: `${planOf(s.plan).label} 플랜 월간 AI 크레딧 (${cycle}~)`, referenceType: GRANT_REF, referenceId: ref });
     return { amount, balance: out.balance, cycle_start: cycle };
   });
 }

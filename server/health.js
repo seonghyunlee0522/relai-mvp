@@ -74,19 +74,19 @@ const n = (v) => Number(v) || 0;
 
 export function scheduleHealth(f, R = HEALTH_RULES.schedule) {
   const w = f.wbs; const reasons = [];
-  if (n(w.tasks_dated) === 0 && n(w.milestones_dated) === 0) return { status: STATUS.UNKNOWN, reasons: ['일정이 입력된 WBS 작업/마일스톤이 없습니다.'], hint: '일정 상태를 확인하려면 WBS 일정을 입력하세요.' };
+  if (n(w.tasks_dated) === 0 && n(w.milestones_dated) === 0) return { status: STATUS.UNKNOWN, reasons: ['일정이 입력된 WBS 작업/주요 일정이 없습니다.'], hint: '일정 상태를 확인하려면 WBS 일정을 입력하세요.' };
   if (n(w.overdue_tasks)) reasons.push(`종료 예정일이 지난 WBS ${w.overdue_tasks}건`);
-  if (n(w.overdue_milestones)) reasons.push(`지난 마일스톤 ${w.overdue_milestones}건`);
+  if (n(w.overdue_milestones)) reasons.push(`날짜가 지난 주요 일정 ${w.overdue_milestones}건`);
   if (n(w.beyond_project_end)) reasons.push(`프로젝트 종료일을 넘는 WBS ${w.beyond_project_end}건`);   // UX-008
   if (n(w.overdue_tasks) >= R.crit_tasks_min || n(w.overdue_milestones) >= R.crit_milestones_min) return { status: STATUS.CRITICAL, reasons };
   if (n(w.overdue_tasks) >= R.warn_tasks_min || n(w.overdue_milestones) >= R.warn_milestones_min) return { status: STATUS.WARNING, reasons };
   if (n(w.beyond_project_end)) return { status: STATUS.WARNING, reasons };
-  return { status: STATUS.GOOD, reasons: [`일정이 지난 작업/마일스톤이 없습니다 (일정 입력 작업 ${w.tasks_dated}건)`] };
+  return { status: STATUS.GOOD, reasons: [`일정이 지난 작업/주요 일정이 없습니다 (일정 입력 작업 ${w.tasks_dated}건)`] };
 }
 
 export function scopeHealth(f, R = HEALTH_RULES.scope) {
   const r = f.req; const c = f.chg; const reasons = [];
-  if (n(r.in_scope) === 0) return { status: STATUS.UNKNOWN, reasons: ['범위 내(IN_SCOPE) 요구사항이 없습니다.'], hint: '범위 상태를 확인하려면 요구사항의 범위를 IN_SCOPE로 정하세요.' };
+  if (n(r.in_scope) === 0) return { status: STATUS.UNKNOWN, reasons: ['범위 내 요구사항이 없습니다.'], hint: '범위 상태를 확인하려면 요구사항의 범위를 범위 내로 정하세요.' };
   if (n(r.unconfirmed)) reasons.push(`미확정 요구사항 ${r.unconfirmed}건`);
   if (n(r.confirmed_unlinked)) reasons.push(`확정된 범위 내 요구사항 ${r.confirmed_unlinked}건이 WBS와 미연결`);
   if (n(c.approved_unimplemented)) reasons.push(`승인 후 미반영 변경 ${c.approved_unimplemented}건`);
@@ -129,7 +129,7 @@ export function riskHealth(f) {
   if (n(r.critical)) return { status: STATUS.CRITICAL, reasons };
   if (reasons.length) return { status: STATUS.WARNING, reasons };
   if (n(r.active) === 0) return { status: STATUS.GOOD, reasons: ['활성 리스크가 없습니다 (종료/발생 처리됨).'] };
-  return { status: STATUS.GOOD, reasons: [`활성 리스크 ${r.active}건 모두 Low/Medium`] };
+  return { status: STATUS.GOOD, reasons: [`활성 리스크 ${r.active}건 모두 낮음/보통`] };
 }
 
 export function overallHealth(dims) {

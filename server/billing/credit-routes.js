@@ -165,7 +165,7 @@ export function mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, pro
     if (!provider?.refundPartial) return fail(res, 503, 'billing_unavailable', '결제 기능이 아직 준비되지 않았습니다.');
     const reason = String(req.body?.reason || '').trim().slice(0, 100);
     if (!reason) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { reason: '환불 사유를 입력해 주세요.' } });
-    if (!(await db.get('SELECT id FROM workspaces WHERE id = ?', [req.params.wid]))) return fail(res, 404, 'not_found', 'Workspace를 찾을 수 없습니다.');
+    if (!(await db.get('SELECT id FROM workspaces WHERE id = ?', [req.params.wid]))) return fail(res, 404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
     let out;
     try { out = await refundCredits(db, provider, { wid: req.params.wid, credits: Number(req.body?.credits), reason, adminUserId: req.user.id }); }
     catch (e) {

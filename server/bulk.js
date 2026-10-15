@@ -64,7 +64,7 @@ export async function bulkRequirements(db, project, wid, body, userId) {
       if (!r) { skipped.push({ id, reason: '요구사항을 찾을 수 없습니다.' }); continue; }
       if (r.archived_at) { skipped.push({ id, reason: '보관된 요구사항은 수정할 수 없습니다.' }); continue; }
       if (action === 'archive') { await R.archiveRequirement(t, r, userId); updated++; continue; }
-      if (ownerBad) { skipped.push({ id, reason: 'Owner는 현재 Workspace 멤버만 지정할 수 있습니다.' }); continue; }
+      if (ownerBad) { skipped.push({ id, reason: '담당자는 현재 워크스페이스 멤버만 지정할 수 있습니다.' }); continue; }
       const changed = await R.updateRequirement(t, project, r, input, userId, { sourceChangeRequestId: source ? source.id : null });
       if (changed.length) updated++; else skipped.push({ id, reason: NO_CHANGE });
     }
@@ -93,9 +93,9 @@ export async function bulkWbs(db, project, wid, body, userId) {
         updated++; continue;
       }
       if (w.archived_at) { skipped.push({ id, reason: '보관된 WBS 항목은 수정할 수 없습니다.' }); continue; }
-      if (ownerBad) { skipped.push({ id, reason: 'Owner는 현재 Workspace 멤버만 지정할 수 있습니다.' }); continue; }
+      if (ownerBad) { skipped.push({ id, reason: '담당자는 현재 워크스페이스 멤버만 지정할 수 있습니다.' }); continue; }
       if (w.item_type === 'MILESTONE' && (patch.planned_start_date !== undefined || patch.planned_end_date !== undefined)) {
-        skipped.push({ id, reason: '마일스톤은 시작일/종료일 대신 마일스톤 날짜를 사용합니다.' }); continue;
+        skipped.push({ id, reason: '주요 일정은 시작일/종료일 대신 날짜 하나만 사용합니다.' }); continue;
       }
       const draft = { ...patch };
       const isGroup = w.item_type === 'SUMMARY' || (await W.childCount(t, id)) > 0;

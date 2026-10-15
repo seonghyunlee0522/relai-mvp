@@ -59,17 +59,17 @@ export async function listIssueTypes(db, project, projectKey, env = process.env)
 export async function saveMapping(db, project, body = {}, userId, env = process.env) {
   const c = await requireActiveConnection(db, project.workspace_id);
   const key = String(body.external_project_key || '').trim().toUpperCase();
-  if (!/^[A-Z][A-Z0-9_]{0,19}$/.test(key)) throw new ValidationError({ external_project_key: 'Jira 프로젝트 키를 확인해 주세요.' });
+  if (!/^[A-Z][A-Z0-9_]{0,19}$/.test(key)) throw new ValidationError({ external_project_key: '지라 프로젝트 키를 확인해 주세요.' });
   const leafId = body.leaf_issue_type_id ? String(body.leaf_issue_type_id) : null; const groupId = body.group_issue_type_id ? String(body.group_issue_type_id) : null;
   // validate against Jira (project exists, issue types creatable there)
   const { jp, types } = await withClient(db, c.id, async (jira) => {
-    let jp; try { jp = await jira.getProject(key); } catch (e) { if (e instanceof JiraApiError && e.status === 404) throw new ValidationError({ external_project_key: `Jira 프로젝트 '${key}'을(를) 찾을 수 없거나 접근 권한이 없습니다.` }); throw e; }
+    let jp; try { jp = await jira.getProject(key); } catch (e) { if (e instanceof JiraApiError && e.status === 404) throw new ValidationError({ external_project_key: `지라 프로젝트 '${key}'을(를) 찾을 수 없거나 접근 권한이 없습니다.` }); throw e; }
     const t = await jira.issueTypesForProject(key);
     return { jp, types: (t.issueTypes || []).filter((x) => !x.subtask) };
   }, env);
   const leaf = leafId ? types.find((t) => String(t.id) === leafId) : null; const group = groupId ? types.find((t) => String(t.id) === groupId) : null;
-  if (leafId && !leaf) throw new ValidationError({ leaf_issue_type_id: '선택한 Issue Type을 이 Jira 프로젝트에서 생성할 수 없습니다.' });
-  if (groupId && !group) throw new ValidationError({ group_issue_type_id: '선택한 Issue Type을 이 Jira 프로젝트에서 생성할 수 없습니다.' });
+  if (leafId && !leaf) throw new ValidationError({ leaf_issue_type_id: '선택한 이슈 유형을 이 지라 프로젝트에서 생성할 수 없습니다.' });
+  if (groupId && !group) throw new ValidationError({ group_issue_type_id: '선택한 이슈 유형을 이 지라 프로젝트에서 생성할 수 없습니다.' });
   const auto = Boolean(body.auto_complete_leaf_wbs); const markReq = Boolean(body.auto_mark_requirements);
   return tx(db, async (db) => {
     const cur = await db.get(`SELECT * FROM integration_project_mappings WHERE project_id = ? AND status = 'ACTIVE' FOR UPDATE`, [project.id]);
@@ -85,18 +85,18 @@ export async function saveMapping(db, project, body = {}, userId, env = process.
       id = randomUUID();
       await db.run('INSERT INTO integration_project_mappings (id, project_id, connection_id, external_project_id, external_project_key, external_project_name, leaf_issue_type_id, leaf_issue_type_name, group_issue_type_id, group_issue_type_name, auto_complete_leaf_wbs, auto_mark_requirements, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, project.id, ...vals, userId]);
     }
-    if (!cur || cur.external_project_id !== String(jp.id)) await logActivity(db, { projectId: project.id, action: 'PROJECT_MAPPED', summary: `Jira 프로젝트 ${jp.key} — ${jp.name}을(를) 연결했습니다.`, actorId: userId });
+    if (!cur || cur.external_project_id !== String(jp.id)) await logActivity(db, { projectId: project.id, action: 'PROJECT_MAPPED', summary: `지라 프로젝트 ${jp.key} — ${jp.name}을(를) 연결했습니다.`, actorId: userId });
     return id;
   }).then(async (id) => { await markRequirements(db, project, { auto_mark_requirements: markReq }); try { await ensureWebhook(db, project, id, env); } catch (e) { /* webhook is best-effort; scheduled sync covers it */ console.warn('[jira] webhook registration failed:', e.message); } return projectIntegration(db, project, env); });
 }
 
 export async function removeMapping(db, project, userId, env = process.env) {
   const m = await getMapping(db, project.id);
-  if (!m) throw new IntegrationError(404, 'not_found', '연결된 Jira 프로젝트가 없습니다.');
+  if (!m) throw new IntegrationError(404, 'not_found', '연결된 지라 프로젝트가 없습니다.');
   await tx(db, async (db) => {
     await db.run(`UPDATE integration_project_mappings SET status = 'REMOVED', removed_at = now(), updated_at = now() WHERE id = ?`, [m.id]);
     await db.run(`UPDATE integration_webhooks SET status = 'DELETED', updated_at = now() WHERE project_mapping_id = ? AND status = 'ACTIVE'`, [m.id]);
-    await logActivity(db, { projectId: project.id, action: 'PROJECT_UNMAPPED', summary: `Jira 프로젝트 ${m.external_project_key} 연결을 해제했습니다. 기존 Jira 연결 기록은 유지되며 동기화는 중단됩니다.`, actorId: userId });
+    await logActivity(db, { projectId: project.id, action: 'PROJECT_UNMAPPED', summary: `지라 프로젝트 ${m.external_project_key} 연결을 해제했습니다. 기존 지라 연결 기록은 유지되며 동기화는 중단됩니다.`, actorId: userId });
   });
   const hooks = await db.all(`SELECT external_webhook_id FROM integration_webhooks WHERE project_mapping_id = ?`, [m.id]);
   if (hooks.length) { try { await withClient(db, m.connection_id, (jira) => jira.deleteWebhooks(hooks.map((h) => Number(h.external_webhook_id))), env); } catch { /* best effort */ } }
@@ -111,14 +111,14 @@ async function wbsNode(db, project, wbsId) {
 }
 function assertRole(w, role) {
   if (w.archived_at) throw new ValidationError({ wbs_item_id: '보관된 WBS 항목에는 연결할 수 없습니다.' });
-  if (w.item_type === 'MILESTONE') throw new ValidationError({ wbs_item_id: '마일스톤에는 Jira Issue를 연결하지 않습니다. 실제 실행 작업(Leaf Task)에 연결하세요.' });
-  if (role === 'EXECUTION' && w.is_group) throw new ValidationError({ wbs_item_id: '하위 작업이 있는 항목(Group)에는 실행 Issue를 직접 연결하지 않습니다. 하위 Leaf 작업에 연결하거나 Group을 Jira Epic과 연결하세요.' });
-  if (role === 'EPIC' && !w.is_group) throw new ValidationError({ wbs_item_id: 'Epic 연결은 하위 작업이 있는 Group 항목에만 할 수 있습니다.' });
+  if (w.item_type === 'MILESTONE') throw new ValidationError({ wbs_item_id: '주요 일정에는 지라 이슈를 연결하지 않습니다. 실제 실행 작업(하위 작업)에 연결하세요.' });
+  if (role === 'EXECUTION' && w.is_group) throw new ValidationError({ wbs_item_id: '하위 작업이 있는 항목(상위 작업)에는 실행 이슈를 직접 연결하지 않습니다. 하위 작업에 연결하거나 상위 작업을 지라 에픽과 연결하세요.' });
+  if (role === 'EPIC' && !w.is_group) throw new ValidationError({ wbs_item_id: '에픽 연결은 하위 작업이 있는 상위 작업에만 할 수 있습니다.' });
 }
 async function requireMapping(db, project) {
   const m = await getMapping(db, project.id);
-  if (!m) throw new IntegrationError(409, 'jira_not_mapped', '이 프로젝트에 연결된 Jira 프로젝트가 없습니다. 헤더 ⋯ → Jira 연동 설정에서 먼저 연결하세요.');
-  if (m.connection_status === 'DISABLED') throw new IntegrationError(409, 'integration_disabled', 'Workspace의 Jira 연동이 해제되어 있습니다.');
+  if (!m) throw new IntegrationError(409, 'jira_not_mapped', '이 프로젝트에 연결된 지라 프로젝트가 없습니다. 헤더 ⋯ → 지라 연동 설정에서 먼저 연결하세요.');
+  if (m.connection_status === 'DISABLED') throw new IntegrationError(409, 'integration_disabled', '워크스페이스의 지라 연동이 해제되어 있습니다.');
   return m;
 }
 
@@ -144,9 +144,9 @@ async function insertLink(db, { m, project, w, issue, role, userId }) {
   const dup = await db.get(`SELECT l.id, l.wbs_item_id, x.wbs_code, x.title FROM integration_entity_links l JOIN wbs_items x ON x.id = l.wbs_item_id WHERE l.connection_id = ? AND l.external_entity_id = ? AND l.${LIVE}`, [m.connection_id, snap.external_entity_id]);
   if (dup) {
     if (dup.wbs_item_id === w.id) throw new ValidationError({ issue_key: `${snap.external_key}은(는) 이미 이 항목에 연결되어 있습니다.` });
-    throw new ValidationError({ issue_key: `${snap.external_key}은(는) 이미 WBS ${dup.wbs_code} ${dup.title}에 연결되어 있습니다. 하나의 Jira Issue는 하나의 WBS에만 연결할 수 있습니다.`, linked_wbs: { id: dup.wbs_item_id, wbs_code: dup.wbs_code, title: dup.title } });
+    throw new ValidationError({ issue_key: `${snap.external_key}은(는) 이미 WBS ${dup.wbs_code} ${dup.title}에 연결되어 있습니다. 하나의 지라 이슈는 하나의 WBS에만 연결할 수 있습니다.`, linked_wbs: { id: dup.wbs_item_id, wbs_code: dup.wbs_code, title: dup.title } });
   }
-  if (issue.fields?.project && String(issue.fields.project.id) !== String(m.external_project_id) && issue.fields.project.key !== m.external_project_key) throw new ValidationError({ issue_key: `${snap.external_key}은(는) 연결된 Jira 프로젝트(${m.external_project_key})의 Issue가 아닙니다.` });
+  if (issue.fields?.project && String(issue.fields.project.id) !== String(m.external_project_id) && issue.fields.project.key !== m.external_project_key) throw new ValidationError({ issue_key: `${snap.external_key}은(는) 연결된 지라 프로젝트(${m.external_project_key})의 이슈가 아닙니다.` });
   const id = randomUUID();
   await db.run('INSERT INTO integration_entity_links (id, connection_id, project_id, wbs_item_id, external_entity_type, external_entity_id, external_key, link_role, created_by) VALUES (?,?,?,?,?,?,?,?,?)', [id, m.connection_id, project.id, w.id, 'ISSUE', snap.external_entity_id, snap.external_key, role, userId]);
   await upsertSnapshot(db, id, snap);
@@ -161,11 +161,11 @@ export async function linkIssues(db, project, wbsId, { issue_keys = [], link_rol
   const role = link_role === 'EPIC' ? 'EPIC' : 'EXECUTION';
   assertRole(w, role);
   const keys = [...new Set((Array.isArray(issue_keys) ? issue_keys : [issue_keys]).map((k) => String(k || '').trim().toUpperCase()).filter(Boolean))];
-  if (!keys.length) throw new ValidationError({ issue_keys: '연결할 Jira Issue를 선택하세요.' });
+  if (!keys.length) throw new ValidationError({ issue_keys: '연결할 지라 이슈를 선택하세요.' });
   if (keys.length > 50) throw new ValidationError({ issue_keys: '한 번에 50개까지 연결할 수 있습니다.' });
   const issues = await withClient(db, m.connection_id, async (jira) => {
     const out = [];
-    for (const k of keys) { try { out.push({ key: k, issue: await jira.getIssue(k) }); } catch (e) { if (e instanceof JiraApiError && (e.status === 404 || e.status === 403)) out.push({ key: k, error: 'Jira에서 Issue를 찾을 수 없습니다.' }); else throw e; } }
+    for (const k of keys) { try { out.push({ key: k, issue: await jira.getIssue(k) }); } catch (e) { if (e instanceof JiraApiError && (e.status === 404 || e.status === 403)) out.push({ key: k, error: '지라에서 이슈를 찾을 수 없습니다.' }); else throw e; } }
     return out;
   }, env);
   const results = [];
@@ -175,7 +175,7 @@ export async function linkIssues(db, project, wbsId, { issue_keys = [], link_rol
     catch (e) { if (e instanceof ValidationError) results.push({ key: r.key, ok: false, error: Object.values(e.fields)[0], linked_wbs: e.fields.linked_wbs || null }); else throw e; }
   }
   const okCount = results.filter((x) => x.ok).length;
-  if (okCount) await logActivity(db, { projectId: project.id, action: 'ISSUE_LINKED', summary: `${w.wbs_code} ${w.title}에 Jira ${results.filter((x) => x.ok).map((x) => x.key).join(', ')}을(를) ${role === 'EPIC' ? 'Epic으로 ' : ''}연결했습니다.`, wbsItemId: w.id, actorId: userId });
+  if (okCount) await logActivity(db, { projectId: project.id, action: 'ISSUE_LINKED', summary: `${w.wbs_code} ${w.title}에 지라 ${results.filter((x) => x.ok).map((x) => x.key).join(', ')}을(를) ${role === 'EPIC' ? '에픽으로 ' : ''}연결했습니다.`, wbsItemId: w.id, actorId: userId });
   if (okCount && role === 'EXECUTION') await maybeAutoComplete(db, project, m, w.id, userId);
   return { results, links: await linksForWbs(db, w.id), summary: await executionForWbs(db, project.id, w.id) };
 }
@@ -187,25 +187,25 @@ export async function createIssueForWbs(db, project, wbsId, body = {}, userId, e
   const w = await wbsNode(db, project, wbsId);
   assertRole(w, 'EXECUTION');
   const typeId = String(body.issue_type_id || m.leaf_issue_type_id || '');
-  if (!typeId) throw new ValidationError({ issue_type_id: 'Jira 연동 설정에서 Leaf 작업의 Issue Type을 먼저 지정하세요.' });
+  if (!typeId) throw new ValidationError({ issue_type_id: '지라 연동 설정에서 하위 작업의 이슈 유형을 먼저 지정하세요.' });
   const summary = String(body.summary || `[${w.wbs_code}] ${w.title}`).trim().slice(0, 255);
-  if (!summary) throw new ValidationError({ summary: 'Summary를 입력하세요.' });
+  if (!summary) throw new ValidationError({ summary: '제목을 입력하세요.' });
   const reqs = await db.all(`SELECT r.display_id, r.title FROM requirement_wbs_links l JOIN requirements r ON r.id = l.requirement_id WHERE l.wbs_item_id = ? AND r.archived_at IS NULL ORDER BY r.sequence_number`, [w.id]);
   const projectUrl = cfg.jira.appBaseUrl ? `${cfg.jira.appBaseUrl}/app/projects/${project.id}/wbs?sel=${w.id}` : null;
   const description = wbsDescription({ wbsCode: w.wbs_code, title: w.title, description: body.description !== undefined ? String(body.description) : w.description, reqs, projectUrl, projectName: project.name });
   const issue = await createInJira(db, m, typeId, summary, description, env);
   const { id, snap } = await tx(db, (db) => insertLink(db, { m, project, w, issue, role: 'EXECUTION', userId }));
-  await logActivity(db, { projectId: project.id, action: 'ISSUE_CREATED', summary: `${w.wbs_code} ${w.title}에서 Jira ${snap.external_key}을(를) 생성했습니다.`, wbsItemId: w.id, actorId: userId });
+  await logActivity(db, { projectId: project.id, action: 'ISSUE_CREATED', summary: `${w.wbs_code} ${w.title}에서 지라 ${snap.external_key}을(를) 생성했습니다.`, wbsItemId: w.id, actorId: userId });
   return { link_id: id, issue: snap, links: await linksForWbs(db, w.id), summary: await executionForWbs(db, project.id, w.id) };
 }
 
 export async function unlinkIssue(db, project, wbsId, linkId, userId) {
   const l = await db.get(`SELECT l.*, w.wbs_code, w.title FROM integration_entity_links l JOIN wbs_items w ON w.id = l.wbs_item_id WHERE l.id = ? AND l.project_id = ? AND l.wbs_item_id = ? AND l.${LIVE}`, [linkId, project.id, wbsId]);
-  if (!l) throw new IntegrationError(404, 'not_found', 'Jira 연결을 찾을 수 없습니다.');
+  if (!l) throw new IntegrationError(404, 'not_found', '지라 연결을 찾을 수 없습니다.');
   await tx(db, async (db) => {
     await db.run(`UPDATE integration_entity_links SET status = 'REMOVED', removed_at = now(), updated_at = now() WHERE id = ?`, [l.id]);
     await addWbsHistory(db, l.wbs_item_id, 'JIRA_UNLINKED', { field: 'jira', oldValue: l.external_key }, userId);
-    await logActivity(db, { projectId: project.id, action: 'ISSUE_UNLINKED', summary: `${l.wbs_code} ${l.title}에서 Jira ${l.external_key} 연결을 해제했습니다. (Jira Issue는 삭제되지 않습니다)`, wbsItemId: l.wbs_item_id, actorId: userId });
+    await logActivity(db, { projectId: project.id, action: 'ISSUE_UNLINKED', summary: `${l.wbs_code} ${l.title}에서 지라 ${l.external_key} 연결을 해제했습니다. (지라 이슈는 삭제되지 않습니다)`, wbsItemId: l.wbs_item_id, actorId: userId });
   });
   return { links: await linksForWbs(db, wbsId), summary: await executionForWbs(db, project.id, wbsId) };
 }
@@ -256,14 +256,14 @@ export async function requirementJiraMap(db, projectId) {
 async function insertReqLink(db, { m, project, r, issue, userId }) {
   const snap = toSnapshot(issue, { siteUrl: m.site_url });
   if (await db.get(`SELECT 1 FROM integration_entity_links WHERE requirement_id = ? AND external_entity_id = ? AND ${LIVE}`, [r.id, snap.external_entity_id])) throw new ValidationError({ issue_key: `${snap.external_key}은(는) 이미 이 요구사항에 연결되어 있습니다.` });
-  if (issue.fields?.project && String(issue.fields.project.id) !== String(m.external_project_id) && issue.fields.project.key !== m.external_project_key) throw new ValidationError({ issue_key: `${snap.external_key}은(는) 연결된 Jira 프로젝트(${m.external_project_key})의 이슈가 아닙니다.` });
+  if (issue.fields?.project && String(issue.fields.project.id) !== String(m.external_project_id) && issue.fields.project.key !== m.external_project_key) throw new ValidationError({ issue_key: `${snap.external_key}은(는) 연결된 지라 프로젝트(${m.external_project_key})의 이슈가 아닙니다.` });
   const id = randomUUID();
   await db.run('INSERT INTO integration_entity_links (id, connection_id, project_id, wbs_item_id, requirement_id, external_entity_type, external_entity_id, external_key, link_role, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)', [id, m.connection_id, project.id, null, r.id, 'ISSUE', snap.external_entity_id, snap.external_key, 'REQUIREMENT', userId]);
   await upsertSnapshot(db, id, snap);
   await reqHistory(db, r.id, 'JIRA_LINKED', { newValue: `${snap.external_key} ${snap.summary}`.trim() }, userId);
   return { id, snap };
 }
-const assertReqWritable = (r) => { if (r.archived_at) throw new ValidationError({ requirement_id: '보관된 요구사항에는 Jira 이슈를 연결할 수 없습니다.' }); };
+const assertReqWritable = (r) => { if (r.archived_at) throw new ValidationError({ requirement_id: '보관된 요구사항에는 지라 이슈를 연결할 수 없습니다.' }); };
 
 /** 지라 태스크 만들기: issue in the mapped project. summary = "REQ-001 제목", description = 설명 + 완료 조건 + RELAI link (ADF). */
 export async function createIssueForRequirement(db, project, reqId, body = {}, userId, env = process.env) {
@@ -271,7 +271,7 @@ export async function createIssueForRequirement(db, project, reqId, body = {}, u
   const m = await requireMapping(db, project);
   const r = await reqRow(db, project, reqId); assertReqWritable(r);
   const typeId = String(body.issue_type_id || m.leaf_issue_type_id || '');
-  if (!typeId) throw new ValidationError({ issue_type_id: 'Jira 연동 설정에서 만들 이슈 유형을 먼저 지정하세요.' });
+  if (!typeId) throw new ValidationError({ issue_type_id: '지라 연동 설정에서 만들 이슈 유형을 먼저 지정하세요.' });
   const summary = String(body.summary || `${r.display_id} ${r.title}`).trim().slice(0, 255);
   if (!summary) throw new ValidationError({ summary: '제목을 입력하세요.' });
   const criteria = (await db.all('SELECT content FROM requirement_criteria WHERE requirement_id = ? ORDER BY sequence', [r.id])).map((c) => c.content);
@@ -279,7 +279,7 @@ export async function createIssueForRequirement(db, project, reqId, body = {}, u
   const description = requirementDescription({ displayId: r.display_id, title: r.title, description: r.description, criteria, reqUrl, projectName: project.name });
   const issue = await createInJira(db, m, typeId, summary, description, env);
   const { id, snap } = await tx(db, (db) => insertReqLink(db, { m, project, r, issue, userId }));
-  await logActivity(db, { projectId: project.id, action: 'ISSUE_CREATED', summary: `${r.display_id} ${r.title}에서 Jira ${snap.external_key}을(를) 만들었습니다.`, actorId: userId });
+  await logActivity(db, { projectId: project.id, action: 'ISSUE_CREATED', summary: `${r.display_id} ${r.title}에서 지라 ${snap.external_key}을(를) 만들었습니다.`, actorId: userId });
   await markRequirements(db, project, m, [r.id]);
   return { link_id: id, issue: snap, jira: await requirementJira(db, project, r.id, env) };
 }
@@ -288,7 +288,7 @@ async function createInJira(db, m, typeId, summary, description, env) {
     const meta = await jira.createFieldsFor(m.external_project_key, typeId);
     const supported = new Set(['summary', 'issuetype', 'project', 'description', 'reporter', 'labels', 'priority']);
     const required = (meta.fields || []).filter((f) => f.required && !supported.has(f.fieldId || f.key) && !f.hasDefaultValue);
-    if (required.length) throw new IntegrationError(409, 'jira_required_fields', `현재 Jira 프로젝트는 추가 필수 필드가 필요합니다: ${required.map((f) => f.name).join(', ')}. Jira에서 필드 설정을 조정하거나 Jira에서 이슈를 만든 뒤 '기존 이슈 연결'을 사용하세요.`, { required_fields: required.map((f) => ({ id: f.fieldId || f.key, name: f.name })) });
+    if (required.length) throw new IntegrationError(409, 'jira_required_fields', `현재 지라 프로젝트는 추가 필수 필드가 필요합니다: ${required.map((f) => f.name).join(', ')}. 지라에서 필드 설정을 조정하거나 지라에서 이슈를 만든 뒤 '기존 이슈 연결'을 사용하세요.`, { required_fields: required.map((f) => ({ id: f.fieldId || f.key, name: f.name })) });
     const created = await jira.createIssue({ project: { id: String(m.external_project_id), key: m.external_project_key }, issuetype: { id: typeId }, summary, description });
     return jira.getIssue(created.key);
   }, env);
@@ -299,12 +299,12 @@ export async function linkIssuesToRequirement(db, project, reqId, { issue_keys =
   const m = await requireMapping(db, project);
   const r = await reqRow(db, project, reqId); assertReqWritable(r);
   const keys = [...new Set((Array.isArray(issue_keys) ? issue_keys : [issue_keys]).map((k) => String(k || '').trim().toUpperCase()).filter(Boolean))];
-  if (!keys.length) throw new ValidationError({ issue_keys: '연결할 Jira 이슈를 선택하세요.' });
+  if (!keys.length) throw new ValidationError({ issue_keys: '연결할 지라 이슈를 선택하세요.' });
   if (keys.length > 50) throw new ValidationError({ issue_keys: '한 번에 50개까지 연결할 수 있습니다.' });
   if (keys.some((k) => !/^[A-Z][A-Z0-9_]*-\d+$/.test(k))) throw new ValidationError({ issue_keys: '이슈 키 형식을 확인해 주세요. (예: ABC-123)' });
   const issues = await withClient(db, m.connection_id, async (jira) => {
     const out = [];
-    for (const k of keys) { try { out.push({ key: k, issue: await jira.getIssue(k) }); } catch (e) { if (e instanceof JiraApiError && (e.status === 404 || e.status === 403)) out.push({ key: k, error: 'Jira에서 이슈를 찾을 수 없습니다.' }); else throw e; } }
+    for (const k of keys) { try { out.push({ key: k, issue: await jira.getIssue(k) }); } catch (e) { if (e instanceof JiraApiError && (e.status === 404 || e.status === 403)) out.push({ key: k, error: '지라에서 이슈를 찾을 수 없습니다.' }); else throw e; } }
     return out;
   }, env);
   const results = [];
@@ -314,17 +314,17 @@ export async function linkIssuesToRequirement(db, project, reqId, { issue_keys =
     catch (e) { if (e instanceof ValidationError) results.push({ key: x.key, ok: false, error: Object.values(e.fields)[0] }); else throw e; }
   }
   const ok = results.filter((x) => x.ok);
-  if (ok.length) { await logActivity(db, { projectId: project.id, action: 'ISSUE_LINKED', summary: `${r.display_id} ${r.title}에 Jira ${ok.map((x) => x.key).join(', ')}을(를) 연결했습니다.`, actorId: userId }); await markRequirements(db, project, m, [r.id]); }
+  if (ok.length) { await logActivity(db, { projectId: project.id, action: 'ISSUE_LINKED', summary: `${r.display_id} ${r.title}에 지라 ${ok.map((x) => x.key).join(', ')}을(를) 연결했습니다.`, actorId: userId }); await markRequirements(db, project, m, [r.id]); }
   return { results, jira: await requirementJira(db, project, r.id, env) };
 }
 
 export async function unlinkRequirementIssue(db, project, reqId, linkId, userId, env = process.env) {
   const l = await db.get(`SELECT l.*, r.display_id, r.title FROM integration_entity_links l JOIN requirements r ON r.id = l.requirement_id WHERE l.id = ? AND l.project_id = ? AND l.requirement_id = ? AND l.link_role = 'REQUIREMENT' AND l.${LIVE}`, [linkId, project.id, reqId]);
-  if (!l) throw new IntegrationError(404, 'not_found', 'Jira 연결을 찾을 수 없습니다.');
+  if (!l) throw new IntegrationError(404, 'not_found', '지라 연결을 찾을 수 없습니다.');
   await tx(db, async (db) => {
     await db.run(`UPDATE integration_entity_links SET status = 'REMOVED', removed_at = now(), updated_at = now() WHERE id = ?`, [l.id]);
     await reqHistory(db, l.requirement_id, 'JIRA_UNLINKED', { oldValue: l.external_key }, userId);
-    await logActivity(db, { projectId: project.id, action: 'ISSUE_UNLINKED', summary: `${l.display_id} ${l.title}에서 Jira ${l.external_key} 연결을 해제했습니다. (Jira 이슈는 삭제되지 않습니다)`, actorId: userId });
+    await logActivity(db, { projectId: project.id, action: 'ISSUE_UNLINKED', summary: `${l.display_id} ${l.title}에서 지라 ${l.external_key} 연결을 해제했습니다. (지라 이슈는 삭제되지 않습니다)`, actorId: userId });
   });
   const m = await getMapping(db, project.id); if (m) await markRequirements(db, project, m, [reqId]);
   return { jira: await requirementJira(db, project, reqId, env) };
@@ -336,12 +336,12 @@ export async function bulkCreateForRequirements(db, project, ids = [], userId, e
   if (!list.length) throw new ValidationError({ ids: '요구사항을 선택하세요.' });
   if (list.length > 50) throw new ValidationError({ ids: '한 번에 50건까지 만들 수 있습니다.' });
   const m = await requireMapping(db, project);
-  if (!m.leaf_issue_type_id) throw new ValidationError({ issue_type_id: 'Jira 연동 설정에서 만들 이슈 유형을 먼저 지정하세요.' });
+  if (!m.leaf_issue_type_id) throw new ValidationError({ issue_type_id: '지라 연동 설정에서 만들 이슈 유형을 먼저 지정하세요.' });
   const rows = await db.all(`SELECT r.id, r.display_id, r.archived_at, (SELECT COUNT(*) FROM integration_entity_links l WHERE l.requirement_id = r.id AND l.link_role = 'REQUIREMENT' AND l.${LIVE}) AS linked FROM requirements r WHERE r.project_id = ? AND r.id = ANY(?::text[]) ORDER BY r.sequence_number`, [project.id, list]);
   const created = []; const skipped = list.filter((x) => !rows.some((r) => r.id === x)).map((x) => ({ id: x, reason: '요구사항을 찾을 수 없습니다.' }));
   for (const r of rows) {
     if (r.archived_at) { skipped.push({ id: r.id, display_id: r.display_id, reason: '보관된 요구사항' }); continue; }
-    if (Number(r.linked)) { skipped.push({ id: r.id, display_id: r.display_id, reason: '이미 Jira 이슈가 연결됨' }); continue; }
+    if (Number(r.linked)) { skipped.push({ id: r.id, display_id: r.display_id, reason: '이미 지라 이슈가 연결됨' }); continue; }
     try { const x = await createIssueForRequirement(db, project, r.id, {}, userId, env); created.push({ id: r.id, display_id: r.display_id, key: x.issue.external_key }); }
     catch (e) { if (e instanceof ValidationError) { skipped.push({ id: r.id, display_id: r.display_id, reason: Object.values(e.fields)[0] }); continue; } if (!created.length) throw e; skipped.push({ id: r.id, display_id: r.display_id, reason: e.message }); break; }
   }
@@ -451,7 +451,7 @@ export async function maybeAutoComplete(db, project, mapping, wbsId, userId = nu
   await tx(db, async (db) => {
     await updateWbs(db, project, w, { status: 'COMPLETED', progress: 100 }, userId);
     await addWbsHistory(db, w.id, 'JIRA_AUTO_COMPLETED', { field: 'source', newValue: 'jira_sync' }, userId);
-    await logActivity(db, { projectId: project.id, action: 'AUTO_COMPLETED', summary: `${w.wbs_code} ${w.title}: 연결된 Jira 작업이 모두 Done이어서 완료 처리했습니다.`, wbsItemId: w.id, actorId: userId });
+    await logActivity(db, { projectId: project.id, action: 'AUTO_COMPLETED', summary: `${w.wbs_code} ${w.title}: 연결된 지라 작업이 모두 Done이어서 완료 처리했습니다.`, wbsItemId: w.id, actorId: userId });
   });
   return true;
 }
@@ -484,7 +484,7 @@ export async function syncProject(db, project, { trigger = 'MANUAL', wbsId = nul
   } catch (e) {
     error = e.message; failed = links.length - success;
     if (e.code === 'reconnect_required') await markError(db, m.connection_id, e.message);
-    await logActivity(db, { projectId: project.id, action: 'SYNC_FAILED', summary: `Jira 동기화 실패: ${e.message}`, actorId: userId });
+    await logActivity(db, { projectId: project.id, action: 'SYNC_FAILED', summary: `지라 동기화 실패: ${e.message}`, actorId: userId });
   }
   const status = await finishRun(db, runId, { total: links.length, success, failed, error });
   return { run_id: runId, status, items_total: links.length, items_success: success, items_failed: failed, error_summary: error };

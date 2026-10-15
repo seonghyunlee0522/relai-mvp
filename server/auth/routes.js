@@ -120,7 +120,7 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
   const loadWsInvite = async (req, res) => { const inv = await I.getInvitation(db, req.params.id); if (!inv || inv.type !== 'WORKSPACE_MEMBER' || inv.workspace_id !== req.params.wid) { fail(res, 404, 'not_found', '초대를 찾을 수 없습니다.'); return null; } return inv; };
   app.post(`${W}/:id/resend`, sendInvite, wrap(async (req, res) => send(res, async () => {
     const inv = await loadWsInvite(req, res); if (!inv) return;
-    if (inv.role === 'ADMIN' && req.role !== 'OWNER') return fail(res, 403, 'forbidden', 'ADMIN 초대는 OWNER만 재발송할 수 있습니다.');
+    if (inv.role === 'ADMIN' && req.role !== 'OWNER') return fail(res, 403, 'forbidden', '관리자 초대는 소유자만 재발송할 수 있습니다.');
     if (await resendLimit.blocked(inv.id) || await inviteEmailLimit.blocked(inv.email)) return fail(res, 429, 'rate_limited', '재발송이 너무 잦습니다. 잠시 후 다시 시도해 주세요.');
     await resendLimit.hit(inv.id); await inviteEmailLimit.hit(inv.email);
     res.json(await I.resendInvite(db, inv, req.user));

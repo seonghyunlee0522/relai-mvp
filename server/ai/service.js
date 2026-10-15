@@ -32,7 +32,7 @@ async function checkLimits(db, cfg, { wid, userId }) {
   }
   if (cfg.dailyLimit > 0) {
     const n = (await db.get(`SELECT COUNT(*) AS n FROM ai_runs WHERE workspace_id = ? AND created_at >= date_trunc('day', now())`, [wid])).n;
-    if (n >= cfg.dailyLimit) throw new AiError('AI_RATE_LIMITED', '오늘 이 Workspace의 AI 요청 한도에 도달했습니다. 내일 다시 시도해 주세요.', { status: 429, scope: 'workspace' });
+    if (n >= cfg.dailyLimit) throw new AiError('AI_RATE_LIMITED', '오늘 이 워크스페이스의 AI 요청 한도에 도달했습니다. 내일 다시 시도해 주세요.', { status: 429, scope: 'workspace' });
   }
 }
 

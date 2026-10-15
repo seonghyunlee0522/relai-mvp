@@ -9,7 +9,7 @@
 export class JiraApiError extends Error {
   constructor(status, message, { code = 'jira_api', body = null, retryAfterMs = 0 } = {}) { super(message); this.status = status; this.code = code; this.body = body; this.retryAfterMs = retryAfterMs; }
 }
-export class JiraAuthError extends JiraApiError { constructor(message = 'Jira 인증이 만료되었습니다.') { super(401, message, { code: 'jira_auth' }); } }
+export class JiraAuthError extends JiraApiError { constructor(message = '지라 인증이 만료되었습니다.') { super(401, message, { code: 'jira_auth' }); } }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errText = (body) => { if (!body) return ''; if (Array.isArray(body.errorMessages) && body.errorMessages.length) return body.errorMessages.join(' '); if (body.errors && typeof body.errors === 'object') return Object.values(body.errors).join(' '); return body.message || body.error_description || body.error || ''; };
@@ -26,7 +26,7 @@ export async function httpJson(url, { method = 'GET', headers = {}, body, timeou
     } catch (e) {
       clearTimeout(timer);
       if (attempt < maxRetries) { attempt++; await sleep(300 * attempt); continue; }
-      throw new JiraApiError(0, e.name === 'AbortError' ? 'Jira 응답이 지연되어 요청을 중단했습니다.' : `Jira에 연결할 수 없습니다. (${e.message})`, { code: e.name === 'AbortError' ? 'jira_timeout' : 'jira_network' });
+      throw new JiraApiError(0, e.name === 'AbortError' ? '지라 응답이 지연되어 요청을 중단했습니다.' : `지라에 연결할 수 없습니다. (${e.message})`, { code: e.name === 'AbortError' ? 'jira_timeout' : 'jira_network' });
     }
     clearTimeout(timer);
     if (res.ok) return { status: res.status, json, text };
@@ -35,7 +35,7 @@ export async function httpJson(url, { method = 'GET', headers = {}, body, timeou
       const ra = Number(res.headers.get('retry-after')); const wait = Math.min(20000, Number.isFinite(ra) && ra > 0 ? ra * 1000 : 500 * (attempt + 1));
       attempt++; await sleep(wait); continue;
     }
-    const msg = errText(json) || `Jira 요청이 실패했습니다. (HTTP ${res.status})`;
+    const msg = errText(json) || `지라 요청이 실패했습니다. (HTTP ${res.status})`;
     const ra = Number(res.headers.get('retry-after'));
     throw new JiraApiError(res.status, msg, { body: json, code: res.status === 429 ? 'jira_rate_limited' : res.status === 403 ? 'jira_forbidden' : res.status === 404 ? 'jira_not_found' : 'jira_api', retryAfterMs: Number.isFinite(ra) && ra > 0 ? ra * 1000 : 0 });
   }

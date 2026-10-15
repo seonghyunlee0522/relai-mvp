@@ -44,27 +44,27 @@ const A = (key, title, description, criteria, importance = 'REQUIRED', feature =
 export const DEFAULT_PHASES = [
   {
     key: 'INITIATION', name: '착수', short: '착수', en: 'Initiation',
-    description: '프로젝트의 목표, 범위, 이해관계자, 상위 일정, 운영 방식을 정리해 출발 기준을 맞춥니다.',
+    description: '프로젝트의 목표, 범위, 관계자, 상위 일정, 운영 방식을 정리해 출발 기준을 맞춥니다.',
     steps: [
       A('GOALS', '프로젝트 목표 정의', '프로젝트를 통해 달성해야 할 목표와 성공 기준을 정리합니다.', '목표 또는 성공 기준이 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
       A('SCOPE', '프로젝트 범위 정리', '이번 프로젝트에서 수행할 범위와 수행하지 않을 범위를 구분합니다.', '수행 범위가 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
-      A('STAKEHOLDERS', '이해관계자 / 조직 확인', '고객사, 수행사, 협력사의 주요 담당자와 역할을 정리합니다.', '이해관계자가 1명 이상 등록되어 있습니다.', 'REQUIRED', 'definition'),
-      A('MILESTONES', '상위 일정 / 마일스톤 확인', '프로젝트 시작일·종료 예정일과 반드시 지켜야 하는 주요 시점을 정리합니다. WBS의 세부 일정과는 구분되는 프로젝트 수준의 개략 일정입니다.', '주요 일정 또는 마일스톤이 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
+      A('STAKEHOLDERS', '관계자 / 조직 확인', '고객사, 수행사, 협력사의 주요 담당자와 역할을 정리합니다.', '관계자가 1명 이상 등록되어 있습니다.', 'REQUIRED', 'definition'),
+      A('MILESTONES', '주요 일정 확인', '프로젝트 시작일·종료 예정일과 반드시 지켜야 하는 주요 시점을 정리합니다. WBS의 세부 일정과는 구분되는 프로젝트 수준의 개략 일정입니다.', '주요 일정이 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
       A('OPERATIONS', '프로젝트 운영 방식 확인', '회의, 보고, 의사결정, 커뮤니케이션 방식을 정합니다.', '운영 방식 항목이 작성되어 있습니다.', 'RECOMMENDED', 'definition'),
-      A('KICKOFF', '착수보고회(킥오프) 준비·개최', '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고 결과를 기록합니다.', '착수보고회가 열렸고 회의록 요약 또는 결정사항이 기록되어 있습니다.', KICKOFF_IMPORTANCE, 'definition'),
+      A('KICKOFF', '착수보고회 준비·개최', '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고 결과를 기록합니다.', '착수보고회가 열렸고 회의록 요약 또는 결정사항이 기록되어 있습니다.', KICKOFF_IMPORTANCE, 'definition'),
       A('APPROVAL', '착수 결과 승인(고객·스폰서)', '정리한 목표·범위·일정·추진 조직을 고객이나 스폰서에게 승인받고 그 근거를 남깁니다.', '승인자·승인일·승인 방법·근거가 기록되어 있습니다.', 'REQUIRED', 'definition'),
     ],
   },
   {
     key: 'REQUIREMENTS', name: '요구사항 정의', short: '요구사항', en: 'Requirements Definition',
-    description: '무엇을 만들어야 하는지 수집하고 정리해 고객과 합의된 요구사항 기준선을 만듭니다.',
+    description: '무엇을 만들어야 하는지 수집하고 정리해 고객과 합의한 요구사항을 확정합니다.',
     steps: [
       A('COLLECT', '요구사항 수집', '계약서, 제안서, 현업·고객 요청에서 요구사항을 모아 등록합니다. 직접 입력, Excel 가져오기, AI 추출을 사용할 수 있습니다.', '요구사항이 1건 이상 등록되어 있습니다.', 'REQUIRED', 'requirements'),
       A('CLASSIFY', '요구사항 분류', '기능, 비기능, 인터페이스, 데이터, 보안 등 성격에 따라 요구사항 유형을 지정합니다.', '모든 요구사항에 유형이 지정되어 있습니다.', 'REQUIRED', 'requirements'),
       A('PRIORITIZE', '우선순위 설정', '반드시 필요한 것과 있으면 좋은 것을 구분해 우선순위를 정합니다.', '모든 요구사항에 우선순위가 지정되어 있습니다.', 'RECOMMENDED', 'requirements'),
       A('SCOPE_CHECK', '범위 확정', '각 요구사항이 이번 범위 안에 있는지 결정하고, 범위 밖 항목은 별도로 표시합니다.', '범위가 결정되지 않은 요구사항이 없습니다.', 'REQUIRED', 'requirements'),
-      A('CONFIRM', '요구사항 확정', '정리된 요구사항을 고객과 확인하고 기준선으로 확정합니다. 확정 이후의 변경은 변경 요청으로 관리합니다.', '범위 내 요구사항이 모두 확정 상태입니다.', 'REQUIRED', 'requirements'),
-      A('BASELINE_APPROVAL', '요구사항 기준선 승인(고객)', '확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 기준선이 됩니다.', '승인자·승인일·방법·근거가 기록되어 있습니다.', 'REQUIRED', 'requirements'),
+      A('CONFIRM', '요구사항 확정', '정리된 요구사항을 고객과 확인하고 확정합니다. 확정 이후의 변경은 변경 요청으로 관리합니다.', '범위 내 요구사항이 모두 확정 상태입니다.', 'REQUIRED', 'requirements'),
+      A('BASELINE_APPROVAL', '요구사항 확정 승인(고객)', '확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 기준이 됩니다.', '승인자·승인일·방법·근거가 기록되어 있습니다.', 'REQUIRED', 'requirements'),
       A('INTERFACE', '인터페이스 · 데이터 · 보안 요구사항 정리', '외부 연계, 데이터, 보안, 인프라 등 비기능 영역의 요구사항을 별도로 확인합니다.', '인터페이스·데이터·보안 유형의 요구사항이 정리되어 있습니다.', 'OPTIONAL', 'requirements'),
     ],
   },
@@ -77,8 +77,8 @@ export const DEFAULT_PHASES = [
       A('ASSIGN', '담당자 지정', '각 작업을 누가 맡을지 정합니다.', '모든 실행 작업에 담당자가 지정되어 있습니다.', 'REQUIRED', 'wbs'),
       A('PLAN', '일정 입력', '작업별 시작일과 종료일을 정해 작업 수준의 세부 일정을 만듭니다.', '모든 실행 작업에 계획 일정이 입력되어 있습니다.', 'REQUIRED', 'wbs'),
       A('ORDER', '선후관계 설정', '먼저 끝나야 하는 작업과 동시에 할 수 있는 작업을 구분합니다.', '작업 간 선후관계가 1건 이상 설정되어 있습니다.', 'RECOMMENDED', 'wbs'),
-      A('MILESTONES', '마일스톤 등록', '중간 점검, 테스트 시작, 검수, 오픈 등 고객과 공유할 주요 시점을 마일스톤으로 등록합니다.', '마일스톤이 1건 이상 등록되어 있습니다.', 'RECOMMENDED', 'wbs'),
-      A('NON_DEV_TASKS', '기능 개발 외 작업 확인', '인프라, 데이터 마이그레이션, 교육, 전환, 테스트처럼 기능 개발이 아닌 작업이 WBS에 포함되어 있는지 확인합니다.', '시험·전환·운영 단계에 해당하는 작업이 WBS에 포함되어 있습니다.', 'RECOMMENDED', 'wbs'),   // Phase 3 US-2: 선택 → 권장 (migration 33)
+      A('MILESTONES', '주요 일정 등록', '중간 점검, 테스트 시작, 검수, 오픈 등 고객과 공유할 시점을 주요 일정으로 등록합니다.', '주요 일정이 1건 이상 등록되어 있습니다.', 'RECOMMENDED', 'wbs'),
+      A('NON_DEV_TASKS', '기능 개발 외 작업 확인', '인프라, 데이터 이관, 교육, 전환, 테스트처럼 기능 개발이 아닌 작업이 WBS에 포함되어 있는지 확인합니다.', '시험·전환·운영 단계에 해당하는 작업이 WBS에 포함되어 있습니다.', 'RECOMMENDED', 'wbs'),   // Phase 3 US-2: 선택 → 권장 (migration 33)
     ],
   },
   {
@@ -102,16 +102,16 @@ export const DEFAULT_PHASES = [
       A('RUN', '테스트 수행', '준비한 케이스대로 테스트를 실행하고 결과(통과/실패/막힘)를 기록합니다.', '모든 테스트 케이스가 실행되었습니다.', 'REQUIRED', 'tests'),
       A('DEFECTS', '결함 조치', '실패한 테스트를 이슈로 등록해 조치하고, 조치 후 다시 실행해 통과로 바꿉니다.', '최근 결과가 실패인 테스트가 없고, 테스트에서 등록한 이슈가 모두 해결되었습니다.', 'REQUIRED', 'tests'),   // Phase 5 US-2
       A('WEEKLY_REPORT', '주간보고 작성·공유', '매주 진행·지연·이슈·변경을 정리해 고객에게 보냅니다. 데이터로 초안이 만들어집니다.', '이번 주 주간보고가 확정되어 있습니다.', 'RECOMMENDED', 'reports'),   // Phase 5 US-6 (migration 36)
-      A('NON_FUNCTIONAL', '성능 · 보안 테스트', '성능, 보안, 마이그레이션 검증 등 비기능 테스트를 수행합니다.', '비기능 테스트 결과가 기록되어 있습니다.', 'OPTIONAL', 'tests'),
+      A('NON_FUNCTIONAL', '성능 · 보안 테스트', '성능, 보안, 데이터 이관 검증 등 비기능 테스트를 수행합니다.', '비기능 테스트 결과가 기록되어 있습니다.', 'OPTIONAL', 'tests'),
     ],
   },
   {
     key: 'TRANSITION_GO_LIVE', name: '전환 및 오픈', short: '전환·오픈', en: 'Transition & Go-Live',
-    description: '검수로 인수 승인을 받고, 전환 계획·데이터 마이그레이션·교육을 거쳐 서비스를 오픈하고 안정화합니다.',
+    description: '검수로 인수 승인을 받고, 전환 계획·데이터 이관·교육을 거쳐 서비스를 오픈하고 안정화합니다.',
     steps: [
       A('ACCEPTANCE', '검수 / 인수 승인', ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA, 'REQUIRED', 'acceptance'),   // Phase 6 US-2 (migration 37)
       A('CUTOVER_PLAN', '전환 계획 수립', '운영 환경 전환 순서, 일정, 담당, 롤백 기준을 정리합니다.', '전환 계획이 정리되어 있습니다.', 'REQUIRED', null),
-      A('DATA_MIGRATION', '데이터 마이그레이션', '이관 대상 데이터의 매핑, 리허설, 본 이관과 검증을 수행합니다.', '데이터 이관과 검증이 완료되어 있습니다.', 'OPTIONAL', null),
+      A('DATA_MIGRATION', '데이터 이관', '이관 대상 데이터의 매핑, 리허설, 본 이관과 검증을 수행합니다.', '데이터 이관과 검증이 완료되어 있습니다.', 'OPTIONAL', null),
       A('TRAINING', '사용자 교육 / 매뉴얼', '사용자와 운영자에게 안내 자료를 전달하고 필요한 교육을 진행합니다.', '교육 또는 매뉴얼 전달이 완료되어 있습니다.', 'RECOMMENDED', null),
       A('WEEKLY_REPORT', '주간보고 작성·공유', '매주 진행·지연·이슈·변경을 정리해 고객에게 보냅니다. 데이터로 초안이 만들어집니다.', '이번 주 주간보고가 확정되어 있습니다.', 'RECOMMENDED', 'reports'),   // Phase 6 US-5 (migration 37)
       A('GO_LIVE', '오픈', '계획한 시점에 서비스를 오픈합니다. 오픈 전 열린 이슈, 실패 테스트, 미반영 변경을 확인합니다.', '서비스가 오픈되어 사용자가 접근할 수 있습니다.', 'REQUIRED', null),
@@ -141,7 +141,7 @@ export const PHASE_BY_KEY = Object.fromEntries(DEFAULT_PHASES.map((p) => [p.key,
  * ("기본 항목 추가"); the team edits, adds or deletes freely.
  */
 export const CHECKLIST_TEMPLATES = {
-  CUTOVER_PLAN: ['전환 대상 시스템·범위 확정', '전환 일정과 작업 순서(Runbook) 작성', '전환 담당자와 연락 체계 지정', '롤백 기준과 절차 정의', '전환 리허설 수행'],
+  CUTOVER_PLAN: ['전환 대상 시스템·범위 확정', '전환 일정과 작업 순서 작성', '전환 담당자와 연락 체계 지정', '롤백 기준과 절차 정의', '전환 리허설 수행'],
   DATA_MIGRATION: ['이관 대상 데이터와 매핑 정의', '이관 리허설과 결과 검증', '본 이관 수행', '이관 데이터 건수·정합성 검증'],
   TRAINING: ['사용자 매뉴얼 작성·전달', '운영자 매뉴얼 작성·전달', '사용자 교육 실시', '교육 참석·질의 결과 정리'],
   GO_LIVE: ['오픈 전 열린 이슈·실패 테스트 확인', '운영 환경 배포 완료', '오픈 공지 발송', '오픈 후 주요 기능 점검'],
@@ -151,6 +151,6 @@ export const CHECKLIST_TEMPLATES = {
   SLA: ['응답 시간 기준 합의', '복구 시간 기준 합의', 'SLA 측정·보고 방식 정의'],
   RELEASE_PLAN: ['정기 배포 주기 확정', '개선 요청 수집·우선순위 절차 정의', '배포 승인·공지 절차 정의'],
   DECISIONS: [],   // F6: 04 의사결정 기록 = a decision log on the same screen (결정일 · 결정 내용 · 결정자 · 메모); no starter items
-  CLOSE: ['프로젝트 결과 공유(완료 보고)', '미결 사항과 후속 조치 정리', LESSONS_ITEM, '산출물 최종본 전달'],
+  CLOSE: ['프로젝트 결과 공유(완료 보고)', '미결 사항과 후속 조치 정리', LESSONS_ITEM, '결과물 최종본 전달'],
 };
 export const CHECKLIST_STEP_KEYS = new Set(Object.keys(CHECKLIST_TEMPLATES));

@@ -73,12 +73,12 @@ export async function getBalance(db, wid) {
  */
 export async function applyCredits(db, { wid, amount, type, reason, createdBy = null, referenceType = null, referenceId = null }) {
   if (!LEDGER_TYPES.includes(type)) throw new CreditError('bad_type', '원장 유형이 올바르지 않습니다.', { status: 400 });
-  if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 10_000_000) throw new CreditError('bad_amount', 'Credit 수량은 0이 아닌 정수여야 합니다.', { status: 400 });
+  if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 10_000_000) throw new CreditError('bad_amount', '크레딧 수량은 0이 아닌 정수여야 합니다.', { status: 400 });
   return tx(db, async (t) => {
     await ensureAccount(t, wid);
     const acc = await lockAccount(t, wid);
     const next = acc.balance + amount;
-    if (next < 0) throw new CreditError('AI_CREDIT_INSUFFICIENT', `차감할 Credit이 부족합니다. (현재 ${acc.balance}, 요청 ${amount})`, { status: 409, balance: acc.balance, required: -amount });
+    if (next < 0) throw new CreditError('AI_CREDIT_INSUFFICIENT', `차감할 크레딧이 부족합니다. (현재 ${acc.balance}, 요청 ${amount})`, { status: 409, balance: acc.balance, required: -amount });
     // A grant that lifts the balance back to the warning threshold re-arms the one low-balance e-mail (a purchase, typically).
     await t.run(`UPDATE workspace_credit_accounts SET balance = ?, lifetime_granted = lifetime_granted + ?, lifetime_used = lifetime_used + ?, updated_at = now(),
       low_balance_notified_at = CASE WHEN ?::bigint >= ?::bigint THEN NULL ELSE low_balance_notified_at END WHERE workspace_id = ?`,
@@ -138,7 +138,7 @@ async function settle(db, runId, { success, usage = {}, providerCost = null, lat
         }
       } else {
         conflict = true; balance = acc.balance;
-        errorCode = SETTLEMENT_CONFLICT; errorMessage = `정산 시점 잔액(${acc.balance})이 비용(${run.credit_cost})보다 적어 차감하지 않았습니다. (예약 만료 후 다른 요청이 Credit을 사용)`;
+        errorCode = SETTLEMENT_CONFLICT; errorMessage = `정산 시점 잔액(${acc.balance})이 비용(${run.credit_cost})보다 적어 차감하지 않았습니다. (예약 만료 후 다른 요청이 크레딧을 사용)`;
       }
     }
     await t.run(`UPDATE ai_runs SET status = ?, credit_status = ?, input_tokens = ?, output_tokens = ?, provider_cost_amount = ?, latency_ms = ?, error_code = ?, error_message = ?, completed_at = now() WHERE id = ?`,

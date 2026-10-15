@@ -25,19 +25,19 @@ const STATUS_LABELS = {
   ACCEPTANCE: { DRAFT: '초안', REQUESTED: '검수 요청', ACCEPTED: '승인', REJECTED: '반려', REWORK_REQUIRED: '보완 필요' },
 };
 const FIELD_LABELS = { title: '제목', description: '설명', type: '분류', priority: '우선순위', scope: '범위', status: '상태', owner_user_id: '담당자', requester: '요청자', progress: '진행률',
-  item_type: '유형', planned_start_date: '시작일', planned_end_date: '종료일', actual_start_date: '실제 시작일', actual_end_date: '실제 종료일', milestone_date: '마일스톤 날짜',
+  item_type: '유형', planned_start_date: '시작일', planned_end_date: '종료일', actual_start_date: '실제 시작일', actual_end_date: '실제 종료일', milestone_date: '주요 일정 날짜',
   severity: '심각도', due_date: '기한', risk_level: '위험 수준', probability: '발생 가능성', impact: '영향도', result: '결과' };
 const VALUE_FIELDS = new Set(['status', 'priority', 'scope', 'type', 'progress', 'item_type', 'planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date', 'milestone_date', 'severity', 'due_date']);
 const VALUE_MAP = { type: { UNSPECIFIED: '미지정', FUNCTIONAL: '기능', NON_FUNCTIONAL: '비기능', INTERFACE: '인터페이스', DATA: '데이터', SECURITY: '보안', OPERATION: '운영', OTHER: '기타' },
   priority: { UNSPECIFIED: '미지정', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' }, scope: { UNDECIDED: '미결정', IN_SCOPE: '범위 내', OUT_OF_SCOPE: '범위 외' },
-  item_type: { SUMMARY: '상위 항목', TASK: '작업', MILESTONE: '마일스톤' } };
+  item_type: { SUMMARY: '상위 항목', TASK: '작업', MILESTONE: '주요 일정' } };
 const SIMPLE = {
   CREATED: '새로 등록했습니다.', ARCHIVED: '보관했습니다.', CONVERTED: '다른 항목으로 전환했습니다.', EXECUTED: '테스트를 실행했습니다.', ISSUE_RAISED: '이슈를 등록했습니다.',
   CRITERION_ADDED: '완료 조건을 추가했습니다.', CRITERION_UPDATED: '완료 조건을 수정했습니다.', CRITERION_REMOVED: '완료 조건을 삭제했습니다.',
   LINKED_WBS: 'WBS 항목을 연결했습니다.', UNLINKED_WBS: 'WBS 연결을 해제했습니다.', LINKED_REQ: '요구사항을 연결했습니다.', UNLINKED_REQ: '요구사항 연결을 해제했습니다.',
-  LINK_TYPE_CHANGED: '연결 유형을 변경했습니다.', MOVED: '위치를 이동했습니다.', DEP_ADDED: '선행 작업을 추가했습니다.', DEP_REMOVED: '선행 작업을 삭제했습니다.',
+  LINK_TYPE_CHANGED: '연결 유형을 변경했습니다.', MOVED: '순서를 옮겼습니다.', DEP_ADDED: '선행 작업을 추가했습니다.', DEP_REMOVED: '선행 작업을 삭제했습니다.',
   REQUIREMENT_LINKED: '요구사항을 연결했습니다.', REQUIREMENT_UNLINKED: '요구사항 연결을 해제했습니다.', WBS_IMPACT_ADDED: '영향 WBS를 추가했습니다.', WBS_IMPACT_UPDATED: '영향 WBS를 수정했습니다.',
-  JIRA_LINKED: 'Jira Issue를 연결했습니다.', JIRA_UNLINKED: 'Jira Issue 연결을 해제했습니다.', JIRA_AUTO_COMPLETED: 'Jira 동기화로 완료 처리했습니다.',
+  JIRA_LINKED: '지라 이슈를 연결했습니다.', JIRA_UNLINKED: '지라 이슈 연결을 해제했습니다.', JIRA_AUTO_COMPLETED: '지라 동기화로 완료 처리했습니다.',
   WBS_IMPACT_REMOVED: '영향 WBS를 삭제했습니다.', LINKED: '연결 항목을 추가했습니다.', UNLINKED: '연결 항목을 삭제했습니다.',
 };
 
@@ -78,7 +78,7 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT) {
     ...tag(issues, 'ISSUE', (id) => `issues?sel=${id}`), ...tag(risks, 'RISK', (id) => `issues?tab=risks&sel=${id}`),
     ...tag(tests, 'TEST', (id) => `tests?sel=${id}`), ...tag(accs, 'ACCEPTANCE', (id) => `tests?tab=acceptance&sel=${id}`),
     ...phases.map((r) => ({ ...r, entity_type: 'PHASE', display_id: null, href: `phases/${r.phase_key}`, summary: r.reason === 'PROJECT_CLOSED' ? '프로젝트 종료' : r.reason === 'PROJECT_REOPENED' ? '프로젝트 종료 취소' : `'${r.title}' 단계로 전환했습니다.` })),   // Phase 7 US-2
-    ...integ.map((r) => ({ ...r, entity_type: 'JIRA', title: r.title || 'Jira', href: r.entity_id ? `wbs?sel=${r.entity_id}` : 'wbs', summary: r.summary })),
+    ...integ.map((r) => ({ ...r, entity_type: 'JIRA', title: r.title || '지라', href: r.entity_id ? `wbs?sel=${r.entity_id}` : 'wbs', summary: r.summary })),
   ];
   events.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.seq - a.seq));
   return events.slice(0, lim).map((e) => ({ at: e.at, actor_name: e.actor_name, entity_type: e.entity_type, entity_id: e.entity_id, display_id: e.display_id, title: e.title, summary: e.summary, href: e.href }));
@@ -150,7 +150,7 @@ export async function projectActivity(db, pid, { limit = 80 } = {}) {
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT title FROM wbs_items w WHERE w.id = c.entity_id) END AS title
       FROM comments c LEFT JOIN users u ON u.id = c.created_by WHERE c.project_id = ? ORDER BY c.created_at DESC, c.seq DESC LIMIT ${lim}`, [pid]),
   ]);
-  const KIND = (e) => (e.entity_type === 'PHASE' ? 'PHASE' : e.entity_type === 'JIRA' ? 'JIRA' : /상태를/.test(e.summary) ? 'STATUS' : /담당자/.test(e.summary) ? 'OWNER' : /(시작일|종료일|마일스톤 날짜|기한|위치를 이동)/.test(e.summary) ? 'SCHEDULE' : 'DATA');
+  const KIND = (e) => (e.entity_type === 'PHASE' ? 'PHASE' : e.entity_type === 'JIRA' ? 'JIRA' : /상태를/.test(e.summary) ? 'STATUS' : /담당자/.test(e.summary) ? 'OWNER' : /(시작일|종료일|마일스톤 날짜|주요 일정 날짜|기한|위치를 이동|순서를 옮)/.test(e.summary) ? 'SCHEDULE' : 'DATA');
   const items = [
     ...events.map((e) => ({ ...e, kind: KIND(e) })),
     ...comments.map((c) => ({ at: c.at, actor_name: c.actor_name, entity_type: c.entity_type, entity_id: c.entity_id, display_id: c.display_id, title: c.title,

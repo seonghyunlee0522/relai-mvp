@@ -56,7 +56,7 @@ export async function saveBaseline(db, project, body = {}, userId = null) {
   if (!body || body.approval === undefined) throw new ValidationError({ approval: '저장할 내용이 없습니다.' });
   const { add_to_stakeholders: addSh, ...a } = D.cleanApproval(body.approval, D.REQ_APPROVAL_METHODS);
   if (!a.approver_id && a.approver_name && addSh) {
-    const sh = D.approverStakeholder(project, a, '요구사항 기준선 승인');
+    const sh = D.approverStakeholder(project, a, '요구사항 확정 승인');
     await D.appendStakeholder(db, project, sh, userId); a.approver_id = sh.id;
   }
   if (a.approver_id) { a.approver_name = ''; a.approver_title = ''; }

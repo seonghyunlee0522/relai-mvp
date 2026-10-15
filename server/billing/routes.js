@@ -222,10 +222,10 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const reason = String(req.body?.reason || '').trim().slice(0, 100);
     if (!reason) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { reason: '환불 사유를 입력해 주세요.' } });
     const pay = await db.get('SELECT id, provider, status, moid, workspace_id FROM payments WHERE id = ?', [req.params.id]);
-    if (!pay) return fail(res, 404, 'not_found', 'Payment를 찾을 수 없습니다.');
+    if (!pay) return fail(res, 404, 'not_found', '결제 내역을 찾을 수 없습니다.');
     const order = pay.provider === provider.name ? await getOrder(db, pay.moid) : null;
     if (!order || pay.status !== 'PAID' || order.status !== 'PAID') return fail(res, 409, 'not_refundable', '환불할 수 있는 결제가 아닙니다.');
-    if (order.kind === 'CREDIT_PACK') return fail(res, 409, 'use_credit_refund', 'AI 크레딧 결제는 Workspace › AI 크레딧 환불로 처리합니다 (미사용 크레딧만 환불).');
+    if (order.kind === 'CREDIT_PACK') return fail(res, 409, 'use_credit_refund', 'AI 크레딧 결제는 워크스페이스 › AI 크레딧 환불로 처리합니다 (미사용 크레딧만 환불).');
     let ev;
     try { ev = await provider.refund({ order, reason }); }
     catch (e) { if (e instanceof BillingError) return fail(res, e.status, e.code, e.message); throw e; }

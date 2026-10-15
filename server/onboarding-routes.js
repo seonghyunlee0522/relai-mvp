@@ -23,7 +23,7 @@ export function mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail 
   app.post('/api/guides/reset', requireAuth, wrap(async (req, res) => res.json({ guides_seen: await O.resetGuides(db, req.user.id) })));
   app.post('/api/guides/:guideKey/seen', requireAuth, wrap(async (req, res) => send(res, async () => res.json({ guides_seen: await O.markGuideSeen(db, req.user.id, String(req.params.guideKey).toUpperCase()) }))));
   app.get('/api/workspaces/:wid/activation', guard, wrap(async (req, res) => {
-    if (!['OWNER', 'ADMIN'].includes(req.role)) return fail(res, 403, 'forbidden', 'Workspace OWNER/ADMIN만 볼 수 있습니다.');
+    if (!['OWNER', 'ADMIN'].includes(req.role)) return fail(res, 403, 'forbidden', '워크스페이스 소유자/관리자만 볼 수 있습니다.');
     res.json({ activation: await O.workspaceActivation(db, req.params.wid) });
   }));
 }

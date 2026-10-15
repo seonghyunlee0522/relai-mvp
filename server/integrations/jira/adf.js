@@ -14,7 +14,7 @@ export const textBlocks = (s) => String(s || '').split(/\n{2,}/).map((p) => p.tr
 export function wbsDescription({ wbsCode, title, description, reqs = [], projectUrl, projectName }) {
   const blocks = [paragraph(strong('RELAI WBS'), text(` ${wbsCode} ${title}`))];
   if (description) blocks.push(...textBlocks(description));
-  if (reqs.length) { blocks.push(paragraph(strong('관련 Requirement'))); blocks.push(bulletList(reqs.map((r) => `${r.display_id} ${r.title}`))); }
+  if (reqs.length) { blocks.push(paragraph(strong('관련 요구사항'))); blocks.push(bulletList(reqs.map((r) => `${r.display_id} ${r.title}`))); }
   if (projectUrl) blocks.push(paragraph(text('RELAI 프로젝트: '), link(projectName || projectUrl, projectUrl)));
   return doc(...blocks);
 }

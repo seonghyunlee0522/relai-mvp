@@ -61,10 +61,10 @@ export async function workspaceAiUsage(db, wid) {
 export async function grantCredits(db, admin, wid, body = {}) {
   const amount = Number(body.amount);
   const reason = String(body.reason || '').trim();
-  if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1_000_000) throw new AdminError(400, 'validation_error', 'Credit 수량은 0이 아닌 정수(±1,000,000 이내)여야 합니다.');
+  if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1_000_000) throw new AdminError(400, 'validation_error', '크레딧 수량은 0이 아닌 정수(±1,000,000 이내)여야 합니다.');
   if (!reason || reason.length > 500) throw new AdminError(400, 'validation_error', '사유를 입력해 주세요. (500자 이내)');
   const w = await db.get('SELECT id, name FROM workspaces WHERE id = ?', [wid]);
-  if (!w) throw new AdminError(404, 'not_found', 'Workspace를 찾을 수 없습니다.');
+  if (!w) throw new AdminError(404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
   return tx(db, async (t) => {
     const auditId = await writeAudit(t, { adminUserId: admin.id, action: amount > 0 ? 'GRANT_AI_CREDITS' : 'ADJUST_AI_CREDITS', targetType: 'WORKSPACE', targetId: wid, metadata: { name: w.name, amount, reason } });
     let out;

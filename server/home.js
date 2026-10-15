@@ -82,7 +82,7 @@ export const MONITOR_RULES = new Set(['DEV_STATUS', 'TRANSITION_RUN', 'CLOSED'])
 export const guidanceKind = (g) => (g && MONITOR_RULES.has(g.rule) ? 'MONITOR' : 'ACTION');
 
 export const PRIORITY = { BLOCKER: 1, ATTENTION: 2, ACTION: 3, NORMAL: 4, WAITING: 5 };
-export const PRIORITY_LABEL = { BLOCKER: 'Blocker', ATTENTION: '확인 필요', ACTION: 'Action 필요', NORMAL: '정상', WAITING: '대기' };
+export const PRIORITY_LABEL = { BLOCKER: '막힘', ATTENTION: '확인 필요', ACTION: '조치 필요', NORMAL: '정상', WAITING: '대기' };
 const MILESTONE_KINDS = new Set(['MILESTONE', 'KEY_DATE', 'PROJECT_END']);
 const SOON_DAYS = 7;
 

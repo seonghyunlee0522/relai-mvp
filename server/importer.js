@@ -41,7 +41,7 @@ function resolveOwner(members, raw, team = null) {
   // WBS (Phase 3 US-1): no RELAI user → a 당사·협력사 stakeholder of 01 with exactly that name (계정 없는 팀원)
   const sh = team ? team.filter((x) => x.name === t) : [];
   if (sh.length === 1) return { value: null, stakeholder: sh[0].id };
-  if (sh.length > 1) return { error: '같은 이름의 팀원이 여러 명입니다. 01 이해관계자 이름을 구분해 주세요.' };
+  if (sh.length > 1) return { error: '같은 이름의 팀원이 여러 명입니다. 01 관계자 이름을 구분해 주세요.' };
   return { error: '담당자를 찾을 수 없습니다.' };
 }
 
@@ -177,7 +177,7 @@ async function wbsContext(db, project, wid, parentId) {
     if (typeof parentId !== 'string') throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
     const p = await db.get('SELECT * FROM wbs_items WHERE project_id = ? AND id = ?', [project.id, parentId]);
     if (!p || p.archived_at) throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
-    if (p.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래에는 항목을 만들 수 없습니다.' });
+    if (p.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '주요 일정 아래에는 항목을 만들 수 없습니다.' });
   }
   return { members, team: W.teamOf(await W.projectStakeholders(db, project.id)), parentId: parentId || null };
 }
@@ -211,11 +211,11 @@ function validateWbs(rows, ctx) {
     const sd = parseDate(v.start); const ed = parseDate(v.end);
     if (sd.error) e.start = sd.error; else if (sd.value) v.start = sd.value;
     if (ed.error) e.end = ed.error; else if (ed.value) v.end = ed.value;
-    if (type === 'MILESTONE' && v.start && !e.start) e.start = '마일스톤은 시작일을 입력하지 않습니다. 종료일 칸에 마일스톤 날짜를 입력하세요.';
+    if (type === 'MILESTONE' && v.start && !e.start) e.start = '주요 일정은 시작일을 입력하지 않습니다. 종료일 칸에 날짜를 입력하세요.';
     if (type !== 'MILESTONE' && sd.value && ed.value && ed.value < sd.value) e.end = '종료일은 시작일보다 빠를 수 없습니다.';
     const pg = parseProgress(v.progress);
     if (pg.error) e.progress = pg.error;
-    else if (pg.value !== null && (type !== 'TASK' || (hasChildren.has(v.code) && pg.value !== 0))) e.progress = type === 'MILESTONE' ? '마일스톤은 진행률을 관리하지 않습니다.' : '상위 항목의 진행률은 하위 작업에서 계산됩니다.';
+    else if (pg.value !== null && (type !== 'TASK' || (hasChildren.has(v.code) && pg.value !== 0))) e.progress = type === 'MILESTONE' ? '주요 일정은 진행률을 관리하지 않습니다.' : '상위 항목의 진행률은 하위 작업에서 계산됩니다.';
 
     const list = [];
     for (const tok of v.predecessors.split(/[,，;\n]+/).map((x) => x.trim()).filter(Boolean)) {
@@ -241,7 +241,7 @@ function validateWbs(rows, ctx) {
       if (p) {
         const pi = byCode.get(p); const key = e.parent_code ? null : (v.parent_code ? 'parent_code' : 'code');
         if (pi === undefined) { if (key && !e[key]) e[key] = `상위 항목(${p})이 파일에 없습니다.`; }
-        else if (typeOf[pi] === 'MILESTONE' && key && !e[key]) e[key] = '마일스톤 아래에는 항목을 만들 수 없습니다.';
+        else if (typeOf[pi] === 'MILESTONE' && key && !e[key]) e[key] = '주요 일정 아래에는 항목을 만들 수 없습니다.';
       }
     }
     for (const tok of preds[i]) if (!byCode.has(tok) && !e.predecessors) e.predecessors = `선행 작업 '${tok}'을(를) 파일에서 찾을 수 없습니다.`;

@@ -79,7 +79,7 @@ export function parseIssue(b = {}, { partial = false } = {}) {
 }
 export function parseRisk(b = {}, { partial = false } = {}) {
   const f = {}; const out = {}; common(b, partial, f, out);
-  for (const k of ['probability', 'impact']) if (b[k] !== undefined) { const v = b[k] || 'MEDIUM'; if (!LEVELS3.includes(v)) f[k] = `${k === 'probability' ? 'Probability' : 'Impact'} 값이 올바르지 않습니다.`; else out[k] = v; }
+  for (const k of ['probability', 'impact']) if (b[k] !== undefined) { const v = b[k] || 'MEDIUM'; if (!LEVELS3.includes(v)) f[k] = `${k === 'probability' ? '발생 가능성' : '영향도'} 값이 올바르지 않습니다.`; else out[k] = v; }
   if (b.response_strategy !== undefined) { const v = b.response_strategy || null; if (v !== null && !STRATEGIES.includes(v)) f.response_strategy = '대응 전략 값이 올바르지 않습니다.'; else out.response_strategy = v; }
   if (b.mitigation_plan !== undefined) { out.mitigation_plan = str(b.mitigation_plan); if (out.mitigation_plan.length > 5000) f.mitigation_plan = '대응 계획은 5,000자 이내로 입력해 주세요.'; }
   if (b.status !== undefined) { if (!RISK_STATUSES.includes(b.status)) f.status = '상태 값이 올바르지 않습니다.'; else out.status = b.status; }

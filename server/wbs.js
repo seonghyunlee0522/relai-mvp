@@ -101,7 +101,7 @@ export function parseWbs(b = {}, { partial = false, existing = null } = {}) {
   if (b.progress !== undefined) {
     const n = Number(b.progress);
     if (!Number.isInteger(n) || n < 0 || n > 100) f.progress = '진행률은 0~100 사이의 정수여야 합니다.';
-    else if (type !== 'TASK') f.progress = type === 'SUMMARY' ? '상위 항목의 진행률은 하위 작업에서 계산됩니다.' : '마일스톤은 진행률을 관리하지 않습니다.';
+    else if (type !== 'TASK') f.progress = type === 'SUMMARY' ? '상위 항목의 진행률은 하위 작업에서 계산됩니다.' : '주요 일정은 진행률을 관리하지 않습니다.';
     else out.progress = n;
   }
   for (const k of ['planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date', 'milestone_date']) {
@@ -243,7 +243,7 @@ export function rangeWarnings(project, item) {
   const out = []; if (!project) return out;
   const ps = project.planned_start_date, pe = project.planned_end_date;
   const chk = (label, d) => { if (!d) return; if (ps && d < ps) out.push(`${label}(${d})이 프로젝트 시작일(${ps})보다 앞섭니다.`); if (pe && d > pe) out.push(`${label}(${d})이 프로젝트 종료일(${pe})을 넘습니다.`); };
-  chk('계획 시작일', item.planned_start_date); chk('계획 종료일', item.planned_end_date); chk('마일스톤 일자', item.milestone_date);
+  chk('계획 시작일', item.planned_start_date); chk('계획 종료일', item.planned_end_date); chk('주요 일정 일자', item.milestone_date);
   return out;
 }
 
@@ -381,7 +381,7 @@ export async function createWbs(db, project, input, userId, { skipRenumber = fal
   if (input.parent_id) {
     const parent = (await getItem(db, project.id, input.parent_id));
     if (!parent || parent.archived_at) throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
-    if (parent.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래에는 항목을 만들 수 없습니다.' });
+    if (parent.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '주요 일정 아래에는 항목을 만들 수 없습니다.' });
     if ((parent.depth || 0) + 1 >= MAX_DEPTH) throw new ValidationError({ parent_id: `WBS는 최대 ${MAX_DEPTH}단계까지 만들 수 있습니다.` });
     if (!skipGuard) input = await guardLeafToGroup(db, project, parent, input.convert_parent, userId, { child: input });
   }
@@ -422,7 +422,7 @@ export async function updateWbs(db, project, existing, input, userId = null, { d
   }
   if (next.item_type && next.item_type !== existing.item_type) {
     const childCount = (await db.get('SELECT COUNT(*) n FROM wbs_items WHERE parent_id = ? AND archived_at IS NULL', [existing.id])).n;
-    if (next.item_type === 'MILESTONE' && childCount) throw new ValidationError({ item_type: '하위 항목이 있는 항목은 마일스톤으로 바꿀 수 없습니다.' });
+    if (next.item_type === 'MILESTONE' && childCount) throw new ValidationError({ item_type: '하위 항목이 있는 항목은 주요 일정으로 바꿀 수 없습니다.' });
     if (next.item_type === 'MILESTONE') { next.planned_start_date = null; next.planned_end_date = null; next.progress = 0; }
     if (next.item_type !== 'MILESTONE') next.milestone_date = null;
     if (next.item_type === 'SUMMARY') next.progress = 0;
@@ -454,7 +454,7 @@ export async function moveWbs(db, project, existing, { parent_id, sequence, conv
   if (newParent) {
     const parent = (await getItem(db, project.id, newParent));
     if (!parent || parent.archived_at) throw new ValidationError({ parent_id: '상위 항목을 찾을 수 없습니다.' });
-    if (parent.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래로는 이동할 수 없습니다.' });
+    if (parent.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '주요 일정 아래로는 이동할 수 없습니다.' });
     if (newParent === existing.id || (await descendants(db, project.id, existing.id)).includes(newParent)) throw new ValidationError({ parent_id: '자기 자신이나 하위 항목 아래로는 이동할 수 없습니다.' });
     const subDepth = await subtreeDepth(db, project.id, existing.id);
     if ((parent.depth || 0) + 1 + subDepth >= MAX_DEPTH) throw new ValidationError({ parent_id: `WBS는 최대 ${MAX_DEPTH}단계까지 만들 수 있습니다.` });
@@ -489,7 +489,7 @@ export async function indentWbs(db, project, existing, userId = null, { convert_
   const i = sibs.findIndex((x) => x.id === existing.id);
   if (i <= 0) throw new ValidationError({ parent_id: '바로 위에 같은 레벨의 항목이 없어 들여쓸 수 없습니다.' });
   const prev = sibs[i - 1];
-  if (prev.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '마일스톤 아래로는 들여쓸 수 없습니다.' });
+  if (prev.item_type === 'MILESTONE') throw new ValidationError({ parent_id: '주요 일정 아래로는 들여쓸 수 없습니다.' });
   await moveWbs(db, project, existing, { parent_id: prev.id, sequence: 9999, convert_parent }, userId);
   return { from: { parent_id: existing.parent_id, sequence: existing.sequence }, to: { parent_id: prev.id } };
 }

@@ -33,7 +33,7 @@ export function parseRequirement(b = {}, { partial = false } = {}) {
     if (!list.includes(v)) f[k] = `${label} 값이 올바르지 않습니다.`; else out[k] = v;
   };
   enumField('type', REQ_TYPES, '유형'); enumField('priority', REQ_PRIORITIES, '우선순위');
-  enumField('scope', REQ_SCOPES, 'Scope'); enumField('status', REQ_STATUSES, '상태');
+  enumField('scope', REQ_SCOPES, '범위'); enumField('status', REQ_STATUSES, '상태');
   if (has('requester_name')) { out.requester_name = str(b.requester_name); if (out.requester_name.length > 100) f.requester_name = '요청자는 100자 이내로 입력해 주세요.'; }
   if (has('requester_organization')) { out.requester_organization = str(b.requester_organization); if (out.requester_organization.length > 100) f.requester_organization = '소속은 100자 이내로 입력해 주세요.'; }
   if (has('owner_user_id')) { out.owner_user_id = b.owner_user_id ? String(b.owner_user_id) : null; }

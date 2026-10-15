@@ -37,7 +37,7 @@ export const REAUTH_MINUTES = 10;
 export const PURGE_DAYS = 30;
 export const LOGIN_RECORD_MONTHS = 3;
 export const DELETED_USER_NAME = '탈퇴한 사용자';
-export const DELETED_WORKSPACE_NAME = '삭제된 Workspace';
+export const DELETED_WORKSPACE_NAME = '삭제된 워크스페이스';
 
 /** One row per successful sign-in (접속 일시, IP 주소). Purged after LOGIN_RECORD_MONTHS by purgeAccountData(). */
 export async function recordLogin(db, { userId, method, req }) {
@@ -74,9 +74,9 @@ async function deletionPlan(db, user) {
   for (const w of rows) {
     if (Number(w.members) === 1) {
       solo.push(w);
-      if (await runningSubscription(db, w.id)) blockers.push({ code: 'subscription_active', workspace_id: w.id, workspace_name: w.name, message: `'${w.name}' Workspace의 유료 구독을 먼저 해지해 주세요.` });
+      if (await runningSubscription(db, w.id)) blockers.push({ code: 'subscription_active', workspace_id: w.id, workspace_name: w.name, message: `'${w.name}' 워크스페이스의 유료 구독을 먼저 해지해 주세요.` });
     } else if (w.role === 'OWNER' && Number(w.owners) === 1) {
-      blockers.push({ code: 'sole_owner', workspace_id: w.id, workspace_name: w.name, message: `'${w.name}' Workspace의 유일한 OWNER입니다. 다른 멤버에게 OWNER를 넘기거나 멤버를 모두 내보낸 후 탈퇴할 수 있습니다.` });
+      blockers.push({ code: 'sole_owner', workspace_id: w.id, workspace_name: w.name, message: `'${w.name}' 워크스페이스의 유일한 소유자입니다. 다른 멤버에게 소유자를 넘기거나 멤버를 모두 내보낸 후 탈퇴할 수 있습니다.` });
     } else shared.push(w);
   }
   return { blockers, solo, shared };
@@ -171,7 +171,7 @@ export function mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, se
   app.delete('/api/workspaces/:wid', guard, requireOwner(), wrap(async (req, res) => {
     const user = await loadUser(req.user.id);
     const w = await db.get('SELECT id, name, status FROM workspaces WHERE id = ?', [req.params.wid]);
-    if (String(req.body?.confirm_name ?? '').trim() !== w.name) return fail(res, 400, 'validation', '확인을 위해 Workspace 이름을 정확히 입력해 주세요.', { fields: { confirm_name: 'Workspace 이름이 일치하지 않습니다.' } });
+    if (String(req.body?.confirm_name ?? '').trim() !== w.name) return fail(res, 400, 'validation', '확인을 위해 워크스페이스 이름을 정확히 입력해 주세요.', { fields: { confirm_name: '워크스페이스 이름이 일치하지 않습니다.' } });
     if (!(await reauth(req, res, user))) return;
     if (await runningSubscription(db, w.id)) return fail(res, 409, 'subscription_active', '유료 구독을 먼저 해지해 주세요. 해지 예약 후 삭제할 수 있습니다.');
     const fallback = await tx(db, async (db) => {
