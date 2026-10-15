@@ -1,5 +1,6 @@
 /* Onboarding UI pieces (Phase 14): welcome dialog, "RELAI 시작하기" checklist, one-time coach marks, phase intro, help menu.
  * All of them are optional layers over the product: if onboarding state is unavailable they render nothing. */
+import { isPhone } from '../core/device.js';
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { state } from '../core/state.js';
@@ -51,8 +52,10 @@ export const COACH = {
   WEEKLY_REPORT_INTRO: { title: '주간보고', body: '프로젝트가 어느 정도 진행되면 주간보고를 생성해 진행 현황·이슈·다음 계획을 고객과 공유할 수 있습니다. 보고서는 현재 데이터로 자동 작성되고 수정할 수 있습니다.' },
   AI_INTRO: { title: 'AI 기능 (보조)', body: 'AI는 요구사항 추출, WBS 초안, 변경 영향 분석을 돕는 보조 기능입니다. 결과는 초안이며 검토 후 반영합니다. AI 없이도 모든 기능을 쓸 수 있습니다.' },
 };
+/* Redesign R3b: on desktop the list pages carry no tip banners — the page purpose line and the empty state say it (spec §3.6). */
+const LIST_TIPS = new Set(['ISSUE_RISK_INTRO', 'CHANGE_REQUEST_INTRO', 'TESTING_INTRO', 'ACCEPTANCE_INTRO', 'REQ_TRACE_INTRO', 'JIRA_EXECUTION_INTRO']);
 export function coachMark(key, extra = {}) {
-  const c = COACH[key]; if (!c || ob.guideSeen(key)) return '';
+  const c = COACH[key]; if (!c || ob.guideSeen(key) || (LIST_TIPS.has(key) && !isPhone())) return '';
   return html`<div class="coach" role="note" data-coach="${key}"><div class="coach__i">i</div><div class="coach__b"><b>${extra.title || c.title}</b><p>${extra.body || c.body}</p>${raw(extra.cta ? html`<a class="link" href="${extra.cta.href}" data-link>${extra.cta.label}</a>` : '')}</div><button type="button" class="linkbtn coach__more" data-coach-more>자세히</button><button type="button" class="coach__x" data-coach-close="${key}" aria-label="닫기">×</button></div>`;
 }
 export function bindCoach(root) {

@@ -69,7 +69,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
     check(`US-2 empty WBS${q}: no Jira banner`, !/Jira를 사용하고 있나요/.test(await page.textContent('main')));
   }
   const emptyTxt = await page.textContent('.wempty');
-  check('US-2 empty copy: 15건 + 직접 추가 · Excel로 가져오기 · AI 초안', /아직 작업이 없습니다/.test(emptyTxt) && /확정한 요구사항 15건으로 기본 작업 목록을 만들어 드립니다\. 일정과 담당자는 직접 채우면 됩니다\./.test(emptyTxt) && /직접 추가/.test(emptyTxt) && /Excel로 가져오기/.test(emptyTxt) && /AI 초안/.test(emptyTxt));
+  check('US-2 empty copy (R3b: one sentence): 15건 + 직접 추가 · Excel로 가져오기 · AI 초안', /확정한 요구사항 15건으로 기본 작업 목록을 만들어 드립니다\./.test(emptyTxt) && /직접 추가/.test(emptyTxt) && /Excel로 가져오기/.test(emptyTxt) && /AI 초안/.test(emptyTxt));
   const terms0 = await page.$$eval('main .term', (els) => els.map((e) => e.getAttribute('aria-label')));
   check('US-2 term: 뼈대 (?) next to the button', terms0.some((x) => x.startsWith('WBS 뼈대: 요구사항과 꼭 필요한 시험·오픈 작업을 넣은 기본 작업 목록')), JSON.stringify(terms0));
   await shot('02-wbs-empty.png');
@@ -117,7 +117,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(`${A.url}/wbs`); await page.waitForSelector('main table');
   check('US-2 skeleton button gone once the WBS has items', !(await page.$('#skel')));
   const terms1 = await page.$$eval('main .term', (els) => els.map((e) => e.getAttribute('aria-label')));
-  check('US-6 terms: WBS · Gantt · 마일스톤', ['WBS: 프로젝트에서 해야 할 일을 잘게 나눈 작업 목록', 'Gantt:', '마일스톤: 고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'].every((t) => terms1.some((x) => x.startsWith(t))), JSON.stringify(terms1));
+  check('US-6 terms: WBS · 간트 · 마일스톤', ['WBS: 프로젝트에서 해야 할 일을 잘게 나눈 작업 목록', '간트:', '마일스톤: 고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'].every((t) => terms1.some((x) => x.startsWith(t))), JSON.stringify(terms1));
 
   /* ---------- US-1 owner picker ---------- */
   const design = tasks.find((t) => t.title === '화면 설계');

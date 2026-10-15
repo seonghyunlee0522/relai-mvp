@@ -117,8 +117,8 @@ export async function requirementsPage(id) {
     const q = params();
     const hasFilter = ['q', ...filterKeys, 'archived'].some((k) => q.get(k));
     return hasFilter ? emptyFiltered('요구사항')
-      : html`<div class="empty empty--ob" data-tour-id="req-empty"><h2>아직 등록된 요구사항이 없습니다.</h2><p>프로젝트 범위와 검수 기준이 되는 요구사항을 등록하세요. 이후 WBS, 테스트, 변경관리와 연결됩니다.</p>
-        ${raw(archived ? '' : html`<div class="empty__a"><button class="btn btn--primary btn--lg" id="add2">요구사항 추가</button><button class="btn btn--secondary btn--lg" id="xl-import2">Excel 가져오기</button>${raw(ai.enabled ? '<button class="btn btn--secondary btn--lg btn--ai" id="ai-extract2">AI로 요구사항 추출</button>' : '')}</div>`)}</div>`;
+      : html`<div class="empty empty--ob" data-tour-id="req-empty"><h2>고객이 원하는 기능과 조건을 요구사항으로 등록하세요.</h2>
+        ${raw(archived ? '' : html`<div class="empty__a"><button class="btn btn--primary btn--lg" id="add2">요구사항 추가</button></div><p class="tempty__alt"><button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button>${raw(ai.enabled ? ' · <button type="button" class="link linkbtn" id="ai-extract2">AI로 요구사항 추출</button>' : '')}</p>`)}</div>`;
   };
 
   /* ---------- bulk ---------- */
@@ -147,7 +147,7 @@ export async function requirementsPage(id) {
         if (guarded.length) {   // 확정 요구사항의 범위 변경 → one prompt; 변경 요청 = one CR linking all of them, they stay unchanged
           const v = await changePromptDialog({ diff: `범위: 확정 요구사항 ${guarded.length}건 → ${shown}` }); if (!v) return;
           if (v === 'cr') {
-            try { await createChangeDraft(id, { title: `${guarded.map((r) => r.display_id).join(', ')} 범위 변경`.slice(0, 200), lines: guarded.map((r) => `${r.display_id} ${r.title}\n  ${proposalLine('scope', r.scope, value)}`), requirementIds: guarded.map((r) => r.id) }); } catch (e) { toast(e.message); return; }
+            try { await createChangeDraft(id, { title: `${guarded.map((r) => r.display_id).join(', ')} 범위 변경`.slice(0, 200), lines: guarded.map((r) => `${r.display_id} ${r.title}\n  ${proposalLine('scope', r.scope, value)}`), requirementIds: guarded.map((r) => r.id), open: false }); } catch (e) { toast(e.message); return; }
             ids = ids.filter((x) => !guarded.some((r) => r.id === x)); if (!ids.length) { await bulkAfter(); return; }
           }
         }
@@ -159,7 +159,7 @@ export async function requirementsPage(id) {
         if (guarded.length) {   // 확정된 범위 내 요구사항 보관 → prompt; 변경 요청 = CR only, those are not archived
           const v = await changePromptDialog({ diff: `보관: 확정된 범위 내 요구사항 ${guarded.length}건 (범위에서 제외)` }); if (!v) return;
           if (v === 'cr') {
-            try { await createChangeDraft(id, { title: `${guarded.map((r) => r.display_id).join(', ')} 범위 제외(보관)`.slice(0, 200), lines: guarded.map((r) => `- 보관(범위에서 제외): ${r.display_id} ${r.title}`), requirementIds: guarded.map((r) => r.id), relation: 'REMOVES' }); } catch (e) { toast(e.message); return; }
+            try { await createChangeDraft(id, { title: `${guarded.map((r) => r.display_id).join(', ')} 범위 제외(보관)`.slice(0, 200), lines: guarded.map((r) => `- 보관(범위에서 제외): ${r.display_id} ${r.title}`), requirementIds: guarded.map((r) => r.id), relation: 'REMOVES', open: false }); } catch (e) { toast(e.message); return; }
             ids = ids.filter((x) => !guarded.some((r) => r.id === x)); if (!ids.length) { await bulkAfter(); return; }
           }
         } else if (!(await confirmDialog({ title: `${n.toLocaleString('ko-KR')}건을 보관할까요?`, body: '보관된 요구사항은 기본 목록에서 숨겨지고 수정할 수 없습니다. 번호는 재사용되지 않습니다.', confirm: '보관하기', danger: true }))) return;
@@ -495,7 +495,7 @@ export async function requirementsPage(id) {
     const acc = r.acceptances && r.acceptances.length ? r.acceptances[0] : null;
     return traceStrip([
       { label: 'WBS', value: live.length, href: `${u}/wbs?requirement=${r.id}`, tone: live.length ? '' : r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' ? 'warn' : 'muted' },
-      ...(r.jira && r.jira.total ? [{ label: 'Jira', value: `${r.jira.done}/${r.jira.total} Done`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
+      ...(r.jira && r.jira.total ? [{ label: 'Jira', value: `${r.jira.done}/${r.jira.total} 완료`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
       { label: '변경 요청', value: r.changes ? r.changes.length : 0, href: `${u}/changes?requirement=${r.id}`, tone: r.changes && r.changes.length ? '' : 'muted' },
       { label: '이슈', value: issues, sub: risks ? `리스크 ${risks}` : '', href: `${u}/issues?requirement=${r.id}`, tone: issues ? 'warn' : 'muted' },
       { label: '테스트', value: t.total, sub: t.total ? `통과 ${t.pass} · 실패 ${t.fail}` : r.test_exclusion_reason ? '테스트 제외' : '', href: `${u}/tests?requirement=${r.id}`, tone: t.fail ? 'crit' : t.total && t.verification === 'VERIFIED' ? 'ok' : t.total ? '' : 'muted' },

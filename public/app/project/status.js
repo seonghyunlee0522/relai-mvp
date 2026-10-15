@@ -65,14 +65,14 @@ export function exceptions(g, pid) {
   const is = g.issues || {}, rs = g.risks || {}, w = g.wbs || {}, t = g.tests || {}, a = g.acceptances || {}, c = g.changes || {}, r = g.requirements || {};
   const rows = [
     ['ISSUE', '미해결 이슈', n(is.active), u(is.critical ? '/issues?severity=CRITICAL' : '/issues'), 'crit', is.critical ? `Critical ${is.critical}건` : ''],
-    ['RISK', 'High 이상 Risk', n(rs.high_or_critical), u('/issues?tab=risks&risk_level=HIGH,CRITICAL'), 'crit', rs.critical ? `Critical ${rs.critical}건` : ''],
+    ['RISK', '높음 이상 리스크', n(rs.high_or_critical), u('/issues?tab=risks&risk_level=HIGH,CRITICAL'), 'crit', rs.critical ? `Critical ${rs.critical}건` : ''],
     ['OVERDUE', '지연 작업', n(w.overdue_tasks), u('/wbs?f=overdue'), 'crit', ''],
     ['MILESTONE', '지난 마일스톤', n(w.overdue_milestones), u('/wbs?view=gantt'), 'crit', ''],
     ['FAIL', '실패 테스트', n(t.last_fail), u('/tests?last_result=FAIL'), 'crit', ''],
     ['REWORK', '보완 필요 검수', n(a.rework), u('/tests?tab=acceptance&status=REWORK_REQUIRED'), 'warn', ''],
     ['CHANGE_APPROVED', '승인 후 미반영 변경', n(c.approved_unimplemented), u('/changes?status=APPROVED'), 'warn', ''],
     ['CHANGE_REVIEW', '검토 중 변경', n(c.under_review), u('/changes?status=UNDER_REVIEW'), 'warn', ''],
-    ['UNLINKED_REQ', 'WBS 미연결 Requirement', n(r.in_scope_unlinked), u('/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked'), 'warn', '범위 내 요구사항 기준'],
+    ['UNLINKED_REQ', 'WBS 미연결 요구사항', n(r.in_scope_unlinked), u('/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked'), 'warn', '범위 내 요구사항 기준'],
     ['NO_OWNER', '담당자 미지정', n(w.tasks_without_owner), u('/wbs?f=no_owner'), 'warn', ''],
     ['NO_DATES', '일정 미입력', n(w.tasks_without_dates), u('/wbs?f=no_dates'), 'warn', ''],
   ].filter((x) => x[2] > 0).map(([key, label, count, href, tone, sub]) => ({ key, label, count, href, tone, sub }));

@@ -92,7 +92,7 @@ export async function charterPage(id) {
   const scope = section('3', 'scope', '범위 · 산출물', '신규 요구사항이나 변경 요청이 프로젝트 범위에 포함되는지 판단하고, 필요한 주요 산출물이 누락되지 않았는지 검토합니다.', html`
     <div class="chx__two">
       ${raw(block('수행 범위', c.scope.inScope, ['수행 범위가 정의되지 않았습니다.', '이번 프로젝트에서 하는 일을 작성하면 AI가 요구사항이 범위 안에 있는지 판단할 수 있습니다.', def('SCOPE', 'scope_in'), '수행 범위 입력 →']))}
-      ${raw(block('제외 범위', c.scope.outOfScope, ['제외 범위가 정의되지 않았습니다.', '프로젝트에서 수행하지 않는 범위를 명확하게 작성하면 범위 확대(Scope Creep)를 줄이고 AI가 신규 요구사항의 범위 포함 여부를 판단하는 데 도움이 됩니다.', def('SCOPE', 'scope_out'), '제외 범위 입력 →']))}
+      ${raw(block('제외 범위', c.scope.outOfScope, ['제외 범위가 정의되지 않았습니다.', '프로젝트에서 수행하지 않는 범위를 명확하게 작성하면 범위 확대를 줄이고 AI가 신규 요구사항의 범위 포함 여부를 판단하는 데 도움이 됩니다.', def('SCOPE', 'scope_out'), '제외 범위 입력 →']))}
     </div>
     ${raw(block('주요 산출물', c.deliverables, ['주요 산출물이 정의되지 않았습니다.', '납품해야 할 산출물을 작성하면 AI가 WBS에 필요한 작업이 빠지지 않았는지 검토할 수 있습니다.', def('SCOPE', 'deliverables'), '주요 산출물 입력 →']))}`);
 
@@ -101,8 +101,8 @@ export async function charterPage(id) {
   const shTable = sh.length ? html`<div class="chx__tblw"><table class="chx__tbl"><thead><tr><th>이름</th><th>소속</th><th>구분</th><th>역할</th><th>주요 책임</th></tr></thead><tbody>
       ${raw(sh.map((s) => html`<tr><td class="chx__nm">${s.name}</td><td>${[s.org, s.department].filter(Boolean).join(' · ') || '-'}</td><td><span class="chx__cat chx__cat--${s.category.toLowerCase()}">${s.category_label}</span></td><td>${s.role || '-'}</td><td>${s.responsibility || '-'}</td></tr>`).join(''))}</tbody></table></div>`
     : empty('이해관계자가 아직 등록되지 않았습니다.', '고객사·당사·협력사의 담당자와 역할을 등록하면 AI가 업무 담당자와 의사결정 상대를 이해할 수 있습니다.', def('STAKEHOLDERS'), '이해관계자 입력 →');
-  const stake = section('4', 'stakeholders', raw(html`Stakeholders &amp; Governance ${raw(term('stakeholder'))}`), '프로젝트 참여자, 업무 담당자 및 의사결정 구조를 이해하는 데 활용합니다.', html`
-    <div class="chx__blk"><h3 class="chx__lbl">Stakeholders${raw(sh.length ? html` <small>${sh.length}명</small>` : '')}</h3>${raw(shTable)}</div>
+  const stake = section('4', 'stakeholders', raw(html`이해관계자 및 의사결정 구조 ${raw(term('stakeholder'))}`), '프로젝트 참여자, 업무 담당자 및 의사결정 구조를 이해하는 데 활용합니다.', html`
+    <div class="chx__blk"><h3 class="chx__lbl">이해관계자${raw(sh.length ? html` <small>${sh.length}명</small>` : '')}</h3>${raw(shTable)}</div>
     ${raw(block('의사결정 / 승인 체계', c.governance, ['의사결정 / 승인 체계가 정의되지 않았습니다.', '범위·일정 변경을 누가 어떤 절차로 승인하는지 작성하면 AI가 변경 요청의 다음 절차를 정확하게 안내할 수 있습니다.', def('OPERATIONS', 'decisions'), '의사결정 체계 입력 →']))}`);
 
   /* ---------- 5. Timeline & Milestones ---------- */
@@ -128,10 +128,10 @@ export async function charterPage(id) {
       return html`<li class="chtl__ms ${past ? 'is-past' : ''} ${out && m.date > tl.endDate ? 'is-late' : ''} ${crowd ? 'is-crowd' : ''} is-${side} ${edge}" style="left:${x.toFixed(2)}%" tabindex="0" title="${m.title} · ${fmtDate(m.date)}${out ? (m.date > tl.endDate ? ' (종료 후)' : ' (프로젝트 기간 밖)') : ''}">
         <i aria-hidden="true"></i><span><b>${m.title}</b><time>${fmtDate(m.date)}</time></span></li>`;
     }).join('');
-    const now = phase === 'during' ? html`<div class="chtl__today" style="left:${pos(today).toFixed(2)}%"><span>TODAY · ${fmtDate(today)}</span></div>` : '';
+    const now = phase === 'during' ? html`<div class="chtl__today" style="left:${pos(today).toFixed(2)}%"><span>오늘 · ${fmtDate(today)}</span></div>` : '';
     const state = phase === 'before' ? '프로젝트 시작 전' : phase === 'after' ? '프로젝트 기간 종료' : '';
     return html`<div class="chtl ${dated.length ? '' : 'chtl--bare'}" role="img" aria-label="프로젝트 기간 ${fmtDate(tl.startDate)} ~ ${fmtDate(tl.endDate)}, 오늘 ${fmtDate(today)}${state ? ` (${state})` : ''}, 마일스톤 ${dated.length}개">
-      <div class="chtl__ends"><span><small>시작</small>${fmtDate(tl.startDate)}</span>${raw(state ? html`<em class="chtl__state is-${phase}">${state} · 오늘 ${fmtDate(today)}</em>` : '')}<span><small>END</small>${fmtDate(tl.endDate)}</span></div>
+      <div class="chtl__ends"><span><small>시작</small>${fmtDate(tl.startDate)}</span>${raw(state ? html`<em class="chtl__state is-${phase}">${state} · 오늘 ${fmtDate(today)}</em>` : '')}<span><small>종료</small>${fmtDate(tl.endDate)}</span></div>
       <div class="chtl__track">${raw(late.length ? `<div class="chtl__after" style="left:${MAIN}%"><span>종료 후</span></div>` : '')}<div class="chtl__line" style="right:${100 - MAIN}%"><i class="chtl__done" style="width:${phase === 'before' ? 0 : phase === 'after' ? 100 : pos(today).toFixed(2)}%"></i></div>
         <span class="chtl__end chtl__end--s" aria-hidden="true"></span><span class="chtl__end chtl__end--e" aria-hidden="true" style="left:${MAIN}%"></span>
         <ol class="chtl__mss">${raw(marks)}</ol>${raw(now)}</div>
@@ -139,11 +139,11 @@ export async function charterPage(id) {
   };
   const msList = tl.milestones.length ? html`<ol class="chx__ml">${raw(tl.milestones.map((m) => html`<li class="${m.date && m.date < today ? 'is-past' : ''}"><time>${m.date ? fmtDate(m.date) : '날짜 미정'}</time><span>${m.title}</span>${raw(m.source === 'WBS' ? html`<small>WBS ${m.wbs_code}</small>` : '')}</li>`).join(''))}</ol>`
     : empty('주요 마일스톤이 아직 등록되지 않았습니다.', '주요 의사결정 및 완료 시점을 작성하면 AI가 현재 프로젝트의 일정 위치와 남은 주요 작업을 더 정확하게 판단할 수 있습니다.', def('MILESTONES', 'key_dates'), '마일스톤 입력 →');
-  const time = section('5', 'timeline', raw(html`Timeline &amp; Milestones ${raw(term('milestone'))}`), '현재 프로젝트 진행 위치와 남은 주요 일정을 기준으로 일정 위험과 다음 작업을 판단합니다.', html`${raw(timeline())}${raw(msList)}`);
+  const time = section('5', 'timeline', raw(html`일정 및 마일스톤 ${raw(term('milestone'))}`), '현재 프로젝트 진행 위치와 남은 주요 일정을 기준으로 일정 위험과 다음 작업을 판단합니다.', html`${raw(timeline())}${raw(msList)}`);
 
   /* ---------- 6. Assumptions, Constraints & Risks ---------- */
   const acr = section('6', 'conditions', '전제 · 제약 · 초기 리스크', 'WBS 생성, 요구사항 검토 및 변경 영향 분석 시 프로젝트의 전제조건과 제약, 위험요소를 함께 고려합니다.', html`
-    ${raw(block('전제', c.assumptions, ['가정사항이 작성되지 않았습니다.', '계획의 전제 조건(예: 고객사가 API 권한을 일정 내 제공)을 작성하면 AI가 그 전제가 깨질 때의 영향을 함께 검토할 수 있습니다.', def('SCOPE', 'assumptions'), '가정사항 입력 →']))}
+    ${raw(block('전제', c.assumptions, ['가정사항이 작성되지 않았습니다.', '계획의 전제 조건(예: 고객사가 연동 권한을 일정 내 제공)을 작성하면 AI가 그 전제가 깨질 때의 영향을 함께 검토할 수 있습니다.', def('SCOPE', 'assumptions'), '가정사항 입력 →']))}
     ${raw(block('제약', c.constraints, ['제약사항이 작성되지 않았습니다.', '내부망 개발, 오픈 일정 고정처럼 수행을 제한하는 조건을 작성하면 AI가 제약에 어긋나는 제안을 하지 않습니다.', def('SCOPE', 'constraints'), '제약사항 입력 →']))}
     ${raw(block('초기 리스크', c.risks, ['초기 리스크가 작성되지 않았습니다.', '착수 시점에 인지한 위험을 작성하면 AI가 WBS와 변경 영향을 검토할 때 함께 고려합니다.', def('SCOPE', 'initial_risks'), '초기 리스크 입력 →']))}`);
 

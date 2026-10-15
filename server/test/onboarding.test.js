@@ -30,7 +30,7 @@ async function googleLogin(c, claims, { intent = 'login', invite = null, nonceOv
 test('existing auth: password login/session/direct signup personal workspace/system admin/suspended login blocked; PASSWORD identity present', async () => {
   const { server, client, db } = await boot();
   const A = await setup(client);
-  const me = await A.c('GET', '/api/me'); assert.equal(me.status, 200); assert.equal(me.json.workspaces.length, 1); assert.match(me.json.workspaces[0].name, /님의 Workspace/);
+  const me = await A.c('GET', '/api/me'); assert.equal(me.status, 200); assert.equal(me.json.workspaces.length, 1); assert.match(me.json.workspaces[0].name, /님의 워크스페이스/);
   const ids = await db.all('SELECT provider, provider_subject, email FROM user_identities WHERE user_id = ?', [A.uid]); assert.deepEqual(ids, [{ provider: 'PASSWORD', provider_subject: A.uid, email: 'u@x.com' }]);
   const { r } = await login(client, 'u@x.com'); assert.equal(r.status, 200);
   const ad = await admin(client, db); assert.equal((await ad.c('GET', '/api/admin/users')).status, 200);
@@ -70,7 +70,7 @@ test('platform invitation: admin only, unknown/existing e-mail, duplicate pendin
   assert.equal(await db.get(`SELECT COUNT(*) n FROM users WHERE email = 'other@acme.co.kr'`).then((x) => Number(x.n)), 0);
   const { c: pm, r: sr } = await signup(client, { name: '김PM', email: 'pm@acme.co.kr', invite_token: t2 }); assert.equal(sr.status, 201, JSON.stringify(sr.json));
   assert.equal(sr.json.workspaces.length, 1); assert.equal(sr.json.workspaces[0].name, 'ACME'); assert.equal(sr.json.workspaces[0].role, 'OWNER'); assert.equal(sr.json.accepted.type, 'WORKSPACE_CREATE');
-  assert.equal(await db.get(`SELECT COUNT(*) n FROM workspaces WHERE name LIKE '%님의 Workspace' AND owner_id = ?`, [sr.json.user.id]).then((x) => Number(x.n)), 0);
+  assert.equal(await db.get(`SELECT COUNT(*) n FROM workspaces WHERE name LIKE '%님의 워크스페이스' AND owner_id = ?`, [sr.json.user.id]).then((x) => Number(x.n)), 0);
   assert.ok(await db.get('SELECT 1 FROM workspace_credit_accounts WHERE workspace_id = ?', [sr.json.workspaces[0].id]), 'AI account initialized');
   const after = await ad.c('GET', `/api/admin/invitations?status=ACCEPTED`); assert.ok(after.json.items.some((x) => x.id === inv.id && x.status === 'ACCEPTED' && x.accepted_by_name === '김PM'));
   // double accept / replay
@@ -79,7 +79,7 @@ test('platform invitation: admin only, unknown/existing e-mail, duplicate pendin
   const t3 = (() => { const m = mail.find((x) => x.to === 'normal@x.com').pop(); return linkOf(m); })();
   r = await U.c('GET', `/api/invitations/${t3}`); assert.equal(r.json.invitation.me.email_matches, true);
   r = await U.c('POST', `/api/invitations/${t3}/accept`, {}); assert.equal(r.status, 200); assert.equal(r.json.type, 'WORKSPACE_CREATE');
-  const wsU = (await U.c('GET', '/api/me')).json.workspaces; assert.equal(wsU.length, 2); assert.ok(wsU.some((w) => w.name === 'Normal Corp' && w.role === 'OWNER')); assert.ok(wsU.some((w) => /님의 Workspace/.test(w.name)));
+  const wsU = (await U.c('GET', '/api/me')).json.workspaces; assert.equal(wsU.length, 2); assert.ok(wsU.some((w) => w.name === 'Normal Corp' && w.role === 'OWNER')); assert.ok(wsU.some((w) => /님의 워크스페이스/.test(w.name)));
   // revoke + expired
   r = await ad.c('POST', '/api/admin/invitations', { email: 'rev@acme.co.kr', workspace_name: 'Rev' }); const revT = lastToken();
   r = await ad.c('POST', `/api/admin/invitations/${r.json.invitation.id}/revoke`, {}); assert.equal(r.json.invitation.status, 'REVOKED');
@@ -110,13 +110,13 @@ test('member invitation: OWNER→MEMBER/ADMIN, ADMIN→MEMBER only, MEMBER forbi
   let r = await AD.c('POST', W, { email: 'a1@acme.co.kr', role: 'ADMIN' }); assert.equal(r.status, 403);
   r = await AD.c('POST', W, { email: 'a1@acme.co.kr', role: 'MEMBER' }); assert.equal(r.status, 201); assert.equal(r.json.invitation.invited_by_name, '관리자');
   r = await O.c('POST', W, { email: 'dev@acme.co.kr', role: 'ADMIN' }); assert.equal(r.status, 201, JSON.stringify(r.json)); const devInv = r.json.invitation; assert.equal(devInv.role, 'ADMIN');
-  const devMail = mail.last(); assert.equal(devMail.to, 'dev@acme.co.kr'); assert.match(devMail.subject, /Workspace에 초대되었습니다/); assert.match(devMail.text, /홍길동/); assert.match(devMail.text, /관리자/); const devT = linkOf(devMail);
+  const devMail = mail.last(); assert.equal(devMail.to, 'dev@acme.co.kr'); assert.match(devMail.subject, /워크스페이스에 초대되었습니다/); assert.match(devMail.text, /홍길동/); assert.match(devMail.text, /관리자/); const devT = linkOf(devMail);
   assert.equal((await O.c('POST', W, { email: 'member@acme.co.kr', role: 'MEMBER' })).json.error.code, 'already_member');
   assert.equal((await O.c('POST', W, { email: 'dev@acme.co.kr', role: 'MEMBER' })).json.error.code, 'invite_pending');
   assert.equal((await O.c('POST', W, { email: 'dev2@acme.co.kr', role: 'OWNER' })).status, 400);
   r = await O.c('GET', W); assert.equal(r.json.invitations.length, 2);
   // landing shows inviter + role, no workspace creation on accept; new user via signup → MEMBER/ADMIN of ACME only
-  r = await client()('GET', `/api/invitations/${devT}`); assert.equal(r.json.invitation.type, 'WORKSPACE_MEMBER'); assert.equal(r.json.invitation.inviter_name, '홍길동'); assert.equal(r.json.invitation.role_label, '관리자'); assert.match(r.json.invitation.workspace_name, /님의 Workspace/);
+  r = await client()('GET', `/api/invitations/${devT}`); assert.equal(r.json.invitation.type, 'WORKSPACE_MEMBER'); assert.equal(r.json.invitation.inviter_name, '홍길동'); assert.equal(r.json.invitation.role_label, '관리자'); assert.match(r.json.invitation.workspace_name, /님의 워크스페이스/);
   const before = Number((await db.get('SELECT COUNT(*) n FROM workspaces')).n);
   const { r: sr } = await signup(client, { name: '개발자', email: 'dev@acme.co.kr', invite_token: devT }); assert.equal(sr.status, 201, JSON.stringify(sr.json));
   assert.equal(sr.json.workspaces.length, 1); assert.equal(sr.json.workspaces[0].id, O.w); assert.equal(sr.json.workspaces[0].role, 'ADMIN');

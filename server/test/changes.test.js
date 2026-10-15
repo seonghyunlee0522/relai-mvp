@@ -190,3 +190,20 @@ test('isolation: other workspace, other project requirement/wbs, archived projec
   ]) assert.equal((await A.c(m, path, body)).status, 409, `${m} ${path}`);
   server.close();
 });
+
+test('R3b F8: a CR made from a requirement (impacts_from_requirements) starts with its WBS links as 영향 WBS', async () => {
+  const { server, client } = await boot();
+  const S = await setup(client);
+  const r1 = await S.req({ title: 'SSO 로그인', scope: 'IN_SCOPE', status: 'CONFIRMED' });
+  const w1 = await S.wbs({ item_type: 'TASK', title: '인증 설계' }); const w2 = await S.wbs({ item_type: 'TASK', title: 'Backend 개발' }); const w3 = await S.wbs({ item_type: 'TASK', title: '통합테스트' });
+  await S.c('POST', `${S.rq}/${r1.id}/links`, { wbs_item_id: w1.id }); await S.c('POST', `${S.rq}/${r1.id}/links`, { wbs_item_id: w2.id });
+  await S.c('POST', `${S.wb}/${w2.id}/archive`, {});   // archived WBS is not carried over
+  let cr = (await S.c('POST', S.cr, { title: 'REQ-001 변경', requirements: [{ requirement_id: r1.id }], impacts_from_requirements: true })).json.change;
+  assert.deepEqual(cr.impacts.filter((x) => !x.archived_at).map((x) => x.title), ['인증 설계']);
+  assert.equal(cr.impact_count, 1); assert.equal(cr.wbs_candidates.length, 0);
+  assert.ok(cr.history.some((h) => h.action_type === 'WBS_IMPACT_ADDED'));
+  assert.ok(!cr.impacts.some((x) => x.wbs_item_id === w3.id));
+  cr = (await S.c('POST', S.cr, { title: '수동', requirements: [{ requirement_id: r1.id }] })).json.change;   // the CR form keeps the candidate list
+  assert.equal(cr.impacts.length, 0); assert.equal(cr.wbs_candidates.length, 1);
+  server.close();
+});

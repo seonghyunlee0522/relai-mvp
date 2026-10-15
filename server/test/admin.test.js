@@ -218,7 +218,7 @@ test('audit: pagination, filters (action, admin, target type), search by email /
   assert.equal((await ops.c('GET', '/api/admin/audit?admin=ops2%40relai.io')).json.total, 4);
   assert.equal((await ops.c('GET', '/api/admin/audit?target_type=WORKSPACE')).json.total, 1);
   assert.equal((await ops.c('GET', '/api/admin/audit?q=u5%40x.com')).json.total, 1);
-  assert.equal((await ops.c('GET', `/api/admin/audit?q=${encodeURIComponent('유저0님의 Workspace')}`)).json.total, 1);
+  assert.equal((await ops.c('GET', `/api/admin/audit?q=${encodeURIComponent('유저0님의 워크스페이스')}`)).json.total, 1);
   assert.equal((await ops.c('GET', `/api/admin/audit?q=${users[1].user.id}`)).json.total, 2);
   // project-level history tables untouched by operator actions
   assert.equal((await db.get('SELECT COUNT(*) AS n FROM requirement_history')).n, 0);
@@ -244,7 +244,7 @@ test('billing admin: absent tables → implemented:false everywhere, 404 details
   await db.run(`INSERT INTO payments (id, workspace_id, subscription_id, plan, amount, currency, status, provider, provider_result_code, provider_tid, moid, card_number, merchant_key, birth_date, failed_at, failure_code, failure_message)
     VALUES ('p1', ?, 's1', 'TEAM', 49000, 'KRW', 'FAILED', 'NICEPAY', '3001', 'TID1234567890ABCD', 'MOID-77', '1234-5678-9012-3456', 'MK-SECRET', '1990-01-01', now(), 'E3001', '한도 초과')`, [A.w]);
   resetBillingCache();
-  const subs = (await ops.c('GET', '/api/admin/subscriptions')).json; assert.equal(subs.implemented, true); assert.equal(subs.total, 1); assert.equal(subs.items[0].workspace_name, '김가나님의 Workspace');
+  const subs = (await ops.c('GET', '/api/admin/subscriptions')).json; assert.equal(subs.implemented, true); assert.equal(subs.total, 1); assert.equal(subs.items[0].workspace_name, '김가나님의 워크스페이스');
   const sd = (await ops.c('GET', '/api/admin/subscriptions/s1')).json; assert.equal(sd.subscription.payment_method_summary, '신한 ****1234'); assert.equal(sd.payments.length, 1);
   const pays = (await ops.c('GET', '/api/admin/payments?q=MOID-77')).json; assert.equal(pays.total, 1);
   const pd = (await ops.c('GET', '/api/admin/payments/p1')).json.payment;

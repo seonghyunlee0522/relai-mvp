@@ -115,7 +115,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   const no = await api('POST', `${A.P}/acceptances/${acc1.id}/transition`, { action: 'accept' });
   check('US-1 API accept without the 4 fields → 422 customer_approval_required', no.status === 422 && no.json.error.code === 'customer_approval_required', String(no.status));
   await page.goto(`${A.url}/tests?tab=acceptance&sel=${acc1.id}`); await page.waitForSelector('#drawer [data-act="accept"]');
-  const reqDate = await page.textContent('#drawer .dgrid');
+  const reqDate = await page.$$eval('#drawer .dgrid, #drawer .dmore', (els) => els.map((e) => e.textContent).join(' ')); // R3b: 날짜는 데스크톱에서 '세부 정보 더보기' 안
   check('US-8 검수 Drawer 날짜 "10/15" 형식 (요청일)', reqDate.includes(md(T)) && !/\d{4}\.\d{2}\.\d{2}/.test(reqDate), reqDate.replace(/\s+/g, ' ').slice(0, 80));
   await page.click('#drawer [data-act="accept"]'); await page.waitForSelector('[data-approval-drawer]');
   const card = await page.textContent('[data-acc-card]');

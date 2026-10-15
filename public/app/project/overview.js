@@ -12,7 +12,7 @@ import { daysUntil, exceptions, scheduleState, varianceText, varianceTone } from
 import { relTime } from '../shared/jira.js';
 import { toast } from '../shared/dialogs.js';
 
-const ATT_TYPE = { ISSUE: '이슈', RISK: 'Risk', TEST: 'Test', CHANGE: 'Change', WBS: 'WBS', ACCEPTANCE: 'Acceptance', REQUIREMENT: 'Requirement' };
+const ATT_TYPE = { ISSUE: '이슈', RISK: '리스크', TEST: '테스트', CHANGE: '변경 요청', WBS: 'WBS', ACCEPTANCE: '검수', REQUIREMENT: '요구사항' };
 const H_CLS = { GOOD: 'is-good', WARNING: 'is-warn', CRITICAL: 'is-crit', UNKNOWN: 'is-unknown' };
 const pv = (v) => (v === null || v === undefined ? '-' : `${v}%`);
 const n = (v) => Number(v) || 0;
@@ -30,10 +30,10 @@ const progressSection = (g, p) => {
   const planned = w.planned_progress; const actual = n(w.progress); const v = w.variance;
   const basis = w.planned_basis || { dated: 0, tasks: 0 };
   return html`<section class="ovp ovsec" aria-labelledby="ovpT">
-    <div class="ovsec__h"><h2 id="ovpT">진척</h2><small class="ovsec__ctx">현재 단계 <a class="link" href="${u}" data-link>${cur ? `${no2(cur.sequence)} ${cur.name}` : '-'}</a>${nphase ? ` (${nphase}단계 중 ${cur ? cur.sequence : '-'}번째)` : ''} · WBS Task ${n(w.tasks)}건</small></div>
+    <div class="ovsec__h"><h2 id="ovpT">진척</h2><small class="ovsec__ctx">현재 단계 <a class="link" href="${u}" data-link>${cur ? `${no2(cur.sequence)} ${cur.name}` : '-'}</a>${nphase ? ` (${nphase}단계 중 ${cur ? cur.sequence : '-'}번째)` : ''} · WBS 작업 ${n(w.tasks)}건</small></div>
     ${raw(!n(w.tasks) ? html`<p class="ovnone">아직 WBS가 없습니다. 분석·설계 단계에서 작업을 등록하면 계획·실제 진척률이 계산됩니다. <a class="link" href="${u}/wbs" data-link>WBS 작성 시작 →</a></p>`
       : html`<div class="kpi4">
-        ${raw(metric('계획 진척률', pv(planned), { sub: planned === null ? '계획 일정이 입력된 Task 없음' : basis.dated < basis.tasks ? `일정 입력 Task ${basis.dated}/${basis.tasks} 기준` : `오늘 기준 · Task ${basis.tasks}건` }))}
+        ${raw(metric('계획 진척률', pv(planned), { sub: planned === null ? '계획 일정이 입력된 작업 없음' : basis.dated < basis.tasks ? `일정 입력 작업 ${basis.dated}/${basis.tasks} 기준` : `오늘 기준 · 작업 ${basis.tasks}건` }))}
         ${raw(metric('실제 진척률', pv(actual), { sub: 'WBS 하위 작업 가중 평균' }))}
         ${raw(metric('진척 편차', varianceText(v), { sub: v === null ? '계획 진척률이 있어야 계산됩니다' : v >= 0 ? '정상' : v >= -5 ? '약간 지연' : '지연', tone: varianceTone(v) }))}
         ${raw(metric('일정 상태', sch.label, { sub: sch.detail, tone: sch.tone }))}
@@ -42,7 +42,7 @@ const progressSection = (g, p) => {
         <div class="pva__r"><span>계획</span><span class="pbar"><i style="width:${planned ?? 0}%"></i></span><b>${pv(planned)}</b></div>
         <div class="pva__r pva__r--a"><span>실적</span><span class="pbar pbar--g"><i style="width:${actual}%"></i></span><b>${actual}%</b></div>
       </div>`)}
-    ${raw(g.jira ? html`<p class="ovs__jira">Jira <span class="mono">${g.jira.project_key}</span> · ${g.jira.total ? `${g.jira.done} Done / ${g.jira.total} 연결 (실행률 ${g.jira.rate}%)` : '연결된 Issue 없음'}${raw(g.jira.connection_status !== 'ACTIVE' ? ' <span class="chip chip--fail">연결 확인 필요</span>' : '')}</p>` : '')}
+    ${raw(g.jira ? html`<p class="ovs__jira">Jira <span class="mono">${g.jira.project_key}</span> · ${g.jira.total ? `완료 ${g.jira.done} / ${g.jira.total} 연결 (실행률 ${g.jira.rate}%)` : '연결된 Issue 없음'}${raw(g.jira.connection_status !== 'ACTIVE' ? ' <span class="chip chip--fail">연결 확인 필요</span>' : '')}</p>` : '')}
   </section>`;
 };
 
@@ -67,29 +67,29 @@ const scheduleCol = (g, p, dash) => {
     ${raw(kv('계획 종료일', p.planned_end_date || '-'))}
     ${raw(kv('남은 기간', left === null ? '-' : left < 0 ? `${-left}일 초과` : `${left}일`, { tone: left === null ? '' : left < 0 ? 'crit' : left <= 14 ? 'warn' : '', sub: p.planned_end_date && left !== null && left >= 0 ? `오늘 ${todayLocal()} 기준` : '' }))}
     ${raw(kv('지연 작업', `${n(w.overdue_tasks)}건`, { href: `${u}/wbs?f=overdue`, tone: n(w.overdue_tasks) ? 'crit' : '', sub: n(w.overdue_tasks) ? `최대 ${n(w.max_overdue_days)}일 지연` : '' }))}
-    ${raw(kv('주요 Milestone', n(w.milestones) ? `${n(w.milestones_completed)} / ${n(w.milestones)} 완료` : '-', { href: `${u}/wbs?view=gantt`, tone: n(w.overdue_milestones) ? 'crit' : '', sub: n(w.overdue_milestones) ? `지난 마일스톤 ${w.overdue_milestones}건` : nextMs ? `다음: ${nextMs.title} (${nextMs.days_left === 0 ? '오늘' : `D-${nextMs.days_left}`})` : n(w.milestones) ? '' : '등록된 마일스톤 없음' }))}
+    ${raw(kv('주요 마일스톤', n(w.milestones) ? `${n(w.milestones_completed)} / ${n(w.milestones)} 완료` : '-', { href: `${u}/wbs?view=gantt`, tone: n(w.overdue_milestones) ? 'crit' : '', sub: n(w.overdue_milestones) ? `지난 마일스톤 ${w.overdue_milestones}건` : nextMs ? `다음: ${nextMs.title} (${nextMs.days_left === 0 ? '오늘' : `D-${nextMs.days_left}`})` : n(w.milestones) ? '' : '등록된 마일스톤 없음' }))}
   </div>`;
 };
 const scopeCol = (g, p) => {
   const u = `/app/projects/${p.id}`; const r = g.requirements || {}; const k = g.kpis || {}; const c = g.changes || {};
   const unconfirmed = n(r.total) - n(r.confirmed);
   return html`<div class="ovcol"><h3>범위</h3>
-    ${raw(kv('Requirements', `${n(r.total)}건`, { href: `${u}/requirements`, sub: n(r.in_scope) ? `범위 내 ${r.in_scope}건` : '' }))}
-    ${raw(kv('확정 Requirements', `${n(r.confirmed)}건`, { href: `${u}/requirements?status=CONFIRMED`, tone: unconfirmed && n(r.total) ? 'warn' : n(r.total) ? 'good' : '', sub: unconfirmed ? `미확정 ${unconfirmed}건` : '' }))}
+    ${raw(kv('요구사항', `${n(r.total)}건`, { href: `${u}/requirements`, sub: n(r.in_scope) ? `범위 내 ${r.in_scope}건` : '' }))}
+    ${raw(kv('확정 요구사항', `${n(r.confirmed)}건`, { href: `${u}/requirements?status=CONFIRMED`, tone: unconfirmed && n(r.total) ? 'warn' : n(r.total) ? 'good' : '', sub: unconfirmed ? `미확정 ${unconfirmed}건` : '' }))}
     ${raw(kv('WBS 연결률', pv(k.requirement_coverage), { href: `${u}/requirements?view=trace`, tone: k.requirement_coverage === null || k.requirement_coverage === undefined ? '' : k.requirement_coverage < 100 ? 'warn' : 'good', sub: '범위 내 요구사항 중 WBS 연결 비율' }))}
-    ${raw(kv('WBS 미연결 Requirement', `${n(r.in_scope_unlinked)}건`, { href: `${u}/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked`, tone: n(r.in_scope_unlinked) ? 'warn' : '' }))}
-    ${raw(kv('Change', `${n(c.total)}건`, { href: `${u}/changes`, tone: n(c.under_review) || n(c.approved_unimplemented) ? 'warn' : '', sub: [n(c.under_review) ? `검토 중 ${c.under_review}` : '', n(c.approved_unimplemented) ? `승인 후 미반영 ${c.approved_unimplemented}` : ''].filter(Boolean).join(' · ') }))}
+    ${raw(kv('WBS 미연결 요구사항', `${n(r.in_scope_unlinked)}건`, { href: `${u}/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked`, tone: n(r.in_scope_unlinked) ? 'warn' : '' }))}
+    ${raw(kv('변경 요청', `${n(c.total)}건`, { href: `${u}/changes`, tone: n(c.under_review) || n(c.approved_unimplemented) ? 'warn' : '', sub: [n(c.under_review) ? `검토 중 ${c.under_review}` : '', n(c.approved_unimplemented) ? `승인 후 미반영 ${c.approved_unimplemented}` : ''].filter(Boolean).join(' · ') }))}
   </div>`;
 };
 const qualityCol = (g, p) => {
   const u = `/app/projects/${p.id}`; const t = g.tests || {}; const a = g.acceptances || {}; const k = g.kpis || {}; const is = g.issues || {}; const rs = g.risks || {};
   const passRate = n(t.executed) ? Math.round((n(t.last_pass) / n(t.executed)) * 100) : null; const risks = n(rs.open) + n(rs.monitoring);
   return html`<div class="ovcol"><h3>품질</h3>
-    ${raw(kv('Test Coverage', pv(k.test_coverage), { href: `${u}/tests?tab=coverage`, sub: n(t.total) ? `테스트 ${t.total}건` : '등록된 테스트 없음' }))}
-    ${raw(kv('테스트 통과율', pv(passRate), { href: `${u}/tests?last_result=PASS`, tone: passRate === null ? '' : n(t.last_fail) ? 'crit' : 'good', sub: n(t.executed) ? `Pass ${n(t.last_pass)} · Fail ${n(t.last_fail)} / 실행 ${t.executed}` : '' }))}
-    ${raw(kv('미해결 이슈', `${n(is.active)}건`, { href: `${u}/issues`, tone: n(is.active) ? 'crit' : '', sub: n(is.critical) ? `Critical ${is.critical}건` : '' }))}
-    ${raw(kv('Risk', `${risks}건`, { href: `${u}/issues?tab=risks`, tone: n(rs.high_or_critical) ? 'crit' : '', sub: n(rs.high_or_critical) ? `High 이상 ${rs.high_or_critical}건` : '' }))}
-    ${raw(kv('Acceptance', n(a.total) ? `${n(a.accepted)} / ${a.total} 승인` : '-', { href: `${u}/tests?tab=acceptance`, tone: n(a.rework) ? 'warn' : n(a.total) && n(a.accepted) === n(a.total) ? 'good' : '', sub: [n(a.requested) ? `요청 ${a.requested}` : '', n(a.rework) ? `보완 필요 ${a.rework}` : ''].filter(Boolean).join(' · ') }))}
+    ${raw(kv('테스트 커버리지', pv(k.test_coverage), { href: `${u}/tests?tab=coverage`, sub: n(t.total) ? `테스트 ${t.total}건` : '등록된 테스트 없음' }))}
+    ${raw(kv('테스트 통과율', pv(passRate), { href: `${u}/tests?last_result=PASS`, tone: passRate === null ? '' : n(t.last_fail) ? 'crit' : 'good', sub: n(t.executed) ? `통과 ${n(t.last_pass)} · 실패 ${n(t.last_fail)} / 실행 ${t.executed}` : '' }))}
+    ${raw(kv('미해결 이슈', `${n(is.active)}건`, { href: `${u}/issues`, tone: n(is.active) ? 'crit' : '', sub: n(is.critical) ? `심각 ${is.critical}건` : '' }))}
+    ${raw(kv('리스크', `${risks}건`, { href: `${u}/issues?tab=risks`, tone: n(rs.high_or_critical) ? 'crit' : '', sub: n(rs.high_or_critical) ? `높음 이상 ${rs.high_or_critical}건` : '' }))}
+    ${raw(kv('검수', n(a.total) ? `${n(a.accepted)} / ${a.total} 승인` : '-', { href: `${u}/tests?tab=acceptance`, tone: n(a.rework) ? 'warn' : n(a.total) && n(a.accepted) === n(a.total) ? 'good' : '', sub: [n(a.requested) ? `요청 ${a.requested}` : '', n(a.rework) ? `보완 필요 ${a.rework}` : ''].filter(Boolean).join(' · ') }))}
   </div>`;
 };
 

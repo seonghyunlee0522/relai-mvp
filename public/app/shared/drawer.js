@@ -2,8 +2,8 @@
 import { html, raw } from '../core/dom.js';
 
 /** Drawer header. `chips` is pre-rendered HTML (status badges). */
-export const drawerHead = (idLabel, chips = '', { archived = false, closeId = 'dclose' } = {}) =>
-  html`<div class="drawer__h"><b class="mono">${idLabel}</b>${raw(chips)}${raw(archived ? '<span class="chip">보관됨</span>' : '')}<button class="drawer__x" id="${closeId}" aria-label="닫기">×</button></div>`;
+export const drawerHead = (idLabel, chips = '', { archived = false, closeId = 'dclose', nav = '' } = {}) =>
+  html`<div class="drawer__h"><b class="mono">${idLabel}</b>${raw(chips)}${raw(archived ? '<span class="chip">보관됨</span>' : '')}${raw(nav)}<button class="drawer__x" id="${closeId}" aria-label="닫기">×</button></div>`;
 /** Drawer footer with the archive (destructive) action; omitted entirely when read-only. */
 export const drawerFoot = ({ ro, meta = '', label, id = 'xarchive' }) =>
   (ro ? '' : html`<div class="drawer__f"><span class="hint">${raw(meta)}</span><button class="btn btn--danger btn--sm" id="${id}">${label}</button></div>`);
@@ -29,3 +29,21 @@ export function bindArrowNav(fn) {
     e.preventDefault(); arrowNav(e.key === 'ArrowDown' ? 1 : -1);
   });
 }
+
+/* Redesign R3b: issues · risks · 변경 요청 · tests · 검수 use the R2 480px side drawer on desktop (detail only — create forms,
+ * approval drawers and the phone keep their views). Header ↑/↓ + keyboard, 세부 정보 더보기, footer = 보관 (left) · the row's actions (right). */
+/** ↑ / ↓ buttons for the drawer header; `ids` = list order. */
+export const navBtns = (ids, cur, what = '항목') => {
+  const at = ids.indexOf(cur);
+  return html`<span class="dnav"><button type="button" data-nav="-1" aria-label="이전 ${what}" title="이전 (목록 순서)" ${at <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-nav="1" aria-label="다음 ${what}" title="다음 (목록 순서)" ${at < 0 || at >= ids.length - 1 ? 'disabled' : ''}>↓</button></span>`;
+};
+/** Wires the header buttons and keyboard ↑/↓; `open(id)` shows another item. */
+export function bindListNav(root, ids, cur, open) {
+  const go = (dir) => { const n = ids[ids.indexOf(cur) + dir]; if (n) open(n); };
+  root.querySelectorAll('[data-nav]').forEach((b) => { b.onclick = () => go(Number(b.dataset.nav)); });
+  bindArrowNav(go);
+}
+/** Secondary fields folded under 세부 정보 더보기 (`inner` = .dfield rows). */
+export const moreFields = (inner, open = false) => html`<details class="dmore" data-dmore ${open ? 'open' : ''}><summary>세부 정보 더보기</summary><div class="dgrid">${raw(inner)}</div></details>`;
+/** Desktop footer: 보관 link + meta (left), the item's actions (right). Read-only → no footer. */
+export const deskFoot = ({ ro, meta = '', archId = 'xarchive', right = '' }) => (ro ? '' : html`<div class="drawer__f dfoot"><button type="button" class="link linkbtn dfoot__arch" id="${archId}">보관</button><span class="hint">${raw(meta)}</span><span class="dfoot__r">${raw(right)}</span></div>`);

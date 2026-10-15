@@ -8,7 +8,7 @@ import { CR_STATUS, CR_STATUS_CHIP, ISSUE_STATUS, ISSUE_STATUS_CHIP, ISSUE_TRANS
 import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, phoneFilters } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
-import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
+import { drawerFoot, drawerHead, bindEscape, bindListNav, deskFoot, moreFields, navBtns } from '../shared/drawer.js';
 import { statusChip } from '../shared/badges.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
@@ -21,6 +21,7 @@ export async function raidPage(id) {
   const carry = carryIndex(g);   // Phase 6 US-3: 운영 이관 (오픈 기록)
   const p = g.project;
   const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
+  const desk = !isPhone(); let moreOpen = false;   // R3b: desktop detail = the R2 480px side drawer
   const { members } = await api('GET', `/api/workspaces/${state.workspace.id}/members`);
   const params = () => new URLSearchParams(location.search);
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
@@ -78,9 +79,9 @@ export async function raidPage(id) {
       <div class="rlayout rlayout--cr ${sel || creating ? 'has-drawer' : ''}">
         <div class="rtable-wrap">${raw(rows.length ? (I ? issueTable() : riskTable())
           : hasFilter ? emptyFiltered(I ? '이슈' : '리스크')
-          : I ? emptyState({ title: '현재 등록된 이슈가 없습니다.', body: '프로젝트 진행 중 발생한 문제를 기록하면 담당자·기한·해결 상태를 관리하고 관련 요구사항·WBS와 연결할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 이슈 등록' } })
-          : emptyState({ title: '현재 등록된 리스크가 없습니다.', body: '프로젝트에 영향을 줄 수 있는 잠재 위험을 미리 기록하고 대응 계획과 검토 일정을 관리하세요.', cta: archived ? null : { id: 'add2', label: '첫 리스크 등록' } }))}</div>
-        <aside class="drawer drawer--cr" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? (I ? createIssue() : createRisk()) : sel ? (I ? detailIssue() : detailRisk()) : '')}</aside>
+          : I ? emptyState({ title: '진행을 막는 문제가 생기면 이슈로 등록해 담당자와 기한을 정하세요.', cta: archived ? null : { id: 'add2', label: '첫 이슈 등록' } })
+          : emptyState({ title: '아직 생기지 않은 위험을 미리 등록하고 대응 계획을 세우세요.', cta: archived ? null : { id: 'add2', label: '첫 리스크 등록' } }))}</div>
+        <aside class="drawer ${desk && sel && !creating ? 'drawer--lg' : 'drawer--cr'}" id="drawer" ${sel || creating ? '' : 'hidden'}>${raw(creating ? (I ? createIssue() : createRisk()) : sel ? (I ? detailIssue() : detailRisk()) : '')}</aside>
       </div></div>`;
     bind(); bindCoach(main);
   };
@@ -165,7 +166,9 @@ export async function raidPage(id) {
 
   const detailIssue = () => {
     const x = sel; const ro = archived || Boolean(x.archived_at);
-    return html`${raw(drawerHead(x.display_id, statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status) + sevBadge(x.severity) + (x.is_overdue ? '<span class="chip chip--hold">기한 지남</span>' : ''), { archived: Boolean(x.archived_at) }))}
+    const head = drawerHead(x.display_id, statusChip(ISSUE_STATUS, ISSUE_STATUS_CHIP, x.status) + sevBadge(x.severity) + (x.is_overdue ? '<span class="chip chip--hold">기한 지남</span>' : ''), { archived: Boolean(x.archived_at), nav: desk ? navBtns(rows.map((r) => r.id), x.id, '이슈') : '' });
+    if (desk) return issueDesk(x, ro, head);
+    return html`${raw(head)}
     ${raw(detailTabs(x))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       ${raw(carryLine(carry, 'ISSUE', x.id))}
@@ -193,7 +196,9 @@ export async function raidPage(id) {
   const detailRisk = () => {
     const x = sel; const ro = archived || Boolean(x.archived_at);
     const canConvert = !ro && ['OPEN', 'MONITORING', 'MATERIALIZED'].includes(x.status) && !x.converted_issue_id;
-    return html`${raw(drawerHead(x.display_id, statusChip(RISK_STATUS, RISK_STATUS_CHIP, x.status) + sevBadge(x.risk_level) + (x.needs_review ? '<span class="chip chip--hold">검토 필요</span>' : ''), { archived: Boolean(x.archived_at) }))}
+    const head = drawerHead(x.display_id, statusChip(RISK_STATUS, RISK_STATUS_CHIP, x.status) + sevBadge(x.risk_level) + (x.needs_review ? '<span class="chip chip--hold">검토 필요</span>' : ''), { archived: Boolean(x.archived_at), nav: desk ? navBtns(rows.map((r) => r.id), x.id, '리스크') : '' });
+    if (desk) return riskDesk(x, ro, head, canConvert);
+    return html`${raw(head)}
     ${raw(detailTabs(x))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
       <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${ro ? 'disabled' : ''} aria-label="제목">
@@ -218,6 +223,48 @@ export async function raidPage(id) {
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section>
     </div>
     ${raw(drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '리스크 보관', id: 'xarchive' }))}`;
+  };
+
+  /* R3b desktop drawers: core fields first, the rest under 세부 정보 더보기; actions in the footer. */
+  const fld = (label, inner) => html`<div class="dfield"><span>${label}</span><div>${raw(inner)}</div></div>`;
+  const deskShell = (x, head, info, right) => html`${raw(head)}${raw(detailTabs(x))}
+    <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}><div class="dstack">${raw(info)}<div class="dsave" id="dsave"></div></div></section>
+      <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>${raw(linkBlocks(x, archived || Boolean(x.archived_at), { WBS: isIssue() ? '영향 WBS' : '영향 가능 WBS' }))}</section>
+      <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section></div>
+    ${raw(deskFoot({ ro: archived || Boolean(x.archived_at), meta: `등록 ${fmtShort(x.created_at)}`, right }))}`;
+  const issueDesk = (x, ro, head) => {
+    const dis = ro ? 'disabled' : ''; const done = ['RESOLVED', 'CLOSED'].includes(x.status);
+    const res = fld('해결 내용', html`<textarea class="textarea" data-field="resolution" maxlength="2000" style="min-height:56px;font-size:14px" placeholder="해결 조치 내용" ${dis}>${x.resolution}</textarea>${raw(done && !String(x.resolution || '').trim() ? `<p class="hint" data-res-hint>${RES_HINT}</p>` : '')}`);
+    const canResolve = !ro && (ISSUE_TRANSITIONS[x.status] || []).includes('RESOLVED');
+    return deskShell(x, head, html`${raw(carryLine(carry, 'ISSUE', x.id))}
+      <input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${dis} aria-label="제목">
+      ${raw(x.source_risk_id ? html`<p class="srcline">원본 리스크 · <a class="link" href="/app/projects/${p.id}/issues?tab=risks&sel=${x.source_risk_id}" data-link>${x.source_risk_display_id} ${x.source_risk_title}</a></p>` : '')}
+      ${raw(x.source_test_id ? html`<p class="srcline">원본 테스트 · <a class="link" href="/app/projects/${p.id}/tests?sel=${x.source_test_id}" data-link>${x.source_test_label}</a> 실행 실패</p>` : '')}
+      <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${dis} aria-label="설명">${x.description}</textarea>
+      <div class="dgrid">${raw(fld('상태', statusSelect(ISSUE_STATUS, ISSUE_TRANSITIONS, x.status, ro)))}
+        ${raw(fld('심각도', html`<select class="select select--sm" data-field="severity" ${dis}>${raw(opt(SEVERITY, x.severity))}</select>`))}
+        ${raw(fld('담당자', html`<select class="select select--sm" data-field="owner" ${dis}>${raw(OP.ownerOptions(members, owners, OP.ownerKey(x)))}</select>${raw(OP.noAcct(x))}${raw(OP.teamHint(owners, p.id, archived))}`))}
+        ${raw(fld('기한', html`<input class="input input--sm" type="date" data-field="due_date" value="${x.due_date || ''}" ${dis}>`))}
+        ${raw(done ? res : '')}</div>
+      ${raw(moreFields(fld('발견일', html`<input class="input input--sm" type="date" data-field="identified_at" value="${x.identified_at || ''}" ${dis}>`)
+        + fld('해결/종료', html`<span class="hint">${x.resolved_at ? '해결 ' + fmtShort(x.resolved_at) : '-'}${x.closed_at ? ' · 종료 ' + fmtShort(x.closed_at) : ''}</span>`) + (done ? '' : res), moreOpen))}`,
+      canResolve ? '<button type="button" class="btn btn--primary btn--sm" data-resolve>해결 처리</button>' : '');
+  };
+  const riskDesk = (x, ro, head, canConvert) => {
+    const dis = ro ? 'disabled' : '';
+    return deskShell(x, head, html`<input class="dtitle" data-field="title" value="${x.title}" maxlength="200" ${dis} aria-label="제목">
+      ${raw(x.converted_issue_id ? html`<p class="srcline">전환된 이슈 · <a class="link" href="/app/projects/${p.id}/issues?sel=${x.converted_issue_id}" data-link>${x.converted_issue_display_id} ${x.title}</a>${x.materialized_at ? ' · 발생 ' + fmtShort(x.materialized_at) : ''}</p>` : '')}
+      <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${dis} aria-label="설명">${x.description}</textarea>
+      <div class="matrix"><div><span>발생 가능성</span><select class="select select--sm" data-field="probability" ${dis}>${raw(opt(LEVEL3, x.probability))}</select></div><span class="matrix__x">×</span>
+        <div><span>영향도</span><select class="select select--sm" data-field="impact" ${dis}>${raw(opt(LEVEL3, x.impact))}</select></div><span class="matrix__x">=</span>
+        <div><span>리스크 등급</span><div style="height:36px;display:flex;align-items:center">${raw(sevBadge(x.risk_level))}</div></div></div>
+      <div class="dgrid">${raw(fld('상태', statusSelect(RISK_STATUS, RISK_TRANSITIONS, x.status, ro)))}
+        ${raw(fld('담당자', html`<select class="select select--sm" data-field="owner_user_id" ${dis}>${raw(ownerOpts(x.owner_user_id || ''))}</select>`))}
+        ${raw(fld('대응 계획', html`<textarea class="textarea" data-field="mitigation_plan" maxlength="5000" style="min-height:64px;font-size:14px" placeholder="완화·회피를 위해 할 일" ${dis}>${x.mitigation_plan}</textarea>`))}</div>
+      ${raw(moreFields(fld('대응 전략', html`<select class="select select--sm" data-field="response_strategy" ${dis}>${raw(opt(STRATEGY, x.response_strategy || '', '미정'))}</select>`)
+        + fld('식별일', html`<input class="input input--sm" type="date" data-field="identified_at" value="${x.identified_at || ''}" ${dis}>`)
+        + fld('검토일', html`<input class="input input--sm" type="date" data-field="review_date" value="${x.review_date || ''}" ${dis}>`), moreOpen))}`,
+      canConvert ? '<button type="button" class="btn btn--primary btn--sm" id="convert" title="이 리스크가 실제로 발생했을 때">이슈로 전환</button>' : '');
   };
 
   const bind = () => {
@@ -248,9 +295,19 @@ export async function raidPage(id) {
     };
   };
   const bindDetail = () => {
-    const x = sel; const status = $('#dsave');
-    bindDtabs(main.querySelector('.drawer'), (k) => { dtab = k; });
+    const x = sel; const status = $('#dsave'); const dr = main.querySelector('.drawer');
+    bindDtabs(dr, (k) => { dtab = k; });
+    if (desk) bindListNav(dr, rows.map((r) => r.id), x.id, async (nid) => { await loadSel(nid); draw(); });
+    const dm = dr.querySelector('[data-dmore]'); if (dm) dm.ontoggle = () => { moreOpen = dm.open; };
     const apply = async (d) => { sel = d[key()]; is = d.issues; rs = d.risks; g.issues = is; g.risks = rs; await load(); draw(); };
+    const resolve = async () => {   // US-5: 해결 asks for one line (a hint, never a block)
+      const note = await promptDialog({ title: `${x.display_id} 해결 처리`, body: RES_HINT, label: '해결 내용', placeholder: '예: Mock API 기반으로 우선 개발 후 실제 API 연동 완료', confirm: '해결 처리' });
+      if (note === null) return false;
+      status.textContent = '저장 중…';
+      try { await apply(await api('PATCH', xApi(`/${x.id}`), { status: 'RESOLVED', resolution: note || x.resolution })); toast('해결 처리했습니다.'); } catch (e) { toast(e.message); draw(); }
+      return true;
+    };
+    const rb = dr.querySelector('[data-resolve]'); if (rb) rb.onclick = resolve;
     const save = async (field, value) => {
       status.textContent = '저장 중…';
       try { const d = await api('PATCH', xApi(`/${x.id}`), { [field]: value }); await apply(d); $('#dsave').textContent = d.changed.length ? '저장됨' : ''; }
@@ -259,13 +316,7 @@ export async function raidPage(id) {
     main.querySelectorAll('.drawer [data-field]').forEach((el) => {
       const field = el.dataset.field;
       if (el.tagName === 'SELECT' || el.type === 'date') el.onchange = async () => {
-        if (field === 'status' && isIssue() && el.value === 'RESOLVED') {
-          const note = await promptDialog({ title: `${x.display_id} 해결 처리`, body: RES_HINT, label: '해결 내용', placeholder: '예: Mock API 기반으로 우선 개발 후 실제 API 연동 완료', confirm: '해결 처리' });
-          if (note === null) { el.value = x.status; return; }
-          status.textContent = '저장 중…';
-          try { await apply(await api('PATCH', xApi(`/${x.id}`), { status: 'RESOLVED', resolution: note || x.resolution })); toast('해결 처리했습니다.'); } catch (e) { toast(e.message); draw(); }
-          return;
-        }
+        if (field === 'status' && isIssue() && el.value === 'RESOLVED') { if (!(await resolve())) el.value = x.status; return; }
         save(field, el.value);
       };
       else { el.onblur = () => { const v = el.value.trim(); if (v !== (x[field] || '')) save(field, v); }; if (el.tagName !== 'TEXTAREA') el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); }; }

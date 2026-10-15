@@ -316,8 +316,9 @@ export async function wbsPage(id) {
   const emptyWbs = (v) => {
     const conf = Number(g.requirements && g.requirements.in_scope_confirmed) || 0;
     const lead = v === 'gantt' ? '작업에 시작일·종료일을 넣으면 여기에 일정표가 그려집니다.' : '아직 작업이 없습니다';
-    const bodyText = conf ? `확정한 요구사항 ${conf}건으로 기본 작업 목록을 만들어 드립니다. 일정과 담당자는 직접 채우면 됩니다.` : '요구사항이 아직 확정되지 않았습니다. 기본 작업 목록을 만들고 구현 작업은 나중에 연결할 수 있습니다.';
-    return html`<div class="wempty" data-tour-id="wbs-empty"><span class="wempty__ic" aria-hidden="true">▤</span><h2>${lead}</h2><p>${bodyText}</p>
+    const bodyText = conf ? `확정한 요구사항 ${conf}건으로 기본 작업 목록을 만들어 드립니다.` : '기본 작업 목록을 먼저 만들고 구현 작업은 요구사항이 확정되면 연결할 수 있습니다.';
+    // R3b: one sentence + one button (the list's sentence is the helpful one; '아직 작업이 없습니다' is implied)
+    return html`<div class="wempty" data-tour-id="wbs-empty"><span class="wempty__ic" aria-hidden="true">▤</span><h2>${v === 'gantt' ? lead : bodyText}</h2>
       ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="skel">WBS 뼈대 만들기</button> ${raw(term('skeleton'))}</div>
         ${raw(ghost ? html`<div class="wempty__add"><input class="input" data-ghost maxlength="200" placeholder="${ghost.item_type === 'MILESTONE' ? '마일스톤 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off" aria-label="첫 작업 이름"></div>` : '')}
         <p class="wempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button> · ${raw(ai.enabled ? '<button type="button" class="link linkbtn" id="ai-wbs2">AI 초안</button>' : '<span class="dim" title="AI 기능이 설정되지 않았습니다.">AI 초안(사용 불가)</span>')}</p>`)}</div>`;
@@ -378,7 +379,7 @@ export async function wbsPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: ctx() === 'monitor' ? 'overview-wbs' : 'wbs', title: ctx() === 'monitor' ? 'WBS · 운영 조회' : 'WBS 작성' }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : pcLine())}
-      ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 Lifecycle 단계를 지정할 수 있습니다.</div>` : '')}
+      ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 단계를 지정할 수 있습니다.</div>` : '')}
       ${raw(onPhone() && params().get('view') === 'gantt' ? '<p class="pcnote" data-gantt-pc>간트 차트는 PC에서 볼 수 있습니다</p>' : '')}
       ${raw(msSuggest())}
       ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}

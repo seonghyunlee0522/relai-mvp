@@ -1002,6 +1002,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         const out = (await C.linkRequirement(db, project, { id: cid }, String(rid || ''), C.parseRelationType(typeof r === 'object' ? r?.relation_type : undefined), req.user.id));
         if (out.error) throw new ValidationError({ requirements: '연결할 요구사항을 찾을 수 없습니다.' });
       }
+      if (req.body?.impacts_from_requirements === true) {   // R3b F8: a CR made from a requirement starts with that requirement's WBS links as 영향 WBS
+        const ws = await db.all(`SELECT w.id FROM change_request_requirements x JOIN requirement_wbs_links l ON l.requirement_id = x.requirement_id
+          JOIN wbs_items w ON w.id = l.wbs_item_id AND w.archived_at IS NULL WHERE x.change_request_id = ? GROUP BY w.id, w.sequence, w.wbs_code ORDER BY w.sequence, w.wbs_code`, [cid]);
+        for (const w of ws) await C.addImpact(db, project, { id: cid }, w.id, 'SCHEDULE', '', req.user.id);
+      }
       return cid;
     }));
     res.status(201).json((await crResponse(project, id, req)));
