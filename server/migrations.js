@@ -186,6 +186,7 @@ export const migrations = [
     await grantEarlyAccess(db);
     await topUpStarterCredits(db);
   } },
+  { version: 42, name: 'Sample projects: projects.sample_key (schema.sql) — example projects for new users, excluded from usage and plan limits', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

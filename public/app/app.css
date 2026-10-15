@@ -3281,3 +3281,11 @@ html:not(.is-phone) .rpl .ovsec__h{justify-content:flex-end}
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs{width:auto!important;min-width:100%}
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs col[data-col="title"]{width:220px!important}
 }
+
+/* ---------- 샘플 프로젝트 (server/samples/): badge on cards / list / project header, Home banner, 설정 panel ---------- */
+.chip--sample{background:#F3EEFF;color:#6D28D9;margin-left:6px;flex:none}
+.sbanner{display:flex;align-items:center;gap:12px;background:#FAF7FF;border:1px solid #E4D9FB;border-radius:var(--r-lg);padding:10px 16px;margin:0 0 14px}
+.sbanner p{margin:0;flex:1;min-width:0;font-size:var(--fs-sm);color:var(--text-2)}
+.sbanner .btn{flex:none}
+.page__acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media (max-width:640px){.sbanner{flex-direction:column;align-items:flex-start;padding:10px 12px}}

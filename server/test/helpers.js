@@ -5,6 +5,8 @@ import { openDb } from '../db.js';
 
 // Plan limits (billing/limits.js) are off for the legacy suites, whose fixtures build more rows than FREE allows; billing.test.js turns them on.
 process.env.PLAN_LIMITS ??= 'off';
+// Signup samples (server/samples/) are off for the legacy suites, which expect an empty workspace; samples.test.js turns them on.
+process.env.SAMPLE_PROJECTS ??= 'false';
 
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://postgres@127.0.0.1:5432/relai_test';
 const opened = [];

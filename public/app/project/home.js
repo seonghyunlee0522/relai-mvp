@@ -15,6 +15,7 @@ import { isPhone, pcLine } from '../core/device.js';
 import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 import { pickJosa } from '../shared/josa.js';
 import { upcomingList, activityList } from './next.js';
+import { isSample, sampleChip, deleteAllSamples } from './samples.js';
 
 /** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
 const wsName = (v) => String(v || '').replace(/ Workspace$/, ' 워크스페이스');
@@ -86,7 +87,7 @@ const card = (c, i) => {
     <header class="hc__h">
       ${raw(alert ? '<span class="hc__prio" title="지연되었거나 막힌 항목이 있습니다">막힘</span>' : '')}
       <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a>
-      <span class="hc__client">${c.client_name || ''}</span>
+      <span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}
       <span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>
     </header>
     <div class="hc__phase"><span class="hc__k">현재 단계</span><b>${no2(c.current_phase_sequence)} ${c.current_phase_name}</b>${raw(lifecycle(c.current_phase_sequence, c.phase_states))}${raw(c.soon && c.next_date ? html`<span class="hc__soon" title="${c.next_date.label}">D-${c.next_date_days} ${c.next_date.title}</span>` : '')}</div>
@@ -98,7 +99,7 @@ const card = (c, i) => {
 };
 
 /** Phase 7 US-2: 완료된 프로젝트 card = 이름 · 완료일 · 완료보고서 (no progress, no 다음 할 일). */
-const completedRow = (p) => html`<div class="hc__done" data-done-pid="${p.id}"><a class="hc__done-n" href="/app/projects/${p.id}" data-link>${p.name}</a><span class="hc__client">${p.client_name || ''}</span><span class="chip chip--done">✓ 완료${p.closed_on ? ` · ${fmtShort(String(p.closed_on).slice(0, 10))}` : ''}</span>${raw(p.completion_report_id ? html`<a class="link hc__done-r" href="/app/projects/${p.id}/reports/${p.completion_report_id}" data-link>완료보고서</a>` : '<span></span>')}</div>`;
+const completedRow = (p) => html`<div class="hc__done" data-done-pid="${p.id}"><a class="hc__done-n" href="/app/projects/${p.id}" data-link>${p.name}</a><span class="hc__client">${p.client_name || ''}${raw(sampleChip(p))}</span><span class="chip chip--done">✓ 완료${p.closed_on ? ` · ${fmtShort(String(p.closed_on).slice(0, 10))}` : ''}</span>${raw(p.completion_report_id ? html`<a class="link hc__done-r" href="/app/projects/${p.id}/reports/${p.completion_report_id}" data-link>완료보고서</a>` : '<span></span>')}</div>`;
 
 const summaryLine = (live) => {
   const k = live.filter(isAlert).length;
@@ -137,7 +138,7 @@ const dCard = (c, i) => {
   const late = isOverdue(c); const w = c.wbs || {};
   return html`<article class="hc hc--r2 ${late ? 'is-blocker' : ''}" data-pid="${c.id}">
     <header class="hc__h">
-      <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a><span class="hc__client">${c.client_name || ''}</span>
+      <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a><span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}
       ${raw(late ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 마일스톤이 있습니다" data-overdue>지연</span>' : '')}
       ${raw(c.status !== 'ACTIVE' ? html`<span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>` : '')}
       <span class="hc__pos">${no2(c.current_phase_sequence)} 단계 / 07</span>
@@ -161,21 +162,27 @@ export async function homePage(main = $('#main')) {
   const [h, o] = await Promise.all([api('GET', wsApi('/home')), ob.get()]);
   const live = h.projects || []; const done = h.completed || [];
   const any = live.length || done.length;
-  const desk = !isPhone();   // Redesign R2 dashboard on desktop; the phone keeps today's cards
+  const desk = !isPhone();
+  // 샘플 프로젝트: the one blue button belongs to real work (the first real card, or + 새 프로젝트 when there is none); the summary sentence reads real projects only
+  const real = live.filter((c) => !isSample(c)); const samples = [...live, ...done].filter(isSample).length;
+  const blue = (c) => (c === real[0] ? 0 : 1);
+  const sampleBanner = samples ? html`<div class="sbanner" data-sample-banner><p><b>샘플 프로젝트 ${samples}개</b>가 들어 있습니다. 시작 단계 · 구현 단계 · 종료 직전 프로젝트를 열어 RELAI가 단계마다 무엇을 안내하는지 살펴보세요. 샘플은 사용량에 포함되지 않습니다.</p>${raw(canManage() && !isPhone() ? '<button type="button" class="btn btn--ghost btn--sm" data-samples-delete>샘플 프로젝트 삭제</button>' : '')}</div>` : '';   // Redesign R2 dashboard on desktop; the phone keeps today's cards
   main.innerHTML = html`<div class="page page--guide home">
     <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${raw(desk && live.length ? html`진행 중인 프로젝트 ${live.length}개 · ` : '')}${wsName(state.workspace.name)}<span id="home-credits"></span></p>${raw(any ? pcLine() : '')}</div>
-      ${raw(any && canManage() && !isPhone() ? `<a class="btn ${live.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
+      ${raw(any && canManage() && !isPhone() ? `<a class="btn ${real.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
+    ${raw(sampleBanner)}
     ${raw(any && !isPhone() ? checklistCard(o, { compact: true }) : '')}
     ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
-    ${raw(live.length && desk ? html`<p class="hsum" data-home-summary>${raw(homeSummary(live))}</p>
-        <div class="hdash"><section class="hgrid__sec" aria-labelledby="hgT"><h2 id="hgT" class="sr-only">프로젝트 현황</h2><div class="hgrid">${raw(live.map(dCard).join(''))}</div></section>${raw(homeSide(live))}</div>`
+    ${raw(live.length && desk ? html`<p class="hsum" data-home-summary>${raw(real.length ? homeSummary(real) : '<b>아직 직접 만든 프로젝트가 없습니다.</b> 샘플 프로젝트를 둘러본 뒤 <b>+ 새 프로젝트</b>로 실제 프로젝트를 시작하세요.')}</p>
+        <div class="hdash"><section class="hgrid__sec" aria-labelledby="hgT"><h2 id="hgT" class="sr-only">프로젝트 현황</h2><div class="hgrid">${raw(live.map((c) => dCard(c, blue(c))).join(''))}</div></section>${raw(homeSide(live))}</div>`
       : live.length ? html`<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
-        <div class="hgrid">${raw(live.map(card).join(''))}</div></section>`
+        <div class="hgrid">${raw(live.map((c) => card(c, blue(c))).join(''))}</div></section>`
       : any ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>완료된 프로젝트는 아래에 있습니다.</p></div>'
       : isPhone() ? html`<div class="empty empty--sm" data-phone-empty><p>프로젝트 만들기는 PC에서 할 수 있습니다. PC에서 ${location.host} 에 로그인하세요.</p></div>` : newWorkspaceHome(o))}
     ${raw(done.length ? html`<details class="hdone"><summary>완료된 프로젝트 <b>${done.length}</b>개</summary><div class="hdone__l">${raw(done.map(completedRow).join(''))}</div></details>` : '')}
   </div>`;
   bindChecklist(main);
+  const sd = main.querySelector('[data-samples-delete]'); if (sd) sd.onclick = async () => { if (await deleteAllSamples()) homePage(main); };
   // AI credits at a glance (AI-credits-only billing): balance + early access, linked to 설정 › AI 크레딧. Never blocks Home.
   api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
     const el = $('#home-credits', main); if (!el) return;

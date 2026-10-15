@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { newToken, sha256 } from './../security.js';
 import { encrypt, decrypt } from '../integrations/crypto.js';
+import { addSamplesAfterSignup } from '../samples/index.js';
 import { createUser, createDirectSignupUser, addIdentity, touchIdentity, normEmail, recordConsent } from '../accounts.js';
 import { currentConsent } from '../legal.js';
 import { writeAudit } from '../admin.js';
@@ -142,13 +143,14 @@ export async function finishGoogleAuth(db, { state, code, tx }, env = process.en
     // B9: a new account needs 이용약관 + 개인정보 수집·이용 consent, given on the signup page before leaving for Google.
     if (!row.consent) { const e = new GoogleAuthError('consent_required', '이용약관과 개인정보 수집·이용에 동의한 뒤 Google로 가입해 주세요.', 422); e.returnPath = returnPath; throw e; }
     const identity = { provider: 'GOOGLE', subject: sub, email, verified: true };
-    let userId;
+    let userId; let workspaceId = null;
     if (row.intent === 'INVITE') userId = await createUser(db, { email, name, identity, emailVerifiedAt: new Date().toISOString() });   // the invitation decides the workspace
-    else ({ userId } = await createDirectSignupUser(db, { email, name, identity, emailVerifiedAt: new Date().toISOString() }));
+    else ({ userId, workspaceId } = await createDirectSignupUser(db, { email, name, identity, emailVerifiedAt: new Date().toISOString() }));
     await recordConsent(db, userId, currentConsent());
     await writeAudit(db, { adminUserId: userId, action: 'USER_CREATED', targetType: 'USER', targetId: userId, metadata: { email, method: 'GOOGLE', intent: row.intent }, actorKind: 'USER' });
-    return { userId, created: true, linked: false };
+    return { userId, created: true, linked: false, workspaceId, userName: name };
   });
+  if (result.created && result.workspaceId) await addSamplesAfterSignup(db, { workspaceId: result.workspaceId, userId: result.userId, userName: result.userName });   // 샘플 프로젝트 (after the commit)
   return { ...result, intent: row.intent, invitationId: row.invitation_id, returnPath };
 }
 /** Reads claims without verifying — only used to find the nonce before the real verification. */

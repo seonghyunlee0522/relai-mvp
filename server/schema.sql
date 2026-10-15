@@ -1336,3 +1336,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_agreed_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_version TEXT;
 -- Google sign-in: consent given on the signup page before leaving for Google; a brand-new Google account needs it.
 ALTER TABLE auth_oauth_states ADD COLUMN IF NOT EXISTS consent boolean NOT NULL DEFAULT false;
+/* Sample projects (migration 42): example projects copied into a new workspace at signup (server/samples/). NULL = a real project;
+ * 'early' · 'mid' · 'done' = which sample. Samples are never counted as usage (plan limits, admin metrics, activation). */
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS sample_key TEXT;
+CREATE INDEX IF NOT EXISTS idx_projects_sample ON projects(workspace_id) WHERE sample_key IS NOT NULL;

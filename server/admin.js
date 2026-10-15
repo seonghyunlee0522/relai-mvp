@@ -48,8 +48,8 @@ export const activationOf = (r) => {
 const USER_COLS = `u.id, u.name, u.email, u.status, u.system_role, u.created_at, u.last_login_at, u.suspended_at,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.user_id = u.id) AS workspace_count,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.user_id = u.id AND m.role = 'OWNER') AS owned_workspaces,
-  (SELECT COUNT(*) FROM projects p WHERE p.created_by = u.id) AS projects_created,
-  (SELECT MAX(p.created_at) FROM projects p WHERE p.created_by = u.id) AS last_project_created_at,
+  (SELECT COUNT(*) FROM projects p WHERE p.created_by = u.id AND p.sample_key IS NULL) AS projects_created,
+  (SELECT MAX(p.created_at) FROM projects p WHERE p.created_by = u.id AND p.sample_key IS NULL) AS last_project_created_at,
   u.email_verified_at,
   (SELECT string_agg(i.provider, ',' ORDER BY i.provider) FROM user_identities i WHERE i.user_id = u.id) AS login_methods_csv`;
 const shapeUser = (r) => { const { login_methods_csv, ...rest } = r; const methods = (login_methods_csv ? login_methods_csv.split(',') : []).sort((a, b) => (a === 'PASSWORD' ? -1 : b === 'PASSWORD' ? 1 : 0)); return { ...rest, login_methods: methods, login_method_label: methods.length ? methods.map((m) => (m === 'PASSWORD' ? 'Password' : 'Google')).join(' + ') : '-', email_verified: Boolean(r.email_verified_at), activation: activationOf(r) }; };
@@ -73,12 +73,12 @@ export async function getUser(db, id) {
   const u = await db.get(`SELECT ${USER_COLS} FROM users u WHERE u.id = ?`, [id]);
   if (!u) return null;
   const workspaces = await db.all(`SELECT w.id, w.name, w.status, m.role, m.created_at AS joined_at,
-      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status != 'ARCHIVED') AS project_count,
+      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status != 'ARCHIVED') AS project_count,
       (SELECT COUNT(*) FROM workspace_members o WHERE o.workspace_id = w.id AND o.role = 'OWNER') AS owner_count,
       COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key
     FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? ORDER BY m.created_at`, [id]);
   // Basic activity only: logins and project create/archive events (dates + workspace, no project content/names).
-  const activity = await db.all(`SELECT 'PROJECT_CREATED' AS type, p.created_at AS at, w.name AS workspace_name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.created_by = ?
+  const activity = await db.all(`SELECT 'PROJECT_CREATED' AS type, p.created_at AS at, w.name AS workspace_name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.sample_key IS NULL AND p.created_by = ?
     ORDER BY p.created_at DESC LIMIT 10`, [id]);
   if (u.last_login_at) activity.push({ type: 'LOGIN', at: u.last_login_at, workspace_name: null });
   activity.sort((a, b) => (a.at < b.at ? 1 : -1));
@@ -97,17 +97,17 @@ export async function getUser(db, id) {
 const WS_COLS = `w.id, w.name, w.status, w.created_at, w.suspended_at,
   o.id AS owner_id, o.name AS owner_name, o.email AS owner_email,
   (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id = w.id) AS member_count,
-  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status != 'ARCHIVED') AS project_count,
+  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status != 'ARCHIVED') AS project_count,
   (SELECT COUNT(*) FROM invitations i WHERE i.workspace_id = w.id AND i.status = 'PENDING' AND i.expires_at >= now()) AS pending_invitations,
-  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND NOT EXISTS (SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.step_key NOT IN ('KICKOFF','APPROVAL') AND s.status <> 'COMPLETED')) AS defined_projects,
-  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)
+  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED' AND NOT EXISTS (SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.step_key NOT IN ('KICKOFF','APPROVAL') AND s.status <> 'COMPLETED')) AS defined_projects,
+  (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)
       AND EXISTS (SELECT 1 FROM wbs_items x WHERE x.project_id = p.id AND x.archived_at IS NULL AND x.item_type = 'TASK' AND NOT EXISTS (SELECT 1 FROM wbs_items c WHERE c.parent_id = x.id AND c.archived_at IS NULL))) AS activated_projects,
   (SELECT MAX(u.last_login_at) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = w.id) AS last_login_at,
   GREATEST(w.created_at,
     COALESCE((SELECT MAX(u.last_login_at) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = w.id), w.created_at),
-    COALESCE((SELECT MAX(r.updated_at) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id), w.created_at),
-    COALESCE((SELECT MAX(x.updated_at) FROM wbs_items x JOIN projects p ON p.id = x.project_id WHERE p.workspace_id = w.id), w.created_at),
-    COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id), w.created_at),
+    COALESCE((SELECT MAX(r.updated_at) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
+    COALESCE((SELECT MAX(x.updated_at) FROM wbs_items x JOIN projects p ON p.id = x.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
+    COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
     COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at,
   COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key`;
 // "Owner" column = the earliest OWNER member (the creator unless ownership was transferred); the LATERAL join keeps it one query.
@@ -134,10 +134,10 @@ export async function getWorkspace(db, id) {
   const w = await db.get(`SELECT ${WS_COLS} ${WS_FROM} WHERE w.id = ?`, [id]);
   if (!w) return null;
   const members = await db.all(`SELECT u.id, u.name, u.email, u.status, m.role, m.created_at AS joined_at FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? ORDER BY m.created_at`, [id]);
-  const projects = await db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((status = 'ARCHIVED')::int), 0) AS archived, COALESCE(SUM((status != 'ARCHIVED')::int), 0) AS active FROM projects WHERE workspace_id = ?`, [id]);
+  const projects = await db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((status = 'ARCHIVED')::int), 0) AS archived, COALESCE(SUM((status != 'ARCHIVED')::int), 0) AS active FROM projects WHERE sample_key IS NULL AND workspace_id = ?`, [id]);
   const activity = await db.all(`SELECT type, at FROM (
-      SELECT 'PROJECT_CREATED' AS type, created_at AS at FROM projects WHERE workspace_id = ?
-      UNION ALL SELECT 'PROJECT_ARCHIVED', updated_at FROM projects WHERE workspace_id = ? AND status = 'ARCHIVED'
+      SELECT 'PROJECT_CREATED' AS type, created_at AS at FROM projects WHERE sample_key IS NULL AND workspace_id = ?
+      UNION ALL SELECT 'PROJECT_ARCHIVED', updated_at FROM projects WHERE sample_key IS NULL AND workspace_id = ? AND status = 'ARCHIVED'
       UNION ALL SELECT 'MEMBER_JOINED', created_at FROM workspace_members WHERE workspace_id = ?
       UNION ALL SELECT 'WEEKLY_REPORT', wr.created_at FROM weekly_reports wr JOIN projects p ON p.id = wr.project_id WHERE p.workspace_id = ?) x
     ORDER BY at DESC LIMIT 15`, [id, id, id, id]);
@@ -268,13 +268,13 @@ export async function dashboard(db) {
       (SELECT COUNT(*) FROM users WHERE status = 'SUSPENDED') AS suspended_users,
       (SELECT COUNT(*) FROM workspaces WHERE status = 'ACTIVE') AS active_workspaces,
       (SELECT COUNT(*) FROM workspaces WHERE status = 'SUSPENDED') AS suspended_workspaces,
-      (SELECT COUNT(*) FROM projects WHERE status != 'ARCHIVED') AS projects,
+      (SELECT COUNT(*) FROM projects WHERE status != 'ARCHIVED' AND sample_key IS NULL) AS projects,
       (SELECT COUNT(*) FROM users WHERE created_at >= now() - interval '7 days') AS signups_7d,
       (SELECT COUNT(*) FROM users WHERE created_at >= date_trunc('day', now())) AS signups_today`);
   // Activation funnel over users who signed up in the last 7 days. Signup auto-creates a workspace, so step 2 ≈ step 1 by design.
   const f = await db.get(`SELECT COUNT(*) AS registered,
       COALESCE(SUM((EXISTS (SELECT 1 FROM workspace_members m WHERE m.user_id = u.id AND m.role = 'OWNER'))::int), 0) AS workspace_created,
-      COALESCE(SUM((EXISTS (SELECT 1 FROM projects p WHERE p.created_by = u.id))::int), 0) AS project_created
+      COALESCE(SUM((EXISTS (SELECT 1 FROM projects p WHERE p.created_by = u.id AND p.sample_key IS NULL))::int), 0) AS project_created
     FROM users u WHERE u.created_at >= now() - interval '7 days'`);
   const suspendedUsers = await db.all(`SELECT id, name, email, suspended_at FROM users WHERE status = 'SUSPENDED' ORDER BY suspended_at DESC NULLS LAST LIMIT 10`);
   const suspendedWs = await db.all(`SELECT id, name, suspended_at FROM workspaces WHERE status = 'SUSPENDED' ORDER BY suspended_at DESC NULLS LAST LIMIT 10`);

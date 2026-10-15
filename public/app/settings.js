@@ -6,6 +6,7 @@ import { confirmDialog, toast } from './shared/dialogs.js';
 import { relTime } from './shared/jira.js';
 import { formDialog, inviteStatusChip, emailStatusChip } from './shared/forms.js';
 import { usageBars, fmtDay } from './admin/ui.js';
+import { addSamples, deleteAllSamples } from './project/samples.js';
 
 const qp0 = () => new URLSearchParams(location.search);
 const unverified = () => state.user?.email_verified === false;   // server refuses checkout/invitations until the e-mail is verified
@@ -30,6 +31,12 @@ export async function settingsPage(main = $('#main')) {
   const creditsCard = () => !credits ? '' : html`<div class="panel" style="margin-top:20px" id="ai-credits"><div class="panel__h">AI 크레딧<a class="btn btn--secondary btn--sm" href="/app/settings/credits" data-link>${credits.payments_enabled === false ? '자세히' : '자세히 · 충전'}</a></div><div class="panel__b">
     <p style="margin:0"><b class="${credits.low ? 'is-warn' : ''}">잔액 ${credits.balance.toLocaleString('ko-KR')} 크레딧 (${won(credits.balance_krw)})</b> <small class="dim">구매 ${credits.purchased_remaining.toLocaleString('ko-KR')} · 무료 ${credits.free_remaining.toLocaleString('ko-KR')}</small></p>
     <p class="hint" style="margin-top:6px">이번 달 사용 ${credits.this_month.used.toLocaleString('ko-KR')} 크레딧 (${won(credits.this_month.krw)}) · 1 크레딧 = ${won(credits.credit_price_krw)} (부가세 포함) · 사용 내역은 모든 멤버가 볼 수 있습니다.</p></div></div>`;
+  // 샘플 프로젝트 (OWNER / ADMIN): how many of the 3 examples this workspace has — 추가 brings back the missing ones, 삭제 removes all
+  let samples = 0; const loadSamples = async () => { try { samples = (await api('GET', `/api/workspaces/${wid}/projects?include_archived=1`)).projects.filter((p) => p.sample_key).length; } catch { samples = 0; } };
+  await loadSamples();
+  const samplesCard = () => (!perm.workspace_settings ? '' : html`<div class="panel" style="margin-top:20px" id="samples"><div class="panel__h">샘플 프로젝트 <span class="chip chip--sample">${samples}/3</span></div><div class="panel__b">
+    <p style="margin:0">시작 단계 · 구현 단계 · 종료 직전, 세 가지 예시 프로젝트로 RELAI 사용 흐름을 보여 줍니다. 샘플은 사용량과 플랜 한도에 포함되지 않습니다.</p>
+    <div class="actions" style="margin-top:14px"><button class="btn btn--secondary btn--sm" id="samples-add"${raw(samples >= 3 ? ' disabled title="샘플 프로젝트가 모두 있습니다."' : '')}>샘플 프로젝트 추가</button>${raw(samples ? '<button class="btn btn--ghost btn--sm is-danger" id="samples-delete">샘플 프로젝트 삭제</button>' : '')}</div></div></div>`);
   let account = null; const loadAccount = async () => { try { account = (await api('GET', '/api/me/account')).account; } catch { account = null; } };
   await loadAccount();
   const SUB_STATUS = { ACTIVE: ['chip--done', '이용 중'], PAST_DUE: ['chip--fail', '결제 실패'], CANCELED: ['chip--muted', '해지됨'], EXPIRED: ['chip--muted', '만료'] };
@@ -160,6 +167,7 @@ export async function settingsPage(main = $('#main')) {
     <div class="panel" style="margin-top:20px" data-tour-id="workspace-settings"><div class="panel__h">워크스페이스</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
       <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl></div></div>
+    ${raw(samplesCard())}
     ${raw(account || ownerWs ? html`<details class="danger-zone" id="danger"><summary>위험 구역 <small class="dim">계정 삭제${ownerWs ? ' · 워크스페이스 삭제' : ''}</small></summary><div class="danger-zone__b">
       ${raw(account ? html`<div class="danger-zone__row"><div><b>계정 삭제</b><p class="hint">계정 정보가 즉시 삭제되고 복구할 수 없습니다.</p></div><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}
       ${raw(ownerWs ? html`<div class="danger-zone__row"><div><b>워크스페이스 삭제</b><p class="hint">모든 프로젝트와 데이터에 접근할 수 없게 되고 30일 후 파기됩니다.</p></div><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>` : '')}
@@ -198,6 +206,8 @@ export async function settingsPage(main = $('#main')) {
       </div>${raw(inviteTable())}${raw(isPhone() ? '' : jiraCard())}${raw(isPhone() ? '<button type="button" class="btn btn--secondary phone-logout" data-logout data-phone-ok>로그아웃</button>' : '')}</div>`;
     }
     members0 = members; bindBuy();
+    const sa = $('#samples-add'); if (sa) sa.onclick = async () => { sa.disabled = true; if (await addSamples()) { await loadSamples(); draw(members); } else sa.disabled = false; };
+    const sx = $('#samples-delete'); if (sx) sx.onclick = async () => { if (await deleteAllSamples()) { await loadSamples(); draw(members); } };
     const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 Free 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });
     const ib = $('#invite-btn'); if (ib) ib.onclick = async () => {

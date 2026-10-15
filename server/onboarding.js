@@ -46,22 +46,22 @@ export const TOUR_STEPS = {
 /* ---------- workspace facts (one query set, no per-row work) ---------- */
 export async function workspaceFacts(db, workspaceId) {
   const row = await db.get(`SELECT
-      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED') AS projects,
-      (SELECT p.id FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' ORDER BY p.created_at LIMIT 1) AS first_project_id,
-      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND NOT EXISTS (
+      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED') AS projects,
+      (SELECT p.id FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED' ORDER BY p.created_at LIMIT 1) AS first_project_id,
+      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED' AND NOT EXISTS (
           SELECT 1 FROM project_steps s JOIN project_phases ph ON ph.id = s.project_phase_id WHERE ph.project_id = p.id AND ph.phase_key = 'INITIATION' AND s.is_required = 1 AND s.step_key NOT IN ('KICKOFF','APPROVAL') AND s.status <> 'COMPLETED')) AS defined_projects,
-      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)) AS projects_with_requirements,
-      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM wbs_items x WHERE x.project_id = p.id AND x.archived_at IS NULL AND x.item_type = 'TASK'
+      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)) AS projects_with_requirements,
+      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED' AND EXISTS (SELECT 1 FROM wbs_items x WHERE x.project_id = p.id AND x.archived_at IS NULL AND x.item_type = 'TASK'
           AND NOT EXISTS (SELECT 1 FROM wbs_items c WHERE c.parent_id = x.id AND c.archived_at IS NULL))) AS projects_with_wbs,
-      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.status <> 'ARCHIVED'
+      (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status <> 'ARCHIVED'
           AND EXISTS (SELECT 1 FROM requirements r WHERE r.project_id = p.id AND r.archived_at IS NULL)
           AND EXISTS (SELECT 1 FROM wbs_items x WHERE x.project_id = p.id AND x.archived_at IS NULL AND x.item_type = 'TASK' AND NOT EXISTS (SELECT 1 FROM wbs_items c WHERE c.parent_id = x.id AND c.archived_at IS NULL))) AS activated_projects,
       EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = w.id AND m.role = 'OWNER') AS has_owner,
       GREATEST(w.created_at,
         COALESCE((SELECT MAX(u.last_login_at) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = w.id), w.created_at),
-        COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id), w.created_at),
-        COALESCE((SELECT MAX(r.updated_at) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id), w.created_at),
-        COALESCE((SELECT MAX(x.updated_at) FROM wbs_items x JOIN projects p ON p.id = x.project_id WHERE p.workspace_id = w.id), w.created_at)) AS last_active_at,
+        COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
+        COALESCE((SELECT MAX(r.updated_at) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
+        COALESCE((SELECT MAX(x.updated_at) FROM wbs_items x JOIN projects p ON p.id = x.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at)) AS last_active_at,
       w.name, w.created_at
     FROM workspaces w WHERE w.id = ?`, [workspaceId]);
   if (!row) return null;
