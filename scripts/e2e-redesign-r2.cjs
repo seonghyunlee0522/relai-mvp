@@ -265,7 +265,8 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
 
   // ================= review shots (1440 + 1920) =================
   if (SHOTS2) {
-    const p2 = await ctx.newPage(); const { w: w1 } = await signup(p2, '이수진');
+    const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'ko-KR' });   // its own session: signing up here must not log out the main user
+    const p2 = await ctx2.newPage(); const { w: w1 } = await signup(p2, '이수진');
     const one = (await api('POST', `/api/workspaces/${w1}/projects`, { name: '한빛제약 AI 고객상담 챗봇 구축', client_name: '(주)한빛제약', project_type: 'NEW_BUILD', planned_start_date: day(-30), planned_end_date: day(120), has_external_integration: 'YES' }, p2)).json.project;
     for (let i = 0; i < 3; i++) await api('POST', `/api/workspaces/${w1}/projects/${one.id}/requirements`, { title: `상담 기능 ${i + 1}`, scope: 'IN_SCOPE', priority: 'HIGH', type: 'FUNCTIONAL' }, p2);
     for (const width of [1440, 1920]) {
@@ -279,7 +280,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
       await s2(page, `/app/projects/${P2.id}/wbs`, '#grid', '06-wbs');
       await s2(page, `/app/projects/${P2.id}/wbs`, '#grid', '07-wbs-drawer', `#grid tr[data-id="${T[2].id}"] .wtitle__t`);
     }
-    await p2.close();
+    await ctx2.close();
   }
 
   check('no page errors', errors.length === 0, errors.join(' | '));
