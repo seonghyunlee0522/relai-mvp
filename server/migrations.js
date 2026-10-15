@@ -181,6 +181,11 @@ export const migrations = [
     await reset(`${steps('OPERATIONS', 'CLOSE')}) AND note NOT LIKE '%[외부 완료보고서]%' AND NOT EXISTS (SELECT 1 FROM weekly_reports w WHERE w.project_id = ${pidOf} AND w.report_type = 'COMPLETION' AND w.status = 'FINAL')`);
   } },
   { version: 40, name: 'B9 signup consent: users.terms_agreed_at/terms_version/privacy_agreed_at/privacy_version + auth_oauth_states.consent — DDL in schema.sql', up() {} },
+  { version: 41, name: 'AI-credits-only billing: workspaces.early_access_until (+ 30/7-day notice stamps), billing_orders CREDIT_PACK (credits, refunded_amount/credits, receipt_url), credit_ledger PURCHASE, low_balance_notified_at (schema.sql) + backfill early access = max(created_at, launch) + 12 months for workspaces created before the cut-off + starter credits topped up to 500 once', async up(db) {
+    const [{ grantEarlyAccess }, { topUpStarterCredits }] = await Promise.all([import('./billing/subscriptions.js'), import('./ai/credits.js')]);
+    await grantEarlyAccess(db);
+    await topUpStarterCredits(db);
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

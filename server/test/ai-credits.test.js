@@ -6,6 +6,8 @@ import { boot, setup } from './api-helpers.js';
 import { setFakeProvider, AiProviderError } from '../ai/provider.js';
 
 process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '100'; process.env.AI_MODEL = '';
+// Metering mechanics are asserted at the pre-v41 per-feature prices; the current prices (30/50/20/10) are covered by credits-billing.test.js.
+Object.assign(process.env, { AI_CREDIT_COST_REQUIREMENT_EXTRACTION: '10', AI_CREDIT_COST_WBS_GENERATION: '15', AI_CREDIT_COST_CHANGE_IMPACT: '8', AI_CREDIT_COST_PROJECT_QA: '3' });
 delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT;
 const grantAdmin = (db, uid) => db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [uid]);
 const answer = () => ({ data: { answer: 'ok', references: [], warnings: [] }, usage: { input_tokens: 1000, output_tokens: 500 } });
@@ -142,17 +144,17 @@ import { runAiFeature, AiError } from '../ai/service.js';
 const ledgerSum = async (db, wid) => (await db.get('SELECT COALESCE(SUM(amount), 0) AS s, (SELECT balance_after FROM credit_ledger WHERE workspace_id = ? ORDER BY created_at DESC, seq DESC LIMIT 1) AS last FROM credit_ledger WHERE workspace_id = ?', [wid, wid]));
 const consistent = async (db, wid) => { const acc = await account(db, wid); const l = await ledgerSum(db, wid); assert.equal(acc.balance, l.s, 'balance == sum(ledger)'); assert.equal(acc.balance, l.last ?? 0, 'balance == last balance_after'); assert.ok(acc.balance >= 0); };
 
-test('initial grant policy: production trial (PROMOTION 100, once) vs DEV_INITIAL (PLAN_GRANT, replaces trial); re-touching an account never grants again; trial can be 0', async () => {
+test('initial grant policy: production starter credits (PROMOTION 500, once) vs DEV_INITIAL (PLAN_GRANT, replaces trial); re-touching an account never grants again; trial can be 0', async () => {
   const { db, server, client } = await boot();
   delete process.env.DEV_INITIAL_AI_CREDITS; delete process.env.AI_INITIAL_TRIAL_CREDITS;
   const P = await setup(client, 'prod@x.com');
   let led = await ledgerOf(db, P.w);
-  assert.equal(led.length, 1); assert.equal(led[0].type, 'PROMOTION'); assert.equal(led[0].amount, 100); assert.equal(led[0].reason, '신규 Workspace AI 시작 Credit'); assert.equal(led[0].reference_id, 'AI_INITIAL_TRIAL_CREDITS');
-  assert.equal((await status(P)).credits.balance, 100);
+  assert.equal(led.length, 1); assert.equal(led[0].type, 'PROMOTION'); assert.equal(led[0].amount, 500); assert.equal(led[0].reason, '무료 시작 크레딧'); assert.equal(led[0].reference_id, 'AI_INITIAL_TRIAL_CREDITS');
+  assert.equal((await status(P)).credits.balance, 500);
   // re-reads / explicit ensureAccount with any policy → no second grant
   await ensureAccount(db, P.w); await ensureAccount(db, P.w, { devInitial: 500, trial: 999 }); await status(P);
   process.env.DEV_INITIAL_AI_CREDITS = '500'; await status(P);
-  led = await ledgerOf(db, P.w); assert.equal(led.length, 1); assert.equal((await account(db, P.w)).balance, 100); assert.equal((await account(db, P.w)).lifetime_granted, 100);
+  led = await ledgerOf(db, P.w); assert.equal(led.length, 1); assert.equal((await account(db, P.w)).balance, 500); assert.equal((await account(db, P.w)).lifetime_granted, 500);
   // DEV_INITIAL set → PLAN_GRANT only, trial NOT added on top
   const D = await setup(client, 'dev@x.com');
   led = await ledgerOf(db, D.w); assert.equal(led.length, 1); assert.equal(led[0].type, 'PLAN_GRANT'); assert.equal(led[0].amount, 500); assert.equal((await account(db, D.w)).balance, 500);

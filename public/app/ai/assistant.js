@@ -39,7 +39,7 @@ export async function openAssistant(pid) {
         : html`<div class="aichat aichat--a"><div class="aichat__m ${m.error ? 'is-err' : ''}">${raw(md(m.content))}
             ${raw(m.references?.length ? html`<div class="aichat__refs">${raw(m.references.map((r) => html`<a href="/app/projects/${pid}/${r.href}" data-link data-close><span class="chip chip--muted">${TYPE_LABEL[r.type] || r.type}</span><span class="mono">${r.display_id}</span> ${r.title}</a>`).join(''))}</div>` : '')}
             ${raw(m.warnings?.length ? html`<ul class="aid__warn aid__warn--sm">${raw(m.warnings.map((w) => html`<li>${w}</li>`).join(''))}</ul>` : '')}
-            ${raw(m.run ? html`<small class="aichat__meta">${m.run.credit_cost} Credits · ${(m.run.latency_ms / 1000).toFixed(1)}s</small>` : '')}</div></div>`)).join(''))}
+            ${raw(m.run ? html`<small class="aichat__meta">${m.run.credit_cost} 크레딧 · ${(m.run.latency_ms / 1000).toFixed(1)}s</small>` : '')}</div></div>`)).join(''))}
       ${raw(pending ? '<div class="aichat aichat--a"><div class="aichat__m is-wait"><span class="spin"></span> 프로젝트 데이터를 확인하는 중…</div></div>' : '')}`;
     log.querySelectorAll('[data-sug]').forEach((b) => b.onclick = () => { ta.value = b.dataset.sug; ask(); });
     log.scrollTop = log.scrollHeight;

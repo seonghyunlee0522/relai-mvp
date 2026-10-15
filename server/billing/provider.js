@@ -6,6 +6,7 @@
  *     order = the billing_orders row (orders.js) holding the server-side amount to charge
  *   handleWebhook({ rawBody: Buffer, headers })                         → normalized event (below); throws BillingError(400) on a bad signature
  *   cancel({ subscription })                                            → { ok: true } (cancellation at period end on the provider side)
+ *   refund({ order, reason }) → payment.refunded event · refundPartial({ order, amount, reason }) → { cancelled_tid } (AI credit packs)
  *
  * Normalized event (what subscriptions.processWebhookEvent consumes):
  *   { id: provider event id (idempotency key), type: one of EVENT_TYPES, workspace_id?, provider_subscription_id?,
@@ -34,7 +35,7 @@ export function assertProvider(p) {
  */
 export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET || 'fake-billing-secret' } = {}) {
   const sign = (raw) => createHmac('sha256', secret).update(raw).digest('hex');
-  const calls = { checkout: [], cancel: [] };
+  const calls = { checkout: [], cancel: [], refund: [] };
   return assertProvider({
     name: 'fake',
     calls,
@@ -58,6 +59,13 @@ export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET ||
         payment: d.payment || undefined, payload: body };
     },
     async cancel({ subscription }) { calls.cancel.push(subscription.id); return { ok: true }; },
+    /** Full refund → normalized payment.refunded (same shape as NicePay's). */
+    async refund({ order, reason }) { calls.refund.push({ order_id: order.id, amount: Number(order.amount), reason }); return { id: `cancelled:${order.provider_tid}`, type: 'payment.refunded', order_id: order.id, refund_tid: order.provider_tid, payload: {} }; },
+    /** Partial cancel (AI credit pack refund). `failNextRefund` makes the next call throw (tests). */
+    async refundPartial({ order, amount, reason }) {
+      if (this.failNextRefund) { const m = this.failNextRefund; this.failNextRefund = null; throw new BillingError(402, 'refund_failed', m); }
+      calls.refund.push({ order_id: order.id, amount, reason, partial: true }); return { cancelled_tid: `fake_cancel_${randomUUID()}`, balance_amount: Number(order.amount) - amount };
+    },
     /** Test helper: a signed webhook delivery { body (string), headers }. */
     signedEvent(type, data = {}, id = `evt_${randomUUID()}`) {
       const body = JSON.stringify({ id, type, data });

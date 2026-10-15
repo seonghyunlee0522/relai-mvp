@@ -12,6 +12,8 @@ const unverified = () => state.user?.email_verified === false;   // server refus
 const VERIFY_HINT = '이메일 인증 후 사용할 수 있습니다.';
 /** K24: the disabled 결제하기 / 멤버 초대 hint carries its own `인증 메일 다시 받기` (the top banner can be hidden). */
 const verifyHint = (id, style = '') => html`<span class="hint" id="${id}"${raw(style ? ` style="${style}"` : '')}>${VERIFY_HINT} <button type="button" class="link linkbtn" data-verify-again>인증 메일 다시 받기</button></span>`;
+const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
+const PLAN_TEAM_MONTHLY = 20000;   // server/plans.js TEAM.base_monthly (VAT excluded) — shown only in the early-access note
 const ROLE = { OWNER: '소유자', ADMIN: '관리자', MEMBER: '멤버' };
 const ROLE_DESC = { OWNER: '모든 기능 · 멤버/설정/결제 관리', ADMIN: '프로젝트 생성·관리 · 멤버/설정 관리 (결제 불가)', MEMBER: '프로젝트 업무 수행 (멤버/설정/결제 불가)' };
 
@@ -24,6 +26,10 @@ export async function settingsPage(main = $('#main')) {
   let billing = null; const loadBilling = async () => { try { billing = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch { billing = null; } };
   await loadBilling();
   // Account lifecycle: login methods, password state, what would block 회원 탈퇴.
+  let credits = null; try { credits = (await api('GET', `/api/workspaces/${wid}/credits/summary`)).credits; } catch { credits = null; }
+  const creditsCard = () => !credits ? '' : html`<div class="panel" style="margin-top:20px" id="ai-credits"><div class="panel__h">AI 크레딧<a class="btn btn--secondary btn--sm" href="/app/settings/credits" data-link>자세히 · 충전</a></div><div class="panel__b">
+    <p style="margin:0"><b class="${credits.low ? 'is-warn' : ''}">잔액 ${credits.balance.toLocaleString('ko-KR')} 크레딧 (${won(credits.balance_krw)})</b> <small class="dim">구매 ${credits.purchased_remaining.toLocaleString('ko-KR')} · 무료 ${credits.free_remaining.toLocaleString('ko-KR')}</small></p>
+    <p class="hint" style="margin-top:6px">이번 달 사용 ${credits.this_month.used.toLocaleString('ko-KR')} 크레딧 (${won(credits.this_month.krw)}) · 1 크레딧 = ${won(credits.credit_price_krw)} (부가세 포함) · 사용 내역은 모든 멤버가 볼 수 있습니다.</p></div></div>`;
   let account = null; const loadAccount = async () => { try { account = (await api('GET', '/api/me/account')).account; } catch { account = null; } };
   await loadAccount();
   const SUB_STATUS = { ACTIVE: ['chip--done', '이용 중'], PAST_DUE: ['chip--fail', '결제 실패'], CANCELED: ['chip--muted', '해지됨'], EXPIRED: ['chip--muted', '만료'] };
@@ -41,11 +47,11 @@ export async function settingsPage(main = $('#main')) {
     const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 Workspace OWNER만 할 수 있습니다.</p>'
       : html`${raw(co.can_purchase && billing.provider_available ? buyForm() : '')}<div class="actions" style="margin-top:14px">${raw(canCancel && s.auto_renew ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
         ${raw(billing.provider_available ? '' : '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>')}`;
-    return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan_label}</span></div><div class="panel__b">
-      ${raw(usageBars(billing.usage))}${raw(lines)}${raw(actions)}</div></div>`;
+    const early = billing.plan === 'EARLY' ? html`<p class="cr-early" id="early-line"><b>얼리 액세스 · ${fmtDay(billing.early_access_until)}까지</b> — RELAI 전체 기능을 무료로 씁니다. AI는 쓴 만큼만 크레딧으로 냅니다. 이후에는 Team 플랜(${won(PLAN_TEAM_MONTHLY)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다 (데이터는 삭제되지 않습니다).</p>` : '';
+    return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan === 'EARLY' ? `얼리 액세스 · ${fmtDay(billing.early_access_until)}까지` : billing.plan_label}</span></div><div class="panel__b">
+      ${raw(early)}${raw(billing.plan === 'EARLY' ? '' : usageBars(billing.usage))}${raw(lines)}${raw(billing.plan === 'EARLY' && !s ? '' : actions)}</div></div>`;
   };
   /** Purchase form: cycle × users (owner included) → server quote (VAT excluded prices, founding discount) → NicePay payment window. */
-  const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
   const buyForm = () => {
     const co = billing.checkout; const extend = billing.plan !== 'FREE';
     return html`<form id="bill-buy" class="panel__sub" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-soft)">
@@ -126,7 +132,7 @@ export async function settingsPage(main = $('#main')) {
       <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
       <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
       ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">Workspace 삭제</button></div>' : '')}</div></div>
-    ${raw(billingCard())}
+    ${raw(billingCard())}${raw(creditsCard())}
     <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
       <div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
       <tbody>${raw(members.map((m) => html`<tr>

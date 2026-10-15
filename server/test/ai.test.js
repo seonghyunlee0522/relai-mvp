@@ -8,6 +8,8 @@ import { classifyQuestion } from '../ai/context.js';
 import { titleSimilarity } from '../ai/features.js';
 
 process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '1000'; process.env.AI_MODEL = '';
+// Metering mechanics are asserted at the pre-v41 per-feature prices; the current prices (30/50/20/10) are covered by credits-billing.test.js.
+Object.assign(process.env, { AI_CREDIT_COST_REQUIREMENT_EXTRACTION: '10', AI_CREDIT_COST_WBS_GENERATION: '15', AI_CREDIT_COST_CHANGE_IMPACT: '8', AI_CREDIT_COST_PROJECT_QA: '3' });
 delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT;
 
 const mkReq = async (A, body) => (await A.c('POST', A.req, body)).json.requirement;

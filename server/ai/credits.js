@@ -12,8 +12,11 @@
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { aiConfig } from './config.js';
+import { LOW_BALANCE_CREDITS } from '../plans.js';
 
-export const LEDGER_TYPES = ['PLAN_GRANT', 'ADMIN_GRANT', 'AI_USAGE', 'REFUND', 'ADJUSTMENT', 'PROMOTION'];
+export const LEDGER_TYPES = ['PLAN_GRANT', 'ADMIN_GRANT', 'AI_USAGE', 'REFUND', 'ADJUSTMENT', 'PROMOTION', 'PURCHASE'];
+/** Ledger reference of the one-time starter grant (new workspaces) and of the v41 top-up of existing workspaces to the same amount. */
+export const STARTER_REFS = ['AI_INITIAL_TRIAL_CREDITS', 'STARTER_TOPUP'];
 const RESERVATION_TTL = "interval '10 minutes'";
 
 export class CreditError extends Error {
@@ -33,7 +36,7 @@ async function writeLedger(t, { wid, runId = null, type, amount, balanceAfter, r
 /**
  * Creates the account on first touch and applies the ONE-TIME initial grant policy, exactly once per workspace:
  *   - DEV_INITIAL_AI_CREDITS > 0  (development / test)  → PLAN_GRANT of that amount, and the trial grant is skipped
- *   - otherwise AI_INITIAL_TRIAL_CREDITS (production, default 100) → PROMOTION "신규 Workspace AI 시작 Credit"
+ *   - otherwise AI_INITIAL_TRIAL_CREDITS (production, default 500 = ₩5,000) → PROMOTION "무료 시작 크레딧"
  * The grant is tied to the INSERT (ON CONFLICT DO NOTHING + changes = 1) under the row lock, so an existing account —
  * or two concurrent first calls — can never be granted twice.
  */
@@ -47,7 +50,7 @@ export async function ensureAccount(db, wid, opts = {}) {
     const ins = await t.run('INSERT INTO workspace_credit_accounts (workspace_id) VALUES (?) ON CONFLICT (workspace_id) DO NOTHING', [wid]);
     if (ins.changes) {
       const grant = devInitial > 0 ? { amount: devInitial, type: 'PLAN_GRANT', reason: '개발 초기 지급 (DEV_INITIAL_AI_CREDITS)', referenceType: 'ENV', referenceId: 'DEV_INITIAL_AI_CREDITS' }
-        : trial > 0 ? { amount: trial, type: 'PROMOTION', reason: '신규 Workspace AI 시작 Credit', referenceType: 'ENV', referenceId: 'AI_INITIAL_TRIAL_CREDITS' } : null;
+        : trial > 0 ? { amount: trial, type: 'PROMOTION', reason: '무료 시작 크레딧', referenceType: 'ENV', referenceId: 'AI_INITIAL_TRIAL_CREDITS' } : null;
       if (grant) {
         await t.run('UPDATE workspace_credit_accounts SET balance = ?, lifetime_granted = ?, updated_at = now() WHERE workspace_id = ?', [grant.amount, grant.amount, wid]);
         await writeLedger(t, { wid, type: grant.type, amount: grant.amount, balanceAfter: grant.amount, reason: grant.reason, referenceType: grant.referenceType, referenceId: grant.referenceId });
@@ -76,8 +79,10 @@ export async function applyCredits(db, { wid, amount, type, reason, createdBy = 
     const acc = await lockAccount(t, wid);
     const next = acc.balance + amount;
     if (next < 0) throw new CreditError('AI_CREDIT_INSUFFICIENT', `차감할 Credit이 부족합니다. (현재 ${acc.balance}, 요청 ${amount})`, { status: 409, balance: acc.balance, required: -amount });
-    await t.run(`UPDATE workspace_credit_accounts SET balance = ?, lifetime_granted = lifetime_granted + ?, lifetime_used = lifetime_used + ?, updated_at = now() WHERE workspace_id = ?`,
-      [next, amount > 0 ? amount : 0, amount < 0 ? -amount : 0, wid]);
+    // A grant that lifts the balance back to the warning threshold re-arms the one low-balance e-mail (a purchase, typically).
+    await t.run(`UPDATE workspace_credit_accounts SET balance = ?, lifetime_granted = lifetime_granted + ?, lifetime_used = lifetime_used + ?, updated_at = now(),
+      low_balance_notified_at = CASE WHEN ?::bigint >= ?::bigint THEN NULL ELSE low_balance_notified_at END WHERE workspace_id = ?`,
+      [next, amount > 0 ? amount : 0, amount < 0 ? -amount : 0, next, LOW_BALANCE_CREDITS, wid]);
     const ledgerId = await writeLedger(t, { wid, type, amount, balanceAfter: next, reason, referenceType, referenceId, createdBy });
     return { ledger_id: ledgerId, balance: next };
   });
@@ -108,11 +113,19 @@ export const SETTLEMENT_CONFLICT = 'AI_CREDIT_SETTLEMENT_CONFLICT';
  *   failure                 → release: run FAILED/RELEASED, nothing written to the ledger.
  * Invariant: workspace_credit_accounts.balance always equals the last ledger balance_after, and never goes negative.
  */
-export async function settleRun(db, runId, { success, usage = {}, providerCost = null, latencyMs = null, errorCode = null, errorMessage = null }) {
+export async function settleRun(db, runId, opts) {
+  const out = await settle(db, runId, opts);
+  // Low-balance e-mail: claimed inside the charge transaction, sent after it (never holds the account lock on a mail provider).
+  if (!out) return out;
+  const { workspace_id: wid, low_balance_crossed: low, ...result } = out;
+  if (low && !db.isTx) await notifyLowBalance(db, wid, out.balance).catch((e) => console.error('[credits] low-balance e-mail failed', e.message));
+  return result;
+}
+async function settle(db, runId, { success, usage = {}, providerCost = null, latencyMs = null, errorCode = null, errorMessage = null }) {
   return tx(db, async (t) => {
     const run = await t.get('SELECT * FROM ai_runs WHERE id = ? FOR UPDATE', [runId]);
     if (!run || run.status !== 'PENDING') return null;
-    let balance = null; let creditStatus = run.credit_cost > 0 ? 'RELEASED' : 'NONE'; let conflict = false;
+    let balance = null; let creditStatus = run.credit_cost > 0 ? 'RELEASED' : 'NONE'; let conflict = false; let lowCrossed = false;
     if (success && run.credit_cost > 0) {
       const acc = await lockAccount(t, run.workspace_id);
       if (acc.balance >= run.credit_cost) {
@@ -120,6 +133,9 @@ export async function settleRun(db, runId, { success, usage = {}, providerCost =
         await t.run('UPDATE workspace_credit_accounts SET balance = ?, lifetime_used = lifetime_used + ?, updated_at = now() WHERE workspace_id = ?', [balance, run.credit_cost, run.workspace_id]);
         await writeLedger(t, { wid: run.workspace_id, runId, type: 'AI_USAGE', amount: -run.credit_cost, balanceAfter: balance, reason: run.feature, referenceType: 'AI_RUN', referenceId: runId, createdBy: run.user_id });
         creditStatus = 'CHARGED';
+        if (balance < LOW_BALANCE_CREDITS && !acc.low_balance_notified_at) {
+          lowCrossed = Boolean(await t.get('UPDATE workspace_credit_accounts SET low_balance_notified_at = now() WHERE workspace_id = ? AND low_balance_notified_at IS NULL RETURNING workspace_id', [run.workspace_id]));
+        }
       } else {
         conflict = true; balance = acc.balance;
         errorCode = SETTLEMENT_CONFLICT; errorMessage = `정산 시점 잔액(${acc.balance})이 비용(${run.credit_cost})보다 적어 차감하지 않았습니다. (예약 만료 후 다른 요청이 Credit을 사용)`;
@@ -127,8 +143,53 @@ export async function settleRun(db, runId, { success, usage = {}, providerCost =
     }
     await t.run(`UPDATE ai_runs SET status = ?, credit_status = ?, input_tokens = ?, output_tokens = ?, provider_cost_amount = ?, latency_ms = ?, error_code = ?, error_message = ?, completed_at = now() WHERE id = ?`,
       [success ? 'SUCCEEDED' : 'FAILED', creditStatus, usage.input_tokens ?? null, usage.output_tokens ?? null, providerCost, latencyMs, errorCode, errorMessage ? String(errorMessage).slice(0, 300) : null, runId]);
-    return { balance, credit_status: creditStatus, conflict };
+    return { balance, credit_status: creditStatus, conflict, workspace_id: run.workspace_id, low_balance_crossed: lowCrossed };
   });
+}
+
+/** One e-mail to each active OWNER when the balance first drops below LOW_BALANCE_CREDITS (re-armed by applyCredits). */
+export async function notifyLowBalance(db, wid, balance) {
+  const [{ sendEmail }, { emailConfig }, { lowBalanceEmail }] = await Promise.all([import('../email/service.js'), import('../email/config.js'), import('../email/templates.js')]);
+  const w = await db.get('SELECT name FROM workspaces WHERE id = ?', [wid]);
+  const owners = await db.all(`SELECT u.id, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.role = 'OWNER' AND u.status = 'ACTIVE'`, [wid]);
+  const cfg = emailConfig();
+  const mail = lowBalanceEmail({ workspaceName: w?.name || '', balance, threshold: LOW_BALANCE_CREDITS, link: cfg.appBaseUrl ? `${cfg.appBaseUrl}/app/settings/credits` : '', support: cfg.supportEmail });
+  let sent = 0;
+  for (const o of owners) if ((await sendEmail(db, { type: 'AI_CREDIT_LOW_BALANCE', to: o.email, ...mail, relatedUserId: o.id, workspaceId: wid })).status === 'SENT') sent += 1;
+  return { sent };
+}
+
+/**
+ * Balance split for the customer page. Free credits are spent first, so the purchased credits still unused are
+ * min(balance, purchased − refunded) — no buckets needed (AI-credits-only billing §3.3).
+ */
+export async function balanceSplit(db, wid) {
+  const acc = await ensureAccount(db, wid);
+  const r = await db.get(`SELECT COALESCE(SUM(amount) FILTER (WHERE type = 'PURCHASE'), 0) AS purchased,
+      COALESCE(-SUM(amount) FILTER (WHERE type = 'REFUND' AND reference_type = 'ORDER'), 0) AS refunded FROM credit_ledger WHERE workspace_id = ?`, [wid]);
+  const purchased = Number(r.purchased); const refunded = Number(r.refunded); const balance = Number(acc.balance);
+  const purchasedLeft = Math.max(0, Math.min(balance, purchased - refunded));
+  return { balance, purchased, refunded, purchased_remaining: purchasedLeft, free_remaining: balance - purchasedLeft, low_balance_notified_at: acc.low_balance_notified_at };
+}
+
+/**
+ * One-time starter credits for workspaces that existed before AI-credits-only billing (migration v41): each workspace's starter
+ * grant is brought up to `target` (the earlier 100-credit trial counts towards it). Idempotent: a second run finds the starter
+ * total already at `target` and grants nothing. Workspaces without an account get theirs from ensureAccount on first touch.
+ */
+export async function topUpStarterCredits(db, { target = aiConfig().trialCredits } = {}) {
+  if (!(target > 0)) return { topped: 0 };
+  const rows = await db.all(`SELECT a.workspace_id, COALESCE(SUM(l.amount) FILTER (WHERE l.type = 'PROMOTION' AND l.reference_id IN ('AI_INITIAL_TRIAL_CREDITS','STARTER_TOPUP')), 0) AS starter
+    FROM workspace_credit_accounts a JOIN workspaces w ON w.id = a.workspace_id LEFT JOIN credit_ledger l ON l.workspace_id = a.workspace_id
+    WHERE w.deleted_at IS NULL GROUP BY a.workspace_id`);
+  let topped = 0;
+  for (const r of rows) {
+    const add = target - Number(r.starter);
+    if (add <= 0) continue;
+    await applyCredits(db, { wid: r.workspace_id, amount: add, type: 'PROMOTION', reason: `무료 시작 크레딧 (${target.toLocaleString('ko-KR')}까지 충전)`, referenceType: 'ENV', referenceId: 'STARTER_TOPUP' });
+    topped += 1;
+  }
+  return { topped };
 }
 
 /** Safety net for the orchestrator: whatever happened, a PENDING run is never left behind. Idempotent. */
