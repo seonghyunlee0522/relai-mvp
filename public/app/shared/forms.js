@@ -35,7 +35,7 @@ export function formDialog({ title, body = '', fields, confirm = '저장', submi
 }
 
 export const INVITE_STATUS = { PENDING: '대기', ACCEPTED: '수락', REVOKED: '취소', EXPIRED: '만료' };
-export const INVITE_TYPE = { WORKSPACE_CREATE: '고객(Workspace 생성)', WORKSPACE_MEMBER: 'Workspace 멤버' };
+export const INVITE_TYPE = { WORKSPACE_CREATE: '고객(워크스페이스 생성)', WORKSPACE_MEMBER: '워크스페이스 멤버' };
 export const EMAIL_STATUS = { PENDING: '발송 중', SENT: '발송됨', FAILED: '발송 실패' };
 export const inviteStatusChip = (s) => html`<span class="chip ${s === 'PENDING' ? 'chip--hold' : s === 'ACCEPTED' ? 'chip--done' : s === 'REVOKED' ? 'chip--muted' : 'chip--fail'}">${INVITE_STATUS[s] || s}</span>`;
 export const emailStatusChip = (s) => (!s ? '<span class="dim">-</span>' : html`<span class="chip ${s === 'SENT' ? 'chip--done' : s === 'FAILED' ? 'chip--fail' : 'chip--hold'}">${EMAIL_STATUS[s] || s}</span>`);

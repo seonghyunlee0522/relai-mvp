@@ -37,7 +37,7 @@ export function shareMeta(req, { title = SHARE.title, description = SHARE.descri
     `<meta property="og:image" content="${esc(o)}/brand/og-image.png">`,
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
-    '<meta property="og:image:alt" content="RELAI — 프로젝트 생애주기를 따라 지금 해야 할 일을 안내합니다.">',
+    '<meta property="og:image:alt" content="RELAI — 착수부터 운영까지 7단계를 따라 지금 해야 할 일을 안내합니다.">',
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${esc(title)}">`,
     `<meta name="twitter:description" content="${esc(description)}">`,

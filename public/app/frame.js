@@ -123,7 +123,7 @@ export function pageInfo(p, g, { tab = null, title = '', badges = null } = {}) {
   const d = DOORS(p.id).find((x) => x.key === door); const t = d.tabs.find((x) => x.key === tkey) || null;
   const curKey = g.current_phase ? g.current_phase.phase_key : null;
   const info = { door: d, tab: t, title: t ? t.label : d.label, purpose: t ? t.purpose : d.purpose, phase: t ? t.phase || curKey : null, crumb: null, badges: badges || {} };
-  const TITLES = { requirements: '요구사항', 'req-classify': '요구사항 분류·우선순위', 'req-trace': '요구사항 추적', wbs: '일정 (WBS)', gantt: '간트 차트', 'wbs-trace': '요구사항–작업 연결', 'test-plan': '요구사항 커버리지', acceptance: '검수 / 인수 승인', docs: title || '공식 문서', health: '프로젝트 건강도' };
+  const TITLES = { requirements: '요구사항', 'req-classify': '요구사항 분류·우선순위', 'req-trace': '요구사항 추적', wbs: '작업 목록(WBS)', gantt: '간트 차트', 'wbs-trace': '요구사항–작업 연결', 'test-plan': '테스트 연결률', acceptance: '검수 / 인수 승인', docs: title || '공식 문서', health: '프로젝트 건강도' };
   if (t && TITLES[t.key]) info.title = TITLES[t.key];
   if (/\/checklist\/?$/.test(path)) {
     const a = checklistActivity(p.id, qs); const ph = a && (g.phases || []).find((x) => x.phase_key === a.phase);
@@ -136,7 +136,7 @@ export function pageInfo(p, g, { tab = null, title = '', badges = null } = {}) {
 }
 /** Section tabs (or the 지금 할 일 breadcrumb on a checklist sub-view). Tab with `action` = a button (활동 기록 panel). */
 const sectionTabs = (info) => {
-  if (info.crumb) return html`<nav class="stabs stabs--crumb" aria-label="위치">${raw(info.crumb.map((c) => html`<a href="${c.href}" data-link>${c.label}</a><span aria-hidden="true">›</span>`).join(''))}<b>${info.title}</b></nav>`;
+  if (info.crumb) return html`<nav class="stabs stabs--crumb" aria-label="경로">${raw(info.crumb.map((c) => html`<a href="${c.href}" data-link>${c.label}</a><span aria-hidden="true">›</span>`).join(''))}<b>${info.title}</b></nav>`;
   if (!info.door.tabs.length) return '';
   return html`<nav class="stabs" aria-label="${info.door.label} 하위 메뉴">${raw(info.door.tabs.map((t) => (t.action
     ? html`<button type="button" class="stabs__i" data-stab-action="${t.action}">${t.label}</button>`

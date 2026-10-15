@@ -124,7 +124,7 @@ test('US-2 뼈대: 15 confirmed + 이관 있음 + 연계 없음 → 3·15·3·3�
   assert.deepEqual(groups.map((x) => [x.title, x.lifecycle_phase, x.children_count]), [['분석·설계', 'ANALYSIS_DESIGN', 3], ['구현', 'DEVELOPMENT', 15], ['시험', 'TESTING', 3], ['전환·오픈', 'TRANSITION_GO_LIVE', 3], ['안정화', 'TRANSITION_GO_LIVE', 1]]);
   const kids = (title) => items.filter((i) => i.parent_id === groups.find((x) => x.title === title).id).map((i) => i.title);
   assert.deepEqual(kids('분석·설계'), ['상세 요구사항 분석', '화면 설계', 'DB 설계']);
-  assert.deepEqual(kids('시험'), ['통합 테스트', '사용자 인수 테스트(UAT)', '결함 조치']);
+  assert.deepEqual(kids('시험'), ['통합 테스트', '고객 인수 테스트(UAT)', '결함 조치']);
   assert.deepEqual(kids('전환·오픈'), ['데이터 이관', '사용자 교육', '운영 환경 배포·오픈']);
   assert.deepEqual(kids('안정화'), ['오픈 후 안정화 지원']);
   assert.equal(kids('구현')[0], `${reqs[0].display_id} 기능 1`);
@@ -219,7 +219,7 @@ test('US-4 01 주요 일정 → 마일스톤: one click = 3 milestones + MILESTO
   await A.c('POST', A.wbs, { title: '설계' });
   let g = (await A.c('GET', A.purl)).json; let ms = step(g, 'ANALYSIS_DESIGN', 'MILESTONES');
   assert.equal(ms.state, 'NOT_STARTED'); assert.equal(ms.import_ms.count, 3);
-  assert.equal(ms.import_ms.text, '착수 때 정한 주요 일정 3건(킥오프·요구사항 확정·안정화 종료)을 마일스톤으로 가져올까요?');
+  assert.equal(ms.import_ms.text, '착수 때 정한 주요 일정 3건(킥오프·요구사항 확정·안정화 종료)을 WBS로 가져올까요?');
   assert.equal((await A.c('GET', A.wbs)).json.key_dates_pending, 3);
   let r = await A.c('POST', `${A.wbs}/milestones/from-key-dates`, {}); assert.equal(r.status, 201); assert.equal(r.json.created, 3);
   assert.deepEqual(r.json.items.filter((i) => i.item_type === 'MILESTONE').map((i) => [i.title, i.milestone_date]), KEY_DATES.map((k) => [k.title, k.date]));

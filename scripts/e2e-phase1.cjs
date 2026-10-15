@@ -168,7 +168,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
 
   // 6. Charter: approval area shows 미승인 — 사유, timeline 종료 후 zone, export menu
   await page.goto(`${BASE}/app/projects/${p.id}/charter`); await page.waitForSelector('.chx__head');
-  check('Charter title = 프로젝트 헌장 (Korean label set)', (await page.title()).startsWith('프로젝트 헌장'));
+  check('Charter title = 프로젝트 개요 (Korean label set)', (await page.title()).startsWith('프로젝트 개요'));
   check('Charter shows 미승인 — 사유', /미승인 — 사유: 고객 PM 휴가로/.test(await page.textContent('#ch-approval')));
   check('Charter timeline 종료 후 zone', Boolean(await page.$('.chtl__after')));
   await page.screenshot({ path: `${SHOTS}/06-charter.png`, fullPage: true });

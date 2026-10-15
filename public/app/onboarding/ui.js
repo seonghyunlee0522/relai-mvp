@@ -14,8 +14,8 @@ export async function maybeWelcome() {
   const el = document.createElement('div'); el.className = 'scrim';
   el.innerHTML = html`<div class="dialog welcome" role="dialog" aria-modal="true" aria-labelledby="wlT">
     <div class="welcome__mark">R</div>
-    <h3 id="wlT">${owner ? 'RELAI에 오신 것을 환영합니다' : `${o.workspace.name} Workspace에 참여했습니다`}</h3>
-    <p>${owner ? '프로젝트를 처음부터 끝까지 단계별로 진행할 수 있도록 안내해 드릴게요. 먼저 화면 구성을 짧게 둘러보고 첫 프로젝트를 만듭니다.' : o.workspace.project_count ? '참여 중인 프로젝트를 열어 현재 단계와 담당 업무를 확인할 수 있습니다. 화면 구성을 짧게 둘러볼까요?' : '아직 프로젝트가 없습니다. Workspace 관리자가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.'}</p>
+    <h3 id="wlT">${owner ? 'RELAI에 오신 것을 환영합니다' : `${o.workspace.name} 워크스페이스에 참여했습니다`}</h3>
+    <p>${owner ? '프로젝트를 처음부터 끝까지 단계별로 진행할 수 있도록 안내해 드릴게요. 먼저 화면 구성을 짧게 둘러보고 첫 프로젝트를 만듭니다.' : o.workspace.project_count ? '참여 중인 프로젝트를 열어 현재 단계와 담당 업무를 확인할 수 있습니다. 화면 구성을 짧게 둘러볼까요?' : '아직 프로젝트가 없습니다. 워크스페이스 관리자가 프로젝트를 만들면 여기에서 바로 볼 수 있습니다.'}</p>
     <div class="actions"><button type="button" class="btn btn--secondary" data-w="later">나중에 하기</button><button type="button" class="btn btn--primary" data-w="start">${owner || o.workspace.project_count ? '시작하기' : '확인'}</button></div></div>`;
   document.body.append(el); $('[data-w="start"]', el).focus();
   const close = async (start) => {
@@ -42,13 +42,13 @@ export function bindChecklist(root) {
 
 /* ---------- Coach marks: one-time, dismissible context banners (not popovers) ---------- */
 export const COACH = {
-  REQ_TRACE_INTRO: { title: '요구사항–WBS 연결', body: '요구사항을 열어 WBS 작업을 연결하면 어떤 작업이 어떤 요구사항을 수행하는지 추적할 수 있습니다. 확정된 요구사항은 모두 WBS와 연결하는 것이 목표입니다.' },
+  REQ_TRACE_INTRO: { title: '요구사항–작업 연결', body: '요구사항을 열어 WBS 작업을 연결하면 어떤 작업이 어떤 요구사항을 수행하는지 추적할 수 있습니다. 확정된 요구사항은 모두 WBS와 연결하는 것이 목표입니다.' },
   CHANGE_REQUEST_INTRO: { title: '변경 요청', body: '확정된 요구사항을 바꾸거나 추가하는 요청은 변경 요청으로 기록하고, 영향받는 요구사항·WBS와 일정 영향을 함께 관리합니다. 승인된 변경은 WBS에 반영한 뒤 "반영 완료"로 닫습니다.' },
   ISSUE_RISK_INTRO: { title: '이슈와 리스크', body: '이슈는 이미 발생해 진행을 막는 문제, 리스크는 아직 발생하지 않았지만 영향을 줄 수 있는 위험입니다. 담당자·기한·심각도를 정해 두면 현황의 확인 필요 목록에 자동으로 올라옵니다.' },
-  TESTING_INTRO: { title: '테스트', body: '범위 내 요구사항마다 테스트를 만들고 실행 결과(통과/실패/막힘)를 기록합니다. 실패는 바로 이슈로 등록할 수 있고, 요구사항 커버리지 탭에서 테스트가 없는 요구사항을 확인합니다.' },
+  TESTING_INTRO: { title: '테스트', body: '범위 내 요구사항마다 테스트를 만들고 실행 결과(통과/실패/막힘)를 기록합니다. 실패는 바로 이슈로 등록할 수 있고, 테스트 연결률 탭에서 테스트가 없는 요구사항을 확인합니다.' },
   ACCEPTANCE_INTRO: { title: '검수', body: '검수는 고객이 결과물을 확인하는 절차입니다. 대상 요구사항과 테스트를 묶어 검수를 요청하고 승인·반려·보완 결과를 기록하세요.' },
-  JIRA_OPTIONAL_INTRO: { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira Issue를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 프로젝트를 계속 진행할 수 있습니다.' },
-  JIRA_EXECUTION_INTRO: { title: 'Jira 실행 연결 (선택)', body: '개발팀이 Jira를 쓴다면 WBS 작업에 Jira Issue를 연결해 실행 상태를 자동으로 가져올 수 있습니다. Jira 없이도 WBS 진행률만으로 프로젝트를 진행할 수 있습니다.' },
+  JIRA_OPTIONAL_INTRO: { title: '지라를 사용하고 있나요? (선택)', body: 'RELAI WBS와 지라 이슈를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 프로젝트를 계속 진행할 수 있습니다.' },
+  JIRA_EXECUTION_INTRO: { title: '지라 실행 연결 (선택)', body: '개발팀이 지라를 쓴다면 WBS 작업에 지라 이슈를 연결해 실행 상태를 자동으로 가져올 수 있습니다. 지라 없이도 WBS 진행률만으로 프로젝트를 진행할 수 있습니다.' },
   WEEKLY_REPORT_INTRO: { title: '주간보고', body: '프로젝트가 어느 정도 진행되면 주간보고를 생성해 진행 현황·이슈·다음 계획을 고객과 공유할 수 있습니다. 보고서는 현재 데이터로 자동 작성되고 수정할 수 있습니다.' },
   AI_INTRO: { title: 'AI 기능 (보조)', body: 'AI는 요구사항 추출, WBS 초안, 변경 영향 분석을 돕는 보조 기능입니다. 결과는 초안이며 검토 후 반영합니다. AI 없이도 모든 기능을 쓸 수 있습니다.' },
 };
@@ -66,11 +66,11 @@ export function bindCoach(root) {
 
 /* ---------- Phase intro: "이 단계에서 하는 일" once per phase ---------- */
 export const PHASE_INTRO = {
-  INITIATION: { what: '프로젝트의 목표, 범위, 이해관계자, 상위 일정, 운영 방식을 정리해 출발 기준을 맞춥니다.', outputs: ['프로젝트 정의'] },
-  REQUIREMENTS: { what: '무엇을 만들어야 하는지 수집·정리해 고객과 합의된 요구사항 기준선을 만듭니다.', outputs: ['요구사항 목록', '분류·우선순위·범위', '확정'] },
-  ANALYSIS_DESIGN: { what: '요구사항을 실행 가능한 작업(WBS)으로 구체화하고 담당자·일정·선후관계를 설계합니다.', outputs: ['WBS', '요구사항–WBS 연결', '담당자·일정·마일스톤'] },
+  INITIATION: { what: '프로젝트의 목표, 범위, 관계자, 상위 일정, 운영 방식을 정리해 출발 기준을 맞춥니다.', outputs: ['프로젝트 정의'] },
+  REQUIREMENTS: { what: '무엇을 만들어야 하는지 수집·정리해 고객과 합의된 요구사항 확정본을 만듭니다.', outputs: ['요구사항 목록', '분류·우선순위·범위', '확정'] },
+  ANALYSIS_DESIGN: { what: '요구사항을 실행 가능한 작업(WBS)으로 구체화하고 담당자·일정·선후관계를 설계합니다.', outputs: ['작업 목록(WBS)', '요구사항–작업 연결', '담당자·일정'] },
   DEVELOPMENT: { what: '실행 계획대로 진행하면서 진척, 지연, 이슈, 변경 요청을 관리합니다.', outputs: ['진행 현황', '이슈', '변경 요청'] },
-  TESTING: { what: '요구사항이 실제 시스템에 올바르게 구현되었는지 테스트로 검증하고 결함을 조치합니다.', outputs: ['Test Case', '실행 결과', 'Fail → 이슈'] },
+  TESTING: { what: '요구사항이 실제 시스템에 올바르게 구현되었는지 테스트로 검증하고 결함을 조치합니다.', outputs: ['테스트 케이스', '실행 결과', '실패 → 이슈'] },
   TRANSITION_GO_LIVE: { what: '검수로 인수 승인을 받고 전환·교육·오픈·안정화를 진행합니다.', outputs: ['검수 승인', '전환 계획', '오픈'] },
   OPERATIONS: { what: '운영 조직에 이관하고 유지보수 체계와 종료 사항을 정리합니다.', outputs: ['운영 이관', '종료 정리'] },
 };
@@ -83,16 +83,16 @@ export function phaseIntro(phaseKey, phaseName) {
 const SCREEN_HELP = [
   [/^\/app\/?$/, '홈', '참여 중인 프로젝트와 각 프로젝트의 현재 단계·다음 할 일을 봅니다. 프로젝트가 없으면 [프로젝트 만들기]로 시작합니다.'],
   [/^\/app\/projects\/new/, '새 프로젝트', '이름, 유형, 현재 상황, 기간만 입력하면 프로젝트가 만들어지고 착수 단계부터 안내가 시작됩니다.'],
-  [/^\/app\/projects\/[\w-]+\/definition/, '프로젝트 정의', '착수 단계의 5개 항목(목표·범위·이해관계자·일정·운영 방식)을 작성하고 각 항목을 완료 처리합니다. 모두 완료되면 요구사항으로 넘어갑니다.'],
+  [/^\/app\/projects\/[\w-]+\/definition/, '프로젝트 정의', '착수 단계의 5개 항목(목표·범위·관계자·일정·운영 방식)을 작성하고 각 항목을 완료 처리합니다. 모두 완료되면 요구사항으로 넘어갑니다.'],
   [/^\/app\/projects\/[\w-]+\/requirements/, '요구사항', '프로젝트 범위와 검수 기준이 되는 요구사항을 등록·분류·확정합니다. 직접 추가, Excel 가져오기, AI 추출(사용 가능 시)을 쓸 수 있습니다.'],
-  [/^\/app\/projects\/[\w-]+\/wbs/, 'WBS', '요구사항을 실제 작업 단위로 나누어 담당자·일정·진행률을 관리합니다. 트리/Gantt 보기, Excel Import, AI 초안을 지원하며 Jira 연결은 선택입니다.'],
+  [/^\/app\/projects\/[\w-]+\/wbs/, '작업 목록(WBS)', '요구사항을 실제 작업 단위로 나누어 담당자·일정·진행률을 관리합니다. 트리/간트 보기, Excel 가져오기, AI 초안을 지원하며 지라 연결은 선택입니다.'],
   [/^\/app\/projects\/[\w-]+\/changes/, '변경 요청', '확정 이후의 추가·변경 요청을 기록하고 영향 요구사항·WBS·일정 영향을 관리합니다.'],
   [/^\/app\/projects\/[\w-]+\/issues/, '이슈·리스크', '발생한 문제(이슈)와 잠재 위험(리스크)을 담당자·기한과 함께 관리합니다.'],
-  [/^\/app\/projects\/[\w-]+\/tests/, 'Tests & Acceptance', '요구사항 기준으로 테스트를 만들고 실행 결과를 기록하며, 고객 검수를 요청·확정합니다.'],
-  [/^\/app\/projects\/[\w-]+\/overview/, '현황', '계획 대비 실제 진척률과 편차, 일정 상태, 확인 필요 항목, Schedule·Scope·Quality 현황, 7일 내 일정, 최근 활동 기록을 봅니다.'],
-  [/^\/app\/projects\/[\w-]+/, '지금 할 일', '전체 진행률과 현재 단계, 지금 해야 할 Action을 봅니다. 현재 단계 체크리스트의 작업 버튼으로 실제 업무 화면에서 작업하고 완료 처리하세요.'],
-  [/^\/app\/settings/, '설정', 'Workspace 이름, 멤버와 역할, 초대 대기, Jira 연결(선택)을 관리합니다.'],
-  [/^\/app\/projects/, '프로젝트', '이 Workspace의 모든 프로젝트 목록입니다. 프로젝트를 열면 현재 단계와 다음 할 일을 안내합니다.'],
+  [/^\/app\/projects\/[\w-]+\/tests/, '테스트 / 검수', '요구사항 기준으로 테스트를 만들고 실행 결과를 기록하며, 고객 검수를 요청·확정합니다.'],
+  [/^\/app\/projects\/[\w-]+\/overview/, '현황', '계획 대비 실제 진척률과 편차, 일정 상태, 확인 필요 항목, 일정·범위·품질 현황, 7일 내 일정, 최근 활동 기록을 봅니다.'],
+  [/^\/app\/projects\/[\w-]+/, '지금 할 일', '전체 진행률과 현재 단계, 지금 해야 할 일을 봅니다. 현재 단계 체크리스트의 작업 버튼으로 실제 업무 화면에서 작업하고 완료 처리하세요.'],
+  [/^\/app\/settings/, '설정', '워크스페이스 이름, 멤버와 역할, 초대 대기, 지라 연결(선택)을 관리합니다.'],
+  [/^\/app\/projects/, '프로젝트', '이 워크스페이스의 모든 프로젝트 목록입니다. 프로젝트를 열면 현재 단계와 다음 할 일을 안내합니다.'],
 ];
 export function helpButton() { return html`<button type="button" class="helpbtn" aria-haspopup="menu" aria-expanded="false" title="도움말" data-tour-id="help">?</button>`; }
 export function wireHelp(root = document) {
@@ -119,7 +119,7 @@ function openMenu(btn) {
   });
 }
 export function screenHelp() {
-  const hit = SCREEN_HELP.find(([re]) => re.test(location.pathname)) || [null, '도움말', 'RELAI는 착수 → 요구사항 → 일정 → 실행 → 테스트 → 검수 → 오픈 순서로 프로젝트를 안내합니다. 각 화면 상단의 안내와 지금 할 일의 RELAI 안내를 따라가세요.'];
+  const hit = SCREEN_HELP.find(([re]) => re.test(location.pathname)) || [null, '도움말', 'RELAI는 착수부터 운영까지 7단계 순서로 프로젝트를 안내합니다. 각 화면 상단의 안내와 지금 할 일의 RELAI 안내를 따라가세요.'];
   const el = document.createElement('div'); el.className = 'scrim';
   el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="shT"><h3 id="shT">${hit[1]}</h3><div class="dialog__b">${hit[2]}</div>
     <div class="actions"><button type="button" class="btn btn--secondary" data-v="tour">전체 가이드 보기</button><button type="button" class="btn btn--primary" data-v="ok">확인</button></div></div>`;

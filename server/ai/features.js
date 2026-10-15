@@ -119,7 +119,7 @@ export async function generateWbs(db, { project, wid, userId, requirementIds }) 
       for (const it of items) {
         if (it.parent_temp_id && !byTemp.has(it.parent_temp_id)) { warnings.push(`${it.temp_id}: 존재하지 않는 상위 항목(${it.parent_temp_id})을 참조해 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
         if (it.parent_temp_id === it.temp_id) { warnings.push(`${it.temp_id}: 자기 자신을 상위로 지정해 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
-        if (it.parent_temp_id && byTemp.get(it.parent_temp_id).item_type === 'MILESTONE') { warnings.push(`${it.temp_id}: 마일스톤 아래에는 항목을 둘 수 없어 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
+        if (it.parent_temp_id && byTemp.get(it.parent_temp_id).item_type === 'MILESTONE') { warnings.push(`${it.temp_id}: 주요 일정 아래에는 항목을 둘 수 없어 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
         const unknown = it.related_requirement_ids.filter((d) => !selected.has(d));
         if (unknown.length) warnings.push(`${it.temp_id}: 선택 범위 밖의 요구사항 ${unknown.join(', ')} 참조를 제거했습니다.`);
         it.related_requirement_ids = it.related_requirement_ids.filter((d) => selected.has(d));
@@ -246,7 +246,7 @@ export async function commitImpact(db, { project, userId, change, requirements =
     }
     for (const r of risks || []) {
       const risk = await X.getRisk(t, project, String(r.id || ''));
-      if (!risk) throw new ValidationError({ risks: 'Risk를 찾을 수 없습니다.' });
+      if (!risk) throw new ValidationError({ risks: '리스크를 찾을 수 없습니다.' });
       if (risk.archived_at) { skipped.push(risk.display_id); continue; }
       const out = await X.addLink(t, project, 'RISK', risk, 'CHANGE', change.id, userId).catch((e) => { if (e instanceof ValidationError) return { skipped: true }; throw e; });
       if (out.skipped) skipped.push(risk.display_id); else added.risks++;

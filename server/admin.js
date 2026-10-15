@@ -152,23 +152,23 @@ export async function getWorkspace(db, id) {
     owners, members, projects, invitations: invitations.map((i) => (i.status === 'PENDING' && new Date(i.expires_at) < new Date() ? { ...i, status: 'EXPIRED' } : i)), origin_invitation: origin || null,
     subscription,                                   // null until Billing exists
     usage, activity, audit: audit.items,
-    warnings: owners.length && owners.every((o) => o.status !== 'ACTIVE') ? ['모든 OWNER 계정이 정지 상태입니다. Workspace를 관리할 수 있는 사용자가 없습니다.'] : [],
+    warnings: owners.length && owners.every((o) => o.status !== 'ACTIVE') ? ['모든 소유자 계정이 정지 상태입니다. 워크스페이스를 관리할 수 있는 사용자가 없습니다.'] : [],
   };
 }
 
 /* ---------- audit ---------- */
 const SUMMARY = {
   REFUND_PAYMENT: (m) => `결제 환불 ₩${Number(m.amount || 0).toLocaleString('ko-KR')}${m.reason ? ` — ${m.reason}` : ''}`,
-  SUSPEND_USER: (m) => `사용자 ${m.email || ''} 정지${m.reason ? ` — ${m.reason}` : ''}${m.sole_owner_of?.length ? ` (단독 OWNER Workspace ${m.sole_owner_of.length}개)` : ''}`,
+  SUSPEND_USER: (m) => `사용자 ${m.email || ''} 정지${m.reason ? ` — ${m.reason}` : ''}${m.sole_owner_of?.length ? ` (단독 소유 워크스페이스 ${m.sole_owner_of.length}개)` : ''}`,
   REACTIVATE_USER: (m) => `사용자 ${m.email || ''} 정지 해제${m.reason ? ` — ${m.reason}` : ''}`,
-  SUSPEND_WORKSPACE: (m) => `Workspace '${m.name || ''}' 정지${m.reason ? ` — ${m.reason}` : ''}`,
-  REACTIVATE_WORKSPACE: (m) => `Workspace '${m.name || ''}' 정지 해제${m.reason ? ` — ${m.reason}` : ''}`,
-  GRANT_AI_CREDITS: (m) => `Workspace '${m.name || ''}' AI Credit +${m.amount ?? ''} — ${m.reason || ''}`,
-  ADJUST_AI_CREDITS: (m) => `Workspace '${m.name || ''}' AI Credit ${m.amount ?? ''} — ${m.reason || ''}`,
-  PLATFORM_INVITE_CREATED: (m) => `고객 초대 발송 ${m.email || ''} → Workspace '${m.workspace_name || ''}'`,
+  SUSPEND_WORKSPACE: (m) => `워크스페이스 '${m.name || ''}' 정지${m.reason ? ` — ${m.reason}` : ''}`,
+  REACTIVATE_WORKSPACE: (m) => `워크스페이스 '${m.name || ''}' 정지 해제${m.reason ? ` — ${m.reason}` : ''}`,
+  GRANT_AI_CREDITS: (m) => `워크스페이스 '${m.name || ''}' AI 크레딧 +${m.amount ?? ''} — ${m.reason || ''}`,
+  ADJUST_AI_CREDITS: (m) => `워크스페이스 '${m.name || ''}' AI 크레딧 ${m.amount ?? ''} — ${m.reason || ''}`,
+  PLATFORM_INVITE_CREATED: (m) => `고객 초대 발송 ${m.email || ''} → 워크스페이스 '${m.workspace_name || ''}'`,
   PLATFORM_INVITE_RESENT: (m) => `고객 초대 재발송 ${m.email || ''}`,
   PLATFORM_INVITE_REVOKED: (m) => `고객 초대 취소 ${m.email || ''}`,
-  PLATFORM_INVITE_ACCEPTED: (m) => `고객 초대 수락 ${m.email || ''} → Workspace '${m.workspace_name || ''}' 생성`,
+  PLATFORM_INVITE_ACCEPTED: (m) => `고객 초대 수락 ${m.email || ''} → 워크스페이스 '${m.workspace_name || ''}' 생성`,
   WORKSPACE_INVITE_CREATED: (m) => `멤버 초대 ${m.email || ''} → '${m.workspace_name || ''}' (${m.role || ''})`,
   WORKSPACE_INVITE_RESENT: (m) => `멤버 초대 재발송 ${m.email || ''}`,
   WORKSPACE_INVITE_REVOKED: (m) => `멤버 초대 취소 ${m.email || ''}`,
@@ -177,7 +177,7 @@ const SUMMARY = {
   USER_CREATED: (m) => `사용자 가입 ${m.email || ''} (${m.method || ''}${m.invitation_id ? ', 초대' : ''})`,
   ONBOARDING_STARTED: (m) => `온보딩 시작 (${m.key || ''}${m.replay ? ', 다시 보기' : ''})`, ONBOARDING_SKIPPED: (m) => `온보딩 건너뜀 (${m.key || ''})`, ONBOARDING_COMPLETED: (m) => `온보딩 완료 (${m.key || ''})`,
   FIRST_PROJECT_CREATED: () => '첫 프로젝트 생성', FIRST_REQUIREMENT_CREATED: () => '첫 요구사항 등록', FIRST_WBS_CREATED: () => '첫 WBS 작업 등록',
-  WORKSPACE_CREATED_FROM_INVITE: (m) => `초대로 Workspace '${m.name || ''}' 생성`,
+  WORKSPACE_CREATED_FROM_INVITE: (m) => `초대로 워크스페이스 '${m.name || ''}' 생성`,
 };
 export const auditSummary = (a) => (SUMMARY[a.action] ? SUMMARY[a.action](a.metadata || {}) : a.action);
 export async function writeAudit(db, { adminUserId, action, targetType, targetId, metadata = {}, actorKind = 'ADMIN' }) {
@@ -222,7 +222,7 @@ export async function suspendUser(db, admin, userId, body) {
     await t.run(`UPDATE users SET status = 'SUSPENDED', suspended_at = now() WHERE id = ?`, [userId]);
     const sessions = (await t.run('DELETE FROM sessions WHERE user_id = ?', [userId])).changes;
     await writeAudit(t, { adminUserId: admin.id, action: 'SUSPEND_USER', targetType: 'USER', targetId: userId, metadata: { email: u.email, name: u.name, reason, sessions_revoked: sessions, sole_owner_of: sole.map((w) => w.name) } });
-    return { warnings: sole.map((w) => `'${w.name}' Workspace의 유일한 OWNER입니다. 데이터는 유지되지만 해당 Workspace를 관리할 수 있는 사용자가 없습니다.`), sessions_revoked: sessions };
+    return { warnings: sole.map((w) => `'${w.name}' 워크스페이스의 유일한 소유자입니다. 데이터는 유지되지만 해당 워크스페이스를 관리할 수 있는 사용자가 없습니다.`), sessions_revoked: sessions };
   });
 }
 export async function reactivateUser(db, admin, userId, body) {
@@ -241,9 +241,9 @@ export async function suspendWorkspace(db, admin, workspaceId, body) {
   const reason = reasonOf(body);
   return tx(db, async (t) => {
     const w = await t.get('SELECT id, name, status FROM workspaces WHERE id = ? FOR UPDATE', [workspaceId]);
-    if (!w) throw new AdminError(404, 'not_found', 'Workspace를 찾을 수 없습니다.');
-    if (w.status === 'SUSPENDED') throw new AdminError(409, 'already_suspended', '이미 정지된 Workspace입니다.');
-    if (w.status === 'CLOSED') throw new AdminError(409, 'closed', '종료된 Workspace는 정지할 수 없습니다.');
+    if (!w) throw new AdminError(404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
+    if (w.status === 'SUSPENDED') throw new AdminError(409, 'already_suspended', '이미 정지된 워크스페이스입니다.');
+    if (w.status === 'CLOSED') throw new AdminError(409, 'closed', '종료된 워크스페이스는 정지할 수 없습니다.');
     await t.run(`UPDATE workspaces SET status = 'SUSPENDED', suspended_at = now() WHERE id = ?`, [workspaceId]);
     await writeAudit(t, { adminUserId: admin.id, action: 'SUSPEND_WORKSPACE', targetType: 'WORKSPACE', targetId: workspaceId, metadata: { name: w.name, reason } });
     return { warnings: [] };
@@ -253,8 +253,8 @@ export async function reactivateWorkspace(db, admin, workspaceId, body) {
   const reason = reasonOf(body);
   return tx(db, async (t) => {
     const w = await t.get('SELECT id, name, status FROM workspaces WHERE id = ? FOR UPDATE', [workspaceId]);
-    if (!w) throw new AdminError(404, 'not_found', 'Workspace를 찾을 수 없습니다.');
-    if (w.status !== 'SUSPENDED') throw new AdminError(409, 'not_suspended', '정지 상태의 Workspace만 해제할 수 있습니다.');
+    if (!w) throw new AdminError(404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
+    if (w.status !== 'SUSPENDED') throw new AdminError(409, 'not_suspended', '정지 상태의 워크스페이스만 해제할 수 있습니다.');
     await t.run(`UPDATE workspaces SET status = 'ACTIVE', suspended_at = NULL WHERE id = ?`, [workspaceId]);
     await writeAudit(t, { adminUserId: admin.id, action: 'REACTIVATE_WORKSPACE', targetType: 'WORKSPACE', targetId: workspaceId, metadata: { name: w.name, reason } });
     return { warnings: [] };

@@ -9,8 +9,8 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { periodDialog } from './dashboard.js';
 import { openJiraProjectSettings } from '../shared/jira.js';
 
-const ENT = { REQUIREMENT: 'REQ', WBS: 'WBS', CHANGE: 'CR', ISSUE: '이슈', RISK: '리스크', TEST: '테스트', ACCEPTANCE: '검수', PHASE: '단계', JIRA: 'Jira' };
-const KINDS = [['ALL', '전체'], ['COMMENT', '댓글'], ['STATUS', '상태'], ['OWNER', '담당자'], ['SCHEDULE', '일정'], ['PHASE', '단계'], ['JIRA', 'Jira'], ['DATA', '기타']];
+const ENT = { REQUIREMENT: '요구사항', WBS: 'WBS', CHANGE: '변경 요청', ISSUE: '이슈', RISK: '리스크', TEST: '테스트', ACCEPTANCE: '검수', PHASE: '단계', JIRA: '지라' };
+const KINDS = [['ALL', '전체'], ['COMMENT', '댓글'], ['STATUS', '상태'], ['OWNER', '담당자'], ['SCHEDULE', '일정'], ['PHASE', '단계'], ['JIRA', '지라'], ['DATA', '기타']];
 const RS = { DRAFT: ['초안', 'chip--muted'], FINAL: ['확정', 'chip--done'] };
 const fmtAt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${no2(d.getDate())} ${no2(d.getHours())}:${no2(d.getMinutes())}`; };
 
@@ -69,7 +69,7 @@ function moreMenu(btn, c) {
   const m = openMenu(btn, html`<button type="button" role="menuitem" class="amenu__act" data-more="activity">활동 기록</button>
     ${raw(c.ro ? '' : '<button type="button" role="menuitem" class="amenu__act amenu__act--sm" data-more="report-new">주간보고 생성</button>')}${raw(done)}
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
-    <button type="button" role="menuitem" data-more="jira">Jira 연동 설정</button>
+    <button type="button" role="menuitem" data-more="jira">지라 연동 설정</button>
     ${raw(c.closed && !c.ro ? '<hr><button type="button" role="menuitem" data-more="reopen">종료 취소</button>' : '')}
     ${raw(c.sample ? (state.workspace && state.workspace.role !== 'MEMBER' ? '<hr><button type="button" role="menuitem" class="is-danger" data-more="sample-delete">샘플 프로젝트 삭제</button>' : '')
       : c.ro ? '<hr><button type="button" role="menuitem" data-more="unarchive">보관 해제</button>' : '<hr><button type="button" role="menuitem" class="is-danger" data-more="archive">프로젝트 보관</button>')}`);

@@ -242,7 +242,7 @@ export function normalizeCandidates(raw, { reqs, existing, max = MAX_ITEMS, pref
   for (const it of items) {
     if (it.parent_temp_id && !byTemp.has(it.parent_temp_id)) { warnings.push(`${it.temp_id}: 존재하지 않는 상위 항목(${it.parent_temp_id})을 참조해 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
     if (it.parent_temp_id === it.temp_id) { warnings.push(`${it.temp_id}: 자기 자신을 상위로 지정해 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
-    if (it.parent_temp_id && byTemp.get(it.parent_temp_id).item_type === 'MILESTONE') { warnings.push(`${it.temp_id}: 마일스톤 아래에는 항목을 둘 수 없어 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
+    if (it.parent_temp_id && byTemp.get(it.parent_temp_id).item_type === 'MILESTONE') { warnings.push(`${it.temp_id}: 주요 일정 아래에는 항목을 둘 수 없어 최상위로 옮겼습니다.`); it.parent_temp_id = null; }
     const unknown = it.related_requirement_ids.filter((d) => !selected.has(d));
     if (unknown.length) warnings.push(`${it.temp_id}: 대상 범위 밖의 요구사항 ${unknown.join(', ')} 참조를 제거했습니다.`);
     it.related_requirement_ids = it.related_requirement_ids.filter((d) => selected.has(d));
@@ -259,7 +259,7 @@ export function normalizeCandidates(raw, { reqs, existing, max = MAX_ITEMS, pref
       warnings.push(`${it.temp_id}: 깊이 ${MAX_PLAN_DEPTH}단계를 넘어 ${anc ? anc.temp_id : '최상위'} 아래로 옮겼습니다.`); it.parent_temp_id = anc ? anc.temp_id : null;
     }
   }
-  for (const it of items) if (it.item_type === 'MILESTONE' && items.some((c) => c.parent_temp_id === it.temp_id)) { warnings.push(`${it.temp_id}: 하위 항목이 있는 마일스톤을 작업(TASK)으로 바꿨습니다.`); it.item_type = 'TASK'; }
+  for (const it of items) if (it.item_type === 'MILESTONE' && items.some((c) => c.parent_temp_id === it.temp_id)) { warnings.push(`${it.temp_id}: 하위 항목이 있는 주요 일정을 작업으로 바꿨습니다.`); it.item_type = 'TASK'; }
   // similarity with existing WBS → flagged and deselected by default
   for (const it of items) {
     const best = existing.map((w) => ({ wbs_code: w.wbs_code, title: w.title, score: titleSimilarity(it.title, w.title) })).filter((x) => x.score >= DUPLICATE_THRESHOLD).sort((a, b) => b.score - a.score)[0];
@@ -276,10 +276,10 @@ export function normalizeCandidates(raw, { reqs, existing, max = MAX_ITEMS, pref
 /* ---------- 4. coverage (deterministic) ---------- */
 export const COVERAGE_STATUS = ['COVERED', 'PARTIAL', 'MISSING', 'NOT_APPLICABLE', 'UNKNOWN'];
 const MISSING_MSG = {
-  DATA_MIGRATION: '데이터 이관이 필요하다고 확인됐지만 이관 작업(대상 분석·매핑·Trial/Final Migration)이 없습니다.', INTERFACE: '외부 연계가 필요하다고 확인됐지만 연계(인터페이스) 작업이 없습니다.',
+  DATA_MIGRATION: '데이터 이관이 필요하다고 확인됐지만 이관 작업(대상 분석·매핑·시험 이관/본 이관)이 없습니다.', INTERFACE: '외부 연계가 필요하다고 확인됐지만 연계(인터페이스) 작업이 없습니다.',
   INFRASTRUCTURE: '운영 환경(인프라)이 확인됐지만 환경 구성 작업이 없습니다.', ENVIRONMENT: '개발·검증·운영 환경 구성 작업이 없습니다.', TRAINING: '교육이 필요하다고 답했지만 교육 작업이 없습니다.',
-  CUTOVER: '전환(Cutover) 작업이 필요하다고 확인됐지만 전환 작업이 없습니다.', OPERATION_HANDOVER: '운영 이관이 필요하다고 확인됐지만 운영 이관 작업이 없습니다.', TESTING: '테스트 작업이 없습니다.', UAT: 'UAT 지원 작업이 없습니다.',
-  DEPLOYMENT: '배포 작업이 없습니다.', SECURITY: '보안/인증/권한 작업이 필요하다고 확인됐지만 관련 작업이 없습니다.', PROJECT_MANAGEMENT: '프로젝트 관리(착수/보고/이슈 관리) 작업이 없습니다.', DOCUMENTATION: '산출물/매뉴얼 작업이 없습니다.', STABILIZATION: '오픈/안정화 작업이 없습니다.',
+  CUTOVER: '전환 작업이 필요하다고 확인됐지만 전환 작업이 없습니다.', OPERATION_HANDOVER: '운영 이관이 필요하다고 확인됐지만 운영 이관 작업이 없습니다.', TESTING: '테스트 작업이 없습니다.', UAT: '인수 테스트 지원 작업이 없습니다.',
+  DEPLOYMENT: '배포 작업이 없습니다.', SECURITY: '보안/인증/권한 작업이 필요하다고 확인됐지만 관련 작업이 없습니다.', PROJECT_MANAGEMENT: '프로젝트 관리(착수/보고/이슈 관리) 작업이 없습니다.', DOCUMENTATION: '결과물/매뉴얼 작업이 없습니다.', STABILIZATION: '오픈/안정화 작업이 없습니다.',
 };
 export function computeCoverage({ areas, items, reqs, existing = [], linkBy = new Map() }) {
   const sel = items.filter((i) => i.selected !== false);

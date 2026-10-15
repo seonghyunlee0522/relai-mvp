@@ -122,7 +122,7 @@ export async function changesPage(id) {
             <div><dt>연결 요구사항</dt><dd class="num">${live(c.requirements)}건</dd></div><div><dt>연결 작업</dt><dd class="num">${live(c.impacts)}건</dd></div></dl>
           ${raw(!imp.length ? '<p class="hint" style="margin:6px 0 0">일정·공수·비용 영향이 입력되지 않았습니다. 고객에게 영향을 함께 알리면 결정이 빨라집니다.</p>' : '')}</div>
         <div class="wd__form">${raw(approvalFields(apv, { people: c.stakeholders || [], methods: Object.entries(CR_APPROVAL_METHODS), approverHint: '<small class="dim">고객 결정권자 (고객사 PM 등)</small>', evidencePh: "예: 2026-10-14 이수진 차장 회신 메일 'CR-001 승인'" }))}</div>
-        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 저장할 수 있습니다. 직접 입력한 승인자는 01 이해관계자(고객사)에도 추가됩니다.</p>
+        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 저장할 수 있습니다. 직접 입력한 승인자는 01 관계자(고객사)에도 추가됩니다.</p>
       </div>
       <div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${approvalStatusText(apv)}</span><span style="display:flex;gap:8px;margin-left:auto"><button type="button" class="btn btn--secondary btn--sm" id="apv-cancel">취소</button><button type="button" class="btn btn--primary btn--sm" id="apv-save">승인 기록 저장</button></span></div>`;
   };
@@ -240,7 +240,7 @@ export async function changesPage(id) {
       <div class="dgrid">${raw(fld('우선순위', html`<select class="select select--sm" data-field="priority" ${dis}>${raw(opt(CR_PRIORITY, c.priority))}</select>`))}${raw(reqF)}</div>
       ${raw(moreFields(restF, moreOpen))}
       <div class="dsave" id="dsave"></div>
-      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·Risk를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
+      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·리스크를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
       ${raw(impactSummary(c))}
       <div class="dgrid">${raw(fld('일정 영향 (일)', html`<input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${dis}>`))}
         ${raw(fld('추가 공수 (MD)', html`<input class="input input--sm" type="number" min="0" step="0.5" data-field="effort_impact_md" value="${c.effort_impact_md ?? ''}" placeholder="0" ${dis}>`))}
@@ -262,7 +262,7 @@ export async function changesPage(id) {
       </div>
       <div class="dsave" id="dsave"></div>
 
-      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·Risk를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
+      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·리스크를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
       ${raw(impactSummary(c))}
       <div class="dgrid dgrid--3">
         <div class="dfield"><span>일정 영향 (일)</span><div><input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>

@@ -103,8 +103,8 @@ export async function createPlatformInvite(db, { email, workspaceName, inviteeNa
 /** OWNER → MEMBER/ADMIN, ADMIN → MEMBER (consistent with member_manage: ADMIN manages MEMBER↔ADMIN but never grants OWNER; invites follow the same ceiling). */
 export async function createMemberInvite(db, { workspaceId, email, role }, actor, actorRole, env = process.env) {
   const em = checkEmail(email); const r = String(role || 'MEMBER').toUpperCase();
-  if (!['MEMBER', 'ADMIN'].includes(r)) throw new ValidationError({ role: '초대 역할은 MEMBER 또는 ADMIN만 가능합니다. OWNER는 멤버 설정에서 역할을 변경해 부여하세요.' });
-  if (r === 'ADMIN' && actorRole !== 'OWNER') throw new InviteError(403, 'forbidden', 'ADMIN 초대는 OWNER만 할 수 있습니다.');
+  if (!['MEMBER', 'ADMIN'].includes(r)) throw new ValidationError({ role: '초대 역할은 멤버 또는 관리자만 가능합니다. 소유자는 멤버 설정에서 역할을 변경해 부여하세요.' });
+  if (r === 'ADMIN' && actorRole !== 'OWNER') throw new InviteError(403, 'forbidden', '관리자 초대는 소유자만 할 수 있습니다.');
   const ws = await db.get('SELECT id, name, status FROM workspaces WHERE id = ?', [workspaceId]);
   if (!ws) throw new InviteError(404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
   if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 워크스페이스에서는 초대할 수 없습니다.');

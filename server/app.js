@@ -174,7 +174,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /** Workspace suspension policy (Phase 10B): a SUSPENDED workspace refuses every workspace-scoped call, reads included.
    * Members keep their login and other workspaces; nothing is deleted. Runs after requireMember so non-members still get 404. */
   const requireWorkspaceActive = (req, res, next) =>
-    (req.workspaceStatus === 'SUSPENDED' ? fail(res, 403, 'workspace_suspended', '정지된 Workspace입니다. 운영자에게 문의해 주세요.') : next());
+    (req.workspaceStatus === 'SUSPENDED' ? fail(res, 403, 'workspace_suspended', '정지된 워크스페이스입니다. 운영자에게 문의해 주세요.') : next());
 
   /* ---------- operations ---------- */
   /** Liveness + database reachability. No secrets, no versions. */
@@ -404,7 +404,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         }
         if (st && st.phase_key === 'REQUIREMENTS' && st.step_key === RB.STEP_KEY) {
           const m = await RB.loadBaseline(db, project);
-          if (m.missing.length || !m.counts.in_scope) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 요구사항 기준선 승인에서 승인 기록을 입력하세요.');
+          if (m.missing.length || !m.counts.in_scope) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 요구사항 확정 승인에서 승인 기록을 입력하세요.');
         }
       }
       fields.status = status;
@@ -483,7 +483,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const { fields, errors } = CL.parseItem(req.body || {});
     if (Object.keys(errors).length) return badItem(res, errors);
     const step = await loadChecklistStep(req, res, project); if (!step) return;
-    if (!(await CL.ownerValid(db, project, fields))) return badItem(res, { owner_ref: '담당은 이 Workspace 멤버나 01 이해관계자 중에서 고르세요.' });
+    if (!(await CL.ownerValid(db, project, fields))) return badItem(res, { owner_ref: '담당은 이 워크스페이스 멤버나 01 관계자 중에서 고르세요.' });
     res.status(201).json({ item: await CL.createItem(db, project.id, step, fields, req.user.id) });
   }));
   app.post(`${base}/:pid/steps/:sid/checklist/defaults`, guard, wrap(async (req, res) => {
@@ -499,7 +499,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const { fields, errors } = CL.parseItem(req.body || {}, { partial: true });
     if (Object.keys(errors).length) return badItem(res, errors);
     if (!Object.keys(fields).length) return fail(res, 400, 'validation_error', '변경할 내용이 없습니다.');
-    if (!(await CL.ownerValid(db, project, fields))) return badItem(res, { owner_ref: '담당은 이 Workspace 멤버나 01 이해관계자 중에서 고르세요.' });
+    if (!(await CL.ownerValid(db, project, fields))) return badItem(res, { owner_ref: '담당은 이 워크스페이스 멤버나 01 관계자 중에서 고르세요.' });
     const item = await CL.updateItem(db, project.id, req.params.iid, fields, req.user.id);
     if (!item) return fail(res, 404, 'not_found', '체크리스트 항목을 찾을 수 없습니다.');
     res.json({ item });
@@ -563,8 +563,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   // 이해관계자 Excel: template + preview (rows are committed through PUT /definition by the client after review; no nested import flow)
   app.get(`${base}/:pid/definition/stakeholders/template.xlsx`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project) return;
-    const buf = await XL.buildSimpleTemplate('이해관계자', D.STAKEHOLDER_COLUMNS, ['이해관계자 등록 템플릿', '• 조직 구분: 당사 · 고객사 · 협력사 · 기타 중 하나 (필수)', '• 이름: 필수', '• 조직(회사) · 부서 · 역할 · 주요 책임 · 비고: 선택', '• 1행(열 제목)은 수정하지 말고 2행부터 입력하세요.']);
-    res.set({ 'Content-Type': XL.XLSX_MIME, 'Content-Disposition': `attachment; filename="stakeholders-template.xlsx"; filename*=UTF-8''${encodeURIComponent('이해관계자 등록 템플릿.xlsx')}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+    const buf = await XL.buildSimpleTemplate('관계자', D.STAKEHOLDER_COLUMNS, ['관계자 등록 템플릿', '• 조직 구분: 당사 · 고객사 · 협력사 · 기타 중 하나 (필수)', '• 이름: 필수', '• 조직(회사) · 부서 · 역할 · 주요 책임 · 비고: 선택', '• 1행(열 제목)은 수정하지 말고 2행부터 입력하세요.']);
+    res.set({ 'Content-Type': XL.XLSX_MIME, 'Content-Disposition': `attachment; filename="stakeholders-template.xlsx"; filename*=UTF-8''${encodeURIComponent('관계자 등록 템플릿.xlsx')}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
     res.end(buf);
   }));
   app.post(`${base}/:pid/definition/stakeholders/import/preview`, guard, express.json({ limit: '8mb' }), wrap(async (req, res) => {
@@ -633,13 +633,13 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
   app.patch(ws, guard, requireAction('workspace_settings'), wrap(async (req, res) => {
     const name = String(req.body?.name || '').trim();
-    if (!name || name.length > 100) throw new ValidationError({ name: 'Workspace 이름은 1~100자로 입력하세요.' });
+    if (!name || name.length > 100) throw new ValidationError({ name: '워크스페이스 이름은 1~100자로 입력하세요.' });
     await db.run('UPDATE workspaces SET name = ? WHERE id = ?', [name, req.params.wid]);
     res.json({ workspace: await db.get('SELECT id, name, owner_id, created_at FROM workspaces WHERE id = ?', [req.params.wid]) });
   }));
   // DELETE /api/workspaces/:wid (OWNER, soft delete + 30-day purge) lives in auth/account.js.
-  const MEMBER_ERR = { bad_role: [400, '역할이 올바르지 않습니다.'], owner_only: [403, 'OWNER 역할은 OWNER만 부여하거나 회수할 수 있습니다.'], user_not_found: [404, '해당 이메일로 가입된 사용자가 없습니다.'],
-    already_member: [409, '이미 Workspace 멤버입니다.'], not_member: [404, '멤버를 찾을 수 없습니다.'], last_owner: [409, 'Workspace에는 최소 한 명의 OWNER가 있어야 합니다.'] };
+  const MEMBER_ERR = { bad_role: [400, '역할이 올바르지 않습니다.'], owner_only: [403, '소유자 역할은 소유자만 부여하거나 회수할 수 있습니다.'], user_not_found: [404, '해당 이메일로 가입된 사용자가 없습니다.'],
+    already_member: [409, '이미 워크스페이스 멤버입니다.'], not_member: [404, '멤버를 찾을 수 없습니다.'], last_owner: [409, '워크스페이스에는 최소 한 명의 소유자가 있어야 합니다.'] };
   const memberFail = (res, out) => fail(res, MEMBER_ERR[out.error][0], out.error, MEMBER_ERR[out.error][1]);
   app.get(`${ws}/members`, guard, wrap(async (req, res) => res.json({ members: await listMembers(db, req.params.wid) })));
   app.post(`${ws}/members`, guard, requireAction('member_manage'), wrap(async (req, res) => {
@@ -662,7 +662,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const rbase = `${base}/:pid/requirements`;
   const ownerOk = async (req, res, ownerId) => {
     if (ownerId && !(await R.isWorkspaceMember(db, req.params.wid, ownerId))) {
-      fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { owner_user_id: 'Owner는 현재 Workspace 멤버만 지정할 수 있습니다.' } });
+      fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { owner_user_id: '담당자는 현재 워크스페이스 멤버만 지정할 수 있습니다.' } });
       return false;
     }
     return true;
@@ -690,7 +690,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
     const body = req.params.action === 'complete' && req.body && typeof req.body === 'object' ? req.body : null;
     const r = await tx(db, (d) => RB.setBaselineStatus(d, project, req.params.action, req.user.id, body));
-    if (r.error === 'not_found') return fail(res, 404, 'not_found', '요구사항 기준선 승인 업무를 찾을 수 없습니다.');
+    if (r.error === 'not_found') return fail(res, 404, 'not_found', '요구사항 확정 승인 업무를 찾을 수 없습니다.');
     res.json({ baseline: await RB.loadBaseline(db, project), confirmed: r.confirmed || 0, summary: await R.requirementStats(db, project.id), guide: await guideResponse(project) });
   }));
   // 요구사항 정의서 download (PDF / Word) — read-only like the 사업수행계획서 export
@@ -821,7 +821,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const stakeholderOk = async (res, project, shId) => {
     if (!shId) return true;
     if ((await SK.ownerOptions(db, project)).team.some((x) => x.id === shId)) return true;
-    fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { owner_stakeholder_id: '팀원은 01 착수 › 이해관계자에 등록된 당사·협력사 인원만 지정할 수 있습니다.' } });
+    fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { owner_stakeholder_id: '팀원은 01 착수 › 관계자에 등록된 당사·협력사 인원만 지정할 수 있습니다.' } });
     return false;
   };
   /* Phase 3 US-2 / US-4 (before the /:iid routes): WBS 뼈대 (empty WBS only → 409 otherwise) and 01 주요 일정 → 마일스톤 */
@@ -1042,7 +1042,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     const input = C.parseChange(req.body, { partial: true });
     if (input.approver_user_id) {
-      if (!(await R.isWorkspaceMember(db, req.params.wid, input.approver_user_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { approver_user_id: '승인자는 현재 Workspace 멤버만 지정할 수 있습니다.' } });
+      if (!(await R.isWorkspaceMember(db, req.params.wid, input.approver_user_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { approver_user_id: '승인자는 현재 워크스페이스 멤버만 지정할 수 있습니다.' } });
       if (input.approver_user_id === ctx.c.created_by) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { approver_user_id: '변경 요청 작성자는 승인자로 지정할 수 없습니다.' } });
     }
     const changed = (await tx(db, async (db) => (await C.updateChange(db, ctx.c, input, req.user.id))));
@@ -1054,7 +1054,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (action === 'approve' || action === 'reject') {
       const perm = C.reviewPermission(ctx.c, { userId: req.user.id, role: req.role, memberCount: await memberCount(req.params.wid) });
       if (perm.reason === 'author') return fail(res, 403, 'self_approval', '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. 다른 승인자에게 요청하세요.');
-      if (!perm.allowed) return fail(res, 403, 'forbidden', '변경 요청은 Owner·Admin 또는 지정된 승인자만 승인하거나 반려할 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
+      if (!perm.allowed) return fail(res, 403, 'forbidden', '변경 요청은 소유자·관리자 또는 지정된 승인자만 승인하거나 반려할 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
     }
     const r = (await tx(db, async (db) => (await C.transition(db, ctx.c, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id))));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
@@ -1066,7 +1066,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const ctx = (await crMutable(req, res)); if (!ctx) return;
     if (!['APPROVED', 'IMPLEMENTED'].includes(ctx.c.status)) return fail(res, 409, 'invalid_transition', '검토 중인 변경 요청은 승인 버튼으로 고객 승인을 기록하세요.');
     const perm = C.reviewPermission(ctx.c, { userId: req.user.id, role: req.role, memberCount: await memberCount(req.params.wid) });
-    if (!perm.allowed && perm.reason === 'role') return fail(res, 403, 'forbidden', '승인 기록은 Owner·Admin 또는 지정된 승인자만 남길 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
+    if (!perm.allowed && perm.reason === 'role') return fail(res, 403, 'forbidden', '승인 기록은 소유자·관리자 또는 지정된 승인자만 남길 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
     (await tx(db, async (db) => (await C.saveCustomerApproval(db, ctx.project, ctx.c, req.body?.customer_approval, req.user.id))));
     res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
@@ -1123,7 +1123,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   ]) {
     const xbase = `${base}/:pid/${seg}`;
     const resp = async (project, id) => ({ [type === 'ISSUE' ? 'issue' : 'risk']: await getOne(db, project, id), issues: (await X.issueStats(db, project.id)), risks: (await X.riskStats(db, project.id)) });
-    const loadX = async (req, res, project) => { const x = await getOne(db, project, req.params.xid); if (!x) fail(res, 404, 'not_found', type === 'ISSUE' ? '이슈를 찾을 수 없습니다.' : 'Risk를 찾을 수 없습니다.'); return x; };
+    const loadX = async (req, res, project) => { const x = await getOne(db, project, req.params.xid); if (!x) fail(res, 404, 'not_found', type === 'ISSUE' ? '이슈를 찾을 수 없습니다.' : '리스크를 찾을 수 없습니다.'); return x; };
     const xMutable = async (req, res) => {
       const project = (await loadProject(req, res));
       if (!project || !mutable(res, project)) return null;
@@ -1176,7 +1176,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       app.post(`${xbase}/:xid/convert`, guard, wrap(async (req, res) => {
         const ctx = (await xMutable(req, res)); if (!ctx) return;
         const r = (await tx(db, async (db) => (await X.convertRiskToIssue(db, ctx.project, ctx.x, req.user.id))));
-        if (r.error === 'already_converted') return fail(res, 409, 'already_converted', `이미 ${r.display_id}(으)로 전환된 Risk입니다.`);
+        if (r.error === 'already_converted') return fail(res, 409, 'already_converted', `이미 ${r.display_id}(으)로 전환된 리스크입니다.`);
         if (r.error) return fail(res, 409, 'invalid_state', '종료된 리스크는 이슈로 전환할 수 없습니다.');
         res.status(201).json({ ...(await resp(ctx.project, ctx.x.id)), issue: (await X.getIssue(db, ctx.project, r.issueId)) });
       }));
@@ -1224,8 +1224,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const ctx = (await tMutable(req, res)); if (!ctx) return;
     const input = Q.parseExecution(req.body);
     // Phase 5 US-4: 수행자 = a workspace member or a stakeholder of this project (팀원 / 고객사)
-    if (input.performer_user_id && !(await R.isWorkspaceMember(db, req.params.wid, input.performer_user_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 Workspace 멤버 또는 01 이해관계자만 지정할 수 있습니다.' } });
-    if (input.performer_stakeholder_id && !(await Q.isProjectStakeholder(db, ctx.project.id, input.performer_stakeholder_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 Workspace 멤버 또는 01 이해관계자만 지정할 수 있습니다.' } });
+    if (input.performer_user_id && !(await R.isWorkspaceMember(db, req.params.wid, input.performer_user_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 워크스페이스 멤버 또는 01 관계자만 지정할 수 있습니다.' } });
+    if (input.performer_stakeholder_id && !(await Q.isProjectStakeholder(db, ctx.project.id, input.performer_stakeholder_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 워크스페이스 멤버 또는 01 관계자만 지정할 수 있습니다.' } });
     const e = (await tx(db, async (db) => (await Q.addExecution(db, ctx.t, input, req.user.id))));
     res.status(201).json({ ...(await tResp(ctx.project, ctx.t.id)), execution: e });
   }));
@@ -1234,7 +1234,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const ex = ctx.t.executions.find((e) => e.id === req.params.eid);
     if (!ex) return fail(res, 404, 'not_found', '실행 기록을 찾을 수 없습니다.');
     const r = (await tx(db, async (db) => (await Q.raiseIssueFromExecution(db, ctx.project, ctx.t, ex, req.user.id))));
-    if (r.error === 'not_failed') return fail(res, 409, 'not_failed', 'FAIL 결과에서만 이슈를 등록할 수 있습니다.');
+    if (r.error === 'not_failed') return fail(res, 409, 'not_failed', '실패 결과에서만 이슈를 등록할 수 있습니다.');
     if (r.error === 'already_raised') return fail(res, 409, 'already_raised', `이미 ${r.issue.display_id}(으)로 등록된 실행입니다.`, { issue_id: r.issue.id });
     res.status(201).json({ ...(await tResp(ctx.project, ctx.t.id)), issue: (await X.getIssue(db, ctx.project, r.issueId)) });
   }));

@@ -23,7 +23,7 @@ import { TRAIT_FIELDS } from '../public/app/shared/project-traits.js';
 export const CORE_SECTIONS = ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS'];
 export const GATE_SECTIONS = ['KICKOFF', 'APPROVAL'];
 export const SECTIONS = [...CORE_SECTIONS, ...GATE_SECTIONS];
-export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '이해관계자', MILESTONES: '주요 일정과 마일스톤', OPERATIONS: '운영 방식', KICKOFF: '착수보고회(킥오프)', APPROVAL: '착수 결과 승인' };
+export const SECTION_LABEL = { GOALS: '목표와 성공 기준', SCOPE: '수행 범위와 제외 범위', STAKEHOLDERS: '관계자', MILESTONES: '주요 일정', OPERATIONS: '운영 방식', KICKOFF: '착수보고회', APPROVAL: '착수 결과 승인' };
 /** 승인 방법. KICKOFF ("착수보고회에서 승인") is hidden in the UI when the 착수보고회 activity was skipped. */
 export const APPROVAL_METHODS = { SIGNED: '서명본 수령', EMAIL: '이메일 회신', KICKOFF: '착수보고회에서 승인', OTHER: '기타' };
 /** 요구사항 기준선 승인 (02, Phase 2) — the same approval record, its own method list. */
@@ -115,8 +115,8 @@ export function cleanSection(key, body = {}) {
         if (ot === null) f[`stakeholders.${i}.org_type`] = '조직 구분은 당사 · 고객사 · 협력사 · 기타 중 하나여야 합니다.';
         return s;
       }).filter((s) => s.name || s.org || s.department || s.role);
-      for (const s of out.stakeholders) { if (!s.name) { f.stakeholders = '이해관계자는 이름을 입력해야 합니다.'; break; } if (!s.org_type) { f.stakeholders = '이해관계자마다 조직 구분(당사 · 고객사 · 협력사 · 기타)을 선택하세요.'; break; } }
-      if (out.stakeholders.length > 300) f.stakeholders = '이해관계자는 최대 300명까지 등록할 수 있습니다.';
+      for (const s of out.stakeholders) { if (!s.name) { f.stakeholders = '관계자는 이름을 입력해야 합니다.'; break; } if (!s.org_type) { f.stakeholders = '관계자마다 조직 구분(당사 · 고객사 · 협력사 · 기타)을 선택하세요.'; break; } }
+      if (out.stakeholders.length > 300) f.stakeholders = '관계자는 최대 300명까지 등록할 수 있습니다.';
       if (Object.keys(f).length) throw new ValidationError(f);
       return out;
     }
@@ -182,7 +182,7 @@ export function cleanApproval(a, methods, field = 'approval') {
 /** What still blocks 완료 처리 of an approval record: 승인자 · 승인일 (≤ today) · 방법 · 근거. */
 export function approvalMissing(a, who) {
   const out = [];
-  if (!who) out.push(a.approver_id ? '선택한 승인자가 이해관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.');
+  if (!who) out.push(a.approver_id ? '선택한 승인자가 관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.');
   if (!a.date) out.push('승인일을 입력하세요.'); else if (a.date > localToday()) out.push('승인일은 오늘 이후일 수 없습니다.');
   if (!a.method) out.push('승인 방법을 선택하세요.');
   if (!a.evidence) out.push('승인 근거(문서번호·메일 제목·보관 위치 등)를 입력하세요.');
@@ -228,8 +228,8 @@ export function missingFor(key, d, ctx = {}) {
   switch (key) {
     case 'GOALS': return d.goal || d.success_criteria.length ? [] : ['프로젝트 목표 또는 성공 기준을 1개 이상 입력하세요.'];
     case 'SCOPE': return d.scope_in.length ? [] : ['수행 범위를 1개 이상 입력하세요.'];
-    case 'STAKEHOLDERS': return d.stakeholders.length ? [] : ['이해관계자를 1명 이상 등록하세요.'];
-    case 'MILESTONES': return d.key_dates.length || (ctx.wbs_milestones || []).length ? [] : ['주요 일정을 1개 이상 입력하거나 WBS에 마일스톤을 등록하세요.'];
+    case 'STAKEHOLDERS': return d.stakeholders.length ? [] : ['관계자를 1명 이상 등록하세요.'];
+    case 'MILESTONES': return d.key_dates.length || (ctx.wbs_milestones || []).length ? [] : ['주요 일정을 1개 이상 입력하거나 WBS에 주요 일정을 등록하세요.'];
     case 'OPERATIONS': return OPS_KEYS.some((k) => d.operations[k]) ? [] : ['회의·보고·소통·의사결정 중 1개 이상의 운영 방식을 입력하세요.'];
     case 'KICKOFF': {
       const k = d.kickoff || {}; const out = [];
@@ -247,9 +247,9 @@ export function missingFor(key, d, ctx = {}) {
 export function sectionSummary(key, d, ctx = {}) {
   switch (key) {
     case 'GOALS': { const parts = []; if (d.goal) parts.push('목표 작성됨'); if (d.success_criteria.length) parts.push(`성공 기준 ${d.success_criteria.length}건`); return parts.join(' · '); }
-    case 'SCOPE': { const parts = []; if (d.scope_in.length) parts.push(`수행 범위 ${d.scope_in.length}건`); if (d.scope_out.length) parts.push(`제외 범위 ${d.scope_out.length}건`); if (d.deliverables) parts.push('주요 산출물'); const n = ['assumptions', 'constraints', 'initial_risks'].filter((k) => d[k]).length; if (n) parts.push(`전제·제약·리스크 ${n}개 항목`); return parts.join(' · '); }
+    case 'SCOPE': { const parts = []; if (d.scope_in.length) parts.push(`수행 범위 ${d.scope_in.length}건`); if (d.scope_out.length) parts.push(`제외 범위 ${d.scope_out.length}건`); if (d.deliverables) parts.push('주요 결과물'); const n = ['assumptions', 'constraints', 'initial_risks'].filter((k) => d[k]).length; if (n) parts.push(`전제·제약·리스크 ${n}개 항목`); return parts.join(' · '); }
     case 'STAKEHOLDERS': { if (!d.stakeholders.length) return ''; const by = {}; for (const x of d.stakeholders) by[x.org_type || 'OTHER'] = (by[x.org_type || 'OTHER'] || 0) + 1; return ORG_TYPES.filter((k) => by[k]).map((k) => `${ORG_TYPE_LABEL[k]} ${by[k]}명`).join(' · ') + ' 등록'; }
-    case 'MILESTONES': { const parts = []; if (d.key_dates.length) parts.push(`주요 일정 ${d.key_dates.length}건`); if ((ctx.wbs_milestones || []).length) parts.push(`WBS 마일스톤 ${ctx.wbs_milestones.length}건`); return parts.join(' · '); }
+    case 'MILESTONES': { const parts = []; if (d.key_dates.length) parts.push(`주요 일정 ${d.key_dates.length}건`); if ((ctx.wbs_milestones || []).length) parts.push(`WBS 주요 일정 ${ctx.wbs_milestones.length}건`); return parts.join(' · '); }
     case 'OPERATIONS': { const n = OPS_KEYS.filter((k) => d.operations[k]).length + ['change_management', 'acceptance'].filter((k) => d[k]).length; return n ? `운영 방식 ${n}개 항목 작성됨` : ''; }
     case 'KICKOFF': {
       const k = d.kickoff || {}; const when = k.datetime ? `${k.datetime.slice(5, 7)}/${k.datetime.slice(8, 10)}${k.datetime.length > 10 ? ` ${k.datetime.slice(11, 16)}` : ''}` : '';

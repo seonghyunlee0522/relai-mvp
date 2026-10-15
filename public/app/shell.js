@@ -137,7 +137,7 @@ export async function shell(path, view, token = null) {
   main.innerHTML = '<div class="loading">불러오는 중…</div>';
   window.scrollTo(0, 0);
   if (state.workspace && state.workspace.status === 'SUSPENDED') {
-    main.innerHTML = html`<div class="page"><div class="empty"><h2>정지된 Workspace입니다</h2><p>'${state.workspace.name}'은(는) 운영자에 의해 정지되어 조회와 수정이 차단됩니다. 데이터는 그대로 보관되어 있습니다. 문의는 운영자에게 해 주세요.</p><a class="btn btn--secondary" href="/app" data-link>Home</a></div></div>`;
+    main.innerHTML = html`<div class="page"><div class="empty"><h2>정지된 워크스페이스입니다</h2><p>'${state.workspace.name}'은(는) 운영자에 의해 정지되어 조회와 수정이 차단됩니다. 데이터는 그대로 보관되어 있습니다. 문의는 운영자에게 해 주세요.</p><a class="btn btn--secondary" href="/app" data-link>홈</a></div></div>`;
     return;
   }
   if (!ob.peek()) await ob.get();   // Phase 14: one onboarding request per workspace, before the page decides what to guide

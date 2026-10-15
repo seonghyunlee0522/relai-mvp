@@ -22,7 +22,7 @@ export async function projectFormPage(id) {
   main.innerHTML = html`<div class="page page--form page--guide">
     <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : '프로젝트'}</a>
     <div class="page__head"><div><h1>${editing ? '프로젝트 정보 수정' : '새 프로젝트 시작하기'}</h1>
-      ${raw(editing ? '' : '<p>기본 정보와 프로젝트 유형만 정하면 됩니다. 목표·범위·이해관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
+      ${raw(editing ? '' : '<p>기본 정보와 프로젝트 유형만 정하면 됩니다. 목표·범위·관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
     <form class="panel form-panel pform" id="f" novalidate>
       <div class="form-err full" role="alert" hidden></div>
       <div class="pform__sec full"><b>프로젝트 기본 정보</b></div>
@@ -73,7 +73,7 @@ export async function projectFormPage(id) {
       try { r = await send(d); }
       catch (err) {   // BUG-002: same-named project exists — let the user decide instead of creating a silent duplicate
         if (err.code !== 'duplicate_name') throw err;
-        const go = await confirmDialog({ title: '같은 이름의 프로젝트가 이미 있습니다', body: `'${d.name.trim()}' 프로젝트가 이 Workspace에 이미 있습니다. 그래도 ${editing ? '저장' : '생성'}할까요? 목록에서 구분하려면 이름을 바꾸는 것이 좋습니다.`, confirm: editing ? '그대로 저장' : '그래도 생성' });
+        const go = await confirmDialog({ title: '같은 이름의 프로젝트가 이미 있습니다', body: `'${d.name.trim()}' 프로젝트가 이 워크스페이스에 이미 있습니다. 그래도 ${editing ? '저장' : '생성'}할까요? 목록에서 구분하려면 이름을 바꾸는 것이 좋습니다.`, confirm: editing ? '그대로 저장' : '그래도 생성' });
         if (!go) { btn.disabled = false; showErrors(form, { name: '같은 이름의 프로젝트가 이미 있습니다.' }); return; }
         r = await send({ ...d, allow_duplicate: true });
       }

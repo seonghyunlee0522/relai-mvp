@@ -85,7 +85,7 @@ export function charterPromptBlock(c, clip) {
   const sh = c.stakeholders.slice(0, 30).map((s) => `- ${clip(s.name, 40)} | ${clip([s.org, s.department].filter(Boolean).join(' '), 60) || '-'} | ${s.category_label} | ${clip(s.role, 60) || '-'}${s.responsibility ? ` | ${clip(s.responsibility, 120)}` : ''}`).join('\n');
   const ms = c.timeline.milestones.slice(0, 30).map((m) => `- ${m.date || '날짜 미정'} ${clip(m.title, 100)}${m.source === 'WBS' ? ` (WBS ${m.wbs_code})` : ''}`).join('\n');
   return `[PROJECT CHARTER]
-아래는 이 프로젝트의 공식 기준정보(Project Charter)입니다. 일반 참고자료가 아니라 요구사항 검토·WBS 구성·변경 영향 판단·다음 작업 제안의 기준으로 사용하세요. "${NONE}" 항목은 아직 정의되지 않은 것이므로 추정해서 채우지 마세요.
+아래는 이 프로젝트의 공식 기준정보(프로젝트 개요)입니다. 일반 참고자료가 아니라 요구사항 검토·WBS 구성·변경 영향 판단·다음 작업 제안의 기준으로 사용하세요. "${NONE}" 항목은 아직 정의되지 않은 것이므로 추정해서 채우지 마세요.
 
 Project Profile:
 프로젝트명: ${v(p.name, (x) => clip(x, 100))}
@@ -118,7 +118,7 @@ ${v(c.governance, (x) => ml(x, 800))}
 
 Timeline:
 기간: ${c.timeline.startDate || '?'} ~ ${c.timeline.endDate || '?'}
-${ms || `주요 마일스톤: ${NONE}`}
+${ms || `주요 일정: ${NONE}`}
 
 Assumptions:
 ${v(c.assumptions, (x) => ml(x))}

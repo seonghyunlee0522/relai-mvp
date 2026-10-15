@@ -22,7 +22,7 @@ const tokenCall = async (cfg, body, fetchImpl) => {
     const err = e instanceof JiraApiError ? e : null;
     const code = err?.body?.error;
     // invalid_grant: expired/rotated refresh token, revoked consent, password change → full re-authorization, never a retry loop
-    if (err && (code === 'invalid_grant' || err.status === 401 || err.status === 403)) throw new OAuthError('Jira 재연결이 필요합니다. (인증이 만료되었거나 취소되었습니다)', { code: 'reconnect_required', status: 409, reconnect: true });
+    if (err && (code === 'invalid_grant' || err.status === 401 || err.status === 403)) throw new OAuthError('지라 재연결이 필요합니다. (인증이 만료되었거나 취소되었습니다)', { code: 'reconnect_required', status: 409, reconnect: true });
     throw new OAuthError(err?.message || 'Atlassian 인증 서버에 연결할 수 없습니다.', { code: 'oauth_unavailable', status: 502 });
   }
 };

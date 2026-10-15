@@ -43,7 +43,7 @@ export function projectNav(p, g, activeKey) {
   const homeHtml = html`<div class="lnb__sec"><div class="lnb__h">프로젝트</div>
     ${raw(link(home[0], isActive(home[0]), { tour: 'lnb-next' }))}
     <div class="lnb__grp ${ovOpen ? 'is-open' : ''}" data-grp="overview">
-      <div class="lnb__row">${raw(link(home[1], isActive(home[1]) || (!ovOpen && home[1].children.some(isActive)), { tour: 'lnb-overview' }))}<button type="button" class="lnb__tg" data-lnb-toggle="overview" aria-label="Overview 하위 메뉴 ${ovOpen ? '접기' : '펼치기'}" aria-expanded="${ovOpen}"></button></div>
+      <div class="lnb__row">${raw(link(home[1], isActive(home[1]) || (!ovOpen && home[1].children.some(isActive)), { tour: 'lnb-overview' }))}<button type="button" class="lnb__tg" data-lnb-toggle="overview" aria-label="현황 하위 메뉴 ${ovOpen ? '접기' : '펼치기'}" aria-expanded="${ovOpen}"></button></div>
       <div class="lnb__sub">${raw(home[1].children.map((c) => link(c, isActive(c), { cls: 'lnb__i--sub' })).join(''))}</div>
     </div></div>`;
 

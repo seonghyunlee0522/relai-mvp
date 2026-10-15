@@ -103,7 +103,7 @@ export async function requirementsPage(id) {
       { key: 'requester_name', label: '요청자', width: 110, hidden: true, sort: (r) => r.requester_name || '', render: (r) => r.requester_name || dim() },
       { key: 'requester_organization', label: '요청자 소속', width: 120, hidden: true, sort: (r) => r.requester_organization || '', render: (r) => r.requester_organization || dim() },
       { key: 'updated', label: '수정일', width: 80, card: false, hidden: desk, sort: (r) => r.updated_at, cls: 'mono', render: (r) => fmtShort(r.updated_at) },
-      { key: 'jira', label: 'Jira', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v43: column option (⋯ → 보기)
+      { key: 'jira', label: '지라', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v43: column option (⋯ → 보기)
     ],
   });
   const traceGrid = createGrid({
@@ -116,7 +116,7 @@ export async function requirementsPage(id) {
       { key: 'scope', label: '범위', width: 100, sort: (r) => REQ_SCOPE[r.scope], render: (r) => subtle(REQ_SCOPE[r.scope]) },
       { key: 'wbs', label: '연결 WBS', width: 90, align: 'right', sort: (r) => r.linked_wbs_count, render: (r) => String(r.linked_wbs_count) },
       { key: 'link', label: '연결 상태', width: 110, sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? '<span class="chip chip--done">연결됨</span>' : r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' ? '<span class="chip chip--hold">미연결</span>' : '<span class="chip chip--muted">미연결</span>') },
-      { key: 'jira', label: 'Jira', width: 160, sort: jiraSort, render: jiraCell },   // v43: linked Jira issues (요구사항 › 추적)
+      { key: 'jira', label: '지라', width: 160, sort: jiraSort, render: jiraCell },   // v43: linked Jira issues (요구사항 › 추적)
     ],
   });
   const curGrid = () => (rview() === 'trace' ? traceGrid : listGrid);
@@ -213,7 +213,7 @@ export async function requirementsPage(id) {
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived && wbsPhase() ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
       ${raw(summary.total && wbsPhase() ? coachMark('REQ_TRACE_INTRO') : '')}
-      ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 History에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
+      ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 변경 이력에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">변경 요청 기준 해제</button></div>` : '')}
       ${raw(desk ? deskTool(q) : '')}
       ${raw(desk ? '' : html`<div class="rtool">
         <div class="seg" role="tablist"><button class="${rview() === 'list' ? 'is-on' : ''}" data-rview="list" role="tab">요구사항 목록</button><button class="${rview() === 'trace' ? 'is-on' : ''}" data-rview="trace" role="tab">연결 추적</button></div>
@@ -372,7 +372,7 @@ export async function requirementsPage(id) {
     const empty = !done && !c.in_scope;   // nothing in scope → no baseline to approve (Q6-2; the API refuses too)
     const methods = Object.entries(b.methods);
     d.className = 'drawer drawer--side'; d.dataset.mode = 'approval';   // the same right-side panel as 01 착수 결과 승인 (Q6-1)
-    d.innerHTML = html`<div class="wd__h"><div class="wd__ht"><b>요구사항 기준선 승인(고객)${raw(done ? ' <span class="chip chip--done">승인 기록됨</span>' : '')}</b><small>확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 기준선 ${raw(term('req_baseline'))}이 됩니다.</small></div><button class="wd__ib" id="dclose" aria-label="닫기">×</button></div>
+    d.innerHTML = html`<div class="wd__h"><div class="wd__ht"><b>요구사항 확정 승인(고객)${raw(done ? ' <span class="chip chip--done">승인 기록됨</span>' : '')}</b><small>확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 확정본 ${raw(term('req_baseline'))}이 됩니다.</small></div><button class="wd__ib" id="dclose" aria-label="닫기">×</button></div>
       <div class="drawer__b apv" data-approval-drawer>
         ${raw(!done && b.bypass ? html`<div class="notice notice--soft">승인 전 진행 — 사유: ${b.bypass.reason} (${[b.bypass.date, b.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
         ${raw(done ? html`<div class="notice">고객 승인이 기록되었습니다 · ${b.summary}</div>` : '')}
@@ -465,7 +465,7 @@ export async function requirementsPage(id) {
     d.innerHTML = html`<div class="drawer__h"><b class="mono">${r.display_id}</b>${raw(statusChip(REQ_STATUS, REQ_STATUS_CHIP, r.status) + subtle(REQ_SCOPE[r.scope]))}${raw(r.archived_at ? '<span class="chip">보관됨</span>' : '')}
         <span class="dnav"><button type="button" data-nav="-1" aria-label="이전 요구사항" title="이전 (목록 순서)" ${at <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-nav="1" aria-label="다음 요구사항" title="다음 (목록 순서)" ${at < 0 || at >= ids.length - 1 ? 'disabled' : ''}>↓</button></span>
         <button class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
-      ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: 'WBS 연결', count: r.links.filter((l) => !l.archived_at).length }, { key: 'jira', label: 'Jira', count: reqJira && reqJira.by[r.id] ? reqJira.by[r.id].total : null }, { key: 'activity', label: '댓글·활동', count: events.length }], dtab))}
+      ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: 'WBS 연결', count: r.links.filter((l) => !l.archived_at).length }, { key: 'jira', label: '지라', count: reqJira && reqJira.by[r.id] ? reqJira.by[r.id].total : null }, { key: 'activity', label: '댓글·활동', count: events.length }], dtab))}
       <div class="drawer__b">
         <section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
           ${raw(desk ? deskInfo(r, readOnly) : html`
@@ -509,12 +509,12 @@ export async function requirementsPage(id) {
     const acc = r.acceptances && r.acceptances.length ? r.acceptances[0] : null;
     return traceStrip([
       { label: 'WBS', value: live.length, href: `${u}/wbs?requirement=${r.id}`, tone: live.length ? '' : r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' ? 'warn' : 'muted' },
-      ...((() => { const j = reqJira && reqJira.by[r.id]; return j && j.total ? [{ label: 'Jira', value: `${j.done}/${j.total} 완료`, sub: `지라 진행률 ${j.rate}%`, href: `${location.pathname}?sel=${r.id}&tab=jira`, tone: j.done === j.total ? 'ok' : '' }] : []; })()),
-      ...(r.jira && r.jira.total && !(reqJira && reqJira.by[r.id]) ? [{ label: 'Jira', value: `${r.jira.done}/${r.jira.total} 완료`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
+      ...((() => { const j = reqJira && reqJira.by[r.id]; return j && j.total ? [{ label: '지라', value: `${j.done}/${j.total} 완료`, sub: `지라 진행률 ${j.rate}%`, href: `${location.pathname}?sel=${r.id}&tab=jira`, tone: j.done === j.total ? 'ok' : '' }] : []; })()),
+      ...(r.jira && r.jira.total && !(reqJira && reqJira.by[r.id]) ? [{ label: '지라', value: `${r.jira.done}/${r.jira.total} 완료`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
       { label: '변경 요청', value: r.changes ? r.changes.length : 0, href: `${u}/changes?requirement=${r.id}`, tone: r.changes && r.changes.length ? '' : 'muted' },
       { label: '이슈', value: issues, sub: risks ? `리스크 ${risks}` : '', href: `${u}/issues?requirement=${r.id}`, tone: issues ? 'warn' : 'muted' },
       { label: '테스트', value: t.total, sub: t.total ? `통과 ${t.pass} · 실패 ${t.fail}` : r.test_exclusion_reason ? '테스트 제외' : '', href: `${u}/tests?requirement=${r.id}`, tone: t.fail ? 'crit' : t.total && t.verification === 'VERIFIED' ? 'ok' : t.total ? '' : 'muted' },
-      { label: 'Acceptance', value: acc ? ACC_STATUS[acc.status] : '-', sub: acc ? acc.display_id : '', href: acc ? `${u}/tests?tab=acceptance&sel=${acc.id}` : `${u}/tests?tab=acceptance&requirement=${r.id}`, tone: acc ? (acc.status === 'ACCEPTED' ? 'ok' : acc.status === 'REWORK_REQUIRED' || acc.status === 'REJECTED' ? 'crit' : '') : 'muted' },
+      { label: '검수', value: acc ? ACC_STATUS[acc.status] : '-', sub: acc ? acc.display_id : '', href: acc ? `${u}/tests?tab=acceptance&sel=${acc.id}` : `${u}/tests?tab=acceptance&requirement=${r.id}`, tone: acc ? (acc.status === 'ACCEPTED' ? 'ok' : acc.status === 'REWORK_REQUIRED' || acc.status === 'REJECTED' ? 'crit' : '') : 'muted' },
     ]);
   };
 
@@ -523,7 +523,7 @@ export async function requirementsPage(id) {
     const byType = Object.keys(LINK_TYPE).map((t) => [t, live.filter((l) => l.link_type === t).length]).filter(([, n]) => n);
     return html`<h4 class="dh">관련 WBS <em>${live.length}</em>${raw(byType.length > 1 ? html`<small class="dim" style="font-weight:500;letter-spacing:0;text-transform:none">${byType.map(([t, n]) => `${LINK_TYPE[t]} ${n}`).join(' · ')}</small>` : '')}</h4>
       ${raw(live.length ? html`<ol class="crit links">${raw(live.map((l) => html`<li data-link="${l.id}">
-        <span class="mono wcode">${l.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${l.title}<small class="dim" style="margin-left:6px">${WBS_TYPE[l.item_type]}${l.owner_name ? ' · ' + l.owner_name : ''}</small>${raw((() => { const j = r.jira && r.jira.wbs ? r.jira.wbs.find((x) => x.id === l.wbs_item_id) : null; return j && j.jira ? html`<small class="jx-inline" title="Jira 실행 (Done / 연결)">Jira ${j.jira.done}/${j.jira.total}${j.jira.in_progress ? ` · 진행 ${j.jira.in_progress}` : ''}</small>` : ''; })())}</span>
+        <span class="mono wcode">${l.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${l.title}<small class="dim" style="margin-left:6px">${WBS_TYPE[l.item_type]}${l.owner_name ? ' · ' + l.owner_name : ''}</small>${raw((() => { const j = r.jira && r.jira.wbs ? r.jira.wbs.find((x) => x.id === l.wbs_item_id) : null; return j && j.jira ? html`<small class="jx-inline" title="지라 실행 (완료 / 연결)">지라 ${j.jira.done}/${j.jira.total}${j.jira.in_progress ? ` · 진행 ${j.jira.in_progress}` : ''}</small>` : ''; })())}</span>
         ${raw(readOnly ? html`<span class="chip chip--muted">${LINK_TYPE[l.link_type]}</span>` : html`<select class="select select--xs" data-link-type="${l.id}">${raw(Object.entries(LINK_TYPE).map(([v, lb]) => html`<option value="${v}" ${l.link_type === v ? 'selected' : ''}>${lb}</option>`).join(''))}</select>
         <span class="crit__act" style="opacity:1"><button data-link-del="${l.id}" title="연결 해제">×</button></span>`)}</li>`).join(''))}</ol>`
         : html`<div class="empty-inline"><b>아직 연결된 WBS가 없습니다.</b><span>이 요구사항을 구현하거나 검증하는 작업을 연결하세요.</span></div>`)}
@@ -545,10 +545,10 @@ export async function requirementsPage(id) {
       case 'CRITERION_REMOVED': return html`완료 조건 삭제 <q>${h.old_value}</q>`;
       case 'LINKED_WBS': return html`WBS 연결 <q>${lt(h.new_value)}</q>`;
       case 'UNLINKED_WBS': return html`WBS 연결 해제 <q>${h.old_value}</q>`;
-      case 'JIRA_LINKED': return html`Jira 이슈 연결 <q>${h.new_value}</q>`;
-      case 'JIRA_UNLINKED': return html`Jira 이슈 연결 해제 <q>${h.old_value}</q>`;
-      case 'JIRA_DONE': return html`연결된 Jira 이슈가 모두 완료 — 구현 완료로 표시`;
-      case 'JIRA_DONE_CLEARED': return html`Jira 이슈가 다시 진행 중 — 구현 완료 표시 해제`;
+      case 'JIRA_LINKED': return html`지라 이슈 연결 <q>${h.new_value}</q>`;
+      case 'JIRA_UNLINKED': return html`지라 이슈 연결 해제 <q>${h.old_value}</q>`;
+      case 'JIRA_DONE': return html`연결된 지라 이슈가 모두 완료 — 구현 완료로 표시`;
+      case 'JIRA_DONE_CLEARED': return html`지라 이슈가 다시 진행 중 — 구현 완료 표시 해제`;
       case 'LINK_TYPE_CHANGED': return html`연결 유형 변경 <q>${lt(h.old_value)}</q> → <q>${lt(h.new_value)}</q>`;
       default: {
         const f = h.field_name; const long = f === 'title' || f === 'description';
@@ -602,7 +602,7 @@ export async function requirementsPage(id) {
     d.querySelectorAll('[data-crit-del]').forEach((b) => b.onclick = async () => {
       const c = r.criteria.find((x) => x.id === b.dataset.critDel);
       if (needsPrompt(r, 'criteria')) { await critGuard(c.content, '(삭제)', () => critApi('DELETE', `/criteria/${c.id}`)); return; }
-      if (!(await confirmDialog({ title: '완료 조건을 삭제할까요?', body: '삭제한 완료 조건은 History에만 남습니다.', confirm: '삭제', danger: true }))) return;
+      if (!(await confirmDialog({ title: '완료 조건을 삭제할까요?', body: '삭제한 완료 조건은 변경 이력에만 남습니다.', confirm: '삭제', danger: true }))) return;
       critApi('DELETE', `/criteria/${b.dataset.critDel}`);
     });
     const la = $('#link-add');

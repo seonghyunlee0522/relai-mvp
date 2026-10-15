@@ -175,7 +175,7 @@ export function sectionsFromData(d) {
     ...S.dimensions.map((x) => `  - ${x.label}: ${x.status_label}${x.status === 'GOOD' || x.status === 'UNKNOWN' ? '' : ` — ${x.reasons.join(', ')}`}`),
     ...scheduleLines(d.schedule_changes),
     `- WBS 진행률: ${pct(S.kpis.wbs_progress)}`,
-    `- 요구사항 반영률: ${pct(S.kpis.requirement_coverage)}`, `- 테스트 커버리지: ${pct(S.kpis.test_coverage)}`,
+    `- 요구사항 반영률: ${pct(S.kpis.requirement_coverage)}`, `- 테스트 연결률: ${pct(S.kpis.test_coverage)}`,
   ].join('\n');
   out.completed = d.completed_items.length ? d.completed_items.map((c) => `- [${TYPE_KO[c.type]}] ${c.display_id} ${c.title} — ${EVENT[c.event] || c.event} (${md(c.at)})`).join('\n') : '- 기간 내 완료 처리된 항목이 없습니다.';
   out.in_progress = d.in_progress_items.length ? d.in_progress_items.map((w) => {
@@ -196,7 +196,7 @@ export function sectionsFromData(d) {
   out.changes = cl.length ? cl.join('\n') : '- 기간 내 변경 요청 활동이 없습니다.';
   const t = d.test_and_acceptance; const tl = [];
   tl.push(`- 테스트 실행: ${t.executions.total}회 (통과 ${t.executions.pass} · 실패 ${t.executions.fail} · 차단됨 ${t.executions.blocked})`);
-  if (t.latest_fail.length) { tl.push(`- 현재 Fail 상태 테스트 ${t.latest_fail.length}건`); t.latest_fail.forEach((x) => tl.push(`  - ${x.display_id} ${x.title}`)); }
+  if (t.latest_fail.length) { tl.push(`- 현재 실패 상태 테스트 ${t.latest_fail.length}건`); t.latest_fail.forEach((x) => tl.push(`  - ${x.display_id} ${x.title}`)); }
   const an = t.acceptance_now; const ap = t.acceptance_period;
   tl.push(`- 검수 현황: 요청 ${an.requested} · 승인 ${an.accepted} · 보완 필요 ${an.rework} · 반려 ${an.rejected}`);
   const apl = Object.entries(ap).map(([k, v]) => `${ACC_STATUS[k] || k} ${v}`); if (apl.length) tl.push(`- 기간 내 검수 상태 변경: ${apl.join(', ')}`);
@@ -207,7 +207,7 @@ export function sectionsFromData(d) {
     ...(made.length ? [`**기간 내 결정 ${made.length}건**`, ...made.map((x) => `- ${md(x.date)} ${x.title}${x.by ? ` · ${x.by}` : ''}${x.note ? ` · ${x.note}` : ''}`)] : []),
     ...(made.length && need.length ? ['**확인 및 의사결정 필요**'] : []), ...need,
   ].join('\n') : '- 확인 및 의사결정이 필요한 항목이 없습니다.';
-  out.next_week = d.next_week_plan.length ? d.next_week_plan.map((u) => `- ${md(u.date)} ${u.label}: ${[u.display_id, u.title].filter(Boolean).join(' ')}`).join('\n') : '- 차주 예정된 일정(WBS 시작/종료, 마일스톤, 리스크 검토, 검수 기한)이 없습니다.';
+  out.next_week = d.next_week_plan.length ? d.next_week_plan.map((u) => `- ${md(u.date)} ${u.label}: ${[u.display_id, u.title].filter(Boolean).join(' ')}`).join('\n') : '- 차주 예정된 일정(WBS 시작/종료, 주요 일정, 리스크 검토, 검수 기한)이 없습니다.';
   return SECTIONS.map(([key, title]) => ({ key, title, body: out[key] }));
 }
 

@@ -40,7 +40,7 @@ export async function listIntegrations(db, workspaceId, env = process.env) {
 /* ---------- OAuth ---------- */
 export async function startOAuth(db, { workspaceId, userId, provider = 'JIRA' }, env = process.env) {
   const cfg = integrationConfig(env);
-  if (!cfg.jira.configured && cfg.provider !== 'fake') throw new IntegrationError(503, 'integration_not_configured', 'Jira 연동이 아직 서버에 설정되지 않았습니다. 운영자에게 문의해 주세요.');
+  if (!cfg.jira.configured && cfg.provider !== 'fake') throw new IntegrationError(503, 'integration_not_configured', '지라 연동이 아직 서버에 설정되지 않았습니다. 운영자에게 문의해 주세요.');
   const p = getProvider(provider, env);
   const state = randomToken(32); const expires = new Date(Date.now() + cfg.oauthStateTtlMs).toISOString();
   await db.run('DELETE FROM integration_oauth_states WHERE expires_at < now()');
@@ -60,7 +60,7 @@ export async function finishOAuth(db, { state, code, userId, provider = 'JIRA' }
   const p = getProvider(provider, env);
   let tokens; try { tokens = await p.exchangeCode({ code: String(code || ''), redirectUri: row.redirect_uri }); } catch (e) { throw new IntegrationError(e.status || 502, e.code || 'oauth_error', e.message); }
   const sites = await p.accessibleResources(tokens.access_token);
-  if (!sites.length) throw new IntegrationError(400, 'no_site', '접근 가능한 Jira 사이트가 없습니다. Atlassian 계정에서 사이트 권한을 확인해 주세요.');
+  if (!sites.length) throw new IntegrationError(400, 'no_site', '접근 가능한 지라 사이트가 없습니다. Atlassian 계정에서 사이트 권한을 확인해 주세요.');
   const site = sites[0];
   let me = { accountId: null, displayName: '' }; try { me = await p.currentUser(site.id, tokens.access_token); } catch { /* optional */ }
   const ts = nowIso(); const exp = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
@@ -97,17 +97,17 @@ async function refreshUnderLock(db, connectionId, env, { force }) {
   return tx(db, async (db) => {
     const c = await db.get('SELECT * FROM integration_connections WHERE id = ? FOR UPDATE', [connectionId]);
     if (!c) throw new IntegrationError(404, 'not_found', '연동 정보를 찾을 수 없습니다.');
-    if (c.status === 'DISABLED') throw new IntegrationError(409, 'integration_disabled', 'Jira 연동이 해제되어 있습니다.');
-    if (!c.access_token_encrypted) throw new IntegrationError(409, 'reconnect_required', 'Jira 재연결이 필요합니다.', { reconnect: true });
+    if (c.status === 'DISABLED') throw new IntegrationError(409, 'integration_disabled', '지라 연동이 해제되어 있습니다.');
+    if (!c.access_token_encrypted) throw new IntegrationError(409, 'reconnect_required', '지라 재연결이 필요합니다.', { reconnect: true });
     if (c.status === 'ERROR' && /재연결/.test(c.last_error || '')) throw new IntegrationError(409, 'reconnect_required', c.last_error, { reconnect: true });
     const fresh = c.access_token_expires_at && new Date(c.access_token_expires_at).getTime() - Date.now() > cfg.refreshSkewMs;
     if (fresh && !force) return { accessToken: decrypt(c.access_token_encrypted, env), connection: c };
-    if (!c.refresh_token_encrypted) throw new IntegrationError(409, 'reconnect_required', 'Jira 재연결이 필요합니다.', { reconnect: true, mark: 'Jira 재연결이 필요합니다. (갱신 토큰 없음)' });
+    if (!c.refresh_token_encrypted) throw new IntegrationError(409, 'reconnect_required', '지라 재연결이 필요합니다.', { reconnect: true, mark: '지라 재연결이 필요합니다. (갱신 토큰 없음)' });
     const p = getProvider(c.provider, env);
     let t;
     try { t = await p.refresh(decrypt(c.refresh_token_encrypted, env)); }
     catch (e) {
-      if (e instanceof OAuthError && e.reconnect) throw new IntegrationError(409, 'reconnect_required', e.message, { reconnect: true, mark: 'Jira 재연결이 필요합니다. (인증이 만료되었거나 취소되었습니다)' });
+      if (e instanceof OAuthError && e.reconnect) throw new IntegrationError(409, 'reconnect_required', e.message, { reconnect: true, mark: '지라 재연결이 필요합니다. (인증이 만료되었거나 취소되었습니다)' });
       throw new IntegrationError(502, e.code || 'oauth_unavailable', e.message);
     }
     const exp = new Date(Date.now() + t.expires_in * 1000).toISOString();
@@ -151,7 +151,7 @@ export async function withClient(db, connectionId, fn, env = process.env) {
     ({ accessToken, connection } = await ensureAccessToken(db, connectionId, env, { force: true }));
     try { return await fn(mk(connection, accessToken), connection); }
     catch (e2) {
-      if (e2 instanceof JiraAuthError) { await markError(db, connectionId, 'Jira 재연결이 필요합니다. (인증 거부)'); throw new IntegrationError(409, 'reconnect_required', 'Jira 재연결이 필요합니다.', { reconnect: true }); }
+      if (e2 instanceof JiraAuthError) { await markError(db, connectionId, '지라 재연결이 필요합니다. (인증 거부)'); throw new IntegrationError(409, 'reconnect_required', '지라 재연결이 필요합니다.', { reconnect: true }); }
       throw e2;
     }
   }
@@ -160,6 +160,6 @@ export async function withClient(db, connectionId, fn, env = process.env) {
 /** Active connection of a workspace or a typed error the routes can map. */
 export async function requireActiveConnection(db, workspaceId, provider = 'JIRA') {
   const c = await getConnection(db, workspaceId, provider);
-  if (!c || c.status === 'DISABLED') throw new IntegrationError(409, 'integration_not_connected', 'Workspace에 Jira가 연결되어 있지 않습니다. Settings → Integrations에서 연결하세요.');
+  if (!c || c.status === 'DISABLED') throw new IntegrationError(409, 'integration_not_connected', '워크스페이스에 지라가 연결되어 있지 않습니다. 설정 › 연동에서 연결하세요.');
   return c;
 }

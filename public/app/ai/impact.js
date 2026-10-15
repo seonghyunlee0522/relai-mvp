@@ -35,7 +35,7 @@ export async function openImpactDialog({ pid, change, onDone }) {
       ${raw(res.summary ? html`<div class="aid__summary"><b>AI 요약</b><p>${res.summary}</p></div>` : '')}
       ${raw(group('관련 요구사항 후보', 'affected_requirements', res.affected_requirements, (x, i) => (x.already ? '' : html`<select class="select select--xs" data-rel="${i}" aria-label="관계 유형">${raw(opt(RELATION_TYPE, 'MODIFIES'))}</select>`)))}
       ${raw(group('영향 WBS 후보', 'affected_wbs', res.affected_wbs, (x, i) => (x.already ? '' : html`<select class="select select--xs" data-imp="${i}" aria-label="영향 유형">${raw(opt(IMPACT_TYPE, x.impact_type))}</select>`)))}
-      ${raw(group('관련 Risk 후보', 'possible_risks', res.possible_risks, (x) => html`<span class="chip chip--muted">${RISK_LEVEL[x.risk_level] || x.risk_level}</span>`))}
+      ${raw(group('관련 리스크 후보', 'possible_risks', res.possible_risks, (x) => html`<span class="chip chip--muted">${RISK_LEVEL[x.risk_level] || x.risk_level}</span>`))}
       ${raw(group('재수행·수정이 필요한 테스트 (참고)', null, res.affected_tests, (x) => html`<span class="chip ${x.last_result === 'FAIL' ? 'chip--fail' : 'chip--muted'}">${RESULT[x.last_result] || '미실행'}</span>`))}`;
     const paintFoot = () => { d.foot.innerHTML = html`<button type="button" class="btn btn--secondary btn--sm" id="ai-again">다시 분석</button><span class="aid__sp"></span><span class="aid__btns"><button type="button" class="btn btn--secondary btn--sm" data-close>닫기</button><button type="button" class="btn btn--primary btn--sm" id="ai-commit" ${sel() ? '' : 'disabled'}>선택 항목 영향으로 추가 (${sel()}건)</button></span>`; $('#ai-again', d.el).onclick = run; $('#ai-commit', d.el).onclick = commit; };
     paintFoot();
@@ -52,7 +52,7 @@ export async function openImpactDialog({ pid, change, onDone }) {
     d.busy(true, '영향 관계를 기록하는 중입니다…');
     try {
       const r = await api('POST', wsApi(`/${pid}/changes/${change.id}/ai/impact/commit`), body);
-      toast(`영향 추가: 요구사항 ${r.added.requirements}건 · WBS ${r.added.wbs}건 · Risk ${r.added.risks}건${r.skipped.length ? ` (이미 연결 ${r.skipped.length}건 건너뜀)` : ''}`);
+      toast(`영향 추가: 요구사항 ${r.added.requirements}건 · WBS ${r.added.wbs}건 · 리스크 ${r.added.risks}건${r.skipped.length ? ` (이미 연결 ${r.skipped.length}건 건너뜀)` : ''}`);
       d.busy(false); d.close(); if (onDone) await onDone(r);
     } catch (e) { d.busy(false); const f = e.fields ? Object.values(e.fields)[0] : null; toast(f || e.message); }
   };

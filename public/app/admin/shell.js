@@ -4,8 +4,8 @@ import { api } from '../core/api.js';
 import { $, html, raw, root } from '../core/dom.js';
 import { state } from '../core/state.js';
 
-const NAV = [['/admin', 'Dashboard', /^\/admin\/?$/], ['/admin/users', 'Users', /^\/admin\/users/], ['/admin/workspaces', 'Workspaces', /^\/admin\/workspaces/], ['/admin/invitations', 'Invitations', /^\/admin\/invitations/], ['/admin/email-deliveries', 'Email Delivery', /^\/admin\/email-deliveries/], ['/admin/subscriptions', 'Subscriptions', /^\/admin\/subscriptions/],
-  ['/admin/payments', 'Payments', /^\/admin\/payments/], ['/admin/usage', 'Usage', /^\/admin\/usage/], ['/admin/integrations', 'Integrations', /^\/admin\/integrations/], ['/admin/audit', 'Audit', /^\/admin\/audit/]];
+const NAV = [['/admin', '대시보드', /^\/admin\/?$/], ['/admin/users', '사용자', /^\/admin\/users/], ['/admin/workspaces', '워크스페이스', /^\/admin\/workspaces/], ['/admin/invitations', '초대', /^\/admin\/invitations/], ['/admin/email-deliveries', '메일 발송', /^\/admin\/email-deliveries/], ['/admin/subscriptions', '구독', /^\/admin\/subscriptions/],
+  ['/admin/payments', '결제', /^\/admin\/payments/], ['/admin/usage', '사용량', /^\/admin\/usage/], ['/admin/integrations', '연동', /^\/admin\/integrations/], ['/admin/audit', '감사 기록', /^\/admin\/audit/]];
 
 export async function adminShell(path, view) {
   if (!state.user || state.user.system_role !== 'SYSTEM_ADMIN') {
@@ -16,8 +16,8 @@ export async function adminShell(path, view) {
     root.innerHTML = html`<div class="ashell">
       <aside class="aside" id="aside">
         <div class="aside__brand"><a href="/admin" data-link>RELAI <em>Admin</em></a><button class="aside__menu" id="amenu" aria-label="메뉴">☰</button></div>
-        <nav class="aside__nav" aria-label="Admin 메뉴">${raw(NAV.map(([href, label]) => html`<a href="${href}" data-link data-anav="${href}">${label}</a>`).join(''))}</nav>
-        <div class="aside__foot"><a href="/app" data-link>← RELAI 앱으로</a><div class="aside__me"><b>${state.user.name}</b><small>${state.user.email}</small></div><button class="linkbtn" id="alogout">Logout</button></div>
+        <nav class="aside__nav" aria-label="운영자 메뉴">${raw(NAV.map(([href, label]) => html`<a href="${href}" data-link data-anav="${href}">${label}</a>`).join(''))}</nav>
+        <div class="aside__foot"><a href="/app" data-link>← RELAI 앱으로</a><div class="aside__me"><b>${state.user.name}</b><small>${state.user.email}</small></div><button class="linkbtn" id="alogout">로그아웃</button></div>
       </aside>
       <main class="amain" id="main"></main></div>`;
     $('#alogout').onclick = async () => { try { await api('POST', '/api/auth/logout', {}); } finally { state.user = null; location.href = '/login'; } };
@@ -29,5 +29,5 @@ export async function adminShell(path, view) {
   main.innerHTML = '<div class="loading">불러오는 중…</div>';
   window.scrollTo(0, 0);
   try { await view(main); }
-  catch (e) { main.innerHTML = html`<div class="apage"><div class="empty"><h2>${e.status === 404 ? '찾을 수 없습니다' : e.status === 403 ? '권한이 없습니다' : '문제가 발생했습니다'}</h2><p>${e.message}</p><a class="btn btn--secondary" href="/admin" data-link>Dashboard</a></div></div>`; }
+  catch (e) { main.innerHTML = html`<div class="apage"><div class="empty"><h2>${e.status === 404 ? '찾을 수 없습니다' : e.status === 403 ? '권한이 없습니다' : '문제가 발생했습니다'}</h2><p>${e.message}</p><a class="btn btn--secondary" href="/admin" data-link>대시보드</a></div></div>`; }
 }

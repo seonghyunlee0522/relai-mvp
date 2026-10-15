@@ -37,7 +37,7 @@ test('charter: definition fields (existing + new free text) flow through unchang
   assert.equal(r.json.project_traits.project_type, 'NEW_BUILD'); assert.equal(r.json.definition.constraints, '내부망 개발');
   const sec = (k) => r.json.sections.find((s) => s.key === k);
   assert.ok(sec('GOALS').updated_at);
-  assert.match(sec('SCOPE').summary, /주요 산출물/); assert.match(sec('SCOPE').summary, /전제·제약·리스크 3개/);
+  assert.match(sec('SCOPE').summary, /주요 결과물/); assert.match(sec('SCOPE').summary, /전제·제약·리스크 3개/);
   assert.match(sec('OPERATIONS').summary, /운영 방식 5개/);
   assert.ok(r.json.definition.section_updated.SCOPE && r.json.definition.section_updated.OPERATIONS);
   // free text alone does not make a section ready (readiness rules unchanged)

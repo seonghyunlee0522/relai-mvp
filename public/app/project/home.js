@@ -28,7 +28,7 @@ const UNLINKED = 'CONFIRMED_UNLINKED_REQUIREMENT';
 const isAlert = (c) => Boolean(n(c.wbs && c.wbs.overdue_tasks) || n(c.wbs && c.wbs.overdue_milestones) || n(c.attention && c.attention.crit));
 
 /** Lifecycle bar: one segment per phase — green only when that phase's REQUIRED gate is met (B-1), amber when left with REQUIRED open. */
-const lifecycle = (seq, states) => html`<span class="lcpos" aria-label="단계 위치">${raw(Array.from({ length: 7 }, (_, i) => { const st = states && states[i] ? states[i] : i + 1 < seq ? 'done' : i + 1 === seq ? 'cur' : 'todo'; return `<i class="${st === 'todo' ? '' : `is-${st}`}"></i>`; }).join(''))}</span>`;
+const lifecycle = (seq, states) => html`<span class="lcpos" aria-label="진행 단계">${raw(Array.from({ length: 7 }, (_, i) => { const st = states && states[i] ? states[i] : i + 1 < seq ? 'done' : i + 1 === seq ? 'cur' : 'todo'; return `<i class="${st === 'todo' ? '' : `is-${st}`}"></i>`; }).join(''))}</span>`;
 const isMove = (a) => Boolean(a && /\?move=next$/.test(a.href));
 
 /* ---------- 다음 할 일: the What's Next CTA, verbatim. ?move=next (phase transition) keeps its confirm dialog in Project Home. ---------- */
@@ -78,14 +78,14 @@ const upcomingLine = (c) => {
   const up = c.upcoming || [];
   return html`<div class="hc__up"><span class="hc__k">주요 일정</span>${raw(up.length
     ? up.map((u) => html`<a class="hc__ms" href="/app/projects/${c.id}/${u.href}" data-link><time>${fmtShort(u.date)}</time>${u.title}</a>`).join('<i class="hc__sep">·</i>')
-    : '<span class="hc__none">예정된 마일스톤 없음</span>')}</div>`;
+    : '<span class="hc__none">예정된 주요 일정 없음</span>')}</div>`;
 };
 
 const card = (c, i) => {
   const alert = isAlert(c);
   return html`<article class="hc ${alert ? 'is-blocker' : ''}" data-pid="${c.id}">
     <header class="hc__h">
-      ${raw(alert ? (isOverdue(c) ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 마일스톤이 있습니다" data-overdue>지연</span>' : '<span class="hc__prio" title="심각한 확인 필요 항목이 있습니다">확인 필요</span>') : '')}
+      ${raw(alert ? (isOverdue(c) ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 주요 일정이 있습니다" data-overdue>지연</span>' : '<span class="hc__prio" title="심각한 확인 필요 항목이 있습니다">확인 필요</span>') : '')}
       <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a>
       <span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}
       <span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>
@@ -139,13 +139,13 @@ const dCard = (c, i) => {
   return html`<article class="hc hc--r2 ${late ? 'is-blocker' : ''}" data-pid="${c.id}">
     <header class="hc__h">
       <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a><span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}
-      ${raw(late ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 마일스톤이 있습니다" data-overdue>지연</span>' : '')}
+      ${raw(late ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 주요 일정이 있습니다" data-overdue>지연</span>' : '')}
       ${raw(c.status !== 'ACTIVE' ? html`<span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>` : '')}
       <span class="hc__pos">${no2(c.current_phase_sequence)} 단계 / 07</span>
     </header>
     ${raw(miniStepper(c))}
     ${raw(dNext(c, i === 0))}
-    ${raw(n(w.tasks) || late ? html`<p class="hc__foot">${raw(n(w.tasks) ? html`진행률 <b>${n(w.progress)}%</b>` : '')}${raw(late ? html`${n(w.tasks) ? ' · ' : ''}<a class="link is-crit" href="/app/projects/${c.id}/wbs?f=overdue" data-link>지연 작업 ${n(w.overdue_tasks)}건${n(w.overdue_milestones) ? ` · 지난 마일스톤 ${n(w.overdue_milestones)}건` : ''}</a>` : '')}</p>` : '')}
+    ${raw(n(w.tasks) || late ? html`<p class="hc__foot">${raw(n(w.tasks) ? html`진행률 <b>${n(w.progress)}%</b>` : '')}${raw(late ? html`${n(w.tasks) ? ' · ' : ''}<a class="link is-crit" href="/app/projects/${c.id}/wbs?f=overdue" data-link>지연 작업 ${n(w.overdue_tasks)}건${n(w.overdue_milestones) ? ` · 지난 주요 일정 ${n(w.overdue_milestones)}건` : ''}</a>` : '')}</p>` : '')}
   </article>`;
 };
 const homeSide = (live) => {

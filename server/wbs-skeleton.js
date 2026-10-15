@@ -31,7 +31,7 @@ export async function skeletonPlan(db, project) {
   const groups = [
     { key: 'ANALYSIS_DESIGN', title: '분석·설계', phase: 'ANALYSIS_DESIGN', tasks: ['상세 요구사항 분석', '화면 설계', 'DB 설계', ...(yes('has_external_integration') ? ['인터페이스 설계'] : [])].map((title) => ({ title })) },
     { key: 'DEVELOPMENT', title: '구현', phase: 'DEVELOPMENT', tasks: reqs.length ? reqs.map((r) => ({ title: `${r.display_id} ${r.title}`.slice(0, 200), requirement_id: r.id })) : [{ title: '기능 구현' }] },
-    { key: 'TESTING', title: '시험', phase: 'TESTING', tasks: ['통합 테스트', '사용자 인수 테스트(UAT)', '결함 조치'].map((title) => ({ title })) },
+    { key: 'TESTING', title: '시험', phase: 'TESTING', tasks: ['통합 테스트', '고객 인수 테스트(UAT)', '결함 조치'].map((title) => ({ title })) },
     { key: 'TRANSITION', title: '전환·오픈', phase: 'TRANSITION_GO_LIVE', tasks: [...(['YES', 'TBD'].includes(project.data_migration) ? ['데이터 이관'] : []), '사용자 교육', '운영 환경 배포·오픈'].map((title) => ({ title })) },
     { key: 'STABILIZE', title: '안정화', phase: 'TRANSITION_GO_LIVE', tasks: [{ title: '오픈 후 안정화 지원' }] },
   ];

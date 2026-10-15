@@ -97,7 +97,7 @@ function analysisDesign(key, ctx) {
       if (n(w.tasks) === 0) return dep;
       if (n(r.in_scope) === 0) return none('범위 내 요구사항이 없어 연결할 대상이 없습니다.', act('요구사항 보기 →', `/app/projects/${ctx.pid}/requirements`));
       if (n(r.in_scope_unlinked)) return prog(`범위 내 요구사항 ${r.in_scope}건 중 ${r.in_scope_unlinked}건이 WBS와 연결되지 않았습니다.`, act('요구사항 연결 →', `/app/projects/${ctx.pid}/requirements?view=trace&scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked`));
-      return ok(`범위 내 요구사항 ${r.in_scope}건이 모두 WBS와 연결되었습니다.`, act('Trace 보기 →', `/app/projects/${ctx.pid}/requirements?view=trace`), { trace: n(w.tasks_unlinked) ? `${w.tasks_unlinked_scope === 'DEVELOPMENT' ? '구현 작업 중 ' : ''}요구사항과 연결되지 않은 작업 ${w.tasks_unlinked}건` : null });   // US-5: only 구현 tasks once tasks are tagged
+      return ok(`범위 내 요구사항 ${r.in_scope}건이 모두 WBS와 연결되었습니다.`, act('연결 추적 보기 →', `/app/projects/${ctx.pid}/requirements?view=trace`), { trace: n(w.tasks_unlinked) ? `${w.tasks_unlinked_scope === 'DEVELOPMENT' ? '구현 작업 중 ' : ''}요구사항과 연결되지 않은 작업 ${w.tasks_unlinked}건` : null });   // US-5: only 구현 tasks once tasks are tagged
     }
     case 'ASSIGN': return n(w.tasks) === 0 ? dep
       : n(w.tasks_without_owner) ? prog(`${w.tasks}건 중 ${w.tasks_without_owner}건에 담당자가 없습니다.`, act('담당자 지정 →', u('?f=no_owner&select=owner')))
@@ -109,11 +109,11 @@ function analysisDesign(key, ctx) {
       : n(w.dependencies) ? ok(`선후관계 ${w.dependencies}건이 설정되어 있습니다.`, act('WBS 보기 →', u()))
       : none('아직 작업 간 선후관계가 없습니다.', act('선후관계 설정 →', u()));
     case 'MILESTONES': {
-      if (n(w.milestones)) return ok(`마일스톤 ${w.milestones}건이 등록되어 있습니다.`, act('간트 차트 보기 →', u('?view=gantt')));
+      if (n(w.milestones)) return ok(`주요 일정 ${w.milestones}건이 등록되어 있습니다.`, act('간트 차트 보기 →', u('?view=gantt')));
       // US-4: the 01 주요 일정 not yet in the WBS are offered once, inline (What's Next row + the WBS screen) — one click imports them
       const kd = ctx.key_dates_pending || [];
-      if (kd.length) return none(`착수 때 정한 주요 일정 ${kd.length}건(${kd.slice(0, 3).map((k) => k.title).join('·')}${kd.length > 3 ? '…' : ''})을 마일스톤으로 가져올까요?`, act('마일스톤 등록 →', u('?new=1&type=MILESTONE')), { import_ms: kd.length });
-      return none('아직 등록된 마일스톤이 없습니다.', act('마일스톤 등록 →', u('?new=1&type=MILESTONE')));
+      if (kd.length) return none(`착수 때 정한 주요 일정 ${kd.length}건(${kd.slice(0, 3).map((k) => k.title).join('·')}${kd.length > 3 ? '…' : ''})을 WBS로 가져올까요?`, act('주요 일정 등록 →', u('?new=1&type=MILESTONE')), { import_ms: kd.length });
+      return none('아직 등록된 주요 일정이 없습니다.', act('주요 일정 등록 →', u('?new=1&type=MILESTONE')));
     }
     case 'NON_DEV_TASKS': {
       const bp = w.by_phase || {}; const nondev = n(bp.TESTING) + n(bp.TRANSITION_GO_LIVE) + n(bp.OPERATIONS);
@@ -186,7 +186,7 @@ function testing(key, ctx) {
     case 'TEST_PLAN': {
       if (n(t.target) === 0) return none(n(t.in_scope) ? '범위 내 확정 요구사항이 아직 없습니다. 요구사항을 확정하면 테스트 대상이 됩니다.' : '범위 내 요구사항이 아직 없습니다.', act('요구사항 보기 →', `/app/projects/${ctx.pid}/requirements?scope=IN_SCOPE`));
       if (n(t.in_scope_untested)) return (n(t.target_tested) + n(t.excluded) ? prog : none)(testPlanProgressText(t), act('요구사항별 테스트 만들기', u('?tab=coverage&generate=1')), { row_text: true });
-      return ok(`범위 내 요구사항 ${n(t.target)}건이 모두 테스트와 연결되었거나 제외 사유가 있습니다.${n(t.excluded) ? ` (제외 ${n(t.excluded)}건)` : ''}`, act('커버리지 보기', u('?tab=coverage')), { row_text: true });
+      return ok(`범위 내 요구사항 ${n(t.target)}건이 모두 테스트와 연결되었거나 제외 사유가 있습니다.${n(t.excluded) ? ` (제외 ${n(t.excluded)}건)` : ''}`, act('테스트 연결률 보기', u('?tab=coverage')), { row_text: true });
     }
     case 'CASES': return n(t.total) === 0 ? empty : ok(`테스트 케이스 ${t.total}건이 등록되어 있습니다.`, act('테스트 케이스 추가 →', u('?new=1')));
     case 'RUN': return n(t.total) === 0 ? dep
@@ -199,7 +199,7 @@ function testing(key, ctx) {
       return ok('최근 결과가 실패인 테스트가 없고, 테스트에서 등록한 이슈가 모두 해결되었습니다.', act('결과 보기 →', u()));
     }
     case 'WEEKLY_REPORT': return weeklyReport(ctx);
-    case 'NON_FUNCTIONAL': return manual('성능·보안·마이그레이션 검증 결과를 테스트 케이스로 기록하거나 메모로 남깁니다.', act('테스트 케이스 추가 →', u('?new=1')));
+    case 'NON_FUNCTIONAL': return manual('성능·보안·데이터 이관 검증 결과를 테스트 케이스로 기록하거나 메모로 남깁니다.', act('테스트 케이스 추가 →', u('?new=1')));
     default: return manual('');
   }
 }

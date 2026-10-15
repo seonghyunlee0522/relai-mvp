@@ -24,7 +24,7 @@ test('template: 02 = … CONFIRM → BASELINE_APPROVAL (필수) → INTERFACE (�
   const st = PHASE_BY_KEY.REQUIREMENTS.steps;
   assert.deepEqual(st.map((s) => s.key), ['COLLECT', 'CLASSIFY', 'PRIORITIZE', 'SCOPE_CHECK', 'CONFIRM', 'BASELINE_APPROVAL', 'INTERFACE']);
   const b = st.find((s) => s.key === 'BASELINE_APPROVAL');
-  assert.equal(b.title, '요구사항 기준선 승인(고객)'); assert.equal(b.importance, 'REQUIRED'); assert.equal(b.linked_feature_type, 'requirements');
+  assert.equal(b.title, '요구사항 확정 승인(고객)'); assert.equal(b.importance, 'REQUIRED'); assert.equal(b.linked_feature_type, 'requirements');
 });
 
 test('US-1 기준선 승인: every field required, 승인일 ≤ today, not skippable (409), direct approver → 이해관계자 (01 untouched)', async () => {
@@ -49,7 +49,7 @@ test('US-1 기준선 승인: every field required, 승인일 ≤ today, not skip
   r = await A.c('POST', `${A.req}/baseline/complete`, { approval: APV }); assert.equal(r.status, 200, JSON.stringify(r.json));
   const b = r.json.baseline; assert.equal(b.status, 'COMPLETED'); assert.equal(b.approver.name, '이수진'); assert.equal(b.summary, '이수진 차장 · 2026-01-10 · 이메일 회신');
   const def = (await A.c('GET', `${A.purl}/definition`)).json;
-  const sh = def.definition.stakeholders.find((s) => s.name === '이수진'); assert.ok(sh); assert.equal(sh.org_type, 'CLIENT'); assert.equal(sh.area, '요구사항 기준선 승인');
+  const sh = def.definition.stakeholders.find((s) => s.name === '이수진'); assert.ok(sh); assert.equal(sh.org_type, 'CLIENT'); assert.equal(sh.area, '요구사항 확정 승인');
   assert.equal(b.approval.approver_id, sh.id);
   assert.equal(def.sections.find((s) => s.key === 'STAKEHOLDERS').changed_after_completion, false);
   assert.equal(r.json.guide.guidance.rule, 'REQ_DONE');
@@ -80,7 +80,7 @@ test('US-1 미확정 함께 확정: 3 unconfirmed + ON → all confirmed, CONFIR
   assert.equal((await A.c('GET', `${A.req}?scope=OUT_OF_SCOPE`)).json.requirements[0].status, 'DRAFT', '범위 외 untouched');
   const g = (await A.c('GET', A.purl)).json;
   assert.equal(step(g, 'REQUIREMENTS', 'CONFIRM').state, 'COMPLETED'); assert.equal(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').state, 'COMPLETED');
-  assert.equal(g.guidance.rule, 'REQ_DONE'); assert.match(g.guidance.description, /기준선이 잡혔습니다/);
+  assert.equal(g.guidance.rule, 'REQ_DONE'); assert.match(g.guidance.description, /요구사항이 확정되었습니다/);
   server.close();
 });
 
@@ -96,9 +96,9 @@ test('US-1 guidance ladder: REQ_CONFIRM (승인 기록하기 + 정의서) → RE
   const rid = (await A.c('GET', A.req)).json.requirements[0].id;
   await A.c('PATCH', `${A.req}/${rid}`, { status: 'CONFIRMED' });
   g = (await A.c('GET', A.purl)).json;
-  assert.equal(g.guidance.rule, 'REQ_APPROVE'); assert.equal(g.guidance.title, '요구사항 기준선을 고객에게 승인받으세요');
-  assert.equal(g.guidance.description, '고객이 승인한 요구사항이 설계·개발·테스트·검수의 기준(기준선)이 됩니다. 요구사항 정의서를 보내고, 승인 회신을 받으면 기록하세요.');
-  assert.ok(!/기준선이 잡혔습니다/.test(JSON.stringify(g.guidance)));
+  assert.equal(g.guidance.rule, 'REQ_APPROVE'); assert.equal(g.guidance.title, '확정한 요구사항을 고객에게 승인받으세요');
+  assert.equal(g.guidance.description, '고객이 승인한 요구사항이 설계·개발·테스트·검수의 기준이 됩니다. 요구사항 정의서를 보내고, 승인 회신을 받으면 기록하세요.');
+  assert.ok(!/요구사항이 확정되었습니다/.test(JSON.stringify(g.guidance)));
   assert.equal(g.current_phase.summary.gate_met, false);
   // 02→03 without approval: the client writes the reason through the step note API, then activates (server never blocks)
   const st = step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL');

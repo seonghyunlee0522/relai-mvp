@@ -40,7 +40,7 @@ export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth
 
   app.get(`/api/workspaces/:wid/integrations`, guard, wrap(async (req, res) => send(res, async () => res.json(await S.listIntegrations(db, req.params.wid)))));
   app.post(`/api/workspaces/:wid/integrations/jira/connect`, manage, wrap(async (req, res) => send(res, async () => res.json(await S.startOAuth(db, { workspaceId: req.params.wid, userId: req.user.id })))));
-  app.post(`/api/workspaces/:wid/integrations/jira/disconnect`, manage, wrap(async (req, res) => send(res, async () => { const c = await S.disconnect(db, req.params.wid); if (!c) return fail(res, 404, 'not_found', '연결된 Jira가 없습니다.'); res.json(await S.listIntegrations(db, req.params.wid)); })));
+  app.post(`/api/workspaces/:wid/integrations/jira/disconnect`, manage, wrap(async (req, res) => send(res, async () => { const c = await S.disconnect(db, req.params.wid); if (!c) return fail(res, 404, 'not_found', '연결된 지라가 없습니다.'); res.json(await S.listIntegrations(db, req.params.wid)); })));
 
   app.get(`/api/integrations/jira/callback`, wrap(async (req, res) => {
     if (!req.user) return res.redirect('/login?next=' + encodeURIComponent('/app/settings'));

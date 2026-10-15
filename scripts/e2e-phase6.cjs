@@ -96,9 +96,9 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-7 06 경고 줄: "열린 이슈 1건 · 승인 후 미반영 변경 1건"', warns.some((x) => /열린 이슈 1건 · 승인 후 미반영 변경 1건/.test(x)), JSON.stringify(warns));
   const wrRow = page.locator('.np__row:has-text("주간보고 작성·공유")');
   check('US-5 06 What\'s Next에 주간보고 행 (권장)', (await wrRow.count()) === 1 && /권장/.test(await wrRow.textContent()));
-  const dmRow = page.locator('.np__row:has-text("데이터 마이그레이션")');
+  const dmRow = page.locator('.np__row[data-step-key="DATA_MIGRATION"]');
   const dmTxt = await dmRow.textContent();
-  check('US-4 이관 있음 → 데이터 마이그레이션 필수 + DATA 요구사항 링크', (/필수/.test(dmTxt) || (await dmRow.getAttribute('data-imp')) === 'REQUIRED') && /기존 계약 데이터 이관/.test(dmTxt) && (await dmRow.locator('[data-row-links] a').count()) === 1, dmTxt.replace(/\s+/g, ' ').slice(0, 160));
+  check('US-4 이관 있음 → 데이터 이관 필수 + DATA 요구사항 링크', (/필수/.test(dmTxt) || (await dmRow.getAttribute('data-imp')) === 'REQUIRED') && /기존 계약 데이터 이관/.test(dmTxt) && (await dmRow.locator('[data-row-links] a').count()) === 1, dmTxt.replace(/\s+/g, ' ').slice(0, 160));
   let g = (await api('GET', A.P)).json;
   check('US-4 DATA_MIGRATION REQUIRED in the gate (필수 미완료)', STEP(g, 'DATA_MIGRATION').importance === 'REQUIRED' && g.current_phase.summary.required_open >= 3);
   check('US-4 건너뛰기 불가 (필수) → 409', (await api('PATCH', `${A.P}/steps/${STEP(g, 'DATA_MIGRATION').id}`, { status: 'SKIPPED' })).status === 409);
@@ -271,7 +271,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   const B = await mkProject('사내 포털 개편', 'NO');
   await toPhase(B, ['REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING', 'TRANSITION_GO_LIVE']);
   let gb = (await api('GET', B.P)).json;
-  check('US-4 이관 없음 → 데이터 마이그레이션 선택', STEP(gb, 'DATA_MIGRATION').importance === 'OPTIONAL');
+  check('US-4 이관 없음 → 데이터 이관 선택', STEP(gb, 'DATA_MIGRATION').importance === 'OPTIONAL');
   sql(`UPDATE projects SET data_migration = 'TBD' WHERE id = '${B.p.id}'`);
   gb = (await api('GET', B.P)).json;
   check('US-4 미정 → 권장 (특성을 바꾸면 바로 반영)', STEP(gb, 'DATA_MIGRATION').importance === 'RECOMMENDED');
