@@ -114,8 +114,8 @@ export function projectGuidance(ctx) {
     }
     case 'ANALYSIS_DESIGN': {
       // Phase 3 US-2: an empty WBS starts from the rule-based skeleton (primary); 직접 추가 · Excel · AI stay on the WBS screen as secondary paths
-      if (n(wbs.tasks) === 0 && n(wbs.total) === 0) return out('WBS_EMPTY', '작업 목록(WBS)을 작성하세요', `${n(req.in_scope_confirmed) ? `확정한 요구사항 ${req.in_scope_confirmed}건으로` : '확정한 요구사항이 없어도'} 시험·전환·오픈 작업까지 들어간 기본 작업 목록(WBS 뼈대)을 만들 수 있습니다. 만든 뒤 자유롭게 고치고, 일정과 담당자는 직접 채웁니다.`, '실행 작업이 있어야 담당자·일정·진척률을 관리할 수 있습니다.', act('WBS 뼈대 만들기', u('/wbs?skeleton=1')), act('직접 추가 · Excel · AI →', u('/wbs')), '작업이 준비되면 담당자와 일정을 정합니다.');
-      if (n(wbs.tasks) === 0) return out('WBS_EMPTY', '작업 목록(WBS)을 작성하세요', '요구사항을 실행 가능한 작업 단위로 구체화해야 일정과 책임을 명확하게 관리할 수 있습니다. 직접 추가, Excel 가져오기, AI WBS 초안(사용 가능 시)을 WBS 화면에서 선택할 수 있습니다.', '실행 작업이 있어야 담당자·일정·진척률을 관리할 수 있습니다.', act('WBS 작성 시작 →', u('/wbs?new=1')), null, '작업이 준비되면 요구사항을 연결하고 담당자와 일정을 정합니다.');
+      if (n(wbs.tasks) === 0 && n(wbs.total) === 0) return out('WBS_EMPTY', 'WBS를 작성하세요', `${n(req.in_scope_confirmed) ? `확정한 요구사항 ${req.in_scope_confirmed}건으로` : '확정한 요구사항이 없어도'} 시험·전환·오픈 작업까지 들어간 기본 작업 목록(WBS 뼈대)을 만들 수 있습니다. 만든 뒤 자유롭게 고치고, 일정과 담당자는 직접 채웁니다.`, '실행 작업이 있어야 담당자·일정·진척률을 관리할 수 있습니다.', act('WBS 뼈대 만들기', u('/wbs?skeleton=1')), act('직접 추가 · Excel · AI →', u('/wbs')), '작업이 준비되면 담당자와 일정을 정합니다.');
+      if (n(wbs.tasks) === 0) return out('WBS_EMPTY', 'WBS를 작성하세요', '요구사항을 실행 가능한 작업 단위로 구체화해야 일정과 책임을 명확하게 관리할 수 있습니다. 직접 추가, Excel 가져오기, AI WBS 초안(사용 가능 시)을 WBS 화면에서 선택할 수 있습니다.', '실행 작업이 있어야 담당자·일정·진척률을 관리할 수 있습니다.', act('WBS 작성 시작 →', u('/wbs?new=1')), null, '작업이 준비되면 요구사항을 연결하고 담당자와 일정을 정합니다.');
       if (n(req.in_scope) && n(req.in_scope_unlinked)) return out('WBS_TRACE', '요구사항과 WBS를 연결하세요', `범위 내 요구사항 ${req.in_scope}건 중 ${req.in_scope_unlinked}건이 아직 어떤 작업과도 연결되지 않았습니다. 연결이 있어야 빠진 요구사항을 찾고 변경 영향을 추적할 수 있습니다.`, '연결이 있어야 빠진 요구사항을 찾고 변경 영향을 추적할 수 있습니다.', act('요구사항 연결 →', u('/requirements?view=trace&scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked')), act('WBS 보기 →', u('/wbs')), '연결이 끝나면 담당자와 일정을 정합니다.');
       if (n(wbs.tasks_without_owner)) return out('WBS_ASSIGN', '작업 담당자를 지정하세요', `담당자가 없는 작업 ${wbs.tasks_without_owner}건이 있습니다. 담당자가 정해져야 진행 상황과 지연을 사람 기준으로 추적할 수 있습니다.`, '담당자가 있어야 진행 상황과 지연을 추적할 수 있습니다.', act('담당자 지정 →', u('/wbs?f=no_owner&select=owner')), n(wbs.tasks_without_dates) ? act('일정 입력 →', u('/wbs?f=no_dates')) : null, '담당자 지정 후 일정을 입력합니다.');
       if (n(wbs.tasks_without_dates)) return out('WBS_PLAN', '작업 일정을 입력하세요', `일정이 없는 작업 ${wbs.tasks_without_dates}건이 있습니다. 작업별 계획 일정이 있어야 계획 대비 진척과 지연을 조기에 발견할 수 있습니다.`, '작업별 계획 일정이 있어야 계획 대비 진척과 지연을 계산할 수 있습니다.', act('일정 입력 →', u('/wbs?f=no_dates')), act('간트 차트 보기 →', u('/wbs?view=gantt')), '일정이 준비되면 구현 단계로 이동합니다.');
@@ -125,7 +125,7 @@ export function projectGuidance(ctx) {
       if (n(bp.TRANSITION_GO_LIVE) === 0) warnLink('오픈(전환) 작업이 없습니다', u('/wbs?phase=TRANSITION_GO_LIVE'));
       if (n(wbs.tasks_over_end)) warnLink(`종료일을 넘는 작업 ${wbs.tasks_over_end}건`, u('/wbs?f=over_end'));
       if (n(wbs.tasks_unlinked)) warnLink(wbs.tasks_unlinked_scope === 'DEVELOPMENT' ? `구현 작업 중 요구사항과 연결되지 않은 작업 ${wbs.tasks_unlinked}건` : `요구사항과 연결되지 않은 작업 ${wbs.tasks_unlinked}건`, u(wbs.tasks_unlinked_scope === 'DEVELOPMENT' ? '/wbs?f=unlinked&phase=DEVELOPMENT' : '/wbs?f=unlinked'));
-      if (n(wbs.milestones) === 0) warnings.push('등록된 주요 일정 없음');
+      if (n(wbs.milestones) === 0) warnings.push('등록된 마일스톤 없음');
       return out('WBS_DONE', '실행 계획이 준비되었습니다', '실행 계획이 갖춰졌습니다. 구현 단계에서는 진척·지연·이슈·변경 요청을 꾸준히 기록해야 일정 영향을 미리 줄일 수 있습니다.', '구현 단계에서는 진척·지연·이슈·변경 요청을 중심으로 안내합니다.', move || act('WBS 보기 →', u('/wbs')), move ? act('WBS 보기 →', u('/wbs')) : null, nextPhaseText);
     }
     case 'DEVELOPMENT': {

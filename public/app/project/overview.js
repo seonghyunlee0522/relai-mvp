@@ -67,7 +67,7 @@ const scheduleCol = (g, p, dash) => {
     ${raw(kv('계획 종료일', p.planned_end_date || '-'))}
     ${raw(kv('남은 기간', left === null ? '-' : left < 0 ? `${-left}일 초과` : `${left}일`, { tone: left === null ? '' : left < 0 ? 'crit' : left <= 14 ? 'warn' : '', sub: p.planned_end_date && left !== null && left >= 0 ? `오늘 ${todayLocal()} 기준` : '' }))}
     ${raw(kv('지연 작업', `${n(w.overdue_tasks)}건`, { href: `${u}/wbs?f=overdue`, tone: n(w.overdue_tasks) ? 'crit' : '', sub: n(w.overdue_tasks) ? `최대 ${n(w.max_overdue_days)}일 지연` : '' }))}
-    ${raw(kv('주요 일정', n(w.milestones) ? `${n(w.milestones_completed)} / ${n(w.milestones)} 완료` : '-', { href: `${u}/wbs?view=gantt`, tone: n(w.overdue_milestones) ? 'crit' : '', sub: n(w.overdue_milestones) ? `지난 주요 일정 ${w.overdue_milestones}건` : nextMs ? `다음: ${nextMs.title} (${nextMs.days_left === 0 ? '오늘' : `D-${nextMs.days_left}`})` : n(w.milestones) ? '' : '등록된 주요 일정 없음' }))}
+    ${raw(kv('주요 마일스톤', n(w.milestones) ? `${n(w.milestones_completed)} / ${n(w.milestones)} 완료` : '-', { href: `${u}/wbs?view=gantt`, tone: n(w.overdue_milestones) ? 'crit' : '', sub: n(w.overdue_milestones) ? `지난 마일스톤 ${w.overdue_milestones}건` : nextMs ? `다음: ${nextMs.title} (${nextMs.days_left === 0 ? '오늘' : `D-${nextMs.days_left}`})` : n(w.milestones) ? '' : '등록된 마일스톤 없음' }))}
   </div>`;
 };
 const scopeCol = (g, p) => {
@@ -105,7 +105,7 @@ const healthLine = (h) => {
 /* ---------- Upcoming / Activity ---------- */
 const upcomingSection = (snap, pid) => {
   const all = snap.upcoming || []; const up = all.slice(0, 6);
-  return html`<section class="ovsec ovup" aria-labelledby="upT"><div class="ovsec__h"><h2 id="upT">다가오는 일정</h2><small class="ovsec__ctx">7일 내 일정</small>${raw(up.length ? html`<em class="ovsec__n">${all.length}</em>` : '')}</div>
+  return html`<section class="ovsec ovup" aria-labelledby="upT"><div class="ovsec__h"><h2 id="upT">다가오는 일정</h2><small class="ovsec__ctx">7일 내 일정 · 마일스톤</small>${raw(up.length ? html`<em class="ovsec__n">${all.length}</em>` : '')}</div>
     ${raw(up.length ? html`<ol class="ovup__list">${raw(up.map((x) => html`<li><a href="/app/projects/${pid}/${x.href}" data-link><time>${fmtShort(x.date)}${x.date === todayLocal() ? ' 오늘' : ''}</time><span class="ovup__k">${x.label}</span><span class="ovup__t">${x.title}</span></a></li>`).join(''))}</ol>` : '<p class="ovnone">7일 내 예정된 일정이 없습니다.</p>')}
   </section>`;
 };

@@ -6,7 +6,7 @@ const TERMS = [
   ['WBS', 'WBS', '프로젝트에서 해야 할 일을 잘게 나눈 작업 목록'],
   ['간트', '간트', '작업의 시작일·종료일을 막대로 그린 일정표'],
   ['확정본', '확정본', '고객이 승인해 확정한 범위·요구사항. 이후 바뀌는 것은 변경 요청으로 관리합니다'],
-  ['주요 일정', '주요 일정', '고객과 공유할 주요 시점 (예: 착수보고회, 오픈)'],
+  ['마일스톤', '마일스톤', '고객과 공유할 주요 시점 (예: 착수보고회, 오픈)'],
   ['완료 조건', '완료 조건', '이 요구사항이 다 됐다고 판단하는 기준. 검수 기준이 됩니다'],
 ];
 export const TERM_SKIP = 'button,a,select,option,textarea,input,label,summary,script,style,th,h1,.term,.stabs,.dtabs,[role="tab"],.chip,.mono,.wcode,.toast,.gtable,.rtable,.gantt,.np__menu,.tmenu,.gpop,[contenteditable="true"]';

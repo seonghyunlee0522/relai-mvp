@@ -321,7 +321,7 @@ test('wbs preview: validation rules (codes, parent, types, dates, progress, pred
   assert.equal(g(5).errors.code, '중복된 WBS Code입니다.');
   assert.match(g(6).errors.code, /상위 항목\(3\)이 파일에 없습니다/);
   assert.match(g(7).errors.start, /시작일/);
-  assert.match(g(8).errors.code, /주요 일정 아래/);
+  assert.match(g(8).errors.code, /마일스톤 아래/);
   assert.match(g(9).errors.progress, /하위 작업/);
   assert.match(g(10).errors.parent_code, /\(5\)/);
   assert.match(g(11).errors.progress, /0~100/);
@@ -416,7 +416,7 @@ test('wbs export: columns, hierarchy, predecessors; the exported file re-imports
   assert.equal(ws.rowCount, 5);
   assert.deepEqual([ws.getCell(3, 1).value, ws.getCell(3, 2).value, ws.getCell(3, 3).value, ws.getCell(3, 4).value, ws.getCell(3, 9).value, ws.getCell(3, 10).value], ['1.1', '1', '작업', 'A', '진행 중', 20]);
   assert.equal(ws.getCell(4, 11).value, '1.1');
-  assert.equal(ws.getCell(5, 3).value, '주요 일정'); assert.equal(ws.getCell(5, 7).value, null);
+  assert.equal(ws.getCell(5, 3).value, '마일스톤'); assert.equal(ws.getCell(5, 7).value, null);
   // the exported file is a valid import file (re-import into a fresh project)
   const B = await setup(client, 'b@x.com');
   const pv = await B.c('POST', `${B.wbs}/import/preview`, { data: ex.buf.toString('base64') });

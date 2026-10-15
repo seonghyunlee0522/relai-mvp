@@ -118,7 +118,7 @@ ${v(c.governance, (x) => ml(x, 800))}
 
 Timeline:
 기간: ${c.timeline.startDate || '?'} ~ ${c.timeline.endDate || '?'}
-${ms || `주요 일정: ${NONE}`}
+${ms || `주요 마일스톤: ${NONE}`}
 
 Assumptions:
 ${v(c.assumptions, (x) => ml(x))}

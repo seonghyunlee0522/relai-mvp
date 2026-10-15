@@ -26,12 +26,12 @@ const STATUS_LABELS = {
   ACCEPTANCE: { DRAFT: '초안', REQUESTED: '검수 요청', ACCEPTED: '승인', REJECTED: '반려', REWORK_REQUIRED: '보완 필요' },
 };
 const FIELD_LABELS = { title: '제목', description: '설명', type: '분류', priority: '우선순위', scope: '범위', status: '상태', owner_user_id: '담당자', requester: '요청자', progress: '진행률',
-  item_type: '유형', planned_start_date: '시작일', planned_end_date: '종료일', actual_start_date: '실제 시작일', actual_end_date: '실제 종료일', milestone_date: '주요 일정 날짜',
+  item_type: '유형', planned_start_date: '시작일', planned_end_date: '종료일', actual_start_date: '실제 시작일', actual_end_date: '실제 종료일', milestone_date: '마일스톤 날짜',
   severity: '심각도', due_date: '기한', risk_level: '위험 수준', probability: '발생 가능성', impact: '영향도', result: '결과' };
 const VALUE_FIELDS = new Set(['status', 'priority', 'scope', 'type', 'progress', 'item_type', 'planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date', 'milestone_date', 'severity', 'due_date']);
 const VALUE_MAP = { type: { UNSPECIFIED: '미지정', FUNCTIONAL: '기능', NON_FUNCTIONAL: '비기능', INTERFACE: '인터페이스', DATA: '데이터', SECURITY: '보안', OPERATION: '운영', OTHER: '기타' },
   priority: { UNSPECIFIED: '미지정', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' }, scope: { UNDECIDED: '미결정', IN_SCOPE: '범위 내', OUT_OF_SCOPE: '범위 외' },
-  item_type: { SUMMARY: '상위 항목', TASK: '작업', MILESTONE: '주요 일정' } };
+  item_type: { SUMMARY: '상위 항목', TASK: '작업', MILESTONE: '마일스톤' } };
 const SIMPLE = {
   CREATED: '새로 등록했습니다.', ARCHIVED: '보관했습니다.', CONVERTED: '다른 항목으로 전환했습니다.', EXECUTED: '테스트를 실행했습니다.', ISSUE_RAISED: '이슈를 등록했습니다.',
   CRITERION_ADDED: '완료 조건을 추가했습니다.', CRITERION_UPDATED: '완료 조건을 수정했습니다.', CRITERION_REMOVED: '완료 조건을 삭제했습니다.',

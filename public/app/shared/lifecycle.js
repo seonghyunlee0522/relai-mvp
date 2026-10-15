@@ -31,9 +31,9 @@ export const HOME_ITEMS = (pid) => [
     children: [
       { key: 'overview-main', label: '프로젝트 현황', href: P(pid, '/overview'), match: (path, qs) => isPath(path, pid, '/overview') && !location.hash.includes('health') },
       { key: 'overview-charter', label: '프로젝트 개요', href: P(pid, '/charter'), match: (path) => isPath(path, pid, '/charter') },
-      { key: 'overview-wbs', label: '작업 목록(WBS)', href: P(pid, '/wbs?ctx=monitor'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && !q(qs, 'view', 'gantt') },
+      { key: 'overview-wbs', label: 'WBS', href: P(pid, '/wbs?ctx=monitor'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && !q(qs, 'view', 'gantt') },
       { key: 'overview-reports', label: '주간보고', href: P(pid, '/reports'), match: (path) => path.startsWith(P(pid, '/reports')) },
-      { key: 'overview-schedule', label: '일정표', href: P(pid, '/wbs?ctx=monitor&view=gantt'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && q(qs, 'view', 'gantt') },
+      { key: 'overview-schedule', label: '일정 / 마일스톤', href: P(pid, '/wbs?ctx=monitor&view=gantt'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'ctx', 'monitor') && q(qs, 'view', 'gantt') },
       { key: 'overview-health', label: '프로젝트 건강도', href: P(pid, '/overview#health'), match: (path) => isPath(path, pid, '/overview') && location.hash === '#health' },
     ] },
 ];
@@ -43,7 +43,7 @@ export const PHASE_ITEMS = {
   INITIATION: (pid) => [
     { key: 'definition', label: '프로젝트 정의', href: P(pid, '/definition'), match: (path, qs) => isPath(path, pid, '/definition') && !['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL'].includes(qs.get('activity')) },
     { key: 'stakeholders', label: '관계자 / 조직', href: P(pid, '/definition?activity=STAKEHOLDERS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'STAKEHOLDERS') },
-    { key: 'milestones', label: '주요 일정', href: P(pid, '/definition?activity=MILESTONES'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'MILESTONES') },
+    { key: 'milestones', label: '상위 일정 / 마일스톤', href: P(pid, '/definition?activity=MILESTONES'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'MILESTONES') },
     { key: 'operations', label: '프로젝트 운영 방식', href: P(pid, '/definition?activity=OPERATIONS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'OPERATIONS') },
     { key: 'kickoff', label: '착수보고회', href: P(pid, '/definition?activity=KICKOFF'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'KICKOFF') },
     { key: 'approval', label: '착수 결과 승인', href: P(pid, '/definition?activity=APPROVAL'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'APPROVAL') },
@@ -55,8 +55,8 @@ export const PHASE_ITEMS = {
   ],
   ANALYSIS_DESIGN: (pid) => [
     { key: 'design', label: '분석·설계', enabled: false },
-    { key: 'wbs', label: '작업 목록(WBS) 작성', href: P(pid, '/wbs'), match: (path, qs) => isPath(path, pid, '/wbs') && !q(qs, 'ctx', 'monitor') && !qs.get('phase') },
-    { key: 'wbs-trace', label: '요구사항–작업 연결', href: P(pid, '/requirements?view=trace&scope=IN_SCOPE'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') && q(qs, 'scope', 'IN_SCOPE') },
+    { key: 'wbs', label: 'WBS 작성', href: P(pid, '/wbs'), match: (path, qs) => isPath(path, pid, '/wbs') && !q(qs, 'ctx', 'monitor') && !qs.get('phase') },
+    { key: 'wbs-trace', label: '요구사항–WBS 연결', href: P(pid, '/requirements?view=trace&scope=IN_SCOPE'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') && q(qs, 'scope', 'IN_SCOPE') },
   ],
   DEVELOPMENT: (pid) => [
     { key: 'dev-status', label: '구현 현황', href: P(pid, '/wbs?ctx=monitor&phase=DEVELOPMENT'), match: (path, qs) => isPath(path, pid, '/wbs') && q(qs, 'phase', 'DEVELOPMENT') },
@@ -109,7 +109,7 @@ export const DOORS = (pid) => [
   { key: 'plan', label: '계획', href: P(pid, '/definition'), tabs: [
     T('definition', '프로젝트 정의', P(pid, '/definition'), '프로젝트의 목표·범위·기간을 정해 출발 기준을 맞춥니다.', 'INITIATION'),
     T('stakeholders', '관계자', P(pid, '/definition?activity=STAKEHOLDERS'), '고객사와 수행사의 역할과 담당자를 정리합니다.', 'INITIATION'),
-    T('milestones', '상위 일정', P(pid, '/definition?activity=MILESTONES'), '오픈일 같은 주요 일정을 정합니다.', 'INITIATION'),
+    T('milestones', '상위 일정', P(pid, '/definition?activity=MILESTONES'), '오픈일 같은 주요 일정과 마일스톤을 정합니다.', 'INITIATION'),
     T('operations', '운영 방식', P(pid, '/definition?activity=OPERATIONS'), '보고 주기·회의·의사결정 방식을 정합니다.', 'INITIATION'),
     T('kickoff', '착수보고회', P(pid, '/definition?activity=KICKOFF'), '착수보고회 일정과 결과를 기록합니다.', 'INITIATION'),
     T('approval', '착수 승인', P(pid, '/definition?activity=APPROVAL'), '착수 결과에 대한 고객 승인을 기록합니다.', 'INITIATION'),
@@ -121,7 +121,7 @@ export const DOORS = (pid) => [
   ] },
   { key: 'schedule', label: '일정', href: P(pid, '/wbs'), tabs: [
     T('wbs', '작업 목록', P(pid, '/wbs'), '요구사항을 작업으로 나누고 담당자와 기간을 정합니다.', 'ANALYSIS_DESIGN'),
-    T('gantt', '간트', P(pid, '/wbs?view=gantt'), '작업 기간과 주요 일정을 일정표로 봅니다.', 'ANALYSIS_DESIGN'),
+    T('gantt', '간트', P(pid, '/wbs?view=gantt'), '작업 기간과 마일스톤을 일정표로 봅니다.', 'ANALYSIS_DESIGN'),
     T('wbs-trace', '요구사항 연결', P(pid, '/requirements?view=trace&scope=IN_SCOPE'), '범위 내 요구사항을 어떤 작업으로 구현하는지 연결합니다.', 'ANALYSIS_DESIGN'),
     T('dev-status', '구현 현황', P(pid, '/wbs?phase=DEVELOPMENT'), '구현 단계 작업의 진행률과 지연을 확인합니다.', 'DEVELOPMENT'),
   ] },

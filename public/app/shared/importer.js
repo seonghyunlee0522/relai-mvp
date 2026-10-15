@@ -8,7 +8,7 @@ import { toast } from './dialogs.js';
 
 const STEPS = ['파일 선택', '검증·수정', '가져오기 결과'];
 const STEPS_WBS = ['파일 선택', '열 연결', '검증·미리보기', '가져오기 결과'];
-const MAP_LABEL = { title: 'WBS명', code: 'WBS Code', lv1: 'Lv1', lv2: 'Lv2', lv3: 'Lv3', lv4: 'Lv4', lv5: 'Lv5', owner: '담당자', start: '시작일', end: '종료일', progress: '진행률', status: '상태', description: '설명', item_type: '유형(주요 일정)' };
+const MAP_LABEL = { title: 'WBS명', code: 'WBS Code', lv1: 'Lv1', lv2: 'Lv2', lv3: 'Lv3', lv4: 'Lv4', lv5: 'Lv5', owner: '담당자', start: '시작일', end: '종료일', progress: '진행률', status: '상태', description: '설명', item_type: '유형(마일스톤)' };
 const KIND_LABEL = { requirements: '요구사항', wbs: 'WBS', tests: '테스트' };
 const TEMPLATE_NAME = { requirements: '요구사항 등록 템플릿.xlsx', wbs: 'WBS 등록 템플릿.xlsx', tests: '테스트 케이스 등록 템플릿.xlsx' };
 
@@ -86,7 +86,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
         </div>
         <div class="imp__mapcol"><h4>속성 (선택)</h4>
           ${raw(['owner', 'start', 'end', 'progress', 'status', 'item_type', 'description'].map((f) => html`<label><span>${MAP_LABEL[f]}</span>${raw(sel(f))}</label>`).join(''))}
-          <p class="hint">담당자는 워크스페이스 멤버 이름/이메일, 날짜는 YYYY-MM-DD, 진행률은 0~100, 유형이 '주요 일정'일 때만 주요 일정으로 만듭니다.</p>
+          <p class="hint">담당자는 워크스페이스 멤버 이름/이메일, 날짜는 YYYY-MM-DD, 진행률은 0~100, 유형이 '마일스톤'일 때만 마일스톤으로 만듭니다.</p>
         </div>
       </div>
       <h4 class="imp__h4">파일 미리보기 <small class="dim">(첫 ${inspect.sample.length}행)</small></h4>

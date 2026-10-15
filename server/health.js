@@ -74,14 +74,14 @@ const n = (v) => Number(v) || 0;
 
 export function scheduleHealth(f, R = HEALTH_RULES.schedule) {
   const w = f.wbs; const reasons = [];
-  if (n(w.tasks_dated) === 0 && n(w.milestones_dated) === 0) return { status: STATUS.UNKNOWN, reasons: ['일정이 입력된 WBS 작업/주요 일정이 없습니다.'], hint: '일정 상태를 확인하려면 WBS 일정을 입력하세요.' };
+  if (n(w.tasks_dated) === 0 && n(w.milestones_dated) === 0) return { status: STATUS.UNKNOWN, reasons: ['일정이 입력된 WBS 작업/마일스톤이 없습니다.'], hint: '일정 상태를 확인하려면 WBS 일정을 입력하세요.' };
   if (n(w.overdue_tasks)) reasons.push(`종료 예정일이 지난 WBS ${w.overdue_tasks}건`);
-  if (n(w.overdue_milestones)) reasons.push(`날짜가 지난 주요 일정 ${w.overdue_milestones}건`);
+  if (n(w.overdue_milestones)) reasons.push(`날짜가 지난 마일스톤 ${w.overdue_milestones}건`);
   if (n(w.beyond_project_end)) reasons.push(`프로젝트 종료일을 넘는 WBS ${w.beyond_project_end}건`);   // UX-008
   if (n(w.overdue_tasks) >= R.crit_tasks_min || n(w.overdue_milestones) >= R.crit_milestones_min) return { status: STATUS.CRITICAL, reasons };
   if (n(w.overdue_tasks) >= R.warn_tasks_min || n(w.overdue_milestones) >= R.warn_milestones_min) return { status: STATUS.WARNING, reasons };
   if (n(w.beyond_project_end)) return { status: STATUS.WARNING, reasons };
-  return { status: STATUS.GOOD, reasons: [`일정이 지난 작업/주요 일정이 없습니다 (일정 입력 작업 ${w.tasks_dated}건)`] };
+  return { status: STATUS.GOOD, reasons: [`일정이 지난 작업/마일스톤이 없습니다 (일정 입력 작업 ${w.tasks_dated}건)`] };
 }
 
 export function scopeHealth(f, R = HEALTH_RULES.scope) {

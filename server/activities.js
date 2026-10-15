@@ -109,11 +109,11 @@ function analysisDesign(key, ctx) {
       : n(w.dependencies) ? ok(`선후관계 ${w.dependencies}건이 설정되어 있습니다.`, act('WBS 보기 →', u()))
       : none('아직 작업 간 선후관계가 없습니다.', act('선후관계 설정 →', u()));
     case 'MILESTONES': {
-      if (n(w.milestones)) return ok(`주요 일정 ${w.milestones}건이 등록되어 있습니다.`, act('간트 차트 보기 →', u('?view=gantt')));
+      if (n(w.milestones)) return ok(`마일스톤 ${w.milestones}건이 등록되어 있습니다.`, act('간트 차트 보기 →', u('?view=gantt')));
       // US-4: the 01 주요 일정 not yet in the WBS are offered once, inline (What's Next row + the WBS screen) — one click imports them
       const kd = ctx.key_dates_pending || [];
-      if (kd.length) return none(`착수 때 정한 주요 일정 ${kd.length}건(${kd.slice(0, 3).map((k) => k.title).join('·')}${kd.length > 3 ? '…' : ''})을 WBS로 가져올까요?`, act('주요 일정 등록 →', u('?new=1&type=MILESTONE')), { import_ms: kd.length });
-      return none('아직 등록된 주요 일정이 없습니다.', act('주요 일정 등록 →', u('?new=1&type=MILESTONE')));
+      if (kd.length) return none(`착수 때 정한 주요 일정 ${kd.length}건(${kd.slice(0, 3).map((k) => k.title).join('·')}${kd.length > 3 ? '…' : ''})을 마일스톤으로 가져올까요?`, act('마일스톤 등록 →', u('?new=1&type=MILESTONE')), { import_ms: kd.length });
+      return none('아직 등록된 마일스톤이 없습니다.', act('마일스톤 등록 →', u('?new=1&type=MILESTONE')));
     }
     case 'NON_DEV_TASKS': {
       const bp = w.by_phase || {}; const nondev = n(bp.TESTING) + n(bp.TRANSITION_GO_LIVE) + n(bp.OPERATIONS);

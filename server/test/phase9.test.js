@@ -48,7 +48,7 @@ test('health rules: schedule / scope / quality / change / risk — each status r
   // schedule
   assert.equal(scheduleHealth(facts({ wbs: { tasks_dated: 0, milestones_dated: 0 } })).status, STATUS.UNKNOWN);
   assert.equal(scheduleHealth(facts()).status, STATUS.GOOD);
-  let h = scheduleHealth(facts({ wbs: { overdue_tasks: 2, overdue_milestones: 1 } })); assert.equal(h.status, STATUS.WARNING); assert.deepEqual(h.reasons, ['종료 예정일이 지난 WBS 2건', '날짜가 지난 주요 일정 1건']);
+  let h = scheduleHealth(facts({ wbs: { overdue_tasks: 2, overdue_milestones: 1 } })); assert.equal(h.status, STATUS.WARNING); assert.deepEqual(h.reasons, ['종료 예정일이 지난 WBS 2건', '날짜가 지난 마일스톤 1건']);
   assert.equal(scheduleHealth(facts({ wbs: { overdue_tasks: HEALTH_RULES.schedule.crit_tasks_min } })).status, STATUS.CRITICAL);
   assert.equal(scheduleHealth(facts({ wbs: { overdue_milestones: 2 } })).status, STATUS.CRITICAL);
   // scope
@@ -129,7 +129,7 @@ test('health + attention + upcoming from real data: computed, archived excluded,
   s = await A.c('GET', `${A.purl}/snapshot`);
   const H = s.json.health;
   assert.equal(H.status, 'CRITICAL');
-  assert.equal(H.dimensions.schedule.status, 'WARNING'); assert.deepEqual(H.dimensions.schedule.reasons, ['종료 예정일이 지난 WBS 1건', '날짜가 지난 주요 일정 1건']);
+  assert.equal(H.dimensions.schedule.status, 'WARNING'); assert.deepEqual(H.dimensions.schedule.reasons, ['종료 예정일이 지난 WBS 1건', '날짜가 지난 마일스톤 1건']);
   assert.equal(H.dimensions.scope.status, 'CRITICAL'); assert.match(H.dimensions.scope.reasons.join(), /미확정 요구사항 1건.*WBS와 미연결.*100%/); // R2 unconfirmed; R1 confirmed-unlinked = 1/1 ≥ 30%
   assert.equal(H.dimensions.quality.status, 'CRITICAL'); assert.match(H.dimensions.quality.reasons.join(), /심각한 이슈 1건/);
   assert.equal(H.dimensions.change.status, 'WARNING'); assert.equal(H.dimensions.risk.status, 'CRITICAL');

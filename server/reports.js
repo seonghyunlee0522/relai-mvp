@@ -207,7 +207,7 @@ export function sectionsFromData(d) {
     ...(made.length ? [`**기간 내 결정 ${made.length}건**`, ...made.map((x) => `- ${md(x.date)} ${x.title}${x.by ? ` · ${x.by}` : ''}${x.note ? ` · ${x.note}` : ''}`)] : []),
     ...(made.length && need.length ? ['**확인 및 의사결정 필요**'] : []), ...need,
   ].join('\n') : '- 확인 및 의사결정이 필요한 항목이 없습니다.';
-  out.next_week = d.next_week_plan.length ? d.next_week_plan.map((u) => `- ${md(u.date)} ${u.label}: ${[u.display_id, u.title].filter(Boolean).join(' ')}`).join('\n') : '- 차주 예정된 일정(WBS 시작/종료, 주요 일정, 리스크 검토, 검수 기한)이 없습니다.';
+  out.next_week = d.next_week_plan.length ? d.next_week_plan.map((u) => `- ${md(u.date)} ${u.label}: ${[u.display_id, u.title].filter(Boolean).join(' ')}`).join('\n') : '- 차주 예정된 일정(WBS 시작/종료, 마일스톤, 리스크 검토, 검수 기한)이 없습니다.';
   return SECTIONS.map(([key, title]) => ({ key, title, body: out[key] }));
 }
 

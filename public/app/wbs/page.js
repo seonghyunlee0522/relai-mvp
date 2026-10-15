@@ -64,7 +64,7 @@ export async function wbsPage(id) {
   const collapsed = new Set(); const gx = { px: 16, mode: 'fit', left: 0, start: null }; // Gantt viewport: mode = fit | today | keep
   const view = () => (!onPhone() && params().get('view') === 'gantt' ? 'gantt' : 'list');   // phone: no Gantt (spec §4 — list + one line)
   const quick = () => params().get('f') || '';
-  const QUICK_LABEL = { no_owner: '담당자 미지정 작업', no_dates: '일정 미설정 작업', linked: '요구사항 연결됨', unlinked: '요구사항 미연결 작업', overdue: '지연 작업', over_end: '종료일 초과 작업', open: '미완료 작업·주요 일정' };
+  const QUICK_LABEL = { no_owner: '담당자 미지정 작업', no_dates: '일정 미설정 작업', linked: '요구사항 연결됨', unlinked: '요구사항 미연결 작업', overdue: '지연 작업', over_end: '종료일 초과 작업', open: '미완료 작업·마일스톤' };
   /* Phase 3 US-1: one owner value for both kinds — 'u:<user>' (RELAI 사용자) · 's:<stakeholder>' (팀원, 계정 없음) · '' (미지정) */
   const ownerKey = OP.ownerKey;
   const hasOwner = (it) => Boolean(it.owner_user_id || (it.owner_stakeholder_id && !it.owner_deleted));
@@ -156,11 +156,11 @@ export async function wbsPage(id) {
   const roRow = (it) => archived || Boolean(it.archived_at);
   const titleCell = (it, { withActions = true } = {}) => {
     if (it._ghost) return html`<div class="wtitle wghost" style="padding-left:${it.depth * 18}px"><span class="wtog wtog--none"></span>${raw(it.item_type === 'MILESTONE' ? '<i class="wms">◆</i>' : '')}
-      <input class="input input--sm wghost__in" data-ghost maxlength="200" placeholder="${it.item_type === 'MILESTONE' ? '주요 일정 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off"></div>`;
+      <input class="input input--sm wghost__in" data-ghost maxlength="200" placeholder="${it.item_type === 'MILESTONE' ? '마일스톤 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off"></div>`;
     return html`<div class="wtitle" style="padding-left:${it.depth * 18}px">
       ${raw(withActions && !archived ? html`<span class="wdrag" draggable="true" data-drag="${it.id}" title="끌어서 이동" aria-hidden="true">⋮⋮</span>` : '')}
       ${raw(it.children_count ? html`<button class="wtog" data-tog="${it.id}" aria-label="${collapsed.has(it.id) ? '펼치기' : '접기'}">${collapsed.has(it.id) ? '▸' : '▾'}</button>` : '<span class="wtog wtog--none"></span>')}
-      ${raw(it.item_type === 'MILESTONE' ? '<i class="wms" title="주요 일정">◆</i>' : '')}<span class="wtitle__t">${it.title}</span>
+      ${raw(it.item_type === 'MILESTONE' ? '<i class="wms" title="마일스톤">◆</i>' : '')}<span class="wtitle__t">${it.title}</span>
       ${raw(it.predecessors.length ? html`<small class="wdep" title="선행 작업 ${it.predecessors.length}개">←${it.predecessors.length}</small>` : '')}
       ${raw(it.linked_req_count ? html`<small class="wdep" title="연결된 요구사항 ${it.linked_req_count}개">요구 ${it.linked_req_count}</small>` : '')}
       ${raw(withActions && !archived ? html`<span class="wact"><button class="wadd" data-addchild="${it.id}" title="하위 작업 추가" aria-label="하위 작업 추가" ${it.item_type === 'MILESTONE' ? 'disabled' : ''}>+</button><button class="wadd wmenu" data-rowmenu="${it.id}" title="더보기" aria-label="행 메뉴">⋯</button></span>` : '')}</div>`;
@@ -233,7 +233,7 @@ export async function wbsPage(id) {
       onApply: async ({ field, value }) => {
         const n = grid.selected.size; const f = bulkFields.find((x) => x.key === field);
         const shown = value === NONE ? '미지정' : (Array.isArray(f.options) ? f.options : Object.entries(f.options || {})).find(([v]) => v === value)?.[1] || value;
-        if (n >= 20 && !(await confirmDialog({ title: `${n.toLocaleString('ko-KR')}건의 ${f.label}을(를) ${field === 'shift_days' ? `${value}일 이동` : `'${shown}'(으)로 변경`}할까요?`, body: '선택한 모든 WBS 항목에 적용되며 각각 변경 이력이 남습니다. 상위 작업·주요 일정 등 적용할 수 없는 항목은 제외되고 결과에 표시됩니다.', confirm: '일괄 변경' }))) return;
+        if (n >= 20 && !(await confirmDialog({ title: `${n.toLocaleString('ko-KR')}건의 ${f.label}을(를) ${field === 'shift_days' ? `${value}일 이동` : `'${shown}'(으)로 변경`}할까요?`, body: '선택한 모든 WBS 항목에 적용되며 각각 변경 이력이 남습니다. 상위 작업·마일스톤 등 적용할 수 없는 항목은 제외되고 결과에 표시됩니다.', confirm: '일괄 변경' }))) return;
         const body = field === 'shift_days' ? { action: 'update', shift_days: value } : { action: 'update', patch: { [field]: value === NONE ? '' : value } };
         try {
           const ids = grid.selectedIds().filter((x) => x !== GHOST);
@@ -308,7 +308,7 @@ export async function wbsPage(id) {
   const kpiHtml = () => {
     const late = items.filter(isOverdue).length;
     return html`<button type="button" class="kchip" data-kf=""><b>${summary.total}</b>전체 항목</button>
-      <span class="kchip"><b>${summary.in_progress}</b>진행 중</span><span class="kchip"><b>${summary.completed}</b>완료</span><span class="kchip"><b>${summary.milestones}</b>주요 일정 ${raw(term('wbs_milestone'))}</span>
+      <span class="kchip"><b>${summary.in_progress}</b>진행 중</span><span class="kchip"><b>${summary.completed}</b>완료</span><span class="kchip"><b>${summary.milestones}</b>마일스톤 ${raw(term('wbs_milestone'))}</span>
       <button type="button" class="kchip ${late ? 'is-crit' : ''}" data-kf="overdue"><b>${late}</b>지연 작업</button>`;
   };
   const paintKpi = () => { const k = $('#kstrip'); if (k) k.innerHTML = kpiHtml(); };
@@ -321,7 +321,7 @@ export async function wbsPage(id) {
     // R3b: one sentence + one button (the list's sentence is the helpful one; '아직 작업이 없습니다' is implied)
     return html`<div class="wempty" data-tour-id="wbs-empty"><span class="wempty__ic" aria-hidden="true">▤</span><h2>${v === 'gantt' ? lead : bodyText}</h2>
       ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="skel">WBS 뼈대 만들기</button> ${raw(term('skeleton'))}</div>
-        ${raw(ghost ? html`<div class="wempty__add"><input class="input" data-ghost maxlength="200" placeholder="${ghost.item_type === 'MILESTONE' ? '주요 일정 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off" aria-label="첫 작업 이름"></div>` : '')}
+        ${raw(ghost ? html`<div class="wempty__add"><input class="input" data-ghost maxlength="200" placeholder="${ghost.item_type === 'MILESTONE' ? '마일스톤 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off" aria-label="첫 작업 이름"></div>` : '')}
         <p class="wempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button> · ${raw(ai.enabled ? '<button type="button" class="link linkbtn" id="ai-wbs2">AI 초안</button>' : '<span class="dim" title="AI 기능이 설정되지 않았습니다.">AI 초안(사용 불가)</span>')}</p>`)}</div>`;
   };
   /** 뼈대 확인 dialog: a short list (그룹명 + 건수) instead of a sentence; [취소] [만들기]. */
@@ -330,7 +330,7 @@ export async function wbsPage(id) {
     let pv; try { pv = (await api('GET', wApi('/skeleton/preview'))).preview; } catch (e) { toast(e.message); return; }
     if (!pv.available) { toast('WBS에 이미 항목이 있어 뼈대를 만들 수 없습니다.'); await load(); draw(); return; }
     const rows = pv.groups.map((x) => [x.title, x.key === 'DEVELOPMENT' && pv.linked ? `${x.count} <small>(요구사항 ${pv.linked}건 자동 연결)</small>` : String(x.count)]);
-    if (pv.milestones) rows.push(['주요 일정', String(pv.milestones)]);
+    if (pv.milestones) rows.push(['마일스톤', String(pv.milestones)]);
     const bodyHtml = html`<ul class="skel">${raw(rows.map(([l, n]) => html`<li><span>${l}</span><b>${raw(n)}</b></li>`).join(''))}</ul>
       <p class="skel__note">만든 뒤 자유롭게 고치거나 지울 수 있습니다. 일정과 담당자는 직접 채웁니다 — 다음 가이드가 안내합니다.</p>`;
     if (!(await confirmDialog({ title: `WBS 뼈대 ${pv.total}건을 만들까요?`, bodyHtml, confirm: '만들기' }))) return;
@@ -341,9 +341,9 @@ export async function wbsPage(id) {
     } catch (e) { toast(e.message); await load(); draw(); }
   };
   /** US-4 on the WBS screen: no milestone yet + 01 key dates not imported → one inline suggestion (not a banner). */
-  const msSuggest = () => (!archived && items.length && !summary.milestones && kdPending ? html`<div class="wsuggest"><span>착수 때 정한 주요 일정 ${kdPending}건을 WBS로 가져올까요?</span><button type="button" class="btn btn--secondary btn--sm" id="ms-import">가져오기</button></div>` : '');
+  const msSuggest = () => (!archived && items.length && !summary.milestones && kdPending ? html`<div class="wsuggest"><span>착수 때 정한 주요 일정 ${kdPending}건을 마일스톤으로 가져올까요?</span><button type="button" class="btn btn--secondary btn--sm" id="ms-import">가져오기</button></div>` : '');
   const importMs = async () => {
-    try { const r = await api('POST', wApi('/milestones/from-key-dates'), {}); apply(r); draw(); toast(r.created ? `주요 일정 ${r.created}건을 가져왔습니다.` : '가져올 주요 일정이 없습니다. 이미 같은 항목이 있습니다.'); }
+    try { const r = await api('POST', wApi('/milestones/from-key-dates'), {}); apply(r); draw(); toast(r.created ? `마일스톤 ${r.created}건을 가져왔습니다.` : '가져올 주요 일정이 없습니다. 이미 같은 마일스톤이 있습니다.'); }
     catch (e) { toast(e.message); }
   };
 
@@ -360,7 +360,7 @@ export async function wbsPage(id) {
         ${raw(fl('상태', html`<select class="select select--sm" id="f-cst" aria-label="상태"><option value="">전체</option>${raw(Object.entries(WBS_CSTATUS).map(([k, l]) => html`<option value="${k}" ${cur === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>`))}
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`],
       ['보기', html`${raw(v === 'gantt' ? tmItem('전체 일정 맞추기', 'id="gfit"') + tmItem('오늘로 이동', 'id="gtoday"') : '')}${raw(tmItem('모두 펼치기', 'id="expall"'))}${raw(tmItem('모두 접기', 'id="colall"'))}${raw(v === 'list' ? grid.toolsHtml() : '')}${raw(v === 'list' && !archived ? tmItem('여러 개 선택', `data-selmode class="tmenu__i ${selMode ? 'is-on' : ''}"`, '체크박스로 여러 작업의 담당자·일정을 한 번에 바꿉니다') : '')}`],
-      [archived ? '' : '추가', archived ? '' : tmItem('◆ 주요 일정 추가', 'id="add-ms"', '기간 없이 날짜만 있는 주요 시점')],
+      [archived ? '' : '추가', archived ? '' : tmItem('◆ 마일스톤 추가', 'id="add-ms"', '기간 없이 날짜만 있는 주요 시점')],
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 WBS 내보내기 (Excel)', 'data-xl="export"'))}`],
       [archived ? '' : 'AI', archived ? '' : ai.enabled ? tmItem('AI로 초안 만들기', 'id="ai-wbs" title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs"', aiPrice(ai, 'WBS_GENERATION')) : tmItem('AI로 초안 만들기', 'id="ai-wbs" disabled', 'AI 기능이 설정되지 않았습니다')],
     ], { label: '일정 메뉴 더보기' });
@@ -378,7 +378,7 @@ export async function wbsPage(id) {
       : v === 'gantt' ? html`<div class="rtable-wrap wbs-wrap">${raw(rows.length ? gantt(rows) : emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '보기 조건을 바꾸거나 필터를 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }))}</div>`
       : grid.html();
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: ctx() === 'monitor' ? 'overview-wbs' : 'wbs', title: ctx() === 'monitor' ? 'WBS · 운영 조회' : '작업 목록(WBS) 작성' }))}
+      ${raw(projectHead(p, g, { tab: ctx() === 'monitor' ? 'overview-wbs' : 'wbs', title: ctx() === 'monitor' ? 'WBS · 운영 조회' : 'WBS 작성' }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 단계를 지정할 수 있습니다.</div>` : '')}
       ${raw(onPhone() && params().get('view') === 'gantt' ? '<p class="pcnote" data-gantt-pc>간트 차트는 PC에서 볼 수 있습니다</p>' : '')}
@@ -400,7 +400,7 @@ export async function wbsPage(id) {
         <span class="gtools ph-hide"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 WBS 내보내기</button></div></span>
         ${raw(archived ? '' : ai.enabled ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ph-hide" id="ai-wbs" title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs">AI로 WBS 만들기</button>' : '<button type="button" class="btn btn--secondary btn--sm btn--ai ph-hide" id="ai-wbs" disabled title="AI 기능이 설정되지 않았습니다.">AI로 WBS 만들기</button>')}
-        ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm ph-hide" id="add-ms" title="주요 일정 추가 (기간 없이 날짜만)">◆ 주요 일정 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
+        ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm ph-hide" id="add-ms" title="마일스톤 추가 (기간 없이 날짜만)">◆ 마일스톤 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>` : '')}
       ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : /^s:/.test(v2) ? (owners.team.find((t) => `s:${t.id}` === v2) || {}).name || v2 : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: QUICK_LABEL }, { key: 'phase', label: '단계', map: LIFECYCLE_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}
@@ -475,7 +475,7 @@ export async function wbsPage(id) {
     document.querySelectorAll('.amenu').forEach((m) => m.remove());
     const m = document.createElement('div'); m.className = 'amenu amenu--row'; m.setAttribute('role', 'menu');
     const ms = it.item_type === 'MILESTONE';
-    m.innerHTML = html`${raw(ms ? '' : html`<button type="button" role="menuitem" data-m="child">하위 작업 추가</button>`)}<button type="button" role="menuitem" data-m="sibling">같은 레벨 작업 추가</button><button type="button" role="menuitem" data-m="ms">◆ 주요 일정 추가 (같은 레벨)</button><hr>
+    m.innerHTML = html`${raw(ms ? '' : html`<button type="button" role="menuitem" data-m="child">하위 작업 추가</button>`)}<button type="button" role="menuitem" data-m="sibling">같은 레벨 작업 추가</button><button type="button" role="menuitem" data-m="ms">◆ 마일스톤 추가 (같은 레벨)</button><hr>
       <button type="button" role="menuitem" data-m="indent">들여쓰기 →</button><button type="button" role="menuitem" data-m="outdent" ${it.parent_id ? '' : 'disabled'}>← 내어쓰기</button><button type="button" role="menuitem" data-m="dup">복제</button><hr>
       <button type="button" role="menuitem" class="is-danger" data-m="del">삭제</button>`;
     const r = btn.getBoundingClientRect(); m.style.position = 'fixed'; m.style.visibility = 'hidden';
@@ -615,7 +615,7 @@ export async function wbsPage(id) {
     catch (e) { toast(e.message); }
   };
 
-  const wbsLabel = { lifecycle_phase: '단계', title: '업무명', description: '설명', item_type: '항목 유형', status: '상태', owner_user_id: '담당자', owner_stakeholder_id: '담당자 (팀원)', progress: '진행률', weight: '가중치', planned_start_date: '계획 시작일', planned_end_date: '계획 종료일', actual_start_date: '실적 시작일', actual_end_date: '실적 종료일', milestone_date: '주요 일정 날짜', parent: '상위 항목', sequence: '순서', source: '출처' };
+  const wbsLabel = { lifecycle_phase: '단계', title: '업무명', description: '설명', item_type: '항목 유형', status: '상태', owner_user_id: '담당자', owner_stakeholder_id: '담당자 (팀원)', progress: '진행률', weight: '가중치', planned_start_date: '계획 시작일', planned_end_date: '계획 종료일', actual_start_date: '실적 시작일', actual_end_date: '실적 종료일', milestone_date: '마일스톤 날짜', parent: '상위 항목', sequence: '순서', source: '출처' };
   const histText = (h, it) => {
     const val = (f, v) => { if (v == null || v === '') return '-'; if (f === 'status') return STATUS_EDIT[v] || WBS_STATUS[v] || v; if (f === 'item_type') return WBS_TYPE[v] || v; if (f === 'owner_user_id') return (members.find((m) => m.id === v) || {}).name || '미지정'; if (f === 'owner_stakeholder_id') return (owners.team.find((x) => x.id === v) || {}).name || '(삭제된 담당자)'; if (f === 'lifecycle_phase') return LIFECYCLE_LABEL[v] || v; if (f === 'progress') return `${v}%`; return v; };
     switch (h.action_type) {
@@ -673,7 +673,7 @@ export async function wbsPage(id) {
           <div class="dside">
             <div class="dfield"><span>담당자</span><div><select class="select select--sm" data-field="owner" ${readOnly ? 'disabled' : ''}>${raw(ownerOpts(ownerKey(it)))}</select>${raw(noAcct(live))}${raw(teamHint())}</div></div>
             <div class="dfield"><span>상태</span><div><select class="select select--sm" data-field="status" ${readOnly ? 'disabled' : ''}>${raw(opt(STATUS_EDIT, it.status))}</select>${raw(live.computed_status === 'DELAYED' ? '<small class="wlate" style="margin-left:6px">지연 — 계획 종료일 경과</small>' : '')}</div></div>
-            ${raw(t === 'MILESTONE' ? html`<div class="dfield"><span>주요 일정 날짜</span><div>${raw(dateInput('milestone_date', it.milestone_date, readOnly))}${raw(live.past_end ? html`<p class="def__warn wpast__msg">${PAST_END()}</p>` : '')}${raw(shiftNote(it))}</div></div>`
+            ${raw(t === 'MILESTONE' ? html`<div class="dfield"><span>마일스톤 날짜</span><div>${raw(dateInput('milestone_date', it.milestone_date, readOnly))}${raw(live.past_end ? html`<p class="def__warn wpast__msg">${PAST_END()}</p>` : '')}${raw(shiftNote(it))}</div></div>`
               : group ? html`<div class="dfield"><span>계획 일정 <small class="dim">(자동)</small></span><div class="hint" style="height:36px;display:flex;align-items:center">${live.planned_start ? fmtShort(live.planned_start) : '-'} ~ ${live.planned_end ? fmtShort(live.planned_end) : '-'}</div></div>
                 <div class="dfield"><span>실적 일정 <small class="dim">(자동)</small></span><div class="hint" style="height:36px;display:flex;align-items:center">${live.actual_start ? fmtShort(live.actual_start) : '-'} ~ ${live.actual_end ? fmtShort(live.actual_end) : '-'}</div></div>
                 <div class="dfield"><span>진행률 <small class="dim">(하위 작업 기준)</small></span><div class="pcell"><div class="pbar"><i style="width:${live.computed_progress || 0}%"></i></div><span>${live.computed_progress || 0}%</span></div></div>`

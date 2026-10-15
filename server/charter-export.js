@@ -55,7 +55,7 @@ export function buildPlanMarkdown(c, { workspaceName = '', author = '', today })
 
   /* 5. 범위 */
   h2('3. 사업 범위');
-  L.push('**수행 범위**', textBlock(c.scope.inScope), '', '**제외 범위**', textBlock(c.scope.outOfScope), '', '**주요 결과물**', textBlock(c.deliverables));
+  L.push('**수행 범위**', textBlock(c.scope.inScope), '', '**제외 범위**', textBlock(c.scope.outOfScope), '', '**주요 산출물**', textBlock(c.deliverables));
 
   /* 6. 전제·제약·초기 리스크 */
   h2('4. 전제·제약·초기 리스크');
@@ -68,10 +68,10 @@ export function buildPlanMarkdown(c, { workspaceName = '', author = '', today })
   if (c.governance) L.push('', '**의사결정 / 승인 체계**', textBlock(c.governance));
 
   /* 8. 일정·마일스톤 */
-  h2('6. 사업 기간 및 주요 일정');
+  h2('6. 사업 기간 및 마일스톤');
   const ms = c.timeline.milestones || [];
   L.push(`사업 기간: ${c.timeline.startDate || '미정'} ~ ${c.timeline.endDate || '미정'}`, '');
-  L.push(ms.length ? table(['일자', '주요 일정', '비고'], ms.map((m) => [m.date || '날짜 미정', m.title, m.source === 'WBS' ? `WBS ${m.wbs_code}` : c.timeline.endDate && m.date && m.date > c.timeline.endDate ? '종료 후' : ''])) : NONE);
+  L.push(ms.length ? table(['일자', '마일스톤', '비고'], ms.map((m) => [m.date || '날짜 미정', m.title, m.source === 'WBS' ? `WBS ${m.wbs_code}` : c.timeline.endDate && m.date && m.date > c.timeline.endDate ? '종료 후' : ''])) : NONE);
 
   /* 9. 운영 방식 */
   h2('7. 운영 방식');

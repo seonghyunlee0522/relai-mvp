@@ -24,7 +24,7 @@ export const upcomingPanel = (items, p) => {
   const days = new Map(); for (const u of items || []) { if (!days.has(u.date)) days.set(u.date, []); days.get(u.date).push(u); }
   return html`<section class="panel up" aria-labelledby="upT"><div class="panel__h" id="upT">다가오는 7일 일정${raw(items?.length ? html`<em class="up__n">${items.length}</em>` : '')}</div>
     ${raw(days.size ? html`<ol class="up__list">${raw([...days].map(([d, rows]) => html`<li><time>${fmtShort(d)}${raw(d === todayLocal() ? '<small>오늘</small>' : '')}</time><div>${raw(rows.map((u) => html`<a href="/app/projects/${p.id}/${u.href}" data-link><span class="up__k is-${u.type.toLowerCase()}">${u.label}</span><span class="mono">${u.display_id}</span><span class="up__t">${u.title}</span></a>`).join(''))}</div></li>`).join(''))}</ol>`
-      : '<div class="att__ok">앞으로 7일 안에 예정된 WBS 시작/종료, 주요 일정, 이슈 기한, 리스크 검토, 검수 기한이 없습니다.</div>')}
+      : '<div class="att__ok">앞으로 7일 안에 예정된 WBS 시작/종료, 마일스톤, 이슈 기한, 리스크 검토, 검수 기한이 없습니다.</div>')}
   </section>`;
 };
 

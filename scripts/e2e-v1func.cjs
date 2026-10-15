@@ -82,7 +82,7 @@ const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: '
   await page.evaluate(async ({ pa, pid }) => { const m = await import('/assets/project/closing.js'); const g = await (await fetch(pa)).json(); m.closeDialog(pid, g); }, { pa, pid: P.id });
   await page.waitForSelector('[data-close-dialog]', { timeout: 8000 });
   const warn = (await page.textContent('[data-cl-open]').catch(() => '')) || '';
-  check('F5 close dialog: "완료되지 않은 작업 1건 · 주요 일정 1건" + WBS link', /작업 1건 · 주요 일정 1건/.test(warn) && /WBS에서 확인/.test(warn), warn);
+  check('F5 close dialog: "완료되지 않은 작업 1건 · 마일스톤 1건" + WBS link', /작업 1건 · 마일스톤 1건/.test(warn) && /WBS에서 확인/.test(warn), warn);
   await page.screenshot({ path: `${SHOTS}/05-close-warn.png` });
   await page.click('[data-cl-wbs]'); await page.waitForURL(/\/wbs\?f=open/, { timeout: 8000 }); await page.waitForTimeout(800);
   const rows = await page.$$eval('#main tbody tr', (els) => els.filter((e) => e.offsetParent).map((e) => e.textContent));

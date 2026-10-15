@@ -223,7 +223,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   check('R2-3 일정: hidden column (계획 종료) restored from 컬럼 and remembered after reload', wc2.includes('계획 종료'), JSON.stringify(wc2));
   await page.click('[data-rtool-r2] [data-tmore]'); await page.click('.tmenu [data-gcols]'); await page.uncheck('.gpop [data-gcol="end"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   const menuTxt = await page.$eval('[data-rtool-r2] .tmenu', (m) => m.textContent);
-  check('R2-4 WBS ⋯ keeps every moved action (주요 일정, AI 초안 + price, Excel, 컬럼, 모두 펼치기/접기, 여러 개 선택)', ['주요 일정 추가', 'AI로 초안 만들기', '크레딧 (₩', 'Excel로 가져오기', '컬럼', '모두 펼치기', '모두 접기', '여러 개 선택'].every((x) => menuTxt.includes(x)), menuTxt.replace(/\s+/g, ' ').slice(0, 300));
+  check('R2-4 WBS ⋯ keeps every moved action (마일스톤, AI 초안 + price, Excel, 컬럼, 모두 펼치기/접기, 여러 개 선택)', ['마일스톤 추가', 'AI로 초안 만들기', '크레딧 (₩', 'Excel로 가져오기', '컬럼', '모두 펼치기', '모두 접기', '여러 개 선택'].every((x) => menuTxt.includes(x)), menuTxt.replace(/\s+/g, ' ').slice(0, 300));
   check('R2-4 no row checkboxes until 여러 개 선택', (await page.$$('#grid [data-pick]')).length === 0);
   await page.click(`#grid tr[data-id="${T[1].id}"] .wtitle__t`); await page.waitForSelector('#drawer:not([hidden]) [data-dx]'); await page.waitForTimeout(300);
   const wd = await page.evaluate(() => { const d = document.querySelector('#drawer').getBoundingClientRect(); const g = document.querySelector('#grid').getBoundingClientRect(); const hid = [...document.querySelectorAll('#drawer .dx')].every((e) => e.offsetParent === null); return { dw: Math.round(d.width), ok: g.right <= d.left + 1 && g.width > 500, hid }; });

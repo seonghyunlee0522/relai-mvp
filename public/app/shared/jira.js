@@ -27,7 +27,7 @@ export function jiraPaneHtml(d, it, { ro = false } = {}) {
   const exec = d.links.filter((l) => l.link_role === 'EXECUTION'); const epics = d.links.filter((l) => l.link_role === 'EPIC');
   const head = html`<div class="jhead"><span class="dim">지라</span><b>${m.external_project_key}</b><span class="dim">${m.external_project_name}</span>${raw(m.connection_status !== 'ACTIVE' ? '<span class="chip chip--fail">연결 확인 필요</span>' : '')}${raw(d.paused ? '<span class="chip chip--hold">보관됨 · 동기화 제외</span>' : '')}
     ${raw(ro ? '' : html`<button type="button" class="link linkbtn" id="jrefresh" style="margin-left:auto;width:auto">새로고침</button>`)}</div>`;
-  if (ms) return html`${raw(head)}<p class="hint">주요 일정에는 지라 이슈를 연결하지 않습니다. 실제 개발 작업(하위 작업)에 연결하세요.</p>`;
+  if (ms) return html`${raw(head)}<p class="hint">마일스톤에는 지라 이슈를 연결하지 않습니다. 실제 개발 작업(하위 작업)에 연결하세요.</p>`;
   if (group) {
     return html`${raw(head)}
       <div class="jsum"><div><span>하위 작업 연결 지라</span><b>${s.total}</b></div><div><span>완료</span><b>${s.done}</b></div><div><span>진행 중</span><b>${s.in_progress}</b></div><div><span>할 일</span><b>${s.todo}</b></div><div class="jsum__r"><span>지라 실행률</span><b>${s.rate === null ? '-' : s.rate + '%'}</b><small>WBS 진행률과 별개</small></div></div>

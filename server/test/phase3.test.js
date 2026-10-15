@@ -219,7 +219,7 @@ test('US-4 01 주요 일정 → 마일스톤: one click = 3 milestones + MILESTO
   await A.c('POST', A.wbs, { title: '설계' });
   let g = (await A.c('GET', A.purl)).json; let ms = step(g, 'ANALYSIS_DESIGN', 'MILESTONES');
   assert.equal(ms.state, 'NOT_STARTED'); assert.equal(ms.import_ms.count, 3);
-  assert.equal(ms.import_ms.text, '착수 때 정한 주요 일정 3건(킥오프·요구사항 확정·안정화 종료)을 WBS로 가져올까요?');
+  assert.equal(ms.import_ms.text, '착수 때 정한 주요 일정 3건(킥오프·요구사항 확정·안정화 종료)을 마일스톤으로 가져올까요?');
   assert.equal((await A.c('GET', A.wbs)).json.key_dates_pending, 3);
   let r = await A.c('POST', `${A.wbs}/milestones/from-key-dates`, {}); assert.equal(r.status, 201); assert.equal(r.json.created, 3);
   assert.deepEqual(r.json.items.filter((i) => i.item_type === 'MILESTONE').map((i) => [i.title, i.milestone_date]), KEY_DATES.map((k) => [k.title, k.date]));

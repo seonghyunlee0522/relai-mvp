@@ -98,7 +98,7 @@ const A = {
     { d: -4, t: '10:42', op: 'reqPatch', key: 'R6', status: 'REVIEWING' },
     { d: -4, t: '10:50', op: 'comment', on: 'REQUIREMENT', key: 'R5', body: '고객사 IT팀 API 사양서 v0.9 수령. 계약 상태 코드 정의가 빠져 있어 다음 주 화요일 회의에서 확인 예정.' },
     { d: -3, t: '16:00', op: 'risk', key: 'K1', title: '기간계 조회 API 사양 확정 지연', probability: 'MEDIUM', impact: 'HIGH', response_strategy: 'MITIGATE', status: 'OPEN', identified_at: '@-3', review_date: '@+4',
-      description: 'API 사양 확정이 늦어지면 분석·설계 완료 일정이 밀린다.', mitigation_plan: '임시 응답(mock)으로 시나리오 설계를 먼저 진행하고, 사양은 주간 회의마다 확인한다.', links: [{ type: 'REQUIREMENT', key: 'R5' }] },
+      description: 'API 사양 확정이 늦어지면 분석·설계 완료(마일스톤)가 밀린다.', mitigation_plan: '임시 응답(mock)으로 시나리오 설계를 먼저 진행하고, 사양은 주간 회의마다 확인한다.', links: [{ type: 'REQUIREMENT', key: 'R5' }] },
   ],
 };
 

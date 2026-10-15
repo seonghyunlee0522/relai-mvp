@@ -117,7 +117,7 @@ test('wbs bulk: owner/status/dates/progress per item, skips with reasons, histor
   assert.equal((await A.c('GET', `${A.wbs}/${t2.id}`)).json.item.progress, 100);
   // milestone cannot take planned dates
   const md = await A.c('POST', url, { ids: [ms.id], action: 'update', patch: { planned_end_date: '2026-12-02' } });
-  assert.equal(md.json.updated, 0); assert.match(md.json.skipped[0].reason, /주요 일정/);
+  assert.equal(md.json.updated, 0); assert.match(md.json.skipped[0].reason, /마일스톤/);
   // validation
   assert.equal((await A.c('POST', url, { ids: [t1.id], action: 'update', patch: { progress: 101 } })).status, 400);
   assert.equal((await A.c('POST', url, { ids: [t1.id], action: 'update', patch: { planned_start_date: '2026/11/01' } })).status, 400);

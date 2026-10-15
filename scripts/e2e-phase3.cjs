@@ -92,8 +92,8 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(A.url); await page.waitForSelector('.rg .btn--primary'); await page.click('.rg .btn--primary');
   await page.waitForSelector('.dialog .skel');
   const rows = await page.$$eval('.dialog .skel li', (els) => els.map((e) => `${e.querySelector('span').textContent} ${e.querySelector('b').textContent}`.replace(/\s+/g, ' ').trim()));
-  check('US-2 dialog list: 분석·설계 3 / 구현 15 (자동 연결) / 시험 3 / 전환·오픈 3 / 안정화 1 / 주요 일정 3',
-    JSON.stringify(rows) === JSON.stringify(['분석·설계 3', '구현 15 (요구사항 15건 자동 연결)', '시험 3', '전환·오픈 3', '안정화 1', '주요 일정 3']), JSON.stringify(rows));
+  check('US-2 dialog list: 분석·설계 3 / 구현 15 (자동 연결) / 시험 3 / 전환·오픈 3 / 안정화 1 / 마일스톤 3',
+    JSON.stringify(rows) === JSON.stringify(['분석·설계 3', '구현 15 (요구사항 15건 자동 연결)', '시험 3', '전환·오픈 3', '안정화 1', '마일스톤 3']), JSON.stringify(rows));
   check('US-2 dialog note + [취소] [만들기]', /만든 뒤 자유롭게 고치거나 지울 수 있습니다\. 일정과 담당자는 직접 채웁니다 — 다음 가이드가 안내합니다\./.test(await page.textContent('.dialog')) && (await page.textContent('.dialog [data-v="1"]')).trim() === '만들기');
   await shot('05-skeleton-dialog.png');
   await page.click('.dialog [data-v="1"]');
@@ -117,7 +117,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(`${A.url}/wbs`); await page.waitForSelector('main table');
   check('US-2 skeleton button gone once the WBS has items', !(await page.$('#skel')));
   const terms1 = await page.$$eval('main .term', (els) => els.map((e) => e.getAttribute('aria-label')));
-  check('US-6 terms: WBS · 간트 · 주요 일정', ['WBS: 프로젝트에서 해야 할 일을 잘게 나눈 작업 목록', '간트:', '주요 일정: 고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'].every((t) => terms1.some((x) => x.startsWith(t))), JSON.stringify(terms1));
+  check('US-6 terms: WBS · 간트 · 마일스톤', ['WBS: 프로젝트에서 해야 할 일을 잘게 나눈 작업 목록', '간트:', '마일스톤: 고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'].every((t) => terms1.some((x) => x.startsWith(t))), JSON.stringify(terms1));
 
   /* ---------- US-1 owner picker ---------- */
   const design = tasks.find((t) => t.title === '화면 설계');
@@ -194,7 +194,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   const B = await mkProject('인사 시스템 고도화', { n: 2, team: [{ id: 'only-pm', name: '김피엠', org_type: 'OWN', role: 'PM' }] });
   const bt = (await api('POST', `${B.P}/wbs`, { title: '현행 분석' })).json.item;
   await page.goto(`${B.url}/wbs`); await page.waitForSelector('.wsuggest');
-  check('US-4 WBS screen: inline suggestion (not a banner)', /착수 때 정한 주요 일정 3건을 WBS로 가져올까요\?/.test(await page.textContent('.wsuggest')));
+  check('US-4 WBS screen: inline suggestion (not a banner)', /착수 때 정한 주요 일정 3건을 마일스톤으로 가져올까요\?/.test(await page.textContent('.wsuggest')));
   await page.goto(`${B.url}/wbs?sel=${bt.id}`); await page.waitForSelector('#drawer [data-field="owner"]');
   check('US-1 only the PM registered → hint + 이해관계자 추가 link', /팀원을 01 착수 › 관계자에 추가하면 계정 없이 담당자로 지정할 수 있습니다\./.test(await page.textContent('#drawer .whint')) && /definition\?activity=STAKEHOLDERS/.test(await page.getAttribute('#drawer .whint a', 'href')));
   await page.setViewportSize({ width: 375, height: 800 });
@@ -204,15 +204,15 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await shot('11-wbs-detail-375.png');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(B.url); await page.waitForSelector('.np__list');
-  if (await page.$('details[data-opt]:has-text("주요 일정 등록")')) await page.click('details[data-opt] > summary');   // R2: 권장 rows are folded
-  const msRow = await page.textContent('.np__row:has-text("주요 일정 등록")');
-  check('US-4 What\'s Next row suggestion + 가져오기', /착수 때 정한 주요 일정 3건\(킥오프·요구사항 확정·오픈\)을 WBS로 가져올까요\?/.test(msRow) && Boolean(await page.$('[data-import-ms]')), msRow.replace(/\s+/g, ' ').slice(0, 140));
+  if (await page.$('details[data-opt]:has-text("마일스톤 등록")')) await page.click('details[data-opt] > summary');   // R2: 권장 rows are folded
+  const msRow = await page.textContent('.np__row:has-text("마일스톤 등록")');
+  check('US-4 What\'s Next row suggestion + 가져오기', /착수 때 정한 주요 일정 3건\(킥오프·요구사항 확정·오픈\)을 마일스톤으로 가져올까요\?/.test(msRow) && Boolean(await page.$('[data-import-ms]')), msRow.replace(/\s+/g, ' ').slice(0, 140));
   await shot('12-milestone-suggestion.png');
   await page.click('[data-import-ms]');
   const t2 = await toastText();
   await page.waitForTimeout(500);
-  const msRow2 = await page.textContent('.np__row:has-text("주요 일정 등록")');
-  check('US-4 one click → 마일스톤 3건 + row 완료', /주요 일정 3건을 가져왔습니다/.test(t2) && /완료/.test(msRow2) && !(await page.$('[data-import-ms]')), t2);
+  const msRow2 = await page.textContent('.np__row:has-text("마일스톤 등록")');
+  check('US-4 one click → 마일스톤 3건 + row 완료', /마일스톤 3건을 가져왔습니다/.test(t2) && /완료/.test(msRow2) && !(await page.$('[data-import-ms]')), t2);
   const again = (await api('POST', `${B.P}/wbs/milestones/from-key-dates`, {})).json;
   check('US-4 twice → no duplicates', again.created === 0 && again.items.filter((i) => i.item_type === 'MILESTONE').length === 3);
   await shot('13-milestones-imported.png');
