@@ -107,6 +107,40 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.click('#rail [data-door="schedule"]'); await settle(); const r2 = page.url();
   await page.click('#rail [data-door="reports"]'); await settle(); const r3 = (await frame()).tab.join();
   check('A13 novice: 지금 할 일 → 요구사항 → 일정 → 주간보고, one rail click each', /\/requirements$/.test(r1) && /\/wbs$/.test(r2) && r3 === 'weekly' && t0 !== r1, `${r1} ${r2} ${r3}`);
+  // ---- Q22-1: every in-page view toggle hidden on desktop has a section-tab equivalent (each of its states is the
+  // selected state on some door tab page), and the risk register is reachable from the 이슈·변경 door
+  const tabHrefs = [...new Set(lc.DOORS(P.id).flatMap((d) => [d.href, ...d.tabs.filter((t) => t.href).map((t) => t.href)]))];
+  const toggles = {};   // signature → { options, seenOn:Set }
+  for (const href of tabHrefs) {
+    await page.goto(BASE + href); await settle();
+    const segs = await page.evaluate(() => [...document.querySelectorAll('#main .seg')].map((seg) => {
+      const opts = [...seg.querySelectorAll(':scope>[data-tab],:scope>[data-view],:scope>[data-rview]')];
+      if (!opts.length) return null;
+      const key = (b) => b.dataset.tab || b.dataset.view || b.dataset.rview;
+      return { sig: opts.map(key).join('|'), hidden: seg.getClientRects().length === 0, on: opts.filter((b) => b.classList.contains('is-on')).map(key) };
+    }).filter(Boolean));
+    for (const sg of segs) if (sg.hidden) { const t = toggles[sg.sig] || (toggles[sg.sig] = { options: sg.sig.split('|'), seenOn: new Set() }); sg.on.forEach((o) => t.seenOn.add(o)); }
+  }
+  const orphanStates = Object.values(toggles).flatMap((t) => t.options.filter((o) => !t.seenOn.has(o)).map((o) => `${t.options.join('/')}:${o}`));
+  check(`Q22-1 every hidden in-page toggle (${Object.keys(toggles).length}) has a tab for each state`, Object.keys(toggles).length >= 2 && orphanStates.length === 0, JSON.stringify({ orphanStates, sigs: Object.keys(toggles) }));
+  await page.goto(BASE + U); await settle();
+  await page.click('#rail [data-door="issues"]'); await settle();
+  await page.click('.stabs__i[data-stab="risks"]'); await settle();
+  const rk = await frame(); const addRisk = await page.isVisible('#add') && /리스크 등록/.test(await page.textContent('#add'));
+  check('Q22-1 이슈·변경 › 리스크 tab opens the risk register with + 리스크 등록', rk.active.join() === 'issues' && rk.tab.join() === 'risks' && /tab=risks/.test(page.url()) && addRisk, JSON.stringify({ rk, addRisk, url: page.url() }));
+  // ---- Q22-2: 시험 tabs carry the counts / 06 tag the hidden toggle used to show
+  await page.goto(`${BASE}${U}/tests`); await settle();
+  const accTab = await page.textContent('.stabs__i[data-stab="acceptance"]');
+  check('Q22-2 시험 › 검수 tab shows the "06에서 진행" tag before 06', /06에서 진행/.test(accTab), accTab);
+  // ---- Q22-3: ⋯ › 프로젝트 정보 수정 keeps the project's rail (계획 door)
+  await page.goto(`${BASE}${U}/edit`); await page.waitForSelector('#f', { timeout: 8000 }).catch(() => {}); await page.waitForTimeout(250);
+  const ed = await frame();
+  check('Q22-3 /edit shows the project rail with the 계획 door', ed.rail.length === 7 && ed.active.join() === 'plan', JSON.stringify(ed));
+  // ---- Jim L1: 보고서 › 공식 문서 says 사업수행계획서 once (the body's 프로젝트 헌장 heading stays on the phone)
+  await page.goto(`${BASE}${U}/charter`); await settle();
+  const doc = await page.evaluate(() => ({ title: document.querySelector('.phead__title').textContent.trim(), h: [...document.querySelectorAll('#main h1')].filter((e) => e.getClientRects().length).map((e) => e.textContent.trim()) }));
+  check('L1 공식 문서 title = 사업수행계획서, shown once (no 프로젝트 헌장 heading on desktop)', doc.title === '사업수행계획서' && doc.h.length === 1, JSON.stringify(doc));
+
   await page.click('[data-stab-action="activity"]'); await page.waitForSelector('.actpanel', { timeout: 4000 }).catch(() => {});
   check('보고서 › 활동 기록 tab opens the activity panel', Boolean(await page.$('.actpanel')));
   await page.keyboard.press('Escape');

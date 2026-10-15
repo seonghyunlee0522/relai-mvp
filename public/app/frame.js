@@ -117,12 +117,12 @@ const checklistActivity = (pid, qs) => {
   return null;
 };
 /** Where a project page sits: door, tab, title, purpose, phase key for the chip, breadcrumb. */
-export function pageInfo(p, g, { tab = null, title = '' } = {}) {
+export function pageInfo(p, g, { tab = null, title = '', badges = null } = {}) {
   const qs = new URLSearchParams(location.search); const path = location.pathname;
   const { door, tab: tkey } = doorOf(p.id, path, qs, tab);
   const d = DOORS(p.id).find((x) => x.key === door); const t = d.tabs.find((x) => x.key === tkey) || null;
   const curKey = g.current_phase ? g.current_phase.phase_key : null;
-  const info = { door: d, tab: t, title: t ? t.label : d.label, purpose: t ? t.purpose : d.purpose, phase: t ? t.phase || curKey : null, crumb: null };
+  const info = { door: d, tab: t, title: t ? t.label : d.label, purpose: t ? t.purpose : d.purpose, phase: t ? t.phase || curKey : null, crumb: null, badges: badges || {} };
   const TITLES = { requirements: '요구사항', 'req-classify': '요구사항 분류·우선순위', 'req-trace': '요구사항 추적', wbs: '일정 (WBS)', gantt: '간트 차트', 'wbs-trace': '요구사항–작업 연결', 'test-plan': '요구사항 커버리지', acceptance: '검수 / 인수 승인', docs: title || '공식 문서', health: '프로젝트 건강도' };
   if (t && TITLES[t.key]) info.title = TITLES[t.key];
   if (/\/checklist\/?$/.test(path)) {
@@ -140,7 +140,7 @@ const sectionTabs = (info) => {
   if (!info.door.tabs.length) return '';
   return html`<nav class="stabs" aria-label="${info.door.label} 하위 메뉴">${raw(info.door.tabs.map((t) => (t.action
     ? html`<button type="button" class="stabs__i" data-stab-action="${t.action}">${t.label}</button>`
-    : html`<a class="stabs__i ${info.tab && info.tab.key === t.key ? 'is-active' : ''}" href="${t.href}" data-link data-stab="${t.key}" ${raw(info.tab && info.tab.key === t.key ? 'aria-current="page"' : '')}>${t.label}</a>`)).join(''))}</nav>`;
+    : html`<a class="stabs__i ${info.tab && info.tab.key === t.key ? 'is-active' : ''}" href="${t.href}" data-link data-stab="${t.key}" ${raw(info.tab && info.tab.key === t.key ? 'aria-current="page"' : '')}>${t.label}${raw(info.badges[t.key] || '')}</a>`)).join(''))}</nav>`;
 };
 /** Phase chip next to the title — links to that phase's list on 지금 할 일. */
 const phaseChip = (p, g, key) => {

@@ -3078,4 +3078,10 @@ html:not(.is-phone) .shell--ws .page--wide>.phead-wrap+*{margin-top:0}
 /* one banner slot: the first notice / tip wins (a state notice outranks a feature tip) */
 html:not(.is-phone) .page:has(>.notice) .coach,html:not(.is-phone) .notice~.notice,html:not(.is-phone) .coach~.coach{display:none}
 /* one way to switch views: the section tabs (the old in-page WBS/Gantt, 목록/추적 and 테스트/검수/커버리지 toggles stay on the phone only) */
-html:not(.is-phone) .seg:has(>[data-view="gantt"]),html:not(.is-phone) .seg:has(>[data-rview]),html:not(.is-phone) .rhead>.seg:has(>[data-tab]){display:none}
+html:not(.is-phone) .seg:has(>[data-view="gantt"]),html:not(.is-phone) .seg:has(>[data-rview]),html:not(.is-phone) .rhead>.seg:has(>[data-tab="acceptance"]){display:none}
+/* counts / tags the hidden 시험 toggle used to carry now ride on the section tabs */
+.stabs__n{margin-left:6px;padding:0 6px;border-radius:999px;background:var(--border-soft);color:var(--text-2);font-size:var(--fs-xs);font-style:normal;font-weight:600;line-height:18px}
+.stabs__i.is-active .stabs__n{background:var(--blue-soft);color:var(--blue-deep)}
+/* 공식 문서 (사업수행계획서): the page header carries the title — the body's own 프로젝트 헌장 heading stays on the phone only */
+html:not(.is-phone) .chx__head>.chx__ht{display:none}
+html:not(.is-phone) .chx__head{justify-content:flex-end}

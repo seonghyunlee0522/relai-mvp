@@ -1,9 +1,12 @@
 import { api, wsApi } from '../core/api.js';
+import { isPhone } from '../core/device.js';
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { ob } from '../onboarding/state.js';
 import { showErrors, toast, confirmDialog } from '../shared/dialogs.js';
 import { traitFields, wireTraitFields } from '../shared/trait-fields.js';
+import { mountProjectRail, setTopProject } from '../frame.js';
+import { statusPill } from './guide.js';
 
 export async function projectFormPage(id) {
   const main = $('#main');
@@ -14,6 +17,8 @@ export async function projectFormPage(id) {
     if (p.status === 'ARCHIVED') { navigate(`/app/projects/${id}`, { replace: true }); return; }
   }
   document.title = `${editing ? '프로젝트 정보 수정' : '새 프로젝트'} — RELAI`;
+  // desktop: editing a project keeps that project's rail (계획 door) and top-bar project, not the global 홈·프로젝트 rail (Q22-3)
+  if (editing && !isPhone()) { mountProjectRail(p.id, 'plan'); setTopProject(p, null, statusPill(p)); }
   main.innerHTML = html`<div class="page page--form page--guide">
     <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : '프로젝트'}</a>
     <div class="page__head"><div><h1>${editing ? '프로젝트 정보 수정' : '새 프로젝트 시작하기'}</h1>

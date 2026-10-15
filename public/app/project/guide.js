@@ -28,13 +28,13 @@ export const statusPill = (p) => (p.status === 'COMPLETED' && p.closed_on
  * `tab` = LNB item key to mark active (next | overview | definition | requirements | wbs | overview-wbs | tests | acceptance | changes | raid | reports …);
  * `title` = optional screen title shown after the phase chip (e.g. "WBS 작성" vs "WBS · 운영 조회").
  */
-export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
+export const projectHead = (p, g, { tab = null, title = '', badges = null } = {}) => {
   wireProjectActions();
   wireAssistant(); queueMicrotask(() => revealAskButton(p.id));   // CTA appears only when /ai/status says AI is on
   const cur = g.current_phase;
   if (!isPhone()) {
     // desktop (Redesign R1): rail door + section tabs + page header; project name / phase / status live in the top bar
-    const info = pageInfo(p, g, { tab, title });
+    const info = pageInfo(p, g, { tab, title, badges });
     queueMicrotask(() => { mountProjectRail(p.id, info.door.key); setTopProject(p, g, statusPill(p)); });
     return pageHeader(p, g, info, html`<button type="button" class="btn btn--secondary btn--sm" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조">RELAI에게 물어보기</button>${raw(headerMore(p))}`);
   }

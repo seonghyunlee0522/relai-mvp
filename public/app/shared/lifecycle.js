@@ -132,7 +132,8 @@ export const DOORS = (pid) => [
     T('acceptance', '검수', P(pid, '/tests?tab=acceptance'), '고객 검수 결과와 인수 승인을 기록합니다.', 'TRANSITION_GO_LIVE'),
   ] },
   { key: 'issues', label: '이슈·변경', href: P(pid, '/issues'), tabs: [
-    T('raid', '이슈·리스크', P(pid, '/issues'), '프로젝트를 막는 문제와 위험을 기록하고 조치합니다.'),
+    T('raid', '이슈', P(pid, '/issues'), '이미 발생해 프로젝트를 막는 문제를 기록하고 조치합니다.'),
+    T('risks', '리스크', P(pid, '/issues?tab=risks'), '아직 발생하지 않은 위험을 미리 등록하고 대응 계획과 검토 일정을 관리합니다.'),
     T('changes', '변경 요청', P(pid, '/changes'), '범위·일정 변경 요청의 영향을 보고 승인 여부를 기록합니다.'),
   ] },
   { key: 'reports', label: '보고서', href: P(pid, '/reports'), tabs: [
@@ -156,9 +157,10 @@ export function doorOf(pid, path, qs, hint = null) {
   }
   if (sub === '/wbs') return q(qs, 'phase', 'DEVELOPMENT') ? pick('schedule', 'dev-status') : q(qs, 'view', 'gantt') ? pick('schedule', 'gantt') : pick('schedule', 'wbs');
   if (sub === '/tests') return pick('tests', q(qs, 'tab', 'coverage') ? 'test-plan' : q(qs, 'tab', 'acceptance') ? 'acceptance' : q(qs, 'last_result', 'FAIL') ? 'defects' : 'tests');
-  if (sub === '/issues') return pick('issues', 'raid');
+  if (sub === '/issues') return pick('issues', q(qs, 'tab', 'risks') ? 'risks' : 'raid');
   if (sub === '/changes') return pick('issues', 'changes');
   if (sub === '/charter') return pick('reports', 'docs');
+  if (sub === '/edit') return pick('plan');   // ⋯ › 프로젝트 정보 수정: the project's 계획 door (Q22-3)
   if (sub === '/overview') return pick('reports', 'health');
   if (sub.startsWith('/reports')) return pick('reports', hint === 'close' ? 'docs' : 'weekly');
   return pick('next');

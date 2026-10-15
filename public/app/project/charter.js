@@ -191,9 +191,9 @@ export async function charterPage(id) {
   </aside>`;
 
   main.innerHTML = html`<div class="page page--wide page--flow chp">
-    ${raw(projectHead(p, g, { tab: 'overview-charter', title: '프로젝트 헌장' }))}
+    ${raw(projectHead(p, g, { tab: 'overview-charter', title: isPhone() ? '프로젝트 헌장' : '사업수행계획서' }))}
     <div class="chl"><div class="chx">
-      <div class="chx__head"><div><h1>프로젝트 헌장 ${raw(term('charter'))}</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
+      <div class="chx__head"><div class="chx__ht"><h1>프로젝트 헌장 ${raw(term('charter'))}</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 헌장은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(hero)}
       ${raw(profile)}${raw(goals)}${raw(scope)}${raw(stake)}${raw(time)}${raw(acr)}${raw(ops)}${raw(gate)}
