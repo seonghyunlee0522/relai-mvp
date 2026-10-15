@@ -22,7 +22,7 @@ if (typeof document !== 'undefined' && document.body && !document.body.dataset.t
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return; const m = document.querySelector('.tmenu:not([hidden])'); if (!m) return;
-    if (document.querySelector('.gpop:not([hidden])')) return;   // a nested popover (컬럼) closes first
+    const pop = m.querySelector('.gpop:not([hidden])'); if (pop) { e.stopPropagation(); pop.hidden = true; const b0 = pop.previousElementSibling; if (b0) b0.focus(); return; }   // a nested popover (컬럼) closes first
     e.stopPropagation(); closeAll(); const b = m.previousElementSibling; if (b) b.focus();
   }, true);
 }

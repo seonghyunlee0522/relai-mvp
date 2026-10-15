@@ -103,7 +103,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   const foot = (await page.textContent('.gfoot')).replace(/\s+/g, ' ');
   const visibleRows = await page.$$eval('main tbody tr', (els) => els.length);
   check('US-2 first group open, others folded', visibleRows === 1 + 3 + 4 + 3, String(visibleRows));
-  const chipTotal = (await page.textContent('.kchip[data-kf=""] b')).trim();
+  const chipTotal = (await page.textContent('.kchip[data-kf=""] b, [data-cstf=""] b')).trim();   // R2: 전체 is the first status segment
   check('K11 총 N건 = the 전체 항목 chip (folded rows counted)', new RegExp(`총 ${chipTotal}건`).test(foot), `${foot} · chip ${chipTotal}`);
   await shot('06-wbs-after-skeleton.png');
   const tree = (await api('GET', `${A.P}/wbs`)).json;
@@ -153,7 +153,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await api('PATCH', `${A.P}/wbs/${design.id}`, { planned_start_date: '2026-11-02', planned_end_date: '2026-11-20' });
   await page.goto(`${A.url}/wbs?sel=${dev1.id}`); await page.waitForSelector('#drawer .wpast__msg');
   check('US-3 drawer copy', (await page.textContent('#drawer .wpast__msg')).trim() === '프로젝트 종료일(04/30) 이후입니다. 계약 기간 안에 끝나도록 일정을 다시 확인하세요.');
-  const cellCol = await page.$eval(`main tr[data-id="${dev1.id}"] .cell--past`, (e) => getComputedStyle(e).color).catch(() => '');
+  const cellCol = await page.$eval(`main tr[data-id="${dev1.id}"] .cell--past, main tr[data-id="${dev1.id}"] .wper.wpast`, (e) => getComputedStyle(e).color).catch(() => '');
   check('US-3 row date in warn colour (not red) + !', Boolean(cellCol) && !isRed(cellCol) && Boolean(await page.$(`main tr[data-id="${dev1.id}"] .wpast__i`)), cellCol);
   await shot('08-past-end-warning.png');
   check('US-3 summary count 1 (안정화 starting after the end not counted)', (await api('GET', `${A.P}/wbs`)).json.summary.tasks_over_end === 1);
@@ -204,6 +204,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await shot('11-wbs-detail-375.png');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(B.url); await page.waitForSelector('.np__list');
+  if (await page.$('details[data-opt]:has-text("마일스톤 등록")')) await page.click('details[data-opt] > summary');   // R2: 권장 rows are folded
   const msRow = await page.textContent('.np__row:has-text("마일스톤 등록")');
   check('US-4 What\'s Next row suggestion + 가져오기', /착수 때 정한 주요 일정 3건\(킥오프·요구사항 확정·오픈\)을 마일스톤으로 가져올까요\?/.test(msRow) && Boolean(await page.$('[data-import-ms]')), msRow.replace(/\s+/g, ' ').slice(0, 140));
   await shot('12-milestone-suggestion.png');
@@ -254,7 +255,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
     check('B-1 LNB: 01–03 number + count, no ✓', lnb.length === 3 && lnb.every(([gap, m]) => gap && m !== '✓'), JSON.stringify(lnb));
     await shot('15-accept-b1-stepper.png');
     await page.goto(`${BASE}/app`); await page.waitForSelector(`.hc[data-pid="${E.p.id}"]`);
-    const bar = await page.$$eval(`.hc[data-pid="${E.p.id}"] .lcpos i`, (els) => els.map((e) => e.className));
+    const bar = await page.$$eval(`.hc[data-pid="${E.p.id}"] .lcpos i, .hc[data-pid="${E.p.id}"] .hmini li`, (els) => els.map((e) => e.className));
     check('B-1 Home lifecycle bar: 01–03 amber (is-gap), never green', JSON.stringify(bar.slice(0, 4)) === JSON.stringify(['is-gap', 'is-gap', 'is-gap', 'is-cur']), JSON.stringify(bar));
   } else check('B-1 legacy project (needs DATABASE_URL)', false, 'DATABASE_URL not set');
 
@@ -262,12 +263,15 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(`${BASE}/app`); await page.waitForSelector(`.hc[data-pid="${D.p.id}"]`);
   const sub = await page.textContent('.page__head p');
   check('L-C6 Home subtitle 워크스페이스', /워크스페이스/.test(sub) && !/Workspace/.test(sub), sub);
-  const strip = (await page.textContent(`.hc[data-pid="${D.p.id}"] .hc__strip`)).replace(/\s+/g, ' ').trim();
+  const strip = ((await page.$eval(`.hc[data-pid="${D.p.id}"] .hc__strip, .hc[data-pid="${D.p.id}"] .hc__foot`, (e) => e.textContent).catch(() => ''))).replace(/\s+/g, ' ').trim();   // R2: card foot only when there are tasks
   check('L-C6 empty progress: no "진행률 -" and no doubled separator', !/진행률/.test(strip) && !/·\s*·/.test(strip) && !/^·/.test(strip), strip);
   await shot('16-accept-home.png');
 
   // L-C1: WBS grid — one text format for dates (10/20) and progress (0%) on editable rows; no mm/dd/yyyy; owner name + 계정 없음 not clipped
   await page.goto(`${A.url}/wbs`); await page.waitForSelector('main table');
+  // R2: 계획 시작 / 계획 종료 are restorable columns on desktop (default = one 기간 column) — show them for this check
+  const cols = async (on) => { await page.click('.rtool [data-tmore]'); await page.click('.tmenu [data-gcols]'); for (const k of ['start', 'end']) await page[on ? 'check' : 'uncheck'](`.gpop [data-gcol="${k}"]`); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); };
+  await cols(true);
   await page.mouse.move(5, 5);
   const fmt = await page.$$eval('main tbody tr:not(.is-group)', (trs) => trs.slice(0, 12).map((tr) => [...tr.querySelectorAll('.cedit__v')].map((v) => v.textContent.trim())).flat());
   check('L-C1 editable dates as M/DD, progress as N%', fmt.length > 0 && fmt.every((t) => /^(\d{1,2}\/\d{2}|-|\d{1,3}%)$/.test(t)) && fmt.some((t) => /%$/.test(t)) && fmt.some((t) => /\//.test(t)), JSON.stringify(fmt.slice(0, 8)));
@@ -277,6 +281,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   const ownerSel = await page.$eval(`main tr[data-id="${design.id}"] select[data-edit="owner"]`, (e) => [e.options[e.selectedIndex].textContent, e.scrollWidth <= e.clientWidth + 1]).catch(() => ['', false]);
   check('L-C1 owner cell: name only + 계정 없음 fully visible', clip && ownerSel[0] === '박협력', JSON.stringify(ownerSel));
   await shot('17-accept-grid-format.png');
+  await cols(false);
 
   await browser.close();
   const fails = results.filter((x) => !x[1]);

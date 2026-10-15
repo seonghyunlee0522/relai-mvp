@@ -217,14 +217,16 @@ const dActivityRow = (a, archived, isCurrent, browse = false, markable = false, 
       if (a.importance !== 'REQUIRED' && a.linked_feature_type !== 'definition' && (isCurrent || markable || a.state === 'IN_PROGRESS')) more.push(mi(html`<button type="button" role="menuitem" class="np__act" data-step="${a.id}" data-status="SKIPPED" data-title="${a.title}">건너뛰기</button>`));
     }
   }
+  const wait = !archived && !done && !skipped && !main;   // no action yet: an earlier row comes first — the row says why (e.g. 먼저 요구사항을 등록하세요.)
   const tail = done ? '<span class="np__ok" data-row-done>✓ 완료</span>' : skipped ? '<span class="np__skipped">건너뜀</span>'
     : a.state === 'IN_PROGRESS' ? html`<span class="badge badge--st is-${cls}">${cls === 'crit' ? '확인 필요' : '진행 중'}</span>` : '';
   const menu = more.length ? html`<span class="np__morew"><button type="button" class="np__more" data-rowmore aria-haspopup="menu" aria-expanded="false" aria-label="${a.title} 더보기" title="더보기">⋯</button><ul class="np__menu" role="menu" hidden>${raw(more.join(''))}</ul></span>` : '';
-  return html`<li class="np__row nxr is-${cls} ${isCurrent ? 'is-cur' : ''} ${href ? 'is-link' : ''}" data-act="${a.id}" data-step-key="${a.step_key}" data-imp="${a.importance}" ${raw(href ? html`data-href="${href}"` : '')}>
+  return html`<li class="np__row nxr is-${cls} ${isCurrent ? 'is-cur' : ''} ${href ? 'is-link' : ''}" ${raw(wait ? 'data-wait' : '')} data-act="${a.id}" data-step-key="${a.step_key}" data-imp="${a.importance}" ${raw(href ? html`data-href="${href}"` : '')}>
     <div class="np__m">
       <span class="np__st">${raw(a.importance !== 'REQUIRED' ? html`<span class="badge badge--imp badge--muted">${a.importance_label}</span>` : '')}${a.title}</span>
-      <span class="np__purpose">${raw(a.text && ((GATE_KEYS.has(a.step_key) && a.state !== 'NOT_STARTED') || a.row_text || a.state === 'IN_PROGRESS') ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}" data-row-text>${a.text}</span>` : html`${a.description}`)}</span>
-      ${raw(a.hint && !done ? html`<span class="np__hint">${a.hint}</span>` : '')}
+      <span class="np__purpose">${a.description}</span>
+      ${raw(a.text && ((GATE_KEYS.has(a.step_key) && a.state !== 'NOT_STARTED') || a.row_text || a.state === 'IN_PROGRESS' || wait) ? html`<span class="np__sum ${a.crit ? 'is-crit' : ''}" data-row-text>${a.text}</span>` : '')}
+      ${raw(a.hint ? html`<span class="np__hint">${a.hint}</span>` : '')}
       ${raw(a.reopen_note ? html`<span class="np__hint np__reopen" data-reopen-note>${a.reopen_note}</span>` : '')}
       ${raw(a.links && !archived ? html`<span class="np__links" data-row-links>${raw(a.links.map((l) => html`<a class="link" href="${l.href}" data-link>${l.label}</a>`).join(''))}</span>` : '')}
       ${raw(a.import_ms && !archived ? html`<span class="np__imp">${a.import_ms.text}</span>` : '')}
@@ -247,6 +249,7 @@ const dPhasePanel = (g, p, archived) => {
   const req = acts.filter((a) => a.importance === 'REQUIRED'); const reqDone = req.filter((a) => a.state === 'COMPLETED' || a.state === 'SKIPPED').length;
   return html`<section class="np nxp" aria-labelledby="npT">
     <div class="np__h"><div class="np__t"><h2 id="npT">${no2(cur.sequence)} ${cur.name} — 필수 업무</h2></div><span class="np__remain ${s.required_open ? '' : 'is-good'}" data-req-count>${reqDone} / ${req.length} 완료</span></div>
+    <p class="np__d">${cur.description}</p>
     ${raw(splitRows(acts, (a) => dActivityRow(a, archived, current && a.id === current.id, false, true, p.id)))}
     <div class="np__f ${allDone && g.next_phase ? 'np__f--ready' : ''}">
       <span class="np__msg">${raw(g.next_phase ? (allDone ? html`<b>${cur.name} 단계의 필요한 업무가 정리되었습니다.</b> 다음 단계 · ${no2(g.next_phase.sequence)} ${g.next_phase.name}` : html`다음 단계: <b>${no2(g.next_phase.sequence)} ${g.next_phase.name}</b>${s.gate_met ? ' · 남은 권장·선택 업무를 정리하거나 건너뛰면 진행할 수 있습니다.' : ' · 필수 업무를 마치면 진행할 수 있습니다.'}`) : '마지막 단계입니다.')}</span>

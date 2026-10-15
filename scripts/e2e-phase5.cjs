@@ -88,7 +88,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   await page.goto(A.url); await page.waitForSelector('.np__list');
   const tpRow = npRow('요구사항별 테스트 준비');
   const tpTxt = await tpRow.textContent();
-  check('US-1 AC1 TEST_PLAN 필수 · 진행 중 · "범위 내 요구사항 15건 중 1건에 테스트가 있습니다 (제외 0건)"', /필수/.test(tpTxt) && /범위 내 요구사항 15건 중 1건에 테스트가 있습니다 \(제외 0건\)/.test(tpTxt), tpTxt.replace(/\s+/g, ' ').slice(0, 160));
+  check('US-1 AC1 TEST_PLAN 필수 · 진행 중 · "범위 내 요구사항 15건 중 1건에 테스트가 있습니다 (제외 0건)"', (/필수/.test(tpTxt) || (await tpRow.getAttribute('data-imp')) === 'REQUIRED') && /범위 내 요구사항 15건 중 1건에 테스트가 있습니다 \(제외 0건\)/.test(tpTxt), tpTxt.replace(/\s+/g, ' ').slice(0, 160));
   const gp = await page.$$eval('.rg .btn--primary', (els) => els.map((e) => e.textContent.trim()));
   check('US-1 What\'s Next 05 primary = 요구사항별 테스트 만들기 (가이드 primary 1개)', gp.length === 1 && gp[0] === '요구사항별 테스트 만들기', JSON.stringify(gp));
   const rg = await page.textContent('.rg');

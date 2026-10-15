@@ -148,7 +148,7 @@ const dCard = (c, i) => {
   </article>`;
 };
 const homeSide = (live) => {
-  const up = live.flatMap((c) => (c.upcoming || []).map((u) => ({ ...u, pid: c.id, sub: c.name }))).sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 6);
+  const up = live.flatMap((c) => (c.upcoming || []).map((u) => ({ ...u, pid: c.id, sub: u.title === c.name ? u.label : `${c.name} · ${u.label}` }))).sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 6);
   const act = live.flatMap((c) => (c.recent || []).map((e) => ({ ...e, pid: c.id, project: live.length > 1 ? c.name : '' }))).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 6);
   return html`<aside class="nxside" aria-label="일정과 활동">
     <section class="nxbox" aria-labelledby="hUpT" data-home-upcoming><div class="nxbox__h"><h2 id="hUpT">다가오는 일정</h2></div><div class="nxbox__b">${raw(upcomingList(up, ''))}</div></section>

@@ -83,7 +83,9 @@ const q = (s) => String(s).replace(/'/g, "''");
 
   // AC3: price line before each of the 4 AI entry points (starter 500 is above the 200 low-balance line, so no amber yet)
   const line = async () => (await text('.ai-credit')).replace(/\s+/g, ' ').trim();
-  await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await page.click('#ai-extract', { timeout: 8000 });
+  // Redesign R2: on desktop the AI entries sit in the toolbar ⋯ menu (with the price line); open it first when the button is not on screen
+  const viaMenu = async (sel) => { await page.waitForSelector('.phead-wrap', { timeout: 15000 }).catch(() => {}); await page.waitForTimeout(300); if (!(await page.locator(`${sel}:visible`).count())) await page.click('[data-rtool-r2] [data-tmore]').catch(() => {}); await page.locator(`${sel}:visible`).first().click({ timeout: 8000 }); };
+  await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await viaMenu('#ai-extract');
   await page.waitForSelector('.dialog--ai .ai-credit');
   let l = await line(); check('AC3 요구사항 추출: 예상 30 크레딧 (₩300) · 잔액 500 크레딧', l === '예상 30 크레딧 (₩300) · 잔액 500 크레딧', l);
   await shot('04-extract-price.png');
@@ -93,7 +95,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   const sum = await text('.aid__sum');
   check('AC4 extraction charged 30 크레딧 (₩300), 잔액 470', /30 크레딧 \(₩300\) 사용 · 잔액 470/.test(sum), sum);
   await page.keyboard.press('Escape');
-  await page.goto(`${BASE}/app/projects/${P.id}/wbs`); await page.locator('#ai-wbs2, #ai-wbs:visible').first().click({ timeout: 8000 }); await page.waitForSelector('.dialog--ai .ai-credit');
+  await page.goto(`${BASE}/app/projects/${P.id}/wbs`); await viaMenu('#ai-wbs2, #ai-wbs'); await page.waitForSelector('.dialog--ai .ai-credit');
   l = await line(); check('AC3 WBS 초안: 예상 50 크레딧 (₩500) · 잔액 470 크레딧', l.startsWith('예상 50 크레딧 (₩500) · 잔액 470 크레딧'), l);
   await page.keyboard.press('Escape');
   await page.goto(`${BASE}/app/projects/${P.id}/changes`); await page.click(`[data-row="${cr.id}"]`, { timeout: 8000 }); await page.click('#ai-impact', { timeout: 8000 }); await page.waitForSelector('.dialog--ai .ai-credit');
@@ -157,13 +159,13 @@ const q = (s) => String(s).replace(/'/g, "''");
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary');
   check('AC8 page amber under 200', Boolean(await page.$('.cr-sum.is-low')) && /아래입니다/.test(await text('.cr-warn')));
   await shot('08-low-balance.png');
-  await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await page.click('#ai-extract'); await page.waitForSelector('.dialog--ai .ai-credit');
+  await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await viaMenu('#ai-extract'); await page.waitForSelector('.dialog--ai .ai-credit');
   check('AC8 AI cost line amber + 충전 link', Boolean(await page.$('.ai-credit.is-low')) && /충전/.test(await line()), await line());
   await page.keyboard.press('Escape');
   // AC6: balance 12 < 30 → button disabled with [크레딧 충전]; API refuses with no ledger row
   await api('POST', `/api/admin/workspaces/${W}/ai/credits`, { amount: -(bal() - 12), reason: 'e2e: insufficient' });
   const rows0 = sql(`SELECT COUNT(*) FROM credit_ledger WHERE workspace_id = '${q(W)}'`);
-  await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await page.click('#ai-extract'); await page.waitForSelector('.dialog--ai .ai-credit');
+  await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await viaMenu('#ai-extract'); await page.waitForSelector('.dialog--ai .ai-credit');
   l = await line();
   check('AC6 dialog: 크레딧이 부족합니다 (필요 30 · 잔액 12) · 크레딧 충전 + 추출 disabled', l === '크레딧이 부족합니다 (필요 30 · 잔액 12) · 크레딧 충전' && await page.$eval('#ai-run', (b) => b.disabled), l);
   await shot('09-insufficient.png');

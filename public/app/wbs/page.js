@@ -175,7 +175,7 @@ export async function wbsPage(id) {
   const periodCol = () => (desk ? [{ key: 'period', label: '기간', width: 130, render: (r) => { if (r._ghost) return '';
     if (r.item_type === 'MILESTONE') return html`${raw(dateCell(r.milestone_date, false, r.past_end))}${raw(shiftLine(r))}`;
     const s0 = r.planned_start; const e0 = r.planned_end; if (!s0 && !e0) return dim();
-    return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(shiftLine(r))}`; } }] : []);
+    return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''} ${r.rollup ? 'dim' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${raw(r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : '')}${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(shiftLine(r))}`; } }] : []);
   const grid = createGrid({
     key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
     rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
@@ -346,7 +346,7 @@ export async function wbsPage(id) {
 
   /* ---------- desktop toolbar (R2 §5.5): status segments · search · 담당자 · ⋯ · + 작업 추가 (≤ 5 controls) ---------- */
   const deskTool = (v, q, f) => {
-    const leaf = items.filter((x) => !x.is_group && x.item_type !== 'SUMMARY' && !x.archived_at); const cnt = (k) => leaf.filter((x) => x.computed_status === k).length;
+    const leaf = items.filter((x) => !x.archived_at); const cnt = (k) => leaf.filter((x) => x.computed_status === k).length;   // same rows the 상태 filter keeps, so 전체 = the footer's 총 N건 (K11)
     const cur = q.get('cst') || '';
     const SEG = [['', '전체', leaf.length], ['IN_PROGRESS', '진행 중', cnt('IN_PROGRESS')], ['DELAYED', '지연', cnt('DELAYED')], ['COMPLETED', '완료', cnt('COMPLETED')]];
     const seg = html`<div class="sseg" role="group" aria-label="상태" data-status-seg>${raw(SEG.map(([k, l, c]) => html`<button type="button" class="${cur === k ? 'is-on' : ''}" data-cstf="${k}" aria-pressed="${cur === k}">${l} <b>${c}</b></button>`).join(''))}${raw(cur && !SEG.some(([k]) => k === cur) ? html`<button type="button" class="is-on" data-cstf="${cur}" aria-pressed="true">${WBS_CSTATUS[cur] || cur}</button>` : '')}</div>`;
@@ -361,7 +361,7 @@ export async function wbsPage(id) {
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 WBS 내보내기 (Excel)', 'data-xl="export"'))}`],
       [archived ? '' : 'AI', archived ? '' : ai.enabled ? tmItem('AI로 초안 만들기', 'id="ai-wbs" title="요구사항과 프로젝트 수행 업무(이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs"', aiPrice(ai, 'WBS_GENERATION')) : tmItem('AI로 초안 만들기', 'id="ai-wbs" disabled', 'AI 기능이 설정되지 않았습니다')],
     ], { label: '일정 메뉴 더보기' });
-    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<span class="wterms">${raw(term('wbs'))}${raw(term('gantt'))}${raw(term('wbs_milestone'))}</span><input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
   };
 
   const draw = () => {

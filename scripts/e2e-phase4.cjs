@@ -76,8 +76,10 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   await page.goto(A.url); await page.waitForSelector('.np__list');
   const issuesRow = page.locator('.np__row:has-text("이슈 관리")');
   check('US-5 ISSUES 0건 text + manual 완료 처리', /아직 기록된 이슈가 없습니다\. 문제가 없었다면 완료 처리하세요\./.test(await page.textContent('main')) && (await issuesRow.locator('[data-status="COMPLETED"]').count()) === 1);
+  // Redesign R2: 필수 rows sit in .nx__req (no 필수 badge); 권장·선택 rows are folded under details[data-opt]
+  await page.click('details[data-opt] > summary').catch(() => {});
   const wrRow = page.locator('.np__row:has-text("주간보고 작성·공유")');
-  check('US-3 WEEKLY_REPORT row: 권장 · 미시작 · "이번 주 주간보고를 만드세요"', (await wrRow.count()) === 1 && /권장/.test(await wrRow.textContent()) && /이번 주 주간보고를 만드세요/.test(await wrRow.textContent()) && /미시작/.test(await wrRow.textContent()));
+  check('US-3 WEEKLY_REPORT row: 권장 · 미시작 · "이번 주 주간보고를 만드세요"', (await wrRow.count()) === 1 && /권장/.test(await wrRow.textContent()) && /이번 주 주간보고를 만드세요/.test(await wrRow.textContent()) && (/미시작/.test(await wrRow.textContent()) || /is-todo/.test(await wrRow.getAttribute('class'))));
   const wrBtn = wrRow.locator('[data-row-cta]');
   check('US-3 row button 주간보고 만들기 is secondary (Guide keeps the only primary)', (await wrBtn.textContent()).trim() === '주간보고 만들기' && /btn--secondary/.test(await wrBtn.getAttribute('class')) && (await page.$$eval('main .btn--primary', (els) => els.filter((e) => e.offsetParent).length)) <= 1);
   const rows04 = await page.$$eval('.np__row .np__st', (els) => els.map((e) => e.textContent.trim()));
@@ -103,6 +105,8 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
 
   /* ---------- US-1 표 셀 편집 ---------- */
   await page.goto(`${A.url}/wbs?ctx=monitor`); await page.waitForSelector(`tr[data-id="${t1.id}"]`);
+  // Redesign R2: the editable 계획 시작 / 계획 종료 columns sit behind ⋯ › 컬럼 on desktop (default = one 기간 column)
+  if (!(await page.$(`tr[data-id="${t1.id}"] [data-edit="planned_end_date"]`))) { await page.click('.rtool [data-tmore]'); await page.click('.tmenu [data-gcols]'); for (const k of ['start', 'end']) await page.check(`.gpop [data-gcol="${k}"]`); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); }
   const setCell = async (id, field, v) => page.$eval(`tr[data-id="${id}"] [data-edit="${field}"]`, (el, val) => { el.value = val; el.dispatchEvent(new Event('change', { bubbles: true })); }, v);
   await setCell(t1.id, 'planned_end_date', d(14));
   await page.waitForSelector('[data-delay-dialog]');
@@ -119,7 +123,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   await page.fill('#dly-in', '고객 계정 발급 지연 → 버퍼 3일 사용');
   await page.click('[data-delay-dialog] [data-v="1"]');
   await page.waitForFunction((id) => { const el = document.querySelector(`tr[data-id="${id}"] [data-shift]`); return el && /\+7일/.test(el.textContent); }, t1.id, { timeout: 8000 }).catch(() => {});
-  const shiftEl = page.locator(`tr[data-id="${t1.id}"] [data-shift]`);
+  const shiftEl = page.locator(`tr[data-id="${t1.id}"] [data-shift]`).first();   // R2: also under the 기간 column
   const shiftTxt = (await shiftEl.count()) ? (await shiftEl.textContent()).trim() : '';
   check('US-1 saved → row shows "계획 m/d → m/d (+7일)"', shiftTxt === `계획 ${md(d(7))} → ${md(d(14))} (+7일)`, shiftTxt);
   check('US-1 design: the shift line is not red', !isRed(await shiftEl.evaluate((e) => getComputedStyle(e).color)));
@@ -151,7 +155,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   check('US-1 Drawer push saved with reason', (await api('GET', `${A.P}/wbs/${t3.id}`)).json.item.delay_note?.note === '배치 서버 반입 지연');
 
   /* ---------- US-1 일괄 편집 ---------- */
-  await page.goto(`${A.url}/wbs?ctx=monitor`); await page.waitForSelector(`tr[data-id="${t1.id}"]`);
+  await page.goto(`${A.url}/wbs?ctx=monitor&select=1`);   // R2: checkboxes = ⋯ › 여러 개 선택 (?select=1) await page.waitForSelector(`tr[data-id="${t1.id}"]`);
   await page.check(`tr[data-id="${t1.id}"] [data-pick]`); await page.check(`tr[data-id="${t3.id}"] [data-pick]`);
   await page.waitForSelector('.bulk [data-bf]');
   await page.selectOption('.bulk [data-bf]', 'shift_days'); await page.fill('.bulk [data-bv]', '2');
@@ -208,6 +212,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   check('US-2 API approve without the 4 fields → 422 customer_approval_required', apiNo.status === 422 && apiNo.json.error.code === 'customer_approval_required');
   // guide CTA → straight into the Drawer
   await page.goto(A.url); await page.waitForSelector('.np__list');
+  if (await page.$('details[data-opt]:has-text("변경 요청 관리")')) await page.click('details[data-opt] > summary');   // R2: 권장 rows are folded
   const chRow = page.locator('.np__row:has-text("변경 요청 관리")');
   check('US-2 CHANGES row: "고객 결정을 받아 기록하세요"', /고객 결정을 받아 기록하세요/.test(await chRow.textContent()));
   check('US-2 guide CTA 승인 기록하기', /승인 기록하기/.test(await page.textContent('.rg')));

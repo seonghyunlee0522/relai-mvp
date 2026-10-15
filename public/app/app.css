@@ -3209,8 +3209,9 @@ a.nxt:hover{border-color:var(--border-blue);background:#fff}
 .sseg button b{font-weight:700;color:var(--navy)}
 .sseg button:hover{background:var(--bg-alt)}
 .sseg button.is-on{background:var(--bg-tint);color:var(--blue-deep);font-weight:700}.sseg button.is-on b{color:var(--blue-deep)}
-.rtool--r2{flex-wrap:nowrap}
-.rtool--r2 #q{max-width:280px;flex:1 1 200px}
+.rtool--r2{flex-wrap:wrap;row-gap:8px}
+.rtool--r2 #q{max-width:280px;flex:1 1 160px;min-width:120px}
+.rtool--r2 #f-owner{max-width:160px}
 .qa--foot{margin:0;padding:8px 12px;background:#fff;border:1px solid var(--border);border-top:0;border-radius:0 0 var(--r-lg) var(--r-lg)}
 .qa--foot .input{width:100%;max-width:none;border-style:dashed}
 /* detail drawer (requirement · WBS item): a 480px panel beside the list — no scrim, the list stays usable; at ≥ 1280px the page

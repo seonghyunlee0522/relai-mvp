@@ -62,8 +62,8 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await page.goto(reqUrl); await page.waitForSelector('.rtool');
   check('US-4(4) no WBS 이동 banner in 02', !(await page.$('[data-tour-id="req-next"]')));
   // P-1: WBS 연결 안내 · KPI 'WBS 미연결 (범위 내)' · 표의 'WBS 없음' 칩 only from 03
-  check('P-1 02: no WBS 연결 안내, KPI or 없음 chip', !/WBS와 연결하는 것이 목표입니다/.test(await page.textContent('main')) && !/WBS 미연결/.test(await page.textContent('#kstrip')) && !(await page.$('.chip--hold')));
-  check('US-2 toolbar has 요구사항 정의서 ▾', Boolean(await page.$('[data-reqdoc-menu]')));
+  check('P-1 02: no WBS 연결 안내, KPI or 없음 chip', !/WBS와 연결하는 것이 목표입니다/.test(await page.textContent('main')) && !/WBS 미연결/.test((await page.$$eval('.rtool [data-kf]', (els) => els.map((e) => e.textContent).join(' ')))) && !(await page.$('.chip--hold')));
+  check('US-2 toolbar has 요구사항 정의서 ▾', Boolean(await page.$('[data-reqdoc-menu], .rtool [data-reqdoc="pdf"]')));   // R2: in the toolbar ⋯
   await shot('01-requirements-02.png');
   await page.goto(`${reqUrl}?scope=UNDECIDED`); await page.waitForSelector('.rtool');
   const excl = await page.textContent('[data-scope-excl]').catch(() => '');
@@ -148,7 +148,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   else check('US-3 list cell Scope → dialog', false, 'no inline select');
   // bulk: Scope on 2 confirmed → one CR linking both, requirements unchanged
   n0 = crCount();
-  await page.goto(reqUrl); await page.waitForSelector('.rtool');
+  await page.goto(`${reqUrl}?select=1`); await page.waitForSelector('.rtool');   // R2: checkboxes = ⋯ › 여러 개 선택 (?select=1)
   await page.check(`tr[data-id="${r1.id}"] [data-pick]`); await page.check(`tr[data-id="${r3.id}"] [data-pick]`);
   await page.selectOption('[data-bf]', 'scope'); await page.selectOption('[data-bv]', 'OUT_OF_SCOPE'); await page.click('[data-bapply]');
   check('US-3 bulk Scope → dialog', await dialogShown('[data-dialog="req-change"]'));
@@ -245,7 +245,10 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   // 03: WBS banner back
   await page.goto(reqUrl); await page.waitForSelector('.rtool');
   check('US-4(4) WBS banner from 03', Boolean(await page.$('[data-tour-id="req-next"]')));
-  check('P-1 03: KPI WBS 미연결 + 미연결 mark shown', /WBS 미연결 \(범위 내\)/.test(await page.textContent('#kstrip')) && Boolean(await page.$('.is-unlinked')));
+  // R2: the WBS column is hidden by default on desktop → show it from ⋯ › 컬럼, check, hide again
+  await page.click('.rtool [data-tmore]'); await page.click('.tmenu [data-gcols]'); await page.check('.gpop [data-gcol="wbs"]');
+  check('P-1 03: KPI WBS 미연결 + 미연결 mark shown', /WBS 미연결 \(범위 내\)/.test((await page.$$eval('.rtool [data-kf]', (els) => els.map((e) => e.textContent).join(' ')))) && Boolean(await page.$('.is-unlinked')));
+  await page.uncheck('.gpop [data-gcol="wbs"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.goto(`${reqUrl}?sel=${r1.id}`); await page.waitForSelector('#drawer .dtitle'); await page.click('[data-dtab="links"]');
   check('US-4(4) Delivery Trace from 03', Boolean(await page.$('#drawer .trace')));
 
@@ -276,9 +279,9 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   check('US-1 document 승인란: 미승인 — 사유', xml.includes('미승인 — 사유: 고객 PM 출장으로 승인 회신이 다음 주 예정'));
 
   /* ---------- US-2 downloads from the toolbar (main project, v1.0) ---------- */
-  await page.goto(reqUrl); await page.waitForSelector('[data-reqdoc-menu]');
+  await page.goto(reqUrl); await page.waitForSelector('.rtool [data-reqdoc]', { state: 'attached' });
   for (const fmt of ['pdf', 'docx']) {
-    const [d] = await Promise.all([page.waitForEvent('download'), (async () => { await page.click('.rtool [data-reqdoc-menu] summary'); await page.click(`.rtool [data-reqdoc="${fmt}"]`); })()]);
+    const [d] = await Promise.all([page.waitForEvent('download'), (async () => { await page.click('.rtool [data-tmore]'); await page.click(`.rtool [data-reqdoc="${fmt}"]`); })()]);
     const f = `${SHOTS}/요구사항정의서.${fmt}`; await d.saveAs(f);
     check(`US-2 ${fmt.toUpperCase()} downloaded (v1.0)`, new RegExp(`_요구사항정의서_v1\\.0_\\d{8}\\.${fmt}$`).test(d.suggestedFilename()) && fs.statSync(f).size > 1000, d.suggestedFilename());
   }

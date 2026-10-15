@@ -98,7 +98,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-5 06 What\'s Next에 주간보고 행 (권장)', (await wrRow.count()) === 1 && /권장/.test(await wrRow.textContent()));
   const dmRow = page.locator('.np__row:has-text("데이터 마이그레이션")');
   const dmTxt = await dmRow.textContent();
-  check('US-4 이관 있음 → 데이터 마이그레이션 필수 + DATA 요구사항 링크', /필수/.test(dmTxt) && /기존 계약 데이터 이관/.test(dmTxt) && (await dmRow.locator('[data-row-links] a').count()) === 1, dmTxt.replace(/\s+/g, ' ').slice(0, 160));
+  check('US-4 이관 있음 → 데이터 마이그레이션 필수 + DATA 요구사항 링크', (/필수/.test(dmTxt) || (await dmRow.getAttribute('data-imp')) === 'REQUIRED') && /기존 계약 데이터 이관/.test(dmTxt) && (await dmRow.locator('[data-row-links] a').count()) === 1, dmTxt.replace(/\s+/g, ' ').slice(0, 160));
   let g = (await api('GET', A.P)).json;
   check('US-4 DATA_MIGRATION REQUIRED in the gate (필수 미완료)', STEP(g, 'DATA_MIGRATION').importance === 'REQUIRED' && g.current_phase.summary.required_open >= 3);
   check('US-4 건너뛰기 불가 (필수) → 409', (await api('PATCH', `${A.P}/steps/${STEP(g, 'DATA_MIGRATION').id}`, { status: 'SKIPPED' })).status === 409);

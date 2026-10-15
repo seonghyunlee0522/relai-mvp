@@ -228,7 +228,8 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   await mp.evaluate(() => { window.__noReload = 1; });
   await mp.setViewportSize({ width: 1024, height: 768 }); await mp.waitForTimeout(1200);
   const wide = await mp.evaluate(() => ({ same: window.__noReload === 1, phone: document.documentElement.classList.contains('is-phone'), tab: getComputedStyle(document.querySelector('.tabbar')).display, add: Boolean([...document.querySelectorAll('#add')].find((b) => b.getBoundingClientRect().width > 0)), pc: document.querySelectorAll('.pcline').length, chk: [...document.querySelectorAll('.gtable input[type=checkbox]')].filter((e) => e.getBoundingClientRect().width > 0).length }));
-  check('A14 375 → 1024: desktop re-render without reload (no tab bar, + 요구사항 추가 back, row checkboxes back)', wide.same && !wide.phone && wide.tab === 'none' && wide.add && wide.pc === 0 && wide.chk > 0, JSON.stringify(wide));
+  const selEntry = await mp.evaluate(() => Boolean(document.querySelector('[data-rtool-r2] [data-selmode]')));   // Redesign R2: desktop checkboxes come from ⋯ › 여러 개 선택
+  check('A14 375 → 1024: desktop re-render without reload (no tab bar, + 요구사항 추가 back, row checkboxes / 여러 개 선택 back)', wide.same && !wide.phone && wide.tab === 'none' && wide.add && wide.pc === 0 && (wide.chk > 0 || selEntry), JSON.stringify({ ...wide, selEntry }));
   await mp.setViewportSize({ width: 375, height: 812 }); await mp.waitForTimeout(1200);
   const back = await mp.evaluate(() => ({ same: window.__noReload === 1, phone: document.documentElement.classList.contains('is-phone'), pc: document.querySelectorAll('.pcline').length }));
   check('A14 1024 → 375: phone again without reload', back.same && back.phone && back.pc === 1, JSON.stringify(back));
