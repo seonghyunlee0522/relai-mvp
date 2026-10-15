@@ -8,6 +8,9 @@ import { helpButton, wireHelp } from './onboarding/ui.js';
 import { tour } from './onboarding/tour.js';
 import { ob } from './onboarding/state.js';
 import { verifyBanner, wireVerifyBanner } from './auth.js';
+import { isPhone } from './core/device.js';
+import { mountGlobalRail, mountProjectRail, mountTopbar, setTopProject } from './frame.js';
+import { doorOf } from './shared/lifecycle.js';
 
 export const icon = {
   home: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9.5 10 3l7 6.5V17H12v-5H8v5H3z" stroke-linejoin="round"/></svg>',
@@ -94,6 +97,8 @@ export async function shell(path, view, token = null) {
   wireOnce();
   if (!$('.shell')) {
     root.innerHTML = html`<div class="shell">
+      <header class="dtop" id="dtop"><a class="dtop__logo" href="/app" data-link>RELAI</a><div class="dtop__p" id="dtop-p"></div><span class="dtop__sp"></span><div class="dtop__r" id="dtop-r"></div></header>
+      <aside class="rail" id="rail"></aside>
       <header class="topbar"><a class="logo" href="/app" data-link>RELAI</a><a class="ptop" id="ptop" href="/app/projects" data-link hidden></a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
       <div class="pstrip" id="pstrip" hidden></div>
       <aside class="side" id="side"></aside>
@@ -109,7 +114,14 @@ export async function shell(path, view, token = null) {
   const ws = isWorkspacePath(path);
   sh.classList.toggle('shell--ws', ws);
   sh.classList.toggle('is-collapsed', store.get('nav.collapsed', false));
-  if (!ws) {
+  if (!isPhone()) {
+    // desktop (Redesign R1): top bar + rail. The phone's side sheet stays empty here and is rebuilt when the width crosses 768px.
+    if (side.childElementCount) { side.classList.remove('side--project'); side.innerHTML = ''; }
+    mountTopbar();
+    const pid = projectIdOf(path);
+    if (!ws) { setTopProject(null); mountGlobalRail(path); }
+    else { if ($('#dtop-p').dataset.pid !== pid) setTopProject(null); mountProjectRail(pid, doorOf(pid, path, new URLSearchParams(location.search)).door); }
+  } else if (!ws) {
     // leaving a project (or first paint): global navigation. Inside a project the page's projectHead() mounts the LNB.
     if (side.classList.contains('side--project') || !side.childElementCount) { side.classList.remove('side--project'); side.innerHTML = globalNav(); wireSideButtons(); wireHelp(side); }
   } else if (!side.classList.contains('side--project')) {

@@ -38,7 +38,7 @@ export async function creditsPage(main = $('#main')) {
         <div class="cr-kpi"><span class="cr-kpi__l">이번 달 사용 <small class="dim">(${tm.month})</small></span><b class="cr-kpi__v" id="cr-month">${n(tm.used)} 크레딧</b><span class="cr-kpi__w">${krw(tm.krw)}</span>
           <small class="dim">지난달 ${n(lm.used)} 크레딧 (${krw(lm.krw)})</small></div>
       </div>
-      ${raw(s.empty ? html`<p class="cr-warn" role="status">크레딧이 없어 AI 기능을 쓸 수 없습니다. ${raw(s.can_buy ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : 'Workspace 소유자에게 충전을 요청하세요.')}</p>`
+      ${raw(s.empty ? html`<p class="cr-warn" role="status">크레딧이 없어 AI 기능을 쓸 수 없습니다. ${raw(s.can_buy ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : '워크스페이스 소유자에게 충전을 요청하세요.')}</p>`
         : s.low ? html`<p class="cr-warn" role="status">잔액이 ${n(s.low_balance_threshold)} 크레딧(${krw(s.low_balance_threshold * s.credit_price_krw)}) 아래입니다. ${raw(s.can_buy ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : '소유자에게 충전을 요청하세요.')}</p>`
           : html`<p class="hint">잔액이 ${n(s.low_balance_threshold)} 크레딧(${krw(s.low_balance_threshold * s.credit_price_krw)}) 아래로 내려가면 소유자에게 메일로 알려 드립니다.</p>`)}
       ${raw(s.purchased_remaining === 0 && s.free_remaining > 0 ? html`<p class="cr-gift">무료 시작 크레딧 <b>${n(s.starter_credits)} 크레딧 (${krw(s.starter_credits * s.credit_price_krw)})</b>을 드렸습니다 — ${starterUses()}를 해 볼 수 있습니다.</p>` : '')}
@@ -50,7 +50,7 @@ export async function creditsPage(main = $('#main')) {
     ${raw(s.prices.map((p) => html`<tr><td>${p.label}</td><td class="num">${n(p.credits)}</td><td class="num">${krw(p.krw)}</td></tr>`).join(''))}</tbody></table>
     <p class="hint" style="margin-top:8px">한 번 실행할 때마다 정해진 크레딧만 차감합니다. 실행 전에 가격을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p></div></div>`;
   const buy = () => html`<div class="panel" style="margin-top:16px" id="cr-buy"><div class="panel__h">크레딧 충전</div><div class="panel__b">
-    ${raw(!s.can_buy ? '<p class="hint">충전과 환불 요청은 Workspace 소유자가 할 수 있습니다.</p>'
+    ${raw(!s.can_buy ? '<p class="hint">충전과 환불 요청은 워크스페이스 소유자가 할 수 있습니다.</p>'
       : isPhone() ? '<p class="hint" data-phone-pay>결제는 PC에서 할 수 있습니다.</p>'
       : !s.provider_available ? '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>'
         : html`<div class="cr-packs">${raw(s.packs.map((p) => html`<button type="button" class="cr-pack" data-pack="${p.key}"><b>${krw(p.amount)}</b><span>${n(p.credits)} 크레딧</span><small>공급가액 ${krw(p.supply)} + 부가세 ${krw(p.vat)}</small></button>`).join(''))}</div>

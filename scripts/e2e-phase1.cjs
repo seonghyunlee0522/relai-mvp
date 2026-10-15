@@ -157,11 +157,12 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
 
   // F6: 01 left with approval unrecorded → number + open-required badge in LNB and stepper, never ✓
   const lc01 = async () => { await page.goto(`${BASE}/app/projects/${p.id}`); await page.waitForSelector('.pstep'); return page.evaluate(() => {
-    const ph = document.querySelector('.lnb__ph[data-grp="INITIATION"]'); const st = document.querySelector('.pstep li:first-child');
-    return { lnbCls: ph.className, mark: ph.querySelector('.lnb__mark').textContent.trim(), badge: (ph.querySelector('.lnb__n') || {}).textContent || '',
+    // Redesign R1: the desktop has no phase menu — the 지금 할 일 stepper is the one phase list (number + badge, or ✓)
+    const st = document.querySelector('.pstep li:first-child'); const ic = st.querySelector('.st').textContent.trim();
+    return { lnbCls: st.className, mark: ic === '✓' ? '✓' : st.querySelector('small').textContent.trim(), badge: (st.querySelector('.pstep__n') || {}).textContent || '', lnb: document.querySelectorAll('.lnb__ph').length,
       stCls: st.className, stIcon: st.querySelector('.st').textContent.trim(), stBadge: (st.querySelector('.pstep__n') || {}).textContent || '' }; }); };
   const b1 = await lc01();
-  check('bypass: LNB 01 shows number + badge 1, not ✓', /is-gap/.test(b1.lnbCls) && b1.mark === '01' && b1.badge.trim() === '1', JSON.stringify(b1));
+  check('bypass: 01 shows number + badge 1, not ✓ (no desktop phase menu)', !b1.lnb && /is-gap/.test(b1.lnbCls) && b1.mark === '01' && b1.badge.trim() === '1', JSON.stringify(b1));
   check('bypass: stepper 01 not ✓, badge 1', /is-gap/.test(b1.stCls) && b1.stIcon !== '✓' && b1.stBadge.trim() === '1', JSON.stringify(b1));
   await page.screenshot({ path: `${SHOTS}/05b-lnb-gap.png` });
 
@@ -189,7 +190,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.click('[data-wact="complete"]'); await page.waitForTimeout(800);
   check('approval completed', /완료/.test(await page.textContent('[data-row="APPROVAL"]')));
   const b2 = await lc01();
-  check('approval recorded: LNB 01 ✓, no badge', /is-done/.test(b2.lnbCls) && b2.mark === '✓' && !b2.badge, JSON.stringify(b2));
+  check('approval recorded: 01 ✓, no badge', /is-done/.test(b2.lnbCls) && b2.mark === '✓' && !b2.badge, JSON.stringify(b2));
   check('approval recorded: stepper 01 ✓', /is-done/.test(b2.stCls) && b2.stIcon === '✓' && !b2.stBadge, JSON.stringify(b2));
   await api('PUT', `${P}/definition`, { goal: '계약 검토 리드타임 70% 단축' });
   await page.goto(`${BASE}/app/projects/${p.id}/definition`); await page.waitForSelector('[data-row="APPROVAL"]');

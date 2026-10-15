@@ -282,7 +282,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-3 미완료 0건 → 목록 없이 오픈일만, 바로 켜짐', (await page.$$('[data-golive-dialog] .gl__row')).length === 0 && !(await page.isDisabled('[data-gl-ok]')));
   await shot('d-09-golive-nothing-open.png');
   await page.click('[data-gl-cancel]');
-  await page.goto(`${B.url}/tests?tab=acceptance`); await page.waitForSelector('main [data-tab="acceptance"].is-on'); await page.waitForSelector('main .term[data-tip*="검수확인서"]').catch(() => {});
+  await page.goto(`${B.url}/tests?tab=acceptance`); await page.waitForSelector('.stabs__i.is-active[data-stab="acceptance"]');   /* R1: 시험 › 검수 section tab */ await page.waitForSelector('main .term[data-tip*="검수확인서"]').catch(() => {});
   const enAcc = enOf(await textOf('main'));
   check('US-8 검수 탭 영어 없음', !enAcc, enAcc);
   check('US-8 ? 검수 용어', await page.$eval('main .term[data-tip*="검수확인서"]', (e) => Boolean(e.offsetParent)).catch(() => false));

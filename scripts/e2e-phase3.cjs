@@ -250,7 +250,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
     await page.goto(E.url); await page.waitForSelector('.pstep li');
     const stepper = await page.$$eval('.pstep li', (els) => els.slice(0, 4).map((e) => [e.className.trim().split(/\s+/)[0], e.querySelector('.st').textContent]));
     check('B-1 stepper: 01–03 ◐ (is-gap), no ✓; 04 current', JSON.stringify(stepper) === JSON.stringify([['is-gap', '◐'], ['is-gap', '◐'], ['is-gap', '◐'], ['is-cur', '●']]), JSON.stringify(stepper));
-    const lnb = await page.$$eval('.lnb__ph', (els) => els.slice(0, 3).map((e) => [e.classList.contains('is-gap'), e.querySelector('.lnb__mark').textContent]));
+    const lnb = await page.$$eval('.pstep li', (els) => els.slice(0, 3).map((e) => [e.classList.contains('is-gap'), e.querySelector('.st').textContent === '✓' ? '✓' : e.querySelector('small').textContent]));   // R1: the stepper is the one phase list
     check('B-1 LNB: 01–03 number + count, no ✓', lnb.length === 3 && lnb.every(([gap, m]) => gap && m !== '✓'), JSON.stringify(lnb));
     await shot('15-accept-b1-stepper.png');
     await page.goto(`${BASE}/app`); await page.waitForSelector(`.hc[data-pid="${E.p.id}"]`);

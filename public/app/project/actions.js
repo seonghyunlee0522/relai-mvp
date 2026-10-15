@@ -24,13 +24,22 @@ export const headerActions = (p) => {
   </span>`;
 };
 
-const ctx = (el) => { const h = el.closest('.wsh__act'); return h ? { pid: h.dataset.pid, ro: h.dataset.ro === '1', name: h.dataset.name, ops: h.dataset.ops === '1', closed: h.dataset.isClosed === '1' } : null; };
+/** Desktop page header (Redesign R1): only `⋯` — 활동 기록, 보고서 and project actions live in it (and in the 보고서 door). */
+export const headerMore = (p) => {
+  const ro = p.status === 'ARCHIVED';
+  const ops = p.current_phase === 'OPERATIONS' || p.status === 'COMPLETED';
+  return html`<span class="phead__act" data-pid="${p.id}" data-ro="${ro ? '1' : ''}" data-name="${p.name}" data-ops="${ops ? '1' : ''}" data-is-closed="${p.status === 'COMPLETED' ? '1' : ''}">
+    <span class="menuwrap"><button type="button" class="btn btn--secondary btn--sm btn--icon phead__more" data-act="more" aria-haspopup="menu" aria-expanded="false" aria-label="더보기 메뉴" title="더보기">⋯</button></span></span>`;
+};
+
+const ctx = (el) => { const h = el.closest('.wsh__act, .phead__act'); return h ? { pid: h.dataset.pid, ro: h.dataset.ro === '1', name: h.dataset.name, ops: h.dataset.ops === '1', closed: h.dataset.isClosed === '1' } : null; };
 const closeMenus = () => { document.querySelectorAll('.amenu').forEach((m) => m.remove()); document.querySelectorAll('[data-act][aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false')); };
 
 function openMenu(btn, inner) {
   closeMenus();
   const m = document.createElement('div'); m.className = 'amenu'; m.setAttribute('role', 'menu'); m.innerHTML = inner;
   btn.parentElement.append(m); btn.setAttribute('aria-expanded', 'true');
+  const first = btn.closest('.phead__act') && m.querySelector('a[role=menuitem],button[role=menuitem]:not([disabled])'); if (first) first.focus();   // keyboard: Tab / ↑↓ move, Esc closes
   return m;
 }
 
@@ -54,8 +63,10 @@ async function reportsMenu(btn, c) {
 }
 
 function moreMenu(btn, c) {
+  const desk = Boolean(btn.closest('.phead__act'));
+  const done = desk && !c.ro ? (c.ops ? '<button type="button" role="menuitem" data-rep="completion">완료보고서 생성·보기</button>' : '<button type="button" role="menuitem" data-rep="completion" disabled aria-disabled="true" title="07 운영 단계에서 만들 수 있습니다">완료보고서 생성·보기</button>') : '';
   const m = openMenu(btn, html`<button type="button" role="menuitem" class="amenu__act" data-more="activity">활동 기록</button>
-    ${raw(c.ro ? '' : '<button type="button" role="menuitem" class="amenu__act amenu__act--sm" data-more="report-new">주간보고 생성</button>')}
+    ${raw(c.ro ? '' : '<button type="button" role="menuitem" class="amenu__act amenu__act--sm" data-more="report-new">주간보고 생성</button>')}${raw(done)}
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
     <button type="button" role="menuitem" data-more="jira">Jira 연동 설정</button>
     ${raw(c.closed && !c.ro ? '<hr><button type="button" role="menuitem" data-more="reopen">종료 취소</button>' : '')}
@@ -69,6 +80,7 @@ function moreMenu(btn, c) {
     try { await api('POST', wsApi(`/${c.pid}/unarchive`), {}); toast('보관을 해제했습니다.'); navigate(`/app/projects/${c.pid}`, { replace: true }); } catch (e) { toast(e.message); }
   };
   $('[data-more="activity"]', m).onclick = () => openActivity(c.pid);
+  const cb = $('[data-rep="completion"]', m); if (cb && !cb.disabled) cb.onclick = async () => { closeMenus(); const { openCompletion } = await import('./closing.js'); openCompletion(c.pid); };
   $('[data-more="jira"]', m).onclick = () => { closeMenus(); openJiraProjectSettings(c.pid); };
   const rn = $('[data-more="report-new"]', m); if (rn) rn.onclick = () => { closeMenus(); periodDialog(undefined, async (period) => { try { const r = await api('POST', wsApi(`/${c.pid}/weekly-reports/generate`), period); navigate(`/app/projects/${c.pid}/reports/${r.report.id}`); return true; } catch (e) { return e.fields || { period_end: e.message }; } }); };
   const ab = $('[data-more="archive"]', m);
@@ -110,7 +122,9 @@ let wired = false;
 export function wireProjectActions() {
   if (wired) return; wired = true;
   document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.wsh__act [data-act]');
+    const sa = e.target.closest('[data-stab-action="activity"]');   // 보고서 door › 활동 기록 tab
+    if (sa) { const h = document.querySelector('.phead__act'); if (h) openActivity(h.dataset.pid); return; }
+    const btn = e.target.closest('.wsh__act [data-act], .phead__act [data-act]');
     if (!btn) { if (!e.target.closest('.amenu')) closeMenus(); else if (e.target.closest('a[data-link]')) closeMenus(); return; }
     const c = ctx(btn); if (!c) return;
     if (btn.getAttribute('aria-expanded') === 'true') { closeMenus(); return; }
@@ -118,5 +132,11 @@ export function wireProjectActions() {
     else if (btn.dataset.act === 'reports') reportsMenu(btn, c);
     else if (btn.dataset.act === 'more') moreMenu(btn, c);
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.querySelector('.amenu')) { const b = document.querySelector('[data-act][aria-expanded="true"]'); closeMenus(); if (b) b.focus(); return; }
+    const m = e.target.closest && e.target.closest('.amenu');
+    if (!m || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    e.preventDefault(); const list = [...m.querySelectorAll('a[role=menuitem],button[role=menuitem]:not([disabled])')].filter((x) => x.offsetParent !== null); const i = list.indexOf(document.activeElement);
+    const n = list[(i + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length]; if (n) n.focus();
+  });
 }

@@ -240,7 +240,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   check('US-1 approved → no gate dialog', !gateAgain);
   const conf = await page.$('.scrim .dialog .btn--primary'); if (conf) { await conf.click(); }
   await page.waitForTimeout(1000);
-  const lnb = await page.evaluate(() => { const ph = document.querySelector('.lnb__ph[data-grp="REQUIREMENTS"]'); return ph ? { cls: ph.className, mark: ph.querySelector('.lnb__mark').textContent.trim() } : null; });
+  const lnb = await page.evaluate(() => { const ph = document.querySelector('.pstep li:nth-child(2)'); if (!ph) return null; const ic = ph.querySelector('.st').textContent.trim(); return { cls: ph.className, mark: ic === '✓' ? '✓' : ph.querySelector('small').textContent.trim() }; });   // R1: stepper = the one phase list
   check('US-1 LNB 02 ✓ after approval', lnb && /is-done/.test(lnb.cls) && lnb.mark === '✓', JSON.stringify(lnb));
   // 03: WBS banner back
   await page.goto(reqUrl); await page.waitForSelector('.rtool');
@@ -268,7 +268,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   check('US-1 row text 승인 전 진행 · 사유 있음', bst.text === '승인 전 진행 · 사유 있음', bst.text);
   await page.goto(`${BASE}/app/projects/${B.p.id}?phase=REQUIREMENTS`); await page.waitForSelector('.np--other');
   check("US-1 What's Next 02 row shows 승인 전 진행 · 사유 있음", /승인 전 진행 · 사유 있음/.test(await page.textContent('.np--other')));
-  const lnb2 = await page.evaluate(() => { const ph = document.querySelector('.lnb__ph[data-grp="REQUIREMENTS"]'); return { cls: ph.className, mark: ph.querySelector('.lnb__mark').textContent.trim() }; });
+  const lnb2 = await page.evaluate(() => { const ph = document.querySelector('.pstep li:nth-child(2)'); const ic = ph.querySelector('.st').textContent.trim(); return { cls: ph.className, mark: ic === '✓' ? '✓' : ph.querySelector('small').textContent.trim() }; });
   check('US-1 bypass: LNB 02 not ✓ (number + badge)', /is-gap/.test(lnb2.cls) && lnb2.mark === '02', JSON.stringify(lnb2));
   await shot('10-bypass-02-row.png');
   const docx = await page.request.get(`${BASE}${B.P}/requirements/export-doc?format=docx`);

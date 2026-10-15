@@ -7,7 +7,9 @@ import { html, no2, raw } from '../core/dom.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { revealAskButton, wireAssistant } from '../ai/assistant.js';
-import { headerActions, wireProjectActions } from './actions.js';
+import { headerActions, headerMore, wireProjectActions } from './actions.js';
+import { isPhone } from '../core/device.js';
+import { mountProjectRail, pageHeader, pageInfo, setTopProject } from '../frame.js';
 import { helpButton } from '../onboarding/ui.js';
 import { mountLnb } from './lnb.js';
 import { phoneHead } from '../shell.js';
@@ -29,8 +31,14 @@ export const statusPill = (p) => (p.status === 'COMPLETED' && p.closed_on
 export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
   wireProjectActions();
   wireAssistant(); queueMicrotask(() => revealAskButton(p.id));   // CTA appears only when /ai/status says AI is on
-  queueMicrotask(() => { mountLnb(p, g, tab); phoneHead(p, g, statusPill(p)); });
   const cur = g.current_phase;
+  if (!isPhone()) {
+    // desktop (Redesign R1): rail door + section tabs + page header; project name / phase / status live in the top bar
+    const info = pageInfo(p, g, { tab, title });
+    queueMicrotask(() => { mountProjectRail(p.id, info.door.key); setTopProject(p, g, statusPill(p)); });
+    return pageHeader(p, g, info, html`<button type="button" class="btn btn--secondary btn--sm" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조">RELAI에게 물어보기</button>${raw(headerMore(p))}`);
+  }
+  queueMicrotask(() => { mountLnb(p, g, tab); phoneHead(p, g, statusPill(p)); });
   return html`<header class="wsh">
     <div class="wsh__row">
       <button type="button" class="wsh__menu" data-ws-menu aria-label="메뉴 열기" title="메뉴">☰</button>

@@ -162,7 +162,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
 
   /* ---------- US-1 완료보고서 ---------- */
   await page.goto(A.url); await page.waitForSelector('.np');
-  await page.click('.wsh__act [data-act="reports"]'); await page.waitForSelector('[data-rep="completion"]');
+  await page.click('.phead__more'); await page.waitForSelector('[data-rep="completion"]');
   check('US-1 보고서 ▾ 메뉴에 "완료보고서 생성" (07: 활성)', !(await page.$eval('[data-rep="completion"]', (b) => b.disabled)));
   await page.click('[data-rep="completion"]');
   await page.waitForURL(/\/reports\/[0-9a-f-]+$/); await page.waitForSelector('.doc');
@@ -184,9 +184,9 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-1 ? 툴팁 완료보고서', /프로젝트 결과·계획 대비 차이·남은 일·교훈/.test(await page.getAttribute('.doc__meta .term', 'data-tip')));
   const enRep = enOf(await textOf('main'));
   check('US-6 완료보고서 화면 영어 UI 없음', !enRep, enRep);
-  await page.waitForSelector('.lnb__i.is-active', { timeout: 5000 }).catch(() => {});
-  const lnbAct = await page.$$eval('.lnb__i.is-active', (e) => e.map((x) => x.textContent.trim()));
-  check('Q16-4 완료보고서 화면: LNB = 07 › 종료 정리 (주간보고 아님)', lnbAct.length === 1 && lnbAct[0] === '종료 정리', JSON.stringify(lnbAct));
+  await page.waitForSelector('.rail__i.is-active', { timeout: 5000 }).catch(() => {});
+  const lnbAct = await page.$$eval('.rail__i.is-active, .stabs__i.is-active', (e) => e.map((x) => x.textContent.trim()));
+  check('Q16-4 완료보고서 화면: 메뉴 = 보고서 › 공식 문서 (주간보고 아님)', JSON.stringify(lnbAct) === JSON.stringify(['보고서', '공식 문서']), JSON.stringify(lnbAct));
   await page.fill('[data-lesson="good"]', '- 요구사항 기준선 승인을 일찍 받아 변경 다툼이 적었다'); await page.dispatchEvent('[data-lesson="good"]', 'change');
   await page.fill('[data-lesson="next"]', '- 이관 리허설을 두 번 한다'); await page.dispatchEvent('[data-lesson="next"]', 'change');
   await page.waitForFunction(() => /저장됨/.test(document.querySelector('#dsave')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
@@ -194,7 +194,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   let G = (await api('GET', A.P)).json;
   check('US-1 DRAFT → CLOSE 진행 중 (초안 작성 중)', STEP(G, 'CLOSE').state === 'IN_PROGRESS');
   // a second 완료보고서 생성 opens the same report
-  await page.click('.wsh__act [data-act="reports"]'); await page.waitForSelector('[data-rep="completion"]'); await page.click('[data-rep="completion"]');
+  await page.click('.phead__more'); await page.waitForSelector('[data-rep="completion"]'); await page.click('[data-rep="completion"]');
   await page.waitForTimeout(800);
   check('US-1 두 번째 "완료보고서 생성" → 같은 보고서', page.url() === repUrl && Number(sql(`SELECT COUNT(*) FROM weekly_reports WHERE project_id = '${A.p.id}' AND report_type = 'COMPLETION'`) || 1) === 1, page.url());
   // 확정 → CLOSE 완료 → 종료 dialog
@@ -254,13 +254,13 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
 
   /* ---------- US-2 종료 취소 → 진행 중, 07 안내 다시 ---------- */
   await page.goto(A.url); await page.waitForSelector('[data-closed]');
-  await page.click('.wsh__act [data-act="more"]'); await page.waitForSelector('[data-more="reopen"]');
+  await page.click('.phead__more'); await page.waitForSelector('[data-more="reopen"]');
   await page.click('[data-more="reopen"]'); await page.waitForSelector('.scrim .dialog'); await page.click('.scrim .dialog [data-v="1"]');
   await toastText(page, /종료를 취소/); await page.waitForSelector('.rg');
   G = (await api('GET', A.P)).json;
   check('US-2 종료 취소 → 진행 중 · closed_on 비움 · 07 안내 다시', G.project.status === 'ACTIVE' && G.project.closed_on === null && /프로젝트를 종료하세요/.test(await page.textContent('.rg__title')), G.guidance.rule);
   check('US-2 나중에 종료: 07 가이드 primary = "프로젝트 종료"', /프로젝트 종료/.test((await primaries(page, '.rg')).join('|')));
-  check('M1 종료 취소 → 남은 필수 업무 숫자 다시 표시', (await page.$$('.lnb__n')).length > 0 && (await page.$$('.pstep__n')).length > 0);
+  check('M1 종료 취소 → 남은 필수 업무 숫자 다시 표시', (await page.$$('.pstep__n')).length > 0);
   // 종료 again through the guide CTA → dialog (나중에 = nothing changes)
   await page.click('.rg .btn--primary'); await page.waitForSelector('[data-close-dialog]');
   await page.click('[data-cl-later]');
@@ -271,14 +271,14 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
 
   /* ---------- US-2 보관은 별개 · US-1 07 이전 회색 ---------- */
   await page.goto(B.url); await page.waitForSelector('.np');
-  await page.click('.wsh__act [data-act="reports"]'); await page.waitForSelector('[data-rep="completion"]');
+  await page.click('.phead__more'); await page.waitForSelector('[data-rep="completion"]');
   const grey = await page.$eval('[data-rep="completion"]', (b) => [b.disabled, b.title]);
   check('US-1 07 이전: 완료보고서 생성 회색 + 툴팁 "07 운영 단계에서 만들 수 있습니다"', grey[0] === true && grey[1] === '07 운영 단계에서 만들 수 있습니다', JSON.stringify(grey));
   check('US-1 07 이전 API → 409', (await api('POST', `${B.P}/weekly-reports/completion`, {})).status === 409);
   const arch = await api('POST', `${B.P}/archive`, {});
   check('US-2 보관(archive) 기존 동작 그대로 (ARCHIVED, 완료와 별개)', arch.status === 200 && arch.json.project.status === 'ARCHIVED' && !arch.json.project.closed_on);
-  await page.goto(B.url); await page.waitForSelector('.wsh');
-  check('US-2 완료 pill과 보관 표시가 다름', !(await page.$('[data-closed-pill]')) && /보관됨/.test(await page.textContent('.wsh__row')));
+  await page.goto(B.url); await page.waitForSelector('.phead'); await page.waitForSelector('#dtop-p .chip');
+  check('US-2 완료 pill과 보관 표시가 다름', !(await page.$('[data-closed-pill]')) && /보관됨/.test(await page.textContent('#dtop-p')));
 
   /* ---------- US-1 CLOSE 수동 완료 (사유) ---------- */
   const C = await mkProject('물류 포털 구축');

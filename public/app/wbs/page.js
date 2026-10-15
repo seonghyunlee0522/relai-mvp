@@ -346,11 +346,10 @@ export async function wbsPage(id) {
       : grid.html();
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: ctx() === 'monitor' ? 'overview-wbs' : 'wbs', title: ctx() === 'monitor' ? 'WBS · 운영 조회' : 'WBS 작성' }))}
-      ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 Lifecycle 단계를 지정할 수 있습니다.</div>` : '')}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : pcLine())}
+      ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 Lifecycle 단계를 지정할 수 있습니다.</div>` : '')}
       ${raw(onPhone() && params().get('view') === 'gantt' ? '<p class="pcnote" data-gantt-pc>간트 차트는 PC에서 볼 수 있습니다</p>' : '')}
       ${raw(msSuggest())}
-      ${raw(items.length && !jira && !archived ? coachMark('JIRA_OPTIONAL_INTRO', { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira 이슈를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 WBS 진행률만으로 프로젝트를 계속 진행할 수 있습니다.', cta: { label: '연결하기 (설정 › 연동)', href: '/app/settings' } }) : '')}
       ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. ${ctxCr.impacts && ctxCr.impacts.length ? `영향 WBS ${ctxCr.impacts.length}건만 표시합니다.` : '영향 WBS가 등록되지 않아 전체를 표시합니다.'} 반영이 끝나면 변경 요청을 '반영 완료'로 바꾸세요.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
       ${raw(items.length ? html`<div class="rtool">

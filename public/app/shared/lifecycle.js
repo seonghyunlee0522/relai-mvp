@@ -98,3 +98,68 @@ export function phaseOfPath(pid, path, qs) {
 }
 /** First usable screen of a phase (stepper click target). */
 export const firstScreen = (pid, phaseKey) => (PHASE_ITEMS[phaseKey] ? PHASE_ITEMS[phaseKey](pid).find((it) => it.enabled !== false) : null);
+
+/* ---- Redesign R1 (hive research/relai-redesign-spec.md §4.2): desktop = 7 doors in the rail, a door's sub-pages are tabs.
+ * Every project route maps to exactly one door (+ tab) — doorOf() is the one place that decides; old URLs keep working
+ * because the tabs link to the same routes. `phase` = the lifecycle phase a page belongs to (title chip); null = current phase.
+ * The phone keeps the LNB above (HOME_ITEMS / PHASE_ITEMS / PM_ITEMS). */
+const T = (key, label, href, purpose, phase = null) => ({ key, label, href, purpose, phase });
+export const DOORS = (pid) => [
+  { key: 'next', label: '지금 할 일', href: P(pid), purpose: '현재 단계에서 할 업무와 다음 단계를 안내합니다.', tabs: [] },
+  { key: 'plan', label: '계획', href: P(pid, '/definition'), tabs: [
+    T('definition', '프로젝트 정의', P(pid, '/definition'), '프로젝트의 목표·범위·기간을 정해 출발 기준을 맞춥니다.', 'INITIATION'),
+    T('stakeholders', '이해관계자', P(pid, '/definition?activity=STAKEHOLDERS'), '고객사와 수행사의 역할과 담당자를 정리합니다.', 'INITIATION'),
+    T('milestones', '상위 일정', P(pid, '/definition?activity=MILESTONES'), '오픈일 같은 주요 일정과 마일스톤을 정합니다.', 'INITIATION'),
+    T('operations', '운영 방식', P(pid, '/definition?activity=OPERATIONS'), '보고 주기·회의·의사결정 방식을 정합니다.', 'INITIATION'),
+    T('kickoff', '착수보고회', P(pid, '/definition?activity=KICKOFF'), '착수보고회 일정과 결과를 기록합니다.', 'INITIATION'),
+    T('approval', '착수 승인', P(pid, '/definition?activity=APPROVAL'), '착수 결과에 대한 고객 승인을 기록합니다.', 'INITIATION'),
+  ] },
+  { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), tabs: [
+    T('requirements', '목록', P(pid, '/requirements'), '고객이 원하는 기능과 조건을 모으고 확정합니다.', 'REQUIREMENTS'),
+    T('req-classify', '분류·우선순위', P(pid, '/requirements?type=UNSPECIFIED'), '요구사항의 유형과 우선순위를 정합니다.', 'REQUIREMENTS'),
+    T('req-trace', '추적', P(pid, '/requirements?view=trace'), '요구사항이 작업과 시험까지 이어졌는지 확인합니다.', 'REQUIREMENTS'),
+  ] },
+  { key: 'schedule', label: '일정', href: P(pid, '/wbs'), tabs: [
+    T('wbs', '작업 목록', P(pid, '/wbs'), '요구사항을 작업으로 나누고 담당자와 기간을 정합니다.', 'ANALYSIS_DESIGN'),
+    T('gantt', '간트', P(pid, '/wbs?view=gantt'), '작업 기간과 마일스톤을 일정표로 봅니다.', 'ANALYSIS_DESIGN'),
+    T('wbs-trace', '요구사항 연결', P(pid, '/requirements?view=trace&scope=IN_SCOPE'), '범위 내 요구사항을 어떤 작업으로 구현하는지 연결합니다.', 'ANALYSIS_DESIGN'),
+    T('dev-status', '구현 현황', P(pid, '/wbs?phase=DEVELOPMENT'), '구현 단계 작업의 진행률과 지연을 확인합니다.', 'DEVELOPMENT'),
+  ] },
+  { key: 'tests', label: '시험', href: P(pid, '/tests'), tabs: [
+    T('test-plan', '커버리지', P(pid, '/tests?tab=coverage'), '확정된 요구사항마다 시험이 준비됐는지 확인합니다.', 'TESTING'),
+    T('tests', '테스트', P(pid, '/tests'), '요구사항 기준으로 시험을 만들고 결과를 기록합니다.', 'TESTING'),
+    T('defects', '결함', P(pid, '/tests?last_result=FAIL'), '실패한 시험을 모아 보고 조치합니다.', 'TESTING'),
+    T('acceptance', '검수', P(pid, '/tests?tab=acceptance'), '고객 검수 결과와 인수 승인을 기록합니다.', 'TRANSITION_GO_LIVE'),
+  ] },
+  { key: 'issues', label: '이슈·변경', href: P(pid, '/issues'), tabs: [
+    T('raid', '이슈·리스크', P(pid, '/issues'), '프로젝트를 막는 문제와 위험을 기록하고 조치합니다.'),
+    T('changes', '변경 요청', P(pid, '/changes'), '범위·일정 변경 요청의 영향을 보고 승인 여부를 기록합니다.'),
+  ] },
+  { key: 'reports', label: '보고서', href: P(pid, '/reports'), tabs: [
+    T('weekly', '주간보고', P(pid, '/reports'), '보고 기간의 진행 이력을 모아 주간보고 초안을 만들고 확정합니다.'),
+    T('docs', '공식 문서', P(pid, '/charter'), '사업수행계획서와 완료보고서 같은 공식 문서를 봅니다.'),
+    T('health', '건강도', P(pid, '/overview'), '일정·범위·품질 지표로 프로젝트 상태를 한눈에 봅니다.'),
+    { key: 'activity', label: '활동 기록', action: 'activity' },
+  ] },
+];
+
+/** Door + tab of a project path (desktop rail + section tabs). `hint` = the page's own key where the URL alone is not enough
+ * (a completion report is a 공식 문서, a weekly report is 주간보고). Unknown sub-paths fall back to 지금 할 일 — never blank. */
+export function doorOf(pid, path, qs, hint = null) {
+  const sub = path.slice(P(pid).length).replace(/\/$/, '');
+  const pick = (door, tab = null) => ({ door, tab });
+  if (sub === '' || sub === '/checklist' || sub.startsWith('/phases')) return pick('next');
+  if (sub === '/definition') { const a = qs.get('activity'); const m = { STAKEHOLDERS: 'stakeholders', MILESTONES: 'milestones', OPERATIONS: 'operations', KICKOFF: 'kickoff', APPROVAL: 'approval' }; return pick('plan', m[a] || 'definition'); }
+  if (sub === '/requirements') {
+    if (q(qs, 'view', 'trace')) return q(qs, 'scope', 'IN_SCOPE') ? pick('schedule', 'wbs-trace') : pick('requirements', 'req-trace');
+    return qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED' ? pick('requirements', 'req-classify') : pick('requirements', 'requirements');
+  }
+  if (sub === '/wbs') return q(qs, 'phase', 'DEVELOPMENT') ? pick('schedule', 'dev-status') : q(qs, 'view', 'gantt') ? pick('schedule', 'gantt') : pick('schedule', 'wbs');
+  if (sub === '/tests') return pick('tests', q(qs, 'tab', 'coverage') ? 'test-plan' : q(qs, 'tab', 'acceptance') ? 'acceptance' : q(qs, 'last_result', 'FAIL') ? 'defects' : 'tests');
+  if (sub === '/issues') return pick('issues', 'raid');
+  if (sub === '/changes') return pick('issues', 'changes');
+  if (sub === '/charter') return pick('reports', 'docs');
+  if (sub === '/overview') return pick('reports', 'health');
+  if (sub.startsWith('/reports')) return pick('reports', hint === 'close' ? 'docs' : 'weekly');
+  return pick('next');
+}

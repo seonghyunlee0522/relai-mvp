@@ -44,7 +44,7 @@ export async function settingsPage(main = $('#main')) {
       ${raw(s.status === 'ACTIVE' && !s.auto_renew ? '<dt>자동 결제</dt><dd>없음 <small class="dim">— 기간 종료 7일 전에 연장 안내 메일을 보내 드립니다</small></dd>' : '')}
       ${raw(s.payment_method_summary ? html`<dt>결제 수단</dt><dd>${s.payment_method_summary}</dd>` : '')}</dl>`;
     const canCancel = billing.can_manage && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && !s.cancel_at_period_end;
-    const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 Workspace OWNER만 할 수 있습니다.</p>'
+    const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 워크스페이스 소유자만 할 수 있습니다.</p>'
       : html`${raw(co.can_purchase && billing.provider_available ? buyForm() : '')}<div class="actions" style="margin-top:14px">${raw(canCancel && s.auto_renew ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
         ${raw(billing.provider_available ? '' : '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>')}`;
     const early = billing.plan === 'EARLY' ? html`<p class="cr-early" id="early-line"><b>얼리 액세스 · ${fmtDay(billing.early_access_until)}까지</b> — RELAI 전체 기능을 무료로 씁니다. AI는 쓴 만큼만 크레딧으로 냅니다. 이후에는 Team 플랜(${won(PLAN_TEAM_MONTHLY)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다 (데이터는 삭제되지 않습니다).</p>` : '';
@@ -58,7 +58,7 @@ export async function settingsPage(main = $('#main')) {
       <p style="margin:0 0 10px;font-weight:600">${extend ? 'Team 이용 기간 연장' : 'Team 플랜 구매'} ${raw(co.founding_eligible ? html`<span class="chip chip--active">파운딩 고객 ${co.founding.pct}% 할인 · 첫 1년</span>` : '')}</p>
       <div class="inline-form" style="gap:8px;flex-wrap:wrap"><select class="select select--sm" name="cycle">${raw(co.cycles.map((c) => html`<option value="${c.key}">${c.label}${c.discount_pct ? ` · ${c.discount_pct}% 할인` : ''}</option>`).join(''))}</select>
         <label class="dim" style="display:flex;align-items:center;gap:6px">사용자 수 (소유자 포함) <input class="input input--sm" name="users" type="number" min="${co.min_users}" max="${co.max_users}" step="1" value="${Math.max(co.min_users, billing.subscription?.seats || 0)}" style="width:84px"></label></div>
-      <p class="hint" style="margin-top:6px">Workspace ${won(co.base_monthly)}/월 (소유자 ${co.included_users}명 포함) + 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월</p>
+      <p class="hint" style="margin-top:6px">워크스페이스 ${won(co.base_monthly)}/월 (소유자 ${co.included_users}명 포함) + 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월</p>
       <p class="hint" id="bill-quote" style="margin-top:8px">금액 계산 중…</p>
       <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay"${raw(unverified() ? ' disabled' : '')}>결제하기</button>${raw(unverified() ? verifyHint('bill-verify') : '')}</div>
       <p class="hint">가격은 부가세 별도이며 결제 시 부가세 10%가 더해집니다. 현재 멤버 수(${co.min_users}명) 이상으로 구매해 주세요 · 자동 결제되지 않습니다.${co.sandbox ? ' (테스트 결제 환경)' : ''}</p>
@@ -114,7 +114,7 @@ export async function settingsPage(main = $('#main')) {
         ${raw(c && c.status !== 'DISABLED' ? html`<div class="icard__site"><a href="${c.site_url}" target="_blank" rel="noopener noreferrer">${(c.site_url || '').replace(/^https?:\/\//, '')}</a></div>
           <dl class="icard__d"><dt>상태</dt><dd>${raw(status)}${raw(c.last_error ? html` <small class="dim">${c.last_error}</small>` : '')}</dd><dt>연결자</dt><dd>${c.connected_by_name || '-'}${raw(c.external_account_name ? html` <small class="dim">(Jira: ${c.external_account_name})</small>` : '')}</dd><dt>마지막 동기화</dt><dd>${c.last_synced_at ? relTime(c.last_synced_at) : '아직 없음'}</dd><dt>연결된 프로젝트</dt><dd>${c.mapped_projects}개</dd></dl>`
           : html`<p class="hint">Jira Cloud 사이트를 연결하면 각 프로젝트의 ⋯ 메뉴 → Jira 연동 설정에서 Jira 프로젝트를 매핑하고, WBS 하위 작업에 Jira 이슈를 연결해 실행 상태를 볼 수 있습니다. ${pv.configured ? '' : '운영자가 서버에 Atlassian 앱 정보를 설정하면 연결할 수 있습니다.'}</p>`)}
-        ${raw(can ? html`<div class="actions" style="margin-top:10px">${raw(c && c.status !== 'DISABLED' ? html`<button class="btn btn--secondary btn--sm" id="jira-reconnect" ${pv.configured ? '' : 'disabled'}>재연결</button><button class="btn btn--ghost btn--sm is-danger" id="jira-disconnect">연결 해제</button>` : html`<button class="btn btn--secondary btn--sm" id="jira-connect" ${pv.configured ? '' : 'disabled'}>Jira 연결</button>`)}</div>` : '<p class="hint">연결 설정은 Workspace OWNER/ADMIN만 할 수 있습니다.</p>')}
+        ${raw(can ? html`<div class="actions" style="margin-top:10px">${raw(c && c.status !== 'DISABLED' ? html`<button class="btn btn--secondary btn--sm" id="jira-reconnect" ${pv.configured ? '' : 'disabled'}>재연결</button><button class="btn btn--ghost btn--sm is-danger" id="jira-disconnect">연결 해제</button>` : html`<button class="btn btn--secondary btn--sm" id="jira-connect" ${pv.configured ? '' : 'disabled'}>Jira 연결</button>`)}</div>` : '<p class="hint">연결 설정은 워크스페이스 소유자·관리자만 할 수 있습니다.</p>')}
       </div></div></div></div>`;
   };
   const draw = (members) => {
@@ -131,7 +131,7 @@ export async function settingsPage(main = $('#main')) {
     <div class="panel" style="margin-top:20px" data-tour-id="workspace-settings"><div class="panel__h">워크스페이스</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
       <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
-      ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">Workspace 삭제</button></div>' : '')}</div></div>
+      ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>' : '')}</div></div>
     ${raw(billingCard())}${raw(creditsCard())}
     <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
       <div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
@@ -146,7 +146,7 @@ export async function settingsPage(main = $('#main')) {
     const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 Free 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });
     const ib = $('#invite-btn'); if (ib) ib.onclick = async () => {
-      const roles = [['MEMBER', 'Member — 프로젝트 업무 수행']]; if (workspace.role === 'OWNER') roles.push(['ADMIN', 'Admin — 프로젝트·멤버·설정 관리']);
+      const roles = [['MEMBER', '멤버 — 프로젝트 업무 수행']]; if (workspace.role === 'OWNER') roles.push(['ADMIN', '관리자 — 프로젝트·멤버·설정 관리']);
       const r = await formDialog({ title: '멤버 초대', body: html`초대 메일을 보냅니다. 초대받은 사람은 같은 이메일로 가입하거나 로그인한 뒤 수락하면 <b>${workspace.name}</b>${/(workspace|워크스페이스)$/i.test(workspace.name.trim()) ? '' : ' 워크스페이스'}에 참여합니다. (유효기간 7일)`, confirm: '초대 메일 보내기',
         fields: [{ name: 'email', label: '이메일', type: 'email', required: true, placeholder: 'teammate@company.com' }, { name: 'role', label: '역할', type: 'select', options: roles, value: 'MEMBER' }],
         submit: (v) => api('POST', `/api/workspaces/${wid}/invitations`, { email: v.email.trim(), role: v.role }) });
@@ -174,18 +174,18 @@ export async function settingsPage(main = $('#main')) {
       await loadAccount(); const d = account.deletion;
       if (d.blockers.length) return confirmDialog({ title: '지금은 계정을 삭제할 수 없습니다', body: d.blockers.map((b) => b.message).join(' '), confirm: '확인' });
       const r = await formDialog({ title: '계정을 삭제할까요?', confirm: '계정 삭제',
-        body: html`<p>이름·이메일·비밀번호 등 계정 정보가 즉시 삭제되고 다시 복구할 수 없습니다. 다른 Workspace에서 작성한 업무 기록은 '탈퇴한 사용자'로 남습니다.</p>
-          ${raw(d.workspaces_deleted.length ? html`<p>혼자 쓰는 Workspace <b>${d.workspaces_deleted.map((w) => w.name).join(', ')}</b>도 함께 삭제되며 30일 후 데이터가 완전히 파기됩니다.</p>` : '')}
+        body: html`<p>이름·이메일·비밀번호 등 계정 정보가 즉시 삭제되고 다시 복구할 수 없습니다. 다른 워크스페이스에서 작성한 업무 기록은 '탈퇴한 사용자'로 남습니다.</p>
+          ${raw(d.workspaces_deleted.length ? html`<p>혼자 쓰는 워크스페이스 <b>${d.workspaces_deleted.map((w) => w.name).join(', ')}</b>도 함께 삭제되며 30일 후 데이터가 완전히 파기됩니다.</p>` : '')}
           <p class="hint">로그인 기록은 통신비밀보호법에 따라 3개월, 결제 기록은 전자상거래법에 따라 5년 동안 보관 후 파기합니다.</p>${raw(reauthNote())}`,
         fields: reauthField(), submit: (v) => api('DELETE', '/api/me', { password: v.password }) });
       if (r) location.href = '/login?deleted=1';
     };
     const wd = $('#ws-delete'); if (wd) wd.onclick = async () => {
-      const r = await formDialog({ title: 'Workspace를 삭제할까요?', confirm: 'Workspace 삭제',
+      const r = await formDialog({ title: '워크스페이스를 삭제할까요?', confirm: '워크스페이스 삭제',
         body: html`<p><b>${workspace.name}</b>의 모든 프로젝트와 데이터에 모든 멤버가 즉시 접근할 수 없게 되고, 30일 후 완전히 파기됩니다. 유료 구독은 먼저 해지해야 합니다.</p>${raw(reauthNote())}`,
-        fields: [{ name: 'confirm_name', label: '확인을 위해 Workspace 이름을 입력하세요', required: true, placeholder: workspace.name }, ...reauthField()],
+        fields: [{ name: 'confirm_name', label: '확인을 위해 워크스페이스 이름을 입력하세요', required: true, placeholder: workspace.name }, ...reauthField()],
         submit: (v) => api('DELETE', `/api/workspaces/${wid}`, { confirm_name: v.confirm_name, password: v.password }) });
-      if (r) { toast('Workspace를 삭제했습니다.'); location.href = '/app'; }
+      if (r) { toast('워크스페이스를 삭제했습니다.'); location.href = '/app'; }
     };
     main.querySelectorAll('[data-verify-again]').forEach((b) => b.onclick = async () => {
       b.disabled = true;
@@ -196,7 +196,7 @@ export async function settingsPage(main = $('#main')) {
     const wsf = $('#wsf'); if (wsf) wsf.onsubmit = async (e) => { e.preventDefault(); try { const r = await api('PATCH', `/api/workspaces/${wid}`, { name: wsf.name.value.trim() }); state.workspace.name = r.workspace.name; workspace.name = r.workspace.name; toast('워크스페이스 이름을 저장했습니다.'); } catch (err) { toast(err.fields?.name || err.message); } };
     const addm = $('#addm'); if (addm) addm.onsubmit = async (e) => { e.preventDefault(); $('#adderr').textContent = ''; try { const r = await api('POST', `/api/workspaces/${wid}/members`, { email: addm.email.value, role: addm.role.value }); toast('멤버를 추가했습니다.'); draw(r.members); } catch (err) { $('#adderr').textContent = err.message; } };
     main.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = async () => { try { const r = await api('PATCH', `/api/workspaces/${wid}/members/${sel.dataset.role}`, { role: sel.value }); toast('역할을 변경했습니다.'); draw(r.members); } catch (err) { toast(err.message); draw(members); } });
-    main.querySelectorAll('[data-remove]').forEach((b) => b.onclick = async () => { const m = members.find((x) => x.id === b.dataset.remove); if (!(await confirmDialog({ title: `${m.name}님을 Workspace에서 제거할까요?`, body: '제거된 멤버는 이 Workspace의 프로젝트에 접근할 수 없습니다. 이미 작성한 데이터는 유지됩니다.', confirm: '제거', danger: true }))) return; try { const r = await api('DELETE', `/api/workspaces/${wid}/members/${m.id}`); toast('멤버를 제거했습니다.'); draw(r.members); } catch (err) { toast(err.message); } });
+    main.querySelectorAll('[data-remove]').forEach((b) => b.onclick = async () => { const m = members.find((x) => x.id === b.dataset.remove); if (!(await confirmDialog({ title: `${m.name}님을 워크스페이스에서 제거할까요?`, body: '제거된 멤버는 이 Workspace의 프로젝트에 접근할 수 없습니다. 이미 작성한 데이터는 유지됩니다.', confirm: '제거', danger: true }))) return; try { const r = await api('DELETE', `/api/workspaces/${wid}/members/${m.id}`); toast('멤버를 제거했습니다.'); draw(r.members); } catch (err) { toast(err.message); } });
   };
   draw(members);
 }

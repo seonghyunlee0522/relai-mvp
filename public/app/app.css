@@ -1575,8 +1575,8 @@ a.akpi__i:hover{border-color:var(--border-blue)}
 }
 @media (max-width:820px){.wsh__act [data-act="activity"]{display:none}}
 @media (max-width:480px){.wsh__act [data-act="reports"]{display:none}.wsh__row{overflow:hidden}.wsh__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
-@media (min-width:821px){.amenu .amenu__act{display:none}}
-@media (min-width:481px){.amenu .amenu__act--sm{display:none}}
+@media (min-width:821px){.wsh .amenu .amenu__act{display:none}}
+@media (min-width:481px){.wsh .amenu .amenu__act--sm{display:none}}
 
 /* Working screens: one header row (view tabs + inline counts), then the filter toolbar, then the grid */
 .rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
@@ -3002,3 +3002,78 @@ html.is-phone .rtable.cr-price tbody,html.is-phone .rtable.cr-log tbody{display:
 html.is-phone .rtable.cr-price tbody tr,html.is-phone .rtable.cr-log tbody tr{display:table-row;padding:0;border:0;border-radius:0;margin:0;background:none;min-height:0}
 html.is-phone .rtable.cr-price td,html.is-phone .rtable.cr-log td{display:table-cell;padding:8px;border-bottom:1px solid var(--border-soft);font-size:13px}
 html.is-phone .rtable.cr-log td:nth-child(3),html.is-phone .rtable.cr-log td:nth-child(6),html.is-phone .rtable.cr-log td:nth-child(7){display:none}
+
+/* =====================================================================================================================
+ * REDESIGN R1 — desktop frame (≥ 768px; hive research/relai-redesign-spec.md §4): 56px top bar · 76px rail · section tabs ·
+ * page header. Everything here is scoped to html:not(.is-phone) — the phone view mode below keeps its own shell.
+ * ===================================================================================================================== */
+:root{--bg-page:#F5F6F8;--topbar-h:56px;--rail-w:76px;--tabs-h:44px;--drawer-w:480px}
+html:not(.is-phone){--border:#E2E5EA}
+.dtop,.rail{display:none}
+html:not(.is-phone) .shell,html:not(.is-phone) .shell.is-collapsed,html:not(.is-phone) .shell--ws,html:not(.is-phone) .shell--ws.is-collapsed{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);grid-template-rows:var(--topbar-h) minmax(0,1fr)}
+html:not(.is-phone) .shell>.side,html:not(.is-phone) .shell>.sidescrim,html:not(.is-phone) .shell>.topbar,html:not(.is-phone) .shell>.pstrip,html:not(.is-phone) .shell>.tabbar,html:not(.is-phone) .verifybar{display:none!important}
+html:not(.is-phone) .dtop{display:flex;grid-column:1/-1;grid-row:1;position:sticky;top:0;z-index:70;height:var(--topbar-h);align-items:center;gap:10px;padding:0 16px 0 20px;background:#fff;border-bottom:1px solid var(--border);min-width:0}
+html:not(.is-phone) .rail{display:block;grid-column:1;grid-row:2;position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h));background:#fff;border-right:1px solid var(--border);overflow-y:auto;scrollbar-width:none}
+html:not(.is-phone) .maincol{grid-column:2;grid-row:2;min-height:calc(100vh - var(--topbar-h))}
+html:not(.is-phone) .main,html:not(.is-phone) .appfoot{background:var(--bg-page)}
+.dtop__logo{font-weight:800;font-size:var(--fs-xl);color:var(--navy);letter-spacing:-.03em;margin-right:6px;flex:none}
+.dtop__p{display:flex;align-items:center;gap:8px;min-width:0}
+.dtop__p:empty{display:none}
+.dtop__proj{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r);background:#fff;cursor:pointer;min-width:0;max-width:min(380px,36vw);font:inherit;color:var(--navy)}
+.dtop__proj b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-md)}
+.dtop__proj i{font-style:normal;font-size:var(--fs-sm);line-height:1;color:var(--text-3)}
+.dtop__proj:hover{background:var(--bg-alt)}
+.dtop__phase{font-size:var(--fs-sm);font-weight:600;color:var(--text-2);white-space:nowrap}
+.dtop__phase:hover{color:var(--blue-deep)}
+.dtop__p .chip{flex:none;white-space:nowrap}
+.dtop__sp{flex:1 1 auto;min-width:8px}
+.dtop__r{display:flex;align-items:center;gap:8px;flex:none}
+.vpill{height:28px;padding:0 12px;border-radius:999px;background:var(--warn-bg);color:var(--warn-fg);border:1px solid var(--warn-bd);font-weight:700;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap;font-family:inherit}
+.vpill:hover{filter:brightness(.97)}
+.dtop__ic{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r);color:var(--text-2)}
+.dtop__ic svg{width:18px;height:18px}
+.dtop__ic:hover{background:var(--bg-alt);color:var(--navy)}
+.dtop__me{width:32px;height:32px;border-radius:50%;border:0;background:var(--bg-tint);color:var(--blue-deep);font-weight:700;font-size:var(--fs-sm);cursor:pointer;font-family:inherit}
+.dmenuwrap{position:relative;display:inline-flex;min-width:0}
+.dmenu{position:absolute;top:calc(100% + 6px);z-index:90;min-width:220px;max-width:360px;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh-pop);padding:6px;font-size:var(--fs-sm)}
+.dmenu--left{left:0}.dmenu--right{right:0}
+.dmenu a,.dmenu button{display:block;width:100%;padding:7px 10px;border-radius:var(--r);border:0;background:none;text-align:left;color:var(--navy);cursor:pointer;font:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dmenu a:hover,.dmenu button:hover,.dmenu a:focus-visible,.dmenu button:focus-visible{background:var(--bg-alt);outline:none}
+.dmenu .is-cur{font-weight:700;color:var(--blue-deep)}
+.dmenu hr{border:0;border-top:1px solid var(--border-soft);margin:5px 2px}
+.dmenu__h{font-size:var(--fs-xs);font-weight:600;color:var(--text-3);padding:4px 10px}
+.dmenu__who{padding:6px 10px 8px;min-width:0}.dmenu__who b,.dmenu__who small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dmenu__who small{color:var(--text-3)}
+.dmenu__empty{display:block;padding:7px 10px;color:var(--text-3)}
+.rail__nav{display:flex;flex-direction:column;gap:2px;padding:10px 6px}
+.rail__i{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 2px 8px;border-radius:var(--r-lg);font-size:var(--fs-xs);font-weight:500;color:var(--text-2);text-align:center;line-height:1.25;word-break:keep-all}
+.rail__i svg{width:20px;height:20px;flex:none}
+.rail__i:hover{background:var(--bg-alt);color:var(--navy)}
+.rail__i.is-active{background:var(--bg-tint);color:var(--blue-deep);font-weight:700}
+.rail__i:focus-visible,.stabs__i:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+/* section tabs + page header */
+.phead-wrap{flex:none}
+.stabs{display:flex;gap:2px;height:var(--tabs-h);align-items:stretch;padding:0 20px;background:#fff;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.stabs__i{display:inline-flex;align-items:center;padding:0 12px;font-size:var(--fs-md);font-weight:500;color:var(--text-2);border:0;border-bottom:2px solid transparent;background:none;cursor:pointer;white-space:nowrap;font-family:inherit}
+.stabs__i:hover{color:var(--navy)}
+.stabs__i.is-active{color:var(--blue-deep);font-weight:700;border-bottom-color:var(--blue)}
+.stabs--crumb{align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--text-3);padding:0 24px}
+.stabs--crumb a{color:var(--text-2)}.stabs--crumb a:hover{color:var(--blue-deep)}.stabs--crumb b{color:var(--navy);font-weight:600}
+.phead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 24px 12px}
+.phead__l{min-width:0}
+.phead__t{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.phead__title{font-size:var(--fs-xl);font-weight:800;color:var(--navy);letter-spacing:-.02em;line-height:1.3}
+.pchip{font-size:var(--fs-xs);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);border-radius:var(--r);padding:2px 8px;white-space:nowrap}
+.pchip:hover{background:var(--bg-tint)}
+.phead__purpose{margin-top:3px;color:var(--text-2);font-size:var(--fs-md)}
+.phead__r{display:flex;align-items:center;gap:8px;flex:none}
+.phead__act{display:inline-flex}
+.phead__more{min-width:32px;padding:0 8px;letter-spacing:.05em}
+html:not(.is-phone) .shell--ws .page--wide{min-height:calc(100vh - var(--topbar-h))}
+html:not(.is-phone) .shell--ws .page--wide:has(>.rlayout){height:calc(100vh - var(--topbar-h))}
+html:not(.is-phone) .shell--ws .page--wide>.phead-wrap{margin-left:0;margin-right:0}
+html:not(.is-phone) .shell--ws .page--wide>*:not(.phead-wrap){margin-left:24px;margin-right:24px}
+html:not(.is-phone) .shell--ws .page--wide>.phead-wrap+*{margin-top:0}
+/* one banner slot: the first notice / tip wins (a state notice outranks a feature tip) */
+html:not(.is-phone) .page:has(>.notice) .coach,html:not(.is-phone) .notice~.notice,html:not(.is-phone) .coach~.coach{display:none}
+/* one way to switch views: the section tabs (the old in-page WBS/Gantt, 목록/추적 and 테스트/검수/커버리지 toggles stay on the phone only) */
+html:not(.is-phone) .seg:has(>[data-view="gantt"]),html:not(.is-phone) .seg:has(>[data-rview]),html:not(.is-phone) .rhead>.seg:has(>[data-tab]){display:none}

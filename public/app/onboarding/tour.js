@@ -126,8 +126,8 @@ const waitRender = () => new Promise((res) => { const done = () => { document.re
 async function findTarget(id) {
   if (!id) return null;
   for (let t = 0; t < WAIT_MS; t += POLL_MS) {
-    const el = document.querySelector(`[data-tour-id="${id}"]`);
-    if (el && el.offsetParent !== null) { el.scrollIntoView({ block: 'center', inline: 'nearest' }); await sleep(60); return el; }
+    const el = [...document.querySelectorAll(`[data-tour-id="${id}"]`)].find((x) => x.offsetParent !== null);   // R1: the desktop rail and the (hidden) phone menu may both carry an id
+    if (el) { el.scrollIntoView({ block: 'center', inline: 'nearest' }); await sleep(60); return el; }
     await sleep(POLL_MS);
   }
   return null;   // caller falls back to a centered guide
