@@ -26,7 +26,7 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
   app.get('/api/admin/dashboard', guard, wrap(async (req, res) => res.json(await A.dashboard(db))));
 
   app.get('/api/admin/users', guard, wrap(async (req, res) => res.json(await A.listUsers(db, req.query))));
-  app.get('/api/admin/users/:id', guard, wrap(async (req, res) => { const d = await A.getUser(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', '사용자를 찾을 수 없습니다.'); }));
+  app.get('/api/admin/users/:id', guard, wrap(async (req, res) => { const d = await A.getUser(db, req.params.id); return d ? res.json(d) : fail(res, 404, 'not_found', '회원을 찾을 수 없습니다.'); }));
   app.post('/api/admin/users/:id/suspend', guard, action((req) => A.suspendUser(db, admin(req), req.params.id, req.body)));
   app.post('/api/admin/users/:id/reactivate', guard, action((req) => A.reactivateUser(db, admin(req), req.params.id, req.body)));
 

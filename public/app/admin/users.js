@@ -13,12 +13,12 @@ const SINCE = { today: '오늘 가입', '7d': '최근 7일 가입', '30d': '최�
 const sinceIso = (v) => { if (!v) return ''; const d = new Date(); if (v === 'today') d.setHours(0, 0, 0, 0); else d.setDate(d.getDate() - (v === '7d' ? 7 : 30)); return d.toISOString(); };
 
 export async function adminUsersPage(main = $('#main')) {
-  document.title = '사용자 — RELAI Admin';
+  document.title = '회원 — RELAI 관리자';
   const draw = async () => {
     const q = qs();
     let data; try { data = await adminApi('users', { q: q.q, status: q.status, system_role: q.system_role, login_method: q.login_method, since: sinceIso(q.since), page: q.page, size: q.size, sort: q.sort }); } catch (e) { main.innerHTML = errorBlock(e); return; }
     main.innerHTML = html`<div class="apage">
-      ${raw(head('사용자', html`<span class="hint">회원가입 관리 — 가입·활성화 상태·정지 여부를 확인합니다.</span>`))}
+      ${raw(head('회원', html`<span class="hint">회원가입 관리 — 가입·활성화 상태·정지 여부를 확인합니다.</span>`))}
       <div class="atool"><input class="input input--sm" data-f="q" type="search" placeholder="이름 · 이메일 검색" value="${q.q || ''}">
         ${raw(sel('status', '상태', STATUS, q.status))}${raw(sel('login_method', '가입 방식', LOGIN, q.login_method))}${raw(sel('system_role', '시스템 역할', ROLE, q.system_role))}${raw(sel('since', '가입 시점', SINCE, q.since))}
         ${raw(sel('sort', '정렬: 가입일', { last_login: '정렬: 마지막 로그인', name: '정렬: 이름', email: '정렬: 이메일' }, q.sort))}
@@ -46,7 +46,7 @@ export async function adminUserPage(id, main = $('#main')) {
   const draw = async () => {
     const d = await adminApi(`users/${id}`);
     const u = d.user; const mine = u.id === state.user.id;
-    document.title = `${u.name} — 사용자 — RELAI Admin`;
+    document.title = `${u.name} — 회원 — RELAI 관리자`;
     const actions = u.status === 'SUSPENDED' ? '<button class="btn btn--primary btn--sm" id="reactivate">정지 해제</button>'
       : u.status === 'ACTIVE' && !mine ? '<button class="btn btn--danger btn--sm" id="suspend">사용자 정지</button>' : '';
     main.innerHTML = html`<div class="apage">
@@ -56,7 +56,7 @@ export async function adminUserPage(id, main = $('#main')) {
       ${raw(kpis([{ label: '워크스페이스', value: n(u.workspace_count) }, { label: '생성한 프로젝트', value: n(u.projects_created) }, { label: '활성화', value: chip(u.activation) }, { label: '마지막 로그인', value: rel(u.last_login_at), sub: fmtD(u.last_login_at) }]))}
       <div class="agrid2">
         ${raw(section('기본 정보', dl([['이름', html`${u.name}`], ['이메일', html`<span class="mono">${u.email}</span>`], ['가입일', fmtD(u.created_at)], ['마지막 로그인', fmtD(u.last_login_at)],
-          ['로그인 방식', html`${u.login_method_label || '-'}`], ['이메일 인증', u.email_verified ? chip('ok', '인증됨 (Google)') : chip('muted', '미인증')], ['상태', chip(u.status)], ['시스템 역할', u.system_role === 'SYSTEM_ADMIN' ? chip('SYSTEM_ADMIN') : '<span class="dim">일반 사용자</span>'], ['사용자 ID', html`<span class="mono dim">${u.id}</span>`]])))}
+          ['로그인 방식', html`${u.login_method_label || '-'}`], ['이메일 인증', u.email_verified ? chip('ok', '인증됨 (Google)') : chip('muted', '미인증')], ['상태', chip(u.status)], ['시스템 역할', u.system_role === 'SYSTEM_ADMIN' ? chip('SYSTEM_ADMIN') : '<span class="dim">일반 사용자</span>'], ['회원 ID', html`<span class="mono dim">${u.id}</span>`]])))}
         ${raw(section('최근 활동', d.activity.length ? html`<ul class="aact">${raw(d.activity.map((x) => html`<li><time>${fmtD(x.at)}</time><span>${x.type === 'LOGIN' ? '로그인' : `프로젝트 생성${x.workspace_name ? ` — ${x.workspace_name}` : ''}`}</span></li>`).join(''))}</ul>` : '<div class="aempty">활동 기록이 없습니다.</div>'))}
       </div>
       ${raw(section(`소속 워크스페이스 (${d.workspaces.length})`, table([
@@ -65,7 +65,7 @@ export async function adminUserPage(id, main = $('#main')) {
         { key: 'project_count', label: '프로젝트', w: 90, cls: 'num', render: (w) => n(w.project_count) }, { key: 'joined_at', label: '가입일', w: 110, render: (w) => fmtDay(w.joined_at) },
       ], d.workspaces, { rowHref: (w) => `/admin/workspaces/${w.id}` })))}
       ${raw(section('로그인 방식', table([
-        { key: 'provider', label: 'Provider', w: 120, render: (i) => (i.provider === 'GOOGLE' ? 'Google' : '비밀번호') }, { key: 'email', label: '연결 이메일', w: 240, render: (i) => html`<span class="mono">${i.email || '-'}</span>` },
+        { key: 'provider', label: '로그인 방식', w: 120, render: (i) => (i.provider === 'GOOGLE' ? 'Google' : '비밀번호') }, { key: 'email', label: '연결 이메일', w: 240, render: (i) => html`<span class="mono">${i.email || '-'}</span>` },
         { key: 'email_verified', label: '이메일 인증', w: 100, render: (i) => (i.email_verified ? chip('ok', '인증됨') : chip('muted', '미인증')) }, { key: 'created_at', label: '연결일', w: 110, render: (i) => fmtDay(i.created_at) }, { key: 'last_used_at', label: '마지막 사용', w: 130, render: (i) => rel(i.last_used_at) },
       ], d.identities || [], { empty: '로그인 수단이 없습니다.' })))}
       ${raw(d.invitations && d.invitations.length ? section(`초대 이력 (${d.invitations.length})`, table([

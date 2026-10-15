@@ -78,7 +78,7 @@ export const usageBars = (usage) => (!usage ? '' : html`<div class="ause">${raw(
 export const errorBlock = (e) => html`<div class="aempty aempty--err">${e.message}</div>`;
 
 /* ---- AI usage (Phase 11) ---- */
-export const AI_FEATURE = { REQUIREMENT_EXTRACTION: '요구사항 추출', WBS_GENERATION: 'WBS 초안 (Planner 포함)', CHANGE_IMPACT: '변경 영향 분석', PROJECT_QA: '프로젝트 Q&A', WBS_PLAN_QUESTIONS: 'WBS Planner 질문 (무과금)', WBS_PLAN_FIX: 'WBS Planner 보완 (무과금)' };
+export const AI_FEATURE = { REQUIREMENT_EXTRACTION: '요구사항 추출', WBS_GENERATION: 'WBS 초안 (플래너 포함)', CHANGE_IMPACT: '변경 영향 분석', PROJECT_QA: '프로젝트 Q&A', WBS_PLAN_QUESTIONS: 'WBS 플래너 질문 (무과금)', WBS_PLAN_FIX: 'WBS 플래너 보완 (무과금)' };
 export const usd = (v) => (v === null || v === undefined ? '-' : `$${Number(v).toFixed(4)}`);
 /** Per-feature metering table shared by the dashboard and the workspace page. */
 export const aiFeatureTable = (features) => table([
@@ -86,6 +86,6 @@ export const aiFeatureTable = (features) => table([
   { key: 'runs', label: '요청', w: 70, render: (f) => n(f.runs) }, { key: 'succeeded', label: '성공', w: 70, render: (f) => n(f.succeeded) },
   { key: 'success_rate', label: '성공률', w: 70, render: (f) => (f.success_rate === null ? '-' : `${f.success_rate}%`) },
   { key: 'avg_input_tokens', label: '평균 입력 토큰', w: 110, render: (f) => n(f.avg_input_tokens) }, { key: 'avg_output_tokens', label: '평균 출력 토큰', w: 110, render: (f) => n(f.avg_output_tokens) },
-  { key: 'avg_provider_cost', label: '평균 Provider Cost', w: 130, render: (f) => usd(f.avg_provider_cost) }, { key: 'avg_credit', label: '평균 크레딧', w: 90, render: (f) => n(f.avg_credit) },
+  { key: 'avg_provider_cost', label: '평균 AI 제공사 비용', w: 130, render: (f) => usd(f.avg_provider_cost) }, { key: 'avg_credit', label: '평균 크레딧', w: 90, render: (f) => n(f.avg_credit) },
   { key: 'credits', label: '크레딧 합계', w: 90, render: (f) => n(f.credits) }, { key: 'avg_latency_ms', label: '평균 응답', w: 90, render: (f) => (f.avg_latency_ms === null ? '-' : `${(f.avg_latency_ms / 1000).toFixed(1)}s`) },
 ], features, { empty: 'AI 요청 기록이 없습니다.', id: 'aiftbl' });

@@ -9,7 +9,7 @@ const STATUS = { ACTIVE: '정상', SUSPENDED: '정지', CLOSED: '종료' };
 const ACT = { PROJECT_CREATED: '프로젝트 생성', PROJECT_ARCHIVED: '프로젝트 보관', MEMBER_JOINED: '멤버 합류', WEEKLY_REPORT: '주간보고 생성' };
 
 export async function adminWorkspacesPage(main = $('#main')) {
-  document.title = '워크스페이스 — RELAI Admin';
+  document.title = '워크스페이스 — RELAI 관리자';
   const draw = async () => {
     const q = qs();
     let data; try { data = await adminApi('workspaces', { q: q.q, status: q.status, page: q.page, size: q.size, sort: q.sort }); } catch (e) { main.innerHTML = errorBlock(e); return; }
@@ -37,7 +37,7 @@ export async function adminWorkspacePage(id, main = $('#main')) {
   const draw = async () => {
     const [d, ai] = await Promise.all([adminApi(`workspaces/${id}`), adminApi(`workspaces/${id}/ai`).catch(() => null)]);
     const w = d.workspace; const s = d.subscription;
-    document.title = `${w.name} — 워크스페이스 — RELAI Admin`;
+    document.title = `${w.name} — 워크스페이스 — RELAI 관리자`;
     const actions = w.status === 'SUSPENDED' ? '<button class="btn btn--primary btn--sm" id="reactivate">정지 해제</button>' : w.status === 'ACTIVE' ? '<button class="btn btn--danger btn--sm" id="suspend">워크스페이스 정지</button>' : '';
     main.innerHTML = html`<div class="apage">
       ${raw(head(w.name, actions, { href: '/admin/workspaces', label: '워크스페이스' }))}
@@ -62,7 +62,7 @@ export async function adminWorkspacePage(id, main = $('#main')) {
           { label: '현재 크레딧', value: n(ai.account.balance), sub: `누적 지급 ${n(ai.account.lifetime_granted)} · 누적 사용 ${n(ai.account.lifetime_used)}` },
           { label: '30일 AI 요청', value: n(ai.kpis.runs_30d), sub: `성공률 ${ai.kpis.success_rate_30d === null ? '-' : ai.kpis.success_rate_30d + '%'}` },
           { label: '입력 / 출력 토큰', value: `${n(ai.kpis.input_tokens_30d)} / ${n(ai.kpis.output_tokens_30d)}` },
-          { label: 'Provider Cost (추정)', value: usd(ai.kpis.provider_cost_30d), sub: `크레딧 사용 ${n(ai.kpis.credits_30d)}` }]))}
+          { label: 'AI 제공사 비용 (추정)', value: usd(ai.kpis.provider_cost_30d), sub: `크레딧 사용 ${n(ai.kpis.credits_30d)}` }]))}
         ${raw(aiFeatureTable(ai.features))}
         <div class="agrid2" style="margin-top:12px">
           <div><div class="asec__h">최근 AI 요청</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'feature', label: '기능', w: 120, render: (r) => AI_FEATURE[r.feature] || r.feature }, { key: 'user_name', label: '사용자', w: 90 }, { key: 'status', label: '상태', w: 90, render: (r) => chip(r.status === 'SUCCEEDED' ? (r.error_code ? 'ON_HOLD' : 'ACTIVE') : r.status === 'FAILED' ? 'SUSPENDED' : 'DRAFT', r.status === 'SUCCEEDED' ? (r.error_code ? '성공 · 정산 충돌' : '성공') : r.status === 'FAILED' ? `실패 ${r.error_code || ''}` : '진행 중') }, { key: 'credit_cost', label: '크레딧', w: 70, render: (r) => (r.credit_status === 'CHARGED' ? n(r.credit_cost) : html`<span class="dim">0</span>`) }, { key: 'tokens', label: '토큰', w: 110, render: (r) => `${n(r.input_tokens)} / ${n(r.output_tokens)}` }], ai.runs, { empty: 'AI 요청 기록이 없습니다.', id: 'airuns' }))}</div>

@@ -6,12 +6,12 @@ import { adminApi, bindFilters, bindPager, bindRows, chip, errorBlock, head, n, 
 const cell = (d) => html`<span class="auv ${d.pct === null ? '' : d.pct >= 90 ? 'is-bad' : d.pct >= 80 ? 'is-warn' : ''}"><b>${n(d.used)}</b><small>/ ${d.limit === null ? '∞' : n(d.limit)}</small>${raw(d.pct === null ? '' : html`<i style="width:${Math.min(100, d.pct)}%"></i>`)}</span>`;
 
 export async function adminUsagePage(main = $('#main')) {
-  document.title = '사용량 — RELAI Admin';
+  document.title = 'AI 사용량 — RELAI 관리자';
   const draw = async () => {
     const q = qs();
     let d; try { d = await adminApi('usage', { q: q.q, sort: q.sort, page: q.page, size: q.size }); } catch (e) { main.innerHTML = errorBlock(e); return; }
     const dim = (r, k) => r.dims.find((x) => x.key === k);
-    main.innerHTML = html`<div class="apage">${raw(head('사용량', html`<span class="hint">Free 한도: 프로젝트 ${d.plans.FREE.limits.projects} · 멤버 ${d.plans.FREE.limits.members} · 요구사항 ${d.plans.FREE.limits.requirements} · WBS ${d.plans.FREE.limits.wbs} · 주간보고 ${d.plans.FREE.limits.weekly_reports}/월</span>`))}
+    main.innerHTML = html`<div class="apage">${raw(head('AI 사용량', html`<span class="hint">Free 한도: 프로젝트 ${d.plans.FREE.limits.projects} · 멤버 ${d.plans.FREE.limits.members} · 요구사항 ${d.plans.FREE.limits.requirements} · WBS ${d.plans.FREE.limits.wbs} · 주간보고 ${d.plans.FREE.limits.weekly_reports}/월</span>`))}
       <div class="atool"><input class="input input--sm" data-f="q" type="search" placeholder="워크스페이스 검색" value="${q.q || ''}">
         ${raw(sel('sort', '정렬: 프로젝트 사용률', { requirements: '정렬: 요구사항 사용률', wbs: '정렬: WBS 사용률', activity: '정렬: 최근 활동' }, q.sort))}</div>
       ${raw(table([

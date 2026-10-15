@@ -4,7 +4,7 @@ import { navigate } from '../core/router.js';
 import { ACTIONS, adminApi, aiFeatureTable, bindRows, fmtD, head, kpis, n, rel, section, table, usd } from './ui.js';
 
 export async function adminDashboardPage(main = $('#main')) {
-  document.title = '대시보드 — RELAI Admin';
+  document.title = '대시보드 — RELAI 관리자';
   const [d, ai] = await Promise.all([adminApi('dashboard'), adminApi('ai/usage').catch(() => null)]);
   const k = d.kpis; const f = d.funnel_7d; const a = d.attention; const b = d.billing.implemented;
   const cards = [
@@ -36,11 +36,11 @@ export async function adminDashboardPage(main = $('#main')) {
         { label: '오늘 AI 요청', value: n(ai.kpis.runs_today) }, { label: '30일 요청', value: n(ai.kpis.runs_30d), sub: `실패 ${n(ai.kpis.failed_30d)}` },
         { label: '성공률', value: ai.kpis.success_rate_30d === null ? '-' : `${ai.kpis.success_rate_30d}%`, tone: ai.kpis.success_rate_30d !== null && ai.kpis.success_rate_30d < 90 ? 'warn' : '' },
         { label: '평균 응답', value: ai.kpis.avg_latency_ms === null ? '-' : `${(ai.kpis.avg_latency_ms / 1000).toFixed(1)}s` },
-        { label: '크레딧 사용', value: n(ai.kpis.credits_30d), sub: ai.kpis.settlement_conflicts_30d ? `정산 충돌 ${n(ai.kpis.settlement_conflicts_30d)}` : '', tone: ai.kpis.settlement_conflicts_30d ? 'warn' : '' }, { label: 'Provider Cost (추정)', value: usd(ai.kpis.provider_cost_30d) }]))}
+        { label: '크레딧 사용', value: n(ai.kpis.credits_30d), sub: ai.kpis.settlement_conflicts_30d ? `정산 충돌 ${n(ai.kpis.settlement_conflicts_30d)}` : '', tone: ai.kpis.settlement_conflicts_30d ? 'warn' : '' }, { label: 'AI 제공사 비용 (추정)', value: usd(ai.kpis.provider_cost_30d) }]))}
       ${raw(aiFeatureTable(ai.features))}
       ${raw(ai.workspaces.length ? html`<div class="agrid2" style="margin-top:12px"><div><div class="asec__h">워크스페이스별 (상위 10)</div>${raw(table([{ key: 'name', label: '워크스페이스', cls: 'ttl' }, { key: 'runs', label: '요청', w: 70, render: (w) => n(w.runs) }, { key: 'credits', label: '크레딧', w: 80, render: (w) => n(w.credits) }, { key: 'balance', label: '잔여', w: 80, render: (w) => n(w.balance) }], ai.workspaces, { rowHref: (w) => `/admin/workspaces/${w.id}`, id: 'aiwtbl' }))}</div>
         <div><div class="asec__h">최근 실패</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'workspace_name', label: '워크스페이스', w: 150 }, { key: 'feature', label: '기능', w: 120 }, { key: 'error_code', label: '오류', render: (r) => html`<span class="mono">${r.error_code || ''}</span> <small class="dim">${r.error_message || ''}</small>` }], ai.recent_failures, { rowHref: (r) => `/admin/workspaces/${r.workspace_id}`, empty: '실패한 요청이 없습니다.', id: 'aiftl' }))}</div></div>` : '')}
-      <p class="hint">크레딧 비용은 기능별 설정값(개발 기본값)이며 가격 정책은 아직 정하지 않았습니다. Provider Cost는 내부 단가표 기준 추정치입니다.</p>`) : '')}
+      <p class="hint">크레딧 비용은 기능별 설정값(개발 기본값)이며 가격 정책은 아직 정하지 않았습니다. AI 제공사 비용은 내부 단가표 기준 추정치입니다.</p>`) : '')}
     ${raw(section('최근 운영자 조작', table([
       { key: 'created_at', label: '일시', w: 150, render: (r) => fmtD(r.created_at) }, { key: 'admin', label: '운영자', w: 200, render: (r) => html`${r.admin_name || '-'} <small class="dim">${r.admin_email || ''}</small>` },
       { key: 'action', label: '작업', w: 170, render: (r) => ACTIONS[r.action] || r.action }, { key: 'summary', label: '요약' },

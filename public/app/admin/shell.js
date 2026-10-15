@@ -4,8 +4,8 @@ import { api } from '../core/api.js';
 import { $, html, raw, root } from '../core/dom.js';
 import { state } from '../core/state.js';
 
-const NAV = [['/admin', '대시보드', /^\/admin\/?$/], ['/admin/users', '사용자', /^\/admin\/users/], ['/admin/workspaces', '워크스페이스', /^\/admin\/workspaces/], ['/admin/invitations', '초대', /^\/admin\/invitations/], ['/admin/email-deliveries', '메일 발송', /^\/admin\/email-deliveries/], ['/admin/subscriptions', '구독', /^\/admin\/subscriptions/],
-  ['/admin/payments', '결제', /^\/admin\/payments/], ['/admin/usage', '사용량', /^\/admin\/usage/], ['/admin/integrations', '연동', /^\/admin\/integrations/], ['/admin/audit', '감사 기록', /^\/admin\/audit/]];
+const NAV = [['/admin', '대시보드', /^\/admin\/?$/], ['/admin/users', '회원', /^\/admin\/users/], ['/admin/workspaces', '워크스페이스', /^\/admin\/workspaces/], ['/admin/invitations', '초대', /^\/admin\/invitations/], ['/admin/email-deliveries', '메일 발송', /^\/admin\/email-deliveries/], ['/admin/subscriptions', '구독', /^\/admin\/subscriptions/],
+  ['/admin/payments', '결제', /^\/admin\/payments/], ['/admin/usage', 'AI 사용량', /^\/admin\/usage/], ['/admin/integrations', '연동', /^\/admin\/integrations/], ['/admin/audit', '감사 로그', /^\/admin\/audit/]];
 
 export async function adminShell(path, view) {
   if (!state.user || state.user.system_role !== 'SYSTEM_ADMIN') {
@@ -15,7 +15,7 @@ export async function adminShell(path, view) {
   if (!$('.ashell')) {
     root.innerHTML = html`<div class="ashell">
       <aside class="aside" id="aside">
-        <div class="aside__brand"><a href="/admin" data-link>RELAI <em>Admin</em></a><button class="aside__menu" id="amenu" aria-label="메뉴">☰</button></div>
+        <div class="aside__brand"><a href="/admin" data-link>RELAI <em>관리자</em></a><button class="aside__menu" id="amenu" aria-label="메뉴">☰</button></div>
         <nav class="aside__nav" aria-label="운영자 메뉴">${raw(NAV.map(([href, label]) => html`<a href="${href}" data-link data-anav="${href}">${label}</a>`).join(''))}</nav>
         <div class="aside__foot"><a href="/app" data-link>← RELAI 앱으로</a><div class="aside__me"><b>${state.user.name}</b><small>${state.user.email}</small></div><button class="linkbtn" id="alogout">로그아웃</button></div>
       </aside>

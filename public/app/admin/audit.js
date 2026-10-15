@@ -4,11 +4,11 @@ import { navigate } from '../core/router.js';
 import { ACTIONS, TARGET, adminApi, bindFilters, bindPager, bindRows, errorBlock, fmtD, head, pager, qs, sel, table } from './ui.js';
 
 export async function adminAuditPage(main = $('#main')) {
-  document.title = '감사 기록 — RELAI Admin';
+  document.title = '감사 로그 — RELAI 관리자';
   const draw = async () => {
     const q = qs();
     let d; try { d = await adminApi('audit', { q: q.q, action: q.action, admin: q.admin, target_type: q.target_type, page: q.page, size: q.size }); } catch (e) { main.innerHTML = errorBlock(e); return; }
-    main.innerHTML = html`<div class="apage">${raw(head('감사 기록', '<span class="hint">운영자 조작 기록 — 상태 변경과 같은 트랜잭션으로 저장됩니다.</span>'))}
+    main.innerHTML = html`<div class="apage">${raw(head('감사 로그', '<span class="hint">운영자 조작 기록 — 상태 변경과 같은 트랜잭션으로 저장됩니다.</span>'))}
       <div class="atool"><input class="input input--sm" data-f="q" type="search" placeholder="대상 ID · 사용자 이메일 · 워크스페이스명" value="${q.q || ''}"><input class="input input--sm" data-f="admin" placeholder="운영자 이메일" value="${q.admin || ''}" style="width:180px">
         ${raw(sel('action', '작업', ACTIONS, q.action))}${raw(sel('target_type', '대상 유형', TARGET, q.target_type))}
         ${raw(Object.keys(q).filter((k) => !['page', 'size'].includes(k)).length ? '<button type="button" class="link linkbtn" data-clear>필터 초기화</button>' : '')}</div>

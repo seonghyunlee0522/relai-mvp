@@ -24,7 +24,7 @@ export async function customerInviteDialog() {
 }
 
 export async function adminInvitationsPage(main = $('#main')) {
-  document.title = '초대 — RELAI Admin';
+  document.title = '초대 — RELAI 관리자';
   const draw = async () => {
     const q = qs();
     let data; try { data = await adminApi('invitations', { q: q.q, type: q.type, status: q.status, page: q.page, size: q.size }); } catch (e) { main.innerHTML = errorBlock(e); return; }
@@ -55,7 +55,7 @@ export async function adminInvitationsPage(main = $('#main')) {
 }
 
 export async function adminEmailDeliveriesPage(main = $('#main')) {
-  document.title = '메일 발송 — RELAI Admin';
+  document.title = '메일 발송 — RELAI 관리자';
   const draw = async () => {
     const q = qs();
     let data; try { data = await adminApi('email-deliveries', { q: q.q, type: q.type, status: q.status, page: q.page, size: q.size }); } catch (e) { main.innerHTML = errorBlock(e); return; }
@@ -69,7 +69,7 @@ export async function adminEmailDeliveriesPage(main = $('#main')) {
         { key: 'type', label: '유형', w: 120, render: (d) => EMAIL_TYPE[d.type] || d.type },
         { key: 'recipient', label: '수신자', w: 220, render: (d) => html`<span class="mono">${d.recipient}</span>` },
         { key: 'status', label: '상태', w: 90, render: (d) => mailChip(d.status) },
-        { key: 'provider', label: 'Provider', w: 90, render: (d) => html`${d.provider}${raw(d.provider_message_id ? html` <small class="dim mono">${d.provider_message_id.slice(0, 12)}</small>` : '')}` },
+        { key: 'provider', label: '발송 서비스', w: 90, render: (d) => html`${d.provider}${raw(d.provider_message_id ? html` <small class="dim mono">${d.provider_message_id.slice(0, 12)}</small>` : '')}` },
         { key: 'workspace_name', label: '워크스페이스', w: 160, render: (d) => (d.workspace_id ? html`<a class="link" href="/admin/workspaces/${d.workspace_id}" data-link>${d.workspace_name || '-'}</a>` : '<span class="dim">-</span>') },
         { key: 'error', label: '오류', render: (d) => (d.status === 'FAILED' ? html`<span class="dim">${d.error_code || ''} ${d.error_message_safe || ''}</span>` : '') },
       ], data.items, { empty: '발송 기록이 없습니다.' }))}

@@ -4,7 +4,7 @@ import { adminApi, chip, errorBlock, head, kpis, rel, section, table } from './u
 
 const st = (c) => (c.status === 'ERROR' ? chip(c.reconnect_required ? 'RECONNECT_REQUIRED' : 'ERROR') : chip(c.status));
 export async function adminIntegrationsPage(main = $('#main')) {
-  document.title = '연동 — RELAI Admin';
+  document.title = '연동 — RELAI 관리자';
   let d; try { d = await adminApi('integrations'); } catch (e) { main.innerHTML = errorBlock(e); return; }
   main.innerHTML = html`<div class="apage">${raw(head('연동', html`<span class="hint">지라 클라우드 연결 상태 · 동기화 실패 (자격 증명·이슈 내용은 표시하지 않습니다)</span>`))}
     ${raw(kpis([{ label: '정상', value: d.counts.active, tone: 'ok' }, { label: '오류', value: d.counts.error, tone: d.counts.error ? 'bad' : '' }, { label: '재연결 필요', value: d.counts.reconnect_required, tone: d.counts.reconnect_required ? 'warn' : '' }, { label: '해제됨', value: d.counts.disabled }]))}
