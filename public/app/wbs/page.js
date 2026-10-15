@@ -172,10 +172,11 @@ export async function wbsPage(id) {
     return true;
   };
   /** R2 §5.5: one 기간 column "10/19–10/31" (plan-change note under it); the editable 계획 시작 / 계획 종료 columns stay in 컬럼. */
+  const periodShift = (r) => (grid.isShown('end') ? '' : shiftLine(r));   // the restored 계획 종료 column carries the note — never twice
   const periodCol = () => (desk ? [{ key: 'period', label: '기간', width: 130, render: (r) => { if (r._ghost) return '';
-    if (r.item_type === 'MILESTONE') return html`${raw(dateCell(r.milestone_date, false, r.past_end))}${raw(shiftLine(r))}`;
+    if (r.item_type === 'MILESTONE') return html`${raw(dateCell(r.milestone_date, false, r.past_end))}${raw(periodShift(r))}`;
     const s0 = r.planned_start; const e0 = r.planned_end; if (!s0 && !e0) return dim();
-    return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''} ${r.rollup ? 'dim' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${raw(r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : '')}${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(shiftLine(r))}`; } }] : []);
+    return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''} ${r.rollup ? 'dim' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${raw(r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : '')}${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(periodShift(r))}`; } }] : []);
   const grid = createGrid({
     key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
     rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,

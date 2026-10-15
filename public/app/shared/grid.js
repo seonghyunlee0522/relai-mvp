@@ -272,6 +272,7 @@ export function createGrid(cfg) {
       paintIndeterminate();
     },
     refresh,
+    isShown: (key) => visibleCols().some((c) => c.key === key),
     rowById,
     clearSelection() { st.selected.clear(); st.anchor = null; syncSelectionUi(); },
     get selectMode() { return select; },

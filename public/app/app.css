@@ -3276,3 +3276,8 @@ html:not(.is-phone) .page--settings .stabs--settings{padding:0;margin:0 0 20px;b
 /* 보고서 › 주간보고: the page header already carries the title and purpose — the list keeps only its buttons */
 html:not(.is-phone) .rpl .ovsec__h>h2,html:not(.is-phone) .rpl .ovsec__h>.ovsec__ctx{display:none}
 html:not(.is-phone) .rpl .ovsec__h{justify-content:flex-end}
+/* release-r2r3: with the WBS drawer open (≥ 1280px) the 작업 column gives up 80px so 상태 stays in view without a sideways scroll */
+@media (min-width:1280px){
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs{width:auto!important;min-width:100%}
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs col[data-col="title"]{width:220px!important}
+}
