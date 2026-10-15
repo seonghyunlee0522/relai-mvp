@@ -202,6 +202,7 @@ export async function purgeAccountData(db, { batch = 20 } = {}) {
     await tx(db, async (db) => {
       for (const t of WORKSPACE_TABLES) await db.run(`DELETE FROM ${t} WHERE workspace_id = ?`, [id]);
       await db.run(`UPDATE invitations SET accepted_workspace_id = NULL WHERE accepted_workspace_id = ?`, [id]);
+      await db.run('UPDATE analytics_events SET workspace_id = NULL, project_id = NULL WHERE workspace_id = ?', [id]);   // counts stay, the link to the workspace goes
       await db.run('UPDATE workspaces SET name = ?, purged_at = now() WHERE id = ?', [DELETED_WORKSPACE_NAME, id]);
       await db.run(`UPDATE admin_audit_logs SET metadata = metadata - 'name' WHERE target_type = 'WORKSPACE' AND target_id = ?`, [id]);
     });

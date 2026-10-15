@@ -192,6 +192,7 @@ export const migrations = [
     await db.run(`ALTER TABLE integration_entity_links ADD CONSTRAINT integration_entity_links_link_role_check CHECK (link_role IN ('EXECUTION','EPIC','REQUIREMENT'))`);
     await db.run('DROP INDEX IF EXISTS uq_iel_external_live');   // replaced by uq_iel_external_live_wbs (schema.sql)
   } },
+  { version: 46, name: 'Product analytics: analytics_events (+ once-per-user milestone index) and analytics_active_days — first-party, ids only (schema.sql)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

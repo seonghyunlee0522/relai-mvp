@@ -10,6 +10,7 @@ import { billingStatus, listSubscriptions, getSubscription, listPayments, getPay
 import { aiUsageOverview, workspaceAiUsage, grantCredits } from './ai/admin.js';
 import { adminIntegrations } from './integrations/routes.js';
 import { mountAdminInvitationRoutes } from './auth/routes.js';
+import { funnelReport, funnelCsv } from './analytics.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -57,6 +58,14 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* Invitations + e-mail deliveries (Phase 13). */
   mountAdminInvitationRoutes(app, db, { guard, wrap, fail });
+
+  /* Product analytics (first-party events): funnel, feature use, weekly cohort retention. Ids only — no names or e-mails. */
+  app.get('/api/admin/funnel', guard, wrap(async (req, res) => res.json(await funnelReport(db, req.query))));
+  app.get('/api/admin/funnel.csv', guard, wrap(async (req, res) => {
+    const r = await funnelReport(db, req.query);
+    res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="relai-funnel-${r.range.from}_${r.range.to}.csv"`, 'Cache-Control': 'no-store' });
+    res.send(funnelCsv(r));
+  }));
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 

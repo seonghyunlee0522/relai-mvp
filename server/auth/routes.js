@@ -8,6 +8,7 @@
  *   GET/POST /api/workspaces/:wid/invitations, POST …/:id/resend, DELETE …/:id   (member_manage; ADMIN → MEMBER only)
  *   GET/POST /api/admin/invitations, POST …/:id/resend, …/:id/revoke, GET /api/admin/email-deliveries   (SYSTEM_ADMIN)
  */
+import { track } from '../analytics.js';
 import { tx } from '../db.js';
 import { ValidationError } from '../validate.js';
 import { rateLimiter, sha256 } from '../security.js';
@@ -87,6 +88,7 @@ export function mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, start
     const user = await db.get('SELECT * FROM users WHERE id = ?', [r.userId]);
     if (!user || user.status !== 'ACTIVE') return res.redirect('/login?suspended=1');
     await afterLogin(req, res, user, 'GOOGLE');
+    if (r.created) { await track(db, 'signup', { userId: user.id, workspaceId: r.workspaceId || null }); if (user.email_verified_at) await track(db, 'email_verified', { userId: user.id }); }
     res.redirect(r.returnPath || '/app');
   }));
 
