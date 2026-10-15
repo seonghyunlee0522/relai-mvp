@@ -3417,3 +3417,5 @@ html:not(.is-phone) .page--settings .danger-zone{margin-top:var(--gap-block)}
 html:not(.is-phone) .toast{left:calc(var(--rail-w) + 24px);transform:none}
 .agrid2>.asec{margin-bottom:0}
 html:not(.is-phone) .clk__back{margin-top:var(--gap-block)}
+/* new/edit project form: the date pair uses the form's own 24px column gap, so its columns line up with the rows above */
+.pform .pdates .row2{column-gap:24px}
