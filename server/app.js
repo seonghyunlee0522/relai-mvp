@@ -1,6 +1,7 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tx, dbErrorInfo } from './db.js';
 import {
@@ -11,6 +12,7 @@ import { ensurePhases, loadGuide, updateStep, transitionTo } from './guide.js';
 import * as CL from './checklists.js';
 import * as GL from './golive.js';
 import { todayKst } from '../public/app/shared/kst-date.js';
+import { shareMeta } from './share-meta.js';
 import { effectiveImportance } from './activities.js';
 import * as D from './definition.js';
 import { buildProjectCharter } from './charter.js';
@@ -1341,34 +1343,37 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.json((await rResp(project, r.id)));
   }));
 
-  app.get('/favicon.ico', (req, res) => res.status(204).end());
+  app.get('/favicon.ico', (req, res) => { res.set('Cache-Control', 'public, max-age=86400'); res.sendFile(resolve(here, '../public/brand/favicon-32.png')); });
   app.all('/api/*', (req, res) => fail(res, 404, 'not_found', '찾을 수 없습니다.'));
 
   /* ---------- pages ---------- */
   const pub = resolve(here, '../public');
+  /* The SPA shell with link-preview tags (server/share-meta.js); read once, origin filled per request. */
+  let appShell = null;
+  const sendApp = (req, res) => { appShell ||= readFileSync(resolve(pub, 'app/index.html'), 'utf8'); res.type('html').send(appShell.replace('<!--SHARE_META-->', shareMeta(req, { path: ['/login', '/signup'].includes(req.path) ? req.path : '/' }))); };
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
   mountLegal(app, { pub, plans: PLANS });   // /, /terms, /privacy, /pricing (B9)
   app.get(['/login', '/signup'], (req, res) => {
     if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect('/app');
-    res.sendFile(resolve(pub, 'app/index.html'));
+    sendApp(req, res);
   });
   // Account-security pages work with or without a session. The token sits in the query string, so never cache and never send a Referer.
   app.get(['/forgot-password', '/reset-password', '/verify-email'], (req, res) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
-    res.sendFile(resolve(pub, 'app/index.html'));
+    sendApp(req, res);
   });
-  app.get(/^\/invite\/[A-Za-z0-9_-]+\/?$/, (req, res) => { res.set('Cache-Control', 'no-store'); res.sendFile(resolve(pub, 'app/index.html')); });   // public invite landing (Phase 13)
+  app.get(/^\/invite\/[A-Za-z0-9_-]+\/?$/, (req, res) => { res.set('Cache-Control', 'no-store'); sendApp(req, res); });   // public invite landing (Phase 13)
   /* Admin Console page: same SPA bundle, but the server refuses it to non-operators (403) — the frontend hiding is not the control. */
   app.get(/^\/admin(\/.*)?$/, (req, res) => {
     if (!req.user) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
     if (!isSystemAdmin(req.user)) return res.status(403).type('html').send('<!DOCTYPE html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;padding:40px"><h1>403</h1><p>운영자 권한이 필요합니다.</p><a href="/app">앱으로 돌아가기</a></body>');
     res.set('Cache-Control', 'no-store');
-    res.sendFile(resolve(pub, 'app/index.html'));
+    sendApp(req, res);
   });
   app.get(/^\/app(\/.*)?$/, (req, res) => {
     if (!req.user) return res.redirect(req.suspendedUser ? '/login?suspended=1' : `/login?next=${encodeURIComponent(req.originalUrl)}`);
     res.set('Cache-Control', 'no-store');
-    res.sendFile(resolve(pub, 'app/index.html'));
+    sendApp(req, res);
   });
   app.use(express.static(pub, { index: 'index.html', extensions: ['html'], setHeaders: (r, p) => { if (p.includes('/app/')) r.set('Cache-Control', 'no-store'); } }));
   /* UX-001: unknown non-API paths get a friendly page instead of Express's "Cannot GET". Signed-in users are sent into the app. */

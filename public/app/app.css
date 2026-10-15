@@ -3281,3 +3281,95 @@ html:not(.is-phone) .rpl .ovsec__h{justify-content:flex-end}
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs{width:auto!important;min-width:100%}
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs col[data-col="title"]{width:220px!important}
 }
+
+/* =====================================================================================================================
+ * mobile-v2 (founder 2026-10-15: links are opened on phones — make an impact). Phone (< 768px) only; desktop is untouched.
+ * Same rule as before: on a phone you look, on a PC you do. Brand band on login/signup, R mark + phase dots in the top bar,
+ * 7-door grid in 더보기, home tiles, card polish, quieter WBS cards, readable report.
+ * ===================================================================================================================== */
+.aband,.mdoors,.mtiles,.pstrip__dots{display:none}
+@media (max-width:767px){
+  .auth .auth__form{justify-content:flex-start;padding:0 20px 40px}
+  .auth .auth__form>.logo{display:none}
+  .aband{display:block;margin:0 -20px 28px;padding:22px 20px 20px;color:#fff;border-radius:0 0 22px 22px;
+    background:radial-gradient(420px 220px at 100% 0,rgba(46,81,196,.85) 0,transparent 70%),linear-gradient(140deg,#0B1324 0,#101828 60%,#1D2939 100%)}
+  .aband__logo{display:inline-flex;align-items:center;gap:8px;font-size:19px;font-weight:800;letter-spacing:-.04em;color:#fff;text-decoration:none}
+  .aband__logo img{border-radius:7px}
+  .aband__t{margin:16px 0 14px;font-size:15px;font-weight:600;color:#DCE3F2;letter-spacing:-.02em}
+  .aband__card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;background:#fff;color:var(--navy);border-radius:14px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25),inset 3px 0 0 var(--blue)}
+  .aband__k{grid-column:1/3;font-size:11.5px;font-weight:700;color:var(--blue)}
+  .aband__card b{grid-column:1/3;font-size:15.5px;letter-spacing:-.02em}
+  .aband__dots{display:flex;gap:3px;margin-top:6px}
+  .aband__dots i{width:16px;height:4px;border-radius:2px;background:var(--border)}
+  .aband__dots i.is-done{background:var(--ok)}.aband__dots i.is-cur{background:var(--blue)}
+  .aband__card small{margin-top:6px;font-size:11.5px;color:var(--text-2)}
+  .auth .auth__form h1,.auth--su-a .auth__form h1{font-size:24px;line-height:1.3}
+  .auth .auth__form .sub{margin-bottom:20px}
+  .auth--su-a .auth__form{padding:0 20px 40px}
+  .auth .su-a-m{display:none}
+  .auth .input{height:48px;font-size:16px;border-radius:10px}
+  .auth .btn--lg{height:52px;border-radius:12px;font-size:16px}
+}
+/* shell: R mark before the project name, phase dots in the strip, active tab as a pill */
+html.is-phone .ptop:not([hidden])::before{content:"";flex:none;width:24px;height:24px;margin-right:8px;border-radius:6px;background:url(/brand/icon.svg) center/cover}
+html.is-phone .topbar .logo{gap:8px}
+html.is-phone .topbar .logo::before{content:"";width:26px;height:26px;border-radius:7px;background:url(/brand/icon.svg) center/cover}
+html.is-phone .pstrip__dots{display:flex;gap:3px;margin-left:auto;flex:none}
+html.is-phone .pstrip__dots i{width:12px;height:4px;border-radius:2px;background:var(--border)}
+html.is-phone .pstrip__dots i.is-done{background:var(--ok)}html.is-phone .pstrip__dots i.is-cur{background:var(--blue)}
+html.is-phone .tabbar{box-shadow:0 -4px 16px rgba(16,24,40,.05)}
+html.is-phone .tabbar__i svg{padding:2px 14px;width:52px;height:26px;border-radius:13px;box-sizing:border-box;transition:background .15s}
+html.is-phone .tabbar__i.is-active svg{background:var(--bg-tint,#EEF2FF)}
+html.is-phone .tabbar__i.is-active span{font-weight:700}
+/* 더보기 sheet: 7 doors on top */
+html.is-phone .mdoors{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:16px 16px 12px;border-bottom:1px solid var(--border-soft);background:var(--bg-alt)}
+html.is-phone .mdoors__i{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:72px;padding:8px 2px;border-radius:14px;background:#fff;border:1px solid var(--border-soft);color:var(--text-2);font-size:12.5px;font-weight:600;text-align:center;text-decoration:none;overflow-wrap:normal;word-break:keep-all}
+html.is-phone .mdoors__i i{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;font-style:normal;font-size:16px;font-weight:800;background:var(--bg-tint,#EEF2FF);color:var(--blue)}
+html.is-phone .mdoors__i.is-active{border-color:var(--blue);color:var(--blue-deep,var(--blue))}
+html.is-phone .mdoors__i.is-active i{background:var(--blue);color:#fff}
+html.is-phone .side.is-open{display:flex;flex-direction:column}
+html.is-phone .side.is-open .lnb__wrap{flex:1 1 auto;min-height:0;overflow:auto}
+/* page titles + PC line */
+html.is-phone .page__head h1{font-size:22px;letter-spacing:-.03em}
+html.is-phone .pcline{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-3)}
+html.is-phone .pcline::before{content:"";width:14px;height:10px;border:1.5px solid currentColor;border-radius:2px;box-sizing:border-box;flex:none}
+/* home: tiles · cards with a clear next step · upcoming */
+html.is-phone .mtiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:4px 0 18px}
+html.is-phone .mtile{background:#fff;border:1px solid var(--border-soft);border-radius:14px;padding:12px 12px 10px;box-shadow:var(--sh-card)}
+html.is-phone .mtile small{display:block;font-size:12px;color:var(--text-2)}
+html.is-phone .mtile b{display:block;margin-top:2px;font-size:20px;font-weight:800;letter-spacing:-.03em;color:var(--navy)}
+html.is-phone .mtile.is-now b{color:var(--blue)}html.is-phone .mtile.is-warn b{color:var(--warn)}html.is-phone .mtile.is-crit b{color:var(--danger)}
+html.is-phone .home .hc{border-radius:16px;padding:16px;gap:10px;box-shadow:0 2px 10px rgba(16,24,40,.06)}
+html.is-phone .home .hc__name{font-size:16px;font-weight:700}
+html.is-phone .home .hc__next{display:block;padding:12px 14px;border-radius:12px;background:var(--bg-tint,#EEF2FF);box-shadow:inset 3px 0 0 var(--blue)}
+html.is-phone .home .hc__next .hc__k{display:block;font-size:11.5px;font-weight:700;color:var(--blue)}
+html.is-phone .home .hc__next .hc__t{font-size:15px;font-weight:700;color:var(--navy);margin-top:2px}
+html.is-phone .home:has(.mup) .hc__up{display:none}
+html.is-phone .home .mup{margin-top:18px}
+/* 지금 할 일: rows as a calm card stack */
+html.is-phone .np__row{border-radius:12px}
+/* WBS cards: ID … status on line 1, title on line 2, dates/owner only when set; parent rows read as section headers */
+html.is-phone .gtable--wbs tbody tr td.gc--stick.mono{order:1;flex:1 1 auto;min-width:0}
+html.is-phone .gtable--wbs tbody tr td[data-label="상태"]{order:2;margin-left:auto}
+html.is-phone .gtable--wbs tbody tr td.ttl{order:3;flex:0 0 100%}
+html.is-phone .gtable--wbs tbody tr td[data-label="계획 시작"]{order:4}
+html.is-phone .gtable--wbs tbody tr td[data-label="계획 종료"]{order:5}
+html.is-phone .gtable--wbs tbody tr td[data-label="계획 종료"]::before{content:"–";margin:0 4px;color:var(--text-3)}
+html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]{order:6}
+html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]::before{content:"·";margin:0 6px;color:var(--text-3)}
+html.is-phone .gtable--wbs tbody tr td:is([data-label="계획 시작"],[data-label="계획 종료"],[data-label="담당자"]):has(>.dim:only-child){display:none!important}
+html.is-phone .gtable--wbs tbody tr td.ttl .wtitle{padding-left:0!important}
+html.is-phone .gtable--wbs tbody tr:has(.wtog:not(.wtog--none)){background:var(--bg-alt);border-color:var(--border)}
+html.is-phone .gtable--wbs tbody tr:has(.wtog:not(.wtog--none)) td.ttl{font-size:16px;font-weight:700;color:var(--navy)}
+/* counters wrap instead of running off the edge */
+html.is-phone .summary--inline>*{flex:0 1 auto;min-width:0}
+/* report viewer: document reads like a page */
+html.is-phone .doc{border-radius:14px;box-shadow:0 2px 10px rgba(16,24,40,.05)}
+html.is-phone .doc h2,html.is-phone .doc h3{scroll-margin-top:96px}
+html.is-phone .gtable--wbs tbody tr td[data-label="상태"]::before{content:none}
+html.is-phone .gtable--wbs tbody tr td.ttl .wtog{display:none}
+html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]::after{content:none}
+/* counter strips keep one swipeable row (first card stays high on the screen); the fade says there is more */
+html.is-phone .kstrip{scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);padding-right:24px}
+html.is-phone .kstrip::-webkit-scrollbar{display:none}
+html.is-phone .kpi__s{white-space:normal;overflow:visible;text-overflow:clip}

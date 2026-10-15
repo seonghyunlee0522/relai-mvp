@@ -9,7 +9,8 @@
 import { $, html, no2, raw } from '../core/dom.js';
 import { store } from '../core/ui.js';
 import { navigate } from '../core/router.js';
-import { HOME_ITEMS, PHASE_ITEMS, PM_ITEMS, phaseOfPath } from '../shared/lifecycle.js';
+import { DOORS, HOME_ITEMS, PHASE_ITEMS, PM_ITEMS, doorOf, phaseOfPath } from '../shared/lifecycle.js';
+import { isPhone } from '../core/device.js';
 import { phaseState, phaseTip } from './status.js';
 
 const ICON = {
@@ -98,12 +99,19 @@ function wire() {
   });
 }
 
+/* Phone 더보기 sheet (mobile-v2): the 7 doors of the desktop rail (Redesign R1) as one tap grid on top of the phase menu. */
+const DOOR_IC = { next: '→', plan: '◎', requirements: '≡', schedule: '▦', tests: '✓', issues: '!', reports: '▤' };
+const doorGrid = (pid) => {
+  const cur = doorOf(pid, location.pathname, new URLSearchParams(location.search)).door;
+  return html`<nav class="mdoors" aria-label="바로가기">${raw(DOORS(pid).map((d) => html`<a class="mdoors__i ${d.key === cur ? 'is-active' : ''}" href="${d.href}" data-link data-door="${d.key}"><i aria-hidden="true">${DOOR_IC[d.key] || '•'}</i><span>${d.label}</span></a>`).join(''))}</nav>`;
+};
+
 /** Put the project LNB into the shell's sidebar. */
 export function mountLnb(p, g, activeKey = null) {
   wire();
   const side = $('#side'); if (!side) return;
   side.classList.add('side--project');
-  side.innerHTML = html`<div class="lnb__wrap" data-lnb-pid="${p.id}">${raw(projectNav(p, g, activeKey))}</div>
+  side.innerHTML = html`${raw(isPhone() ? doorGrid(p.id) : '')}<div class="lnb__wrap" data-lnb-pid="${p.id}">${raw(projectNav(p, g, activeKey))}</div>
     <div class="side__bottom side__bottom--project">
       <a class="navlink" href="/app" data-link title="홈"><span class="lnb__ic">⌂</span><span class="nl">홈</span></a>
       <a class="navlink" href="/app/settings" data-link title="설정"><span class="lnb__ic">⚙</span><span class="nl">설정</span></a>

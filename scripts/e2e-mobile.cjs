@@ -257,6 +257,46 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
     await dp.context().close();
   }
 
+  /* ---------- M mobile-v2: landing impact, auth band, home tiles, 7 doors in 더보기, quiet WBS cards (phone only; desktop unchanged) ---------- */
+  {
+    const vis = (pg, sel) => pg.evaluate((s) => [...document.querySelectorAll(s)].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; }).length, sel);
+    const lc = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'ko-KR', isMobile: true, hasTouch: true });
+    const lp = await lc.newPage(); lp.on('pageerror', (e) => log('PAGEERROR(landing)', e.message));
+    await lp.goto(BASE + '/'); await lp.waitForTimeout(400);
+    const L = await lp.evaluate(() => ({ sw: document.documentElement.scrollWidth, h1: document.querySelector('.hero h1').getBoundingClientRect().bottom, cta: document.querySelector('.hero__actions a.btn--primary').getBoundingClientRect().bottom,
+      og: Boolean(document.querySelector('meta[property="og:image"]')) }));
+    const heroBtns = await vis(lp, '.hero__actions a.btn'); const shot = await vis(lp, '.mshot'); const desk = await vis(lp, '#preview'); const proof = await vis(lp, '.mproof li');
+    check('M1 landing 375: one hero CTA above the fold, phone product shot + 3 proof cards, no 840px desktop mock, no sideways scroll', heroBtns === 1 && L.cta < 812 && shot === 1 && desk === 0 && proof === 3 && L.sw <= 375 && L.og, JSON.stringify({ ...L, heroBtns, shot, desk, proof }));
+    const stickyAt = async (y) => { await lp.evaluate((v) => scrollTo(0, v), y); await lp.waitForTimeout(450); return lp.evaluate(() => document.getElementById('mcta').classList.contains('is-on')); };
+    const s0 = await stickyAt(0); const s1 = await stickyAt(1800); const s2 = await stickyAt(999999);
+    check('M1 landing 375: sticky 무료로 시작하기 appears after the hero CTA scrolls away and hides at the closing CTA', !s0 && s1 && !s2, JSON.stringify({ s0, s1, s2 }));
+    await lp.goto(BASE + '/login'); await lp.waitForSelector('#email');
+    const band = await vis(lp, '.aband'); const logo = await vis(lp, '.auth__form > .logo'); const lsw = await lp.evaluate(() => document.documentElement.scrollWidth);
+    check('M2 /login 375: brand band on top (form logo folded into it), no sideways scroll', band === 1 && logo === 0 && lsw <= 375, JSON.stringify({ band, logo, lsw }));
+    await lp.goto(BASE + '/signup'); await lp.waitForSelector('#name');
+    check('M2 /signup 375: brand band, 7-phase pills folded away', (await vis(lp, '.aband')) === 1 && (await vis(lp, '.su-a-m')) === 0);
+    await lp.setViewportSize({ width: 1440, height: 900 }); await lp.goto(BASE + '/'); await lp.waitForTimeout(400);
+    const D = { phoneBlocks: await vis(lp, '.mshot, .mproof, .mcta, .hero__msub, .hero__mnote'), shot: await vis(lp, '#preview'), heroBtns: await vis(lp, '.hero__actions a.btn'), flow: await vis(lp, '.flowline') };
+    check('M3 landing 1440 unchanged: desktop mock + 2 hero buttons + flowline, no phone blocks', D.phoneBlocks === 0 && D.shot === 1 && D.heroBtns === 2 && D.flow === 1, JSON.stringify(D));
+    await lp.goto(BASE + '/login'); await lp.waitForSelector('#email');
+    check('M3 /login 1440 unchanged: no brand band, side panel shown', (await vis(lp, '.aband')) === 0 && (await vis(lp, '.auth__side')) === 1);
+    await lc.close();
+
+    await go('/app');
+    const tiles = await mp.evaluate(() => [...document.querySelectorAll('[data-home-tiles] .mtile')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
+    check('M4 home 375: three tiles (진행 중 · 다음 할 일 · 지연/확인 필요) above the cards', tiles.length === 3 && /^진행 중 \d+개$/.test(tiles[0]) && /^다음 할 일 \d+건$/.test(tiles[1]), JSON.stringify(tiles));
+    await go(`${A.url}/wbs`);
+    const W = await mp.evaluate(() => ({ dots: document.querySelectorAll('#pstrip .pstrip__dots i').length, cur: [...document.querySelectorAll('#pstrip .pstrip__dots i')].findIndex((i) => i.classList.contains('is-cur')),
+      dash: [...document.querySelectorAll('.gtable--wbs tbody td')].filter((td) => td.getBoundingClientRect().width > 0 && td.innerText.trim() === '-').length }));
+    check('M5 status strip: 7 phase dots, current = 05; WBS cards show no bare "-" values', W.dots === 7 && W.cur === 4 && W.dash === 0, JSON.stringify(W));
+    await mp.click('[data-tab-more]'); await mp.waitForTimeout(300);
+    const doors = await mp.evaluate(() => ({ n: [...document.querySelectorAll('#side .mdoors__i')].filter((a) => a.getBoundingClientRect().height >= 44).length, act: (document.querySelector('#side .mdoors__i.is-active') || {}).textContent || '' }));
+    check('M6 더보기: 7 doors as ≥ 44px tiles on top, 일정 active on /wbs', doors.n === 7 && doors.act.trim() === '▦일정', JSON.stringify(doors));
+    await mp.click('#side .mdoors__i[data-door="requirements"]'); await mp.waitForTimeout(800);
+    check('M6 door tile navigates (요구사항) and closes the sheet', /\/requirements$/.test(new URL(mp.url()).pathname) && !(await mp.evaluate(() => document.querySelector('#side').classList.contains('is-open'))), mp.url());
+    await mp.screenshot({ path: `${SHOTS}/m-v2-requirements.png` });
+  }
+
   /* ---------- A6 downloads (Chromium 375) ---------- */
   const DL = [
     ['사업수행계획서 PDF', `${A.url}/charter`, async (pg) => { await pg.click('.pmenu summary'); await pg.click('[data-plan="pdf"]'); }, /사업수행계획서.*\.pdf$/],
@@ -308,6 +348,9 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   const wk = await webkit.launch();
   const wctx = await wk.newContext({ ...devices['iPhone 13'], locale: 'ko-KR', acceptDownloads: true });
   const wp = await wctx.newPage(); wp.on('pageerror', (e) => log('PAGEERROR(webkit)', e.message));
+  await wp.goto(BASE + '/'); await wp.waitForTimeout(400);
+  const wl = await wp.evaluate(() => ({ sw: document.documentElement.scrollWidth, vw: innerWidth, shot: document.querySelector('.mshot').getBoundingClientRect().height > 0, desk: document.querySelector('#preview').getBoundingClientRect().height }));
+  check('M1 WebKit iPhone 13 landing: phone shot, no desktop mock, no sideways scroll', wl.sw <= wl.vw && wl.shot && wl.desk === 0, JSON.stringify(wl));
   await wp.goto(BASE + '/login'); await wp.fill('#email', email); await wp.fill('#password', password); await wp.click('button[type=submit]');
   await wp.waitForURL(/\/app/, { timeout: 15000 }).catch(() => {});
   check('A6 WebKit iPhone 13: 로그인 → /app, phone mode', /\/app/.test(wp.url()) && await wp.evaluate(() => document.documentElement.classList.contains('is-phone')), wp.url());

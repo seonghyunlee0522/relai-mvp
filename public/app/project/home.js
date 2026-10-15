@@ -156,6 +156,18 @@ const homeSide = (live) => {
   </aside>`;
 };
 
+/* Phone dashboard (mobile-v2): three numbers on top, the cards, then 다가오는 일정 across projects. Same data as desktop. */
+const phoneTiles = (live) => {
+  const todo = live.filter(hasTodo).length; const late = live.filter(isOverdue).length;
+  const att = live.reduce((k, c) => k + Math.max(0, n(c.attention && c.attention.total) - n(c.attention && c.attention.unlinked)), 0);
+  const tile = (label, v, tone = '') => html`<div class="mtile ${tone}"><small>${label}</small><b>${v}</b></div>`;
+  return html`<div class="mtiles" data-home-tiles>${raw(tile('진행 중', `${live.length}개`))}${raw(tile('다음 할 일', `${todo}건`, todo ? 'is-now' : ''))}${raw(late ? tile('지연', `${late}개`, 'is-crit') : tile('확인 필요', `${att}건`, att ? 'is-warn' : ''))}</div>`;
+};
+const phoneUpcoming = (live) => {
+  const up = live.flatMap((c) => (c.upcoming || []).map((u) => ({ ...u, pid: c.id, sub: u.title === c.name ? u.label : `${c.name} · ${u.label}` }))).sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 4);
+  return up.length ? html`<section class="nxbox mup" aria-labelledby="hUpM" data-home-upcoming><div class="nxbox__h"><h2 id="hUpM">다가오는 일정</h2></div><div class="nxbox__b">${raw(upcomingList(up, ''))}</div></section>` : '';
+};
+
 export async function homePage(main = $('#main')) {
   document.title = '홈 — RELAI';
   const [h, o] = await Promise.all([api('GET', wsApi('/home')), ob.get()]);
@@ -169,8 +181,8 @@ export async function homePage(main = $('#main')) {
     ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
     ${raw(live.length && desk ? html`<p class="hsum" data-home-summary>${raw(homeSummary(live))}</p>
         <div class="hdash"><section class="hgrid__sec" aria-labelledby="hgT"><h2 id="hgT" class="sr-only">프로젝트 현황</h2><div class="hgrid">${raw(live.map(dCard).join(''))}</div></section>${raw(homeSide(live))}</div>`
-      : live.length ? html`<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
-        <div class="hgrid">${raw(live.map(card).join(''))}</div></section>`
+      : live.length ? html`${raw(phoneTiles(live))}<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
+        <div class="hgrid">${raw(live.map(card).join(''))}</div></section>${raw(phoneUpcoming(live))}`
       : any ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>완료된 프로젝트는 아래에 있습니다.</p></div>'
       : isPhone() ? html`<div class="empty empty--sm" data-phone-empty><p>프로젝트 만들기는 PC에서 할 수 있습니다. PC에서 ${location.host} 에 로그인하세요.</p></div>` : newWorkspaceHome(o))}
     ${raw(done.length ? html`<details class="hdone"><summary>완료된 프로젝트 <b>${done.length}</b>개</summary><div class="hdone__l">${raw(done.map(completedRow).join(''))}</div></details>` : '')}

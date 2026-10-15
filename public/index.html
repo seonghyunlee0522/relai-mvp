@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RELAI — 프로젝트 생애주기를 따라 다음 할 일을 안내하는 Project Guidance System</title>
 <meta name="description" content="RELAI는 착수 · 요구사항 정의 · 분석·설계 · 구현 · 시험 · 전환 및 오픈 · 운영 및 유지보수 7단계 생애주기를 따라 현재 단계와 다음 업무를 안내하고, Requirements · WBS · Testing · Change 데이터를 연결해 프로젝트 실행을 돕는 Project Guidance System입니다.">
+<!--SHARE_META-->
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18437024959"></script>
 <script>
@@ -413,6 +414,71 @@ p{margin:0}
   .demo__log{padding:18px 16px;min-height:290px}
   .footer__links{margin-left:0;flex-wrap:wrap;gap:18px}
 }
+
+/* ===== phone (≤640px) — mobile-v2: short value line, one CTA, phone-sized product shot, proof cards, sticky CTA. Hidden on desktop. ===== */
+.hero__msub,.hero__mnote,.mshot,.mproof,.mcta{display:none}
+@media (max-width:640px){
+  .hero{padding:36px 0 8px;background:linear-gradient(180deg,#fff 0 46%,var(--bg-alt) 46% 100%)}
+  .hero .eyebrow{margin-bottom:12px}
+  .hero h1{font-size:31px;line-height:1.24;margin-bottom:14px}
+  .hero__sub,.hero__punch,.flowline,.hero__note,.hero__actions .btn--secondary,.closing__actions .btn--secondary,.shot{display:none}
+  .hero__msub{display:block;font-size:16.5px;line-height:1.65;color:var(--text-2);margin-bottom:22px;text-wrap:pretty}
+  .hero__msub b{color:var(--navy);font-weight:700}
+  .hero__actions .btn{height:54px;font-size:17px;border-radius:12px}
+  .hero__mnote{display:flex;justify-content:center;flex-wrap:wrap;gap:4px 10px;margin-top:12px;font-size:13px;color:var(--text-2)}
+  .hero__mnote span{display:inline-flex;align-items:center;gap:5px}
+  .hero__mnote span::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok)}
+  /* phone-sized product shot: the real 지금 할 일 screen, not a squeezed desktop */
+  .mshot{display:block;margin:30px auto 0;max-width:320px;border-radius:30px;padding:9px;background:var(--navy);box-shadow:0 24px 60px rgba(16,24,40,.22),0 2px 6px rgba(16,24,40,.12)}
+  .mshot__s{border-radius:22px;overflow:hidden;background:#F6F8FB;font-size:12px;line-height:1.45;color:var(--text)}
+  .mshot__top{display:flex;align-items:center;gap:8px;padding:14px 14px 8px;background:#fff}
+  .mshot__top b{flex:1;min-width:0;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mshot__q{width:22px;height:22px;border-radius:50%;border:1px solid var(--border);display:grid;place-items:center;font-size:11px;color:var(--text-2);flex:none}
+  .mshot__strip{display:flex;align-items:center;gap:8px;padding:0 14px 10px;background:#fff;border-bottom:1px solid var(--border-soft);font-size:11.5px;color:var(--text-2)}
+  .mshot__chip{font-size:10.5px;font-weight:700;color:var(--blue-deep);background:var(--bg-tint);border-radius:99px;padding:1px 8px}
+  .mshot__dots{display:flex;gap:4px;margin-left:auto}
+  .mshot__dots i{width:14px;height:4px;border-radius:2px;background:var(--border)}
+  .mshot__dots i.d{background:var(--ok)}.mshot__dots i.n{background:var(--blue)}
+  .mshot__b{padding:12px;display:grid;gap:10px}
+  .mshot__card{background:#fff;border:1px solid var(--border-soft);border-radius:12px;padding:12px}
+  .mshot__card--now{border-color:var(--border-blue);box-shadow:inset 3px 0 0 var(--blue)}
+  .mshot__k{font-size:10.5px;font-weight:700;color:var(--blue);letter-spacing:.02em}
+  .mshot__t{font-size:14px;font-weight:700;color:var(--navy);margin:3px 0 4px;letter-spacing:-.02em}
+  .mshot__m{font-size:11px;color:var(--text-2)}
+  .mshot__row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--border-soft)}
+  .mshot__row:first-of-type{border-top:0}
+  .mshot__row i{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex:none;font-style:normal;font-size:9px;display:grid;place-items:center;color:#fff}
+  .mshot__row i.d{background:var(--ok);border-color:var(--ok)}.mshot__row i.n{border-color:var(--blue);box-shadow:inset 0 0 0 3px #fff;background:var(--blue)}
+  .mshot__row span{flex:1;min-width:0}
+  .mshot__row em{font-style:normal;font-size:10.5px;color:var(--text-2)}
+  .mshot__row em.n{color:var(--blue);font-weight:700}
+  .mshot__kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mshot__kpi div{background:#fff;border:1px solid var(--border-soft);border-radius:10px;padding:8px 9px}
+  .mshot__kpi small{display:block;font-size:10px;color:var(--text-2)}
+  .mshot__kpi b{font-size:14px;color:var(--navy)}.mshot__kpi b.ok{color:var(--ok)}
+  .mshot__tabs{display:grid;grid-template-columns:repeat(5,1fr);background:#fff;border-top:1px solid var(--border-soft);padding:8px 4px 12px;font-size:10px;color:var(--muted);text-align:center}
+  .mshot__tabs span.on{color:var(--blue);font-weight:700}
+  .mshot__tabs span::before{content:"";display:block;width:16px;height:16px;margin:0 auto 3px;border-radius:5px;background:currentColor;opacity:.28}
+  .mshot__tabs span.on::before{opacity:1}
+  /* proof cards */
+  .mproof{display:grid;gap:10px;margin:28px 0 0;padding:0;list-style:none}
+  .mproof li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:2px 12px;align-items:center;background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--sh-card)}
+  .mproof i{grid-row:1/3;width:40px;height:40px;border-radius:11px;background:var(--bg-tint);color:var(--blue);display:grid;place-items:center;font-style:normal;font-weight:800;font-size:15px}
+  .mproof b{font-size:15.5px;color:var(--navy);letter-spacing:-.02em;line-height:1.35}
+  .mproof span{font-size:13.5px;color:var(--text-2);line-height:1.5}
+  /* sections: tighter, card rows swipe sideways instead of a 6-card tower */
+  .section{padding:56px 0}
+  .h2{font-size:26px}
+  .head-block{margin-bottom:26px}
+  .qgrid{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -20px;padding:2px 20px 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .qgrid::-webkit-scrollbar{display:none}
+  .qgrid>.q{flex:0 0 82%;scroll-snap-align:center}
+  /* sticky CTA after the hero button leaves the screen */
+  .mcta{display:block;position:fixed;left:0;right:0;bottom:0;z-index:70;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.94);backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--border-soft);transform:translateY(110%);transition:transform .25s}
+  .mcta.is-on{transform:none}
+  .mcta .btn{height:50px;border-radius:12px}
+  .footer{padding-bottom:84px}
+}
 </style>
 </head>
 <body>
@@ -450,6 +516,7 @@ p{margin:0}
     <div class="hero__copy">
       <p class="eyebrow">Project Guidance System</p>
       <h1>프로젝트 생애주기를 따라<br>지금 해야 할 일을 안내합니다.</h1>
+      <p class="hero__msub">PM 경험이 없어도 괜찮습니다. 착수부터 운영까지 <b>단계마다 지금 할 일 하나</b>를 알려주고, 요구사항 · 일정 · 테스트 · 보고서를 한 흐름으로 잇습니다.</p>
       <p class="hero__sub">
         프로젝트 관리 도구는 많지만, 프로젝트를 처음부터 끝까지 <b>어떤 순서로 무엇을 해야 하는지</b> 안내해 주는 제품은 드뭅니다.
         RELAI는 현재 단계와 다음 업무를 안내하고, Requirements · WBS · Testing · Change 데이터를 연결해 실행을 돕습니다.
@@ -464,6 +531,28 @@ p{margin:0}
         <a href="#preview" class="btn btn--secondary" data-loc="hero_how">어떻게 작동하나요?</a>
       </div>
       <p class="hero__note">회원가입 후 바로 시작할 수 있습니다.</p>
+      <p class="hero__mnote"><span>얼리 액세스 12개월 무료</span><span>AI 크레딧 500 제공</span><span>설치 없이 웹에서</span></p>
+      <div class="mshot" id="mpreview" aria-label="RELAI 지금 할 일 화면 예시">
+        <div class="mshot__s">
+          <div class="mshot__top"><b>A사 상담 시스템 구축</b><span class="mshot__q">?</span></div>
+          <div class="mshot__strip">03 / 07 · 분석·설계 <span class="mshot__chip">진행 중</span><span class="mshot__dots"><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i><i></i><i></i></span></div>
+          <div class="mshot__b">
+            <div class="mshot__card mshot__card--now"><div class="mshot__k">✦ 다음 할 일</div><div class="mshot__t">화면 설계를 확정하세요</div><div class="mshot__m">담당 김하늘 · 11/13까지 · 필수 업무 2건 남음</div></div>
+            <div class="mshot__card">
+              <div class="mshot__row"><i class="d">✓</i><span>상세 요구사항 분석</span><em>완료</em></div>
+              <div class="mshot__row"><i class="n"></i><span>화면 설계</span><em class="n">진행 중</em></div>
+              <div class="mshot__row"><i></i><span>DB 설계</span><em>11/27</em></div>
+            </div>
+            <div class="mshot__kpi"><div><small>일정</small><b class="ok">정상</b></div><div><small>요구사항 확정</small><b>16/18</b></div><div><small>주간보고</small><b>10/18</b></div></div>
+          </div>
+          <div class="mshot__tabs"><span class="on">다음</span><span>현황</span><span>일정</span><span>보고서</span><span>더보기</span></div>
+        </div>
+      </div>
+      <ul class="mproof">
+        <li><i>7</i><b>착수부터 운영까지 7단계 안내</b><span>지금 어느 단계인지, 다음에 무엇을 해야 하는지 한 화면에서.</span></li>
+        <li><i>↔</i><b>요구사항 → 일정 → 테스트 연결</b><span>빠진 요구사항과 테스트되지 않은 기능을 바로 찾습니다.</span></li>
+        <li><i>✎</i><b>주간보고 초안을 데이터로</b><span>프로젝트 기록으로 초안을 만들고 PDF · Word로 공유합니다.</span></li>
+      </ul>
     </div>
 
     <!-- WHAT'S NEXT PREVIEW -->
@@ -844,6 +933,7 @@ p{margin:0}
   </div>
 </footer>
 
+<div class="mcta" id="mcta" aria-hidden="true"><a href="/signup" class="btn btn--primary btn--block" data-auth="start" data-loc="mobile_sticky" tabindex="-1">무료로 시작하기</a></div>
 <script>
 (function(){
 /* ---------- analytics ---------- */
@@ -1000,6 +1090,17 @@ new IntersectionObserver(function(en){
   en.forEach(function(x){ if(x.isIntersecting && !seen){ seen = true; track('contact_view'); } });
 }, {threshold:.3}).observe(document.getElementById('contact'));
 
+})();
+</script>
+<script>
+(function(){
+  /* phone (≤640px): sticky CTA once the hero button scrolls away, hidden again at the closing CTA; "#preview" links go to the phone shot */
+  var mq = matchMedia('(max-width:640px)'); var bar = document.getElementById('mcta'); if (!bar || !('IntersectionObserver' in window)) return;
+  var heroOut = false, closeIn = false;
+  var set = function(){ var on = mq.matches && heroOut && !closeIn; bar.classList.toggle('is-on', on); bar.setAttribute('aria-hidden', on ? 'false' : 'true'); bar.querySelector('a').tabIndex = on ? 0 : -1; };
+  new IntersectionObserver(function(en){ heroOut = !en[0].isIntersecting && en[0].boundingClientRect.top < 0; set(); }).observe(document.querySelector('.hero__actions'));
+  new IntersectionObserver(function(en){ closeIn = en[0].isIntersecting; set(); }).observe(document.querySelector('.closing__actions'));
+  document.addEventListener('click', function(e){ var a = e.target.closest('a[href="#preview"]'); if (a && mq.matches) { e.preventDefault(); document.getElementById('mpreview').scrollIntoView({behavior:'smooth', block:'center'}); } });
 })();
 </script>
 </body>
