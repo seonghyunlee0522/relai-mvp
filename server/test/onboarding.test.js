@@ -110,7 +110,7 @@ test('member invitation: OWNER→MEMBER/ADMIN, ADMIN→MEMBER only, MEMBER forbi
   let r = await AD.c('POST', W, { email: 'a1@acme.co.kr', role: 'ADMIN' }); assert.equal(r.status, 403);
   r = await AD.c('POST', W, { email: 'a1@acme.co.kr', role: 'MEMBER' }); assert.equal(r.status, 201); assert.equal(r.json.invitation.invited_by_name, '관리자');
   r = await O.c('POST', W, { email: 'dev@acme.co.kr', role: 'ADMIN' }); assert.equal(r.status, 201, JSON.stringify(r.json)); const devInv = r.json.invitation; assert.equal(devInv.role, 'ADMIN');
-  const devMail = mail.last(); assert.equal(devMail.to, 'dev@acme.co.kr'); assert.match(devMail.subject, /Workspace에 초대되었습니다/); assert.match(devMail.text, /홍길동/); assert.match(devMail.text, /Admin/); const devT = linkOf(devMail);
+  const devMail = mail.last(); assert.equal(devMail.to, 'dev@acme.co.kr'); assert.match(devMail.subject, /Workspace에 초대되었습니다/); assert.match(devMail.text, /홍길동/); assert.match(devMail.text, /관리자/); const devT = linkOf(devMail);
   assert.equal((await O.c('POST', W, { email: 'member@acme.co.kr', role: 'MEMBER' })).json.error.code, 'already_member');
   assert.equal((await O.c('POST', W, { email: 'dev@acme.co.kr', role: 'MEMBER' })).json.error.code, 'invite_pending');
   assert.equal((await O.c('POST', W, { email: 'dev2@acme.co.kr', role: 'OWNER' })).status, 400);
