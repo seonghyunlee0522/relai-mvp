@@ -178,7 +178,7 @@ export async function openJiraProjectSettings(pid) {
   catch (e) { el.querySelector('.dialog').innerHTML = html`<h3>Jira 연동 설정</h3><p class="err">${e.message}</p><div class="actions"><button class="btn btn--secondary" data-close>닫기</button></div>`; }
 }
 
-/* ---------- Requirement ↔ Jira (v42): drawer pane, list cell, bulk create ---------- */
+/* ---------- Requirement ↔ Jira (v43): drawer pane, list cell, bulk create ---------- */
 const canManageWs = () => ['OWNER', 'ADMIN'].includes(state.workspace?.role);
 /** One sentence + one button for every state before a link is possible (no Jira on the server · workspace not connected · project not mapped). */
 export function jiraEmptyHtml(d, { ro = false } = {}) {

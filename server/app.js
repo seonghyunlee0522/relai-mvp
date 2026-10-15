@@ -713,7 +713,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(rbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
-    res.json({ requirements: (await R.listRequirements(db, project, req.query)), summary: (await R.requirementStats(db, project.id)), jira: (await requirementJiraMap(db, project.id)) });   // v42: null unless mapped to Jira
+    res.json({ requirements: (await R.listRequirements(db, project, req.query)), summary: (await R.requirementStats(db, project.id)), jira: (await requirementJiraMap(db, project.id)) });   // v43: null unless mapped to Jira
   }));
 
   app.post(rbase, guard, wrap(async (req, res) => {

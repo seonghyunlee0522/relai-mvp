@@ -16,7 +16,7 @@ const valueControl = (f) => {
  * Mounts the bar into `slot` (an empty container) and returns { update(count), destroy() }.
  * onApply({ field, value }) / onArchive() / onClear() may be async; the Apply button is disabled while they run.
  */
-export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive, onClear, initial = null, extra = [] }) {   // extra = [{ key, label, onClick }] — more buttons before 보관 (v42: 지라 태스크 만들기)   // initial = the field picked first (R2: 담당자 지정 → 담당자)
+export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive, onClear, initial = null, extra = [] }) {   // extra = [{ key, label, onClick }] — more buttons before 보관 (v43: 지라 태스크 만들기)   // initial = the field picked first (R2: 담당자 지정 → 담당자)
   const first = Math.max(0, fields.findIndex((f) => f.key === initial));
   let bar = null;
   const build = (count) => {

@@ -7,7 +7,7 @@
  *   execution   Done(statusCategory) / linked EXECUTION issues; groups aggregate descendant leaves (deduplicated), epics excluded.
  *   auto-complete (opt-in per mapping): leaf TASK with ≥1 EXECUTION link, all Done → WBS COMPLETED/100 via wbs.updateWbs.
  * WBS progress/status are otherwise never touched; wbs.js never imports this file.
- *   requirement links (v42) link_role REQUIREMENT, requirement_id set, wbs_item_id NULL. One requirement → many issues; the same issue may
+ *   requirement links (v43) link_role REQUIREMENT, requirement_id set, wbs_item_id NULL. One requirement → many issues; the same issue may
  *               also be linked to a WBS leaf. Requirement status is never changed; with mapping.auto_mark_requirements on, sync sets
  *               requirements.jira_done_at when every linked issue is Done (a '구현 완료 (Jira)' mark), and clears it otherwise.
  */
@@ -210,7 +210,7 @@ export async function unlinkIssue(db, project, wbsId, linkId, userId) {
   return { links: await linksForWbs(db, wbsId), summary: await executionForWbs(db, project.id, wbsId) };
 }
 
-/* ---------- requirement links (v42) ---------- */
+/* ---------- requirement links (v43) ---------- */
 const reqHistory = (db, reqId, action, { oldValue = null, newValue = null } = {}, userId = null) =>
   db.run(`INSERT INTO requirement_history (id, requirement_id, action_type, field_name, old_value, new_value, changed_by) VALUES (?,?,?,?,?,?,?)`, [randomUUID(), reqId, action, 'jira', oldValue, newValue, userId]);
 const emptyRate = () => rate({ total: 0, done: 0, in_progress: 0, todo: 0, missing: 0 });

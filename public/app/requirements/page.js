@@ -50,7 +50,7 @@ export async function requirementsPage(id) {
   let rows = []; let summary = g.requirements; let sel = null; let creating = params().get('new') === '1' && !archived;   /* archived / phone: no create form */
   let apvOpen = params().get('approval') === '1' && !archived && Boolean(baseline && baseline.step_id); let bw = null; let confirmAll = true;   // 요구사항 기준선 승인 Drawer (Phase 2 US-1) — not when archived / on a phone
   let dtab = 'info'; let actFilter = 'ALL';
-  let reqJira = null;        // v42: { enabled, auto_mark, by: { reqId: summary + keys } } when the project is mapped to Jira, else null
+  let reqJira = null;        // v43: { enabled, auto_mark, by: { reqId: summary + keys } } when the project is mapped to Jira, else null
   let reqJiraDetail = null;  // Jira tab data of the open requirement (fetched when the tab is first opened)
   // Arrived from an approved Change Request → edits are recorded with that CR as the history source.
   let ctxCr = null;
@@ -103,7 +103,7 @@ export async function requirementsPage(id) {
       { key: 'requester_name', label: '요청자', width: 110, hidden: true, sort: (r) => r.requester_name || '', render: (r) => r.requester_name || dim() },
       { key: 'requester_organization', label: '요청자 소속', width: 120, hidden: true, sort: (r) => r.requester_organization || '', render: (r) => r.requester_organization || dim() },
       { key: 'updated', label: '수정일', width: 80, card: false, hidden: desk, sort: (r) => r.updated_at, cls: 'mono', render: (r) => fmtShort(r.updated_at) },
-      { key: 'jira', label: 'Jira', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v42: column option (⋯ → 보기)
+      { key: 'jira', label: 'Jira', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v43: column option (⋯ → 보기)
     ],
   });
   const traceGrid = createGrid({
@@ -116,7 +116,7 @@ export async function requirementsPage(id) {
       { key: 'scope', label: '범위', width: 100, sort: (r) => REQ_SCOPE[r.scope], render: (r) => subtle(REQ_SCOPE[r.scope]) },
       { key: 'wbs', label: '연결 WBS', width: 90, align: 'right', sort: (r) => r.linked_wbs_count, render: (r) => String(r.linked_wbs_count) },
       { key: 'link', label: '연결 상태', width: 110, sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? '<span class="chip chip--done">연결됨</span>' : r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' ? '<span class="chip chip--hold">미연결</span>' : '<span class="chip chip--muted">미연결</span>') },
-      { key: 'jira', label: 'Jira', width: 160, sort: jiraSort, render: jiraCell },   // v42: linked Jira issues (요구사항 › 추적)
+      { key: 'jira', label: 'Jira', width: 160, sort: jiraSort, render: jiraCell },   // v43: linked Jira issues (요구사항 › 추적)
     ],
   });
   const curGrid = () => (rview() === 'trace' ? traceGrid : listGrid);
