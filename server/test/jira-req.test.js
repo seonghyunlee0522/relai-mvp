@@ -67,7 +67,7 @@ test('requirement Jira: link existing by key (also when linked to a WBS), duplic
   assert.equal((await A.c('POST', `${A.wbs}/${w.id}/jira/links`, { issue_keys: ['ABC-50'] })).status, 201);
   let r = await A.c('POST', `${RJ(A, R1.id)}/links`, { issue_keys: ['abc-50', 'ABC-51', 'ABC-999', 'OTH-1'] }); assert.equal(r.status, 201);
   const by = Object.fromEntries(r.json.results.map((x) => [x.key, x]));
-  assert.equal(by['ABC-50'].ok, true); assert.equal(by['ABC-51'].ok, true); assert.equal(by['ABC-999'].ok, false); assert.match(by['ABC-999'].error, /찾을 수 없습니다/); assert.equal(by['OTH-1'].ok, false); assert.match(by['OTH-1'].error, /연결된 Jira 프로젝트/);
+  assert.equal(by['ABC-50'].ok, true); assert.equal(by['ABC-51'].ok, true); assert.equal(by['ABC-999'].ok, false); assert.match(by['ABC-999'].error, /찾을 수 없습니다/); assert.equal(by['OTH-1'].ok, false); assert.match(by['OTH-1'].error, /연결된 지라 프로젝트/);
   assert.equal(r.json.jira.links.length, 2); assert.equal(r.json.jira.summary.in_progress, 1);
   r = await A.c('POST', `${RJ(A, R1.id)}/links`, { issue_keys: ['ABC-50'] }); assert.equal(r.json.results[0].ok, false); assert.match(r.json.results[0].error, /이미 이 요구사항/);
   assert.equal((await A.c('POST', `${RJ(A, R2.id)}/links`, { issue_keys: ['ABC-50'] })).json.results[0].ok, true);   // one issue → several requirements
@@ -100,7 +100,7 @@ test('requirement Jira: bulk 지라 태스크 만들기 creates one issue per re
   await A.c('POST', `${RJ(A, rs[1].id)}/issues`, {});
   const before = fake.issues.size;
   let r = await A.c('POST', `${A.req}/jira/bulk-create`, { ids: rs.map((x) => x.id) }); assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.equal(r.json.created.length, 2); assert.equal(r.json.skipped.length, 1); assert.match(r.json.skipped[0].reason, /이미 Jira 이슈/);
+  assert.equal(r.json.created.length, 2); assert.equal(r.json.skipped.length, 1); assert.match(r.json.skipped[0].reason, /이미 지라 이슈/);
   assert.equal(fake.issues.size - before, 2); assert.equal(r.json.jira.by[rs[0].id].total, 1);
   assert.equal((await A.c('POST', `${A.req}/jira/bulk-create`, { ids: [] })).status, 400);
   assert.equal((await A.c('POST', `${A.req}/jira/bulk-create`, { ids: Array.from({ length: 51 }, (_, i) => `x${i}`) })).status, 400);

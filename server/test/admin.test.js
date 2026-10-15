@@ -84,7 +84,7 @@ test('user suspend / reactivate: audit in the same transaction, sessions revoked
   const before = (await A.c('GET', A.purl)).json.project;
   // suspend
   const s = await ops.c('POST', `/api/admin/users/${A.uid}/suspend`, { reason: '약관 위반 신고' });
-  assert.equal(s.status, 200); assert.equal(s.json.sessions_revoked, 1); assert.match(s.json.warnings[0], /유일한 OWNER/);
+  assert.equal(s.status, 200); assert.equal(s.json.sessions_revoked, 1); assert.match(s.json.warnings[0], /유일한 소유자/);
   assert.equal((await ops.c('POST', `/api/admin/users/${A.uid}/suspend`, {})).status, 409);
   // old session is dead, login refused
   assert.equal((await A.c('GET', '/api/me')).status, 401);

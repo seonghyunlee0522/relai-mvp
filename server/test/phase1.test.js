@@ -152,7 +152,7 @@ test('plan markdown: fixed sections, 작성되지 않음, tables, approval rows,
     governance: '', timeline: { startDate: '2026-11-01', endDate: '2027-02-28', milestones: [{ title: '하자보수 종료', date: '2027-05-01', source: 'KEY_DATE' }] }, assumptions: '', constraints: '', risks: '',
     operatingModel: { communication: '', changeManagement: '', acceptance: '' }, kickoff: { skipped: true }, approval: { status: 'TODO', approver: null, bypass: { reason: '회신 대기', date: '2026-10-15', name: '홍길동' } } };
   const doc = buildPlanMarkdown(c, { workspaceName: '수행사', author: '홍길동', today: '2026-10-15' });
-  for (const h of ['개정 이력', '1. 사업 개요', '2. 성공 기준', '3. 사업 범위', '4. 전제·제약·초기 리스크', '5. 추진 조직', '6. 일정 및 마일스톤', '7. 운영 방식', '8. 승인']) assert.ok(doc.markdown.includes(`## ${h}`), h);
+  for (const h of ['개정 이력', '1. 사업 개요', '2. 성공 기준', '3. 사업 범위', '4. 전제·제약·초기 리스크', '5. 추진 조직', '6. 사업 기간 및 주요 일정', '7. 운영 방식', '8. 승인']) assert.ok(doc.markdown.includes(`## ${h}`), h);
   assert.ok(!doc.markdown.includes('착수보고회'));   // skipped kickoff → section omitted
   assert.match(doc.markdown, /작성되지 않음/); assert.match(doc.markdown, /\| 종료 후 \|/);
   assert.match(doc.markdown, /미승인 — 사유: 회신 대기\*\* \(2026-10-15 · 홍길동\)/);

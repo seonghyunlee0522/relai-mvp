@@ -98,7 +98,7 @@ const A = {
     { d: -4, t: '10:42', op: 'reqPatch', key: 'R6', status: 'REVIEWING' },
     { d: -4, t: '10:50', op: 'comment', on: 'REQUIREMENT', key: 'R5', body: '고객사 IT팀 API 사양서 v0.9 수령. 계약 상태 코드 정의가 빠져 있어 다음 주 화요일 회의에서 확인 예정.' },
     { d: -3, t: '16:00', op: 'risk', key: 'K1', title: '기간계 조회 API 사양 확정 지연', probability: 'MEDIUM', impact: 'HIGH', response_strategy: 'MITIGATE', status: 'OPEN', identified_at: '@-3', review_date: '@+4',
-      description: 'API 사양 확정이 늦어지면 분석·설계 완료(마일스톤)가 밀린다.', mitigation_plan: '임시 응답(mock)으로 시나리오 설계를 먼저 진행하고, 사양은 주간 회의마다 확인한다.', links: [{ type: 'REQUIREMENT', key: 'R5' }] },
+      description: 'API 사양 확정이 늦어지면 분석·설계 완료 일정이 밀린다.', mitigation_plan: '임시 응답(mock)으로 시나리오 설계를 먼저 진행하고, 사양은 주간 회의마다 확인한다.', links: [{ type: 'REQUIREMENT', key: 'R5' }] },
   ],
 };
 
@@ -182,7 +182,7 @@ const B = {
     { d: -80, t: '10:04', op: 'wbs', key: 'T32', parent: 'S3', title: '이관 리허설 (2회)', planned_start_date: '@+35', planned_end_date: '@+48', lifecycle_phase: 'TRANSITION_GO_LIVE' },
     { d: -80, t: '10:06', op: 'wbs', key: 'S4', item_type: 'TASK', title: '시험', lifecycle_phase: 'TESTING' },
     { d: -80, t: '10:08', op: 'wbs', key: 'T41', parent: 'S4', title: '통합 테스트', planned_start_date: '@+31', planned_end_date: '@+48', lifecycle_phase: 'TESTING' },
-    { d: -80, t: '10:10', op: 'wbs', key: 'T42', parent: 'S4', title: '사용자 인수 테스트(UAT)', planned_start_date: '@+49', planned_end_date: '@+59', lifecycle_phase: 'TESTING' },
+    { d: -80, t: '10:10', op: 'wbs', key: 'T42', parent: 'S4', title: '고객 인수 테스트(UAT)', planned_start_date: '@+49', planned_end_date: '@+59', lifecycle_phase: 'TESTING' },
     { d: -80, t: '10:12', op: 'wbs', key: 'M4', parent: 'S4', item_type: 'MILESTONE', title: '검수 완료', milestone_date: '@+61' },
     { d: -80, t: '10:14', op: 'wbs', key: 'S5', item_type: 'TASK', title: '전환·오픈', lifecycle_phase: 'TRANSITION_GO_LIVE' },
     { d: -80, t: '10:16', op: 'wbs', key: 'T51', parent: 'S5', title: '사용자 교육 (센터 3교대)', planned_start_date: '@+53', planned_end_date: '@+60', lifecycle_phase: 'TRANSITION_GO_LIVE' },
@@ -380,7 +380,7 @@ const C = {
     { d: -9, t: '17:30', op: 'handover', receiver: 's:sc-ops', date: '@-9', owners: 's:sc-ops' },
     { d: -6, t: '10:00', op: 'checklist', step: 'OPERATIONS.CLOSE', done: -2 },
     { d: -3, t: '14:00', op: 'completion', lessons: {
-      good: '- 요구사항 기준선 승인을 일찍 받아 범위 논쟁이 적었다\n- 이관 리허설 2회로 오픈 당일 문제가 없었다',
+      good: '- 요구사항 확정 승인을 일찍 받아 범위 논쟁이 적었다\n- 이관 리허설 2회로 오픈 당일 문제가 없었다',
       bad: '- 모바일 알림 지연을 시험 단계에서야 발견했다',
       next: '- 푸시·알림은 설계 단계에서 부하 테스트를 먼저 한다',
     } },

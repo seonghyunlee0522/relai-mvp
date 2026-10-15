@@ -38,7 +38,7 @@ test('requirements bulk: update applies per id, skips unknown/archived/other-pro
   // a user from another workspace as owner: every id skipped, nothing applied
   const o = await A.c('POST', `${A.req}/bulk`, { ids: [r1.id, r2.id], action: 'update', patch: { owner_user_id: B.uid } });
   assert.equal(o.status, 200); assert.equal(o.json.updated, 0); assert.equal(o.json.skipped.length, 2);
-  assert.match(o.json.skipped[0].reason, /Workspace 멤버/);
+  assert.match(o.json.skipped[0].reason, /워크스페이스 멤버/);
   server.close();
 });
 
@@ -117,7 +117,7 @@ test('wbs bulk: owner/status/dates/progress per item, skips with reasons, histor
   assert.equal((await A.c('GET', `${A.wbs}/${t2.id}`)).json.item.progress, 100);
   // milestone cannot take planned dates
   const md = await A.c('POST', url, { ids: [ms.id], action: 'update', patch: { planned_end_date: '2026-12-02' } });
-  assert.equal(md.json.updated, 0); assert.match(md.json.skipped[0].reason, /마일스톤/);
+  assert.equal(md.json.updated, 0); assert.match(md.json.skipped[0].reason, /주요 일정/);
   // validation
   assert.equal((await A.c('POST', url, { ids: [t1.id], action: 'update', patch: { progress: 101 } })).status, 400);
   assert.equal((await A.c('POST', url, { ids: [t1.id], action: 'update', patch: { planned_start_date: '2026/11/01' } })).status, 400);

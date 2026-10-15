@@ -149,13 +149,13 @@ test('WBS links: leaf create/link, multiple issues per WBS, same issue second WB
   // search by text within mapped project only
   r = await A.c('GET', `${PJ(A)}/issues/search?q=SAML`); assert.deepEqual(r.json.issues.map((i) => i.external_key), ['ABC-145']);
   // 17. group EXECUTION blocked; 18. group Epic allowed and excluded from rate; 19. milestone blocked; create on group blocked
-  r = await A.c('POST', `${WJ(A, g.id)}/links`, { issue_keys: ['ABC-145'] }); assert.equal(r.status, 400); assert.match(r.json.error.fields.wbs_item_id, /Group/);
+  r = await A.c('POST', `${WJ(A, g.id)}/links`, { issue_keys: ['ABC-145'] }); assert.equal(r.status, 400); assert.match(r.json.error.fields.wbs_item_id, /상위 작업/);
   assert.equal((await A.c('POST', `${WJ(A, g.id)}/issues`, {})).status, 400);
   fake.addIssue('ABC-100', { summary: 'SSO Epic', type: 'Epic', status: 'done' });
   r = await A.c('POST', `${WJ(A, g.id)}/links`, { issue_keys: ['ABC-100'], link_role: 'EPIC' }); assert.equal(r.status, 201); assert.equal(r.json.results[0].ok, true); assert.equal(r.json.links[0].link_role, 'EPIC');
   assert.equal(r.json.summary.total, 4);   // group aggregates descendant leaves; the Done epic is not counted
   r = await A.c('POST', `${WJ(A, leaf.id)}/links`, { issue_keys: ['ABC-205'], link_role: 'EPIC' }); assert.equal(r.status, 400);   // epic only on groups
-  r = await A.c('POST', `${WJ(A, ms.id)}/links`, { issue_keys: ['ABC-145'] }); assert.equal(r.status, 400); assert.match(r.json.error.fields.wbs_item_id, /마일스톤/);
+  r = await A.c('POST', `${WJ(A, ms.id)}/links`, { issue_keys: ['ABC-145'] }); assert.equal(r.status, 400); assert.match(r.json.error.fields.wbs_item_id, /주요 일정/);
   assert.equal((await A.c('POST', `${WJ(A, ms.id)}/issues`, {})).status, 400);
   // 20. legacy SUMMARY without children is a leaf for Jira purposes (is_group, not enum); with a child it becomes a group
   r = await A.c('POST', `${WJ(A, legacy.id)}/issues`, { summary: '레거시 작업' }); assert.equal(r.status, 201);

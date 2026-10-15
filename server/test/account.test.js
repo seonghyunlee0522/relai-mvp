@@ -149,7 +149,7 @@ test('workspace deletion: OWNER only, name + password confirmation, subscription
   for (const { table_name: t } of cols) if (!KEEP.has(t)) assert.equal(await n(db, `SELECT COUNT(*) n FROM ${t} WHERE workspace_id = ?`, [A.w]), 0, t);
   assert.equal(await n(db, 'SELECT COUNT(*) n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ?', [A.w]), 0);
   assert.equal(await n(db, `SELECT COUNT(*) n FROM payments WHERE id = 'pay1'`), 1);
-  const tomb = await db.get('SELECT name, status, purged_at FROM workspaces WHERE id = ?', [A.w]); assert.equal(tomb.status, 'CLOSED'); assert.equal(tomb.name, '삭제된 Workspace'); assert.ok(tomb.purged_at);
+  const tomb = await db.get('SELECT name, status, purged_at FROM workspaces WHERE id = ?', [A.w]); assert.equal(tomb.status, 'CLOSED'); assert.equal(tomb.name, '삭제된 워크스페이스'); assert.ok(tomb.purged_at);
   assert.equal((await purgeExpired(db)).workspaces_purged, 0);   // idempotent
 });
 
