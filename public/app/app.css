@@ -3087,6 +3087,12 @@ html:not(.is-phone) .chx__head>.chx__ht{display:none}
 html:not(.is-phone) .chx__head{justify-content:flex-end}
 /* wide layout (desktop ≥ 768px; the prototype bhsn-client fills the width beside the rail): work pages (home, 프로젝트, reports…)
  * take the full width next to the rail with 24px gutters; reading/form pages (설정, AI 크레딧, 프로젝트 설정, report document)
- * start at the rail too — left-aligned, never centered — and stop at a readable 1200px. Phone keeps its own layout. */
+ * start at the rail too — left-aligned, never centered. Phone keeps its own layout. */
 html:not(.is-phone) .page{max-width:none;margin-left:0;margin-right:0}
-html:not(.is-phone) .page--narrow,html:not(.is-phone) .page--form,html:not(.is-phone) .page--doc{max-width:1200px}
+/* wide cards (desktop ≥ 768px; founder: '카드형도 같이 넓어져야지'): cards, tiles and panels fill the row next to the rail.
+ * Grids of like cards use auto-fit tracks — they stretch, wider screens get more columns, a lone card never sits beside a void.
+ * Card pages (설정, AI 크레딧, 프로젝트 설정, report document, admin) drop their 1200px caps; inline inputs stay at a readable width. */
+html:not(.is-phone) .hgrid{grid-template-columns:repeat(auto-fit,minmax(min(400px,100%),1fr))}
+html:not(.is-phone) .apage{max-width:none}
+html:not(.is-phone) .chl{grid-template-columns:minmax(0,1fr) clamp(272px,18vw,360px)}
+html:not(.is-phone) .inline-form .input{flex:0 1 480px}
