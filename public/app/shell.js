@@ -88,7 +88,8 @@ export function phoneHead(p, g, pill) {
   const name = $('#ptop'); const strip = $('#pstrip'); if (!name || !strip) return;
   name.textContent = p.name; name.title = p.name; name.hidden = false;
   const cur = g && g.current_phase; const total = (g && g.phases && g.phases.length) || 7;
-  strip.innerHTML = cur ? html`<a class="pstrip__a" href="/app/projects/${p.id}" data-link><span class="pstrip__n">${String(cur.sequence).padStart(2, '0')} / ${String(total).padStart(2, '0')} · ${cur.name}</span>${raw(pill)}</a>` : pill;
+  const dots = cur ? Array.from({ length: total }, (_, i) => `<i class="${i + 1 < cur.sequence ? 'is-done' : i + 1 === cur.sequence ? 'is-cur' : ''}"></i>`).join('') : '';
+  strip.innerHTML = cur ? html`<a class="pstrip__a" href="/app/projects/${p.id}" data-link><span class="pstrip__n">${String(cur.sequence).padStart(2, '0')} / ${String(total).padStart(2, '0')} · ${cur.name}</span>${raw(pill)}<span class="pstrip__dots" aria-hidden="true">${raw(dots)}</span></a>` : pill;
   strip.hidden = false;
 }
 

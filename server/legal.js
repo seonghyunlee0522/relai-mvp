@@ -12,6 +12,7 @@ import { resolve } from 'node:path';
 import { LEGAL, koDate, legalFooterHtml } from '../public/app/shared/legal-info.js';
 import { CREDIT_PRICE_KRW, CREDIT_PACKS, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, EARLY_ACCESS } from './plans.js';
 import { aiConfig } from './ai/config.js';
+import { shareMeta } from './share-meta.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /** Inline: escape, then **bold** and [text](href). */
@@ -364,6 +365,7 @@ export function legalPage(kind, { plans } = {}, L = LEGAL) {
   return `<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${p.title} — RELAI</title><meta name="description" content="RELAI ${p.title}">
+<!--SHARE_META-->
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>${PAGE_CSS}</style></head>
 <body><header class="top"><div class="top__in"><a class="logo" href="/">RELAI</a><nav class="top__nav"><a href="/terms"${kind === 'terms' ? ' aria-current="page"' : ''}>이용약관</a><a href="/privacy"${kind === 'privacy' ? ' aria-current="page"' : ''}>개인정보처리방침</a></nav></div></header>
@@ -378,13 +380,13 @@ export function mountLegal(app, { pub, plans }) {
   const cache = {};
   const page = (kind) => (cache[kind] ||= legalPage(kind, { plans }));
   for (const kind of Object.keys(PAGES)) {
-    app.get([`/${kind}`, `/${kind}.html`], (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.type('html').send(page(kind)); });
+    app.get([`/${kind}`, `/${kind}.html`], (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.type('html').send(page(kind).replace('<!--SHARE_META-->', shareMeta(req, { title: `${PAGES[kind].title} — RELAI`, description: `RELAI ${PAGES[kind].title}`, path: `/${kind}` }))); });
   }
   app.get('/pricing', (req, res) => res.redirect(302, '/#pricing'));
   let landing = null;
   app.get(['/', '/index.html'], (req, res) => {
     landing ||= readFileSync(resolve(pub, 'index.html'), 'utf8').replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
-    res.type('html').send(landing);
+    res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req)));
   });
 }
 

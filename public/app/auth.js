@@ -47,6 +47,14 @@ const signupSide = () => html`<aside class="auth__side su-a">
 /** Small screens hide the side panel, so the 7 phases move under the headline. */
 const signupMobile = () => html`<div class="su-mobile su-a-m" aria-label="프로젝트 7단계">${raw(PHASES.map((p, i) => html`<span class="${i === 0 ? 'is-current' : ''}"><i>${i + 1}</i>${p}</span>`).join(''))}</div>`;
 
+/** Phone (< 768px, mobile-v2): a brand band on top — the value in one line and a glimpse of 지금 할 일 — instead of a bare form. */
+const phoneBand = (isSignup) => html`<div class="aband" aria-hidden="true">
+  <a class="aband__logo" href="/" tabindex="-1"><img src="/brand/icon.svg" alt="" width="28" height="28">RELAI</a>
+  <p class="aband__t">${isSignup ? '첫 프로젝트, 다음 할 일부터 안내합니다' : '오늘 할 일이 기다리고 있어요'}</p>
+  <div class="aband__card"><span class="aband__k">✦ 다음 할 일</span><b>화면 설계를 확정하세요</b>
+    <span class="aband__dots">${raw(PHASES.map((p, i) => `<i class="${i < 2 ? 'is-done' : i === 2 ? 'is-cur' : ''}"></i>`).join(''))}</span><small>03 / 07 · 분석·설계</small></div>
+</div>`;
+
 export async function authPage(mode) {
   const isSignup = mode === 'signup';
   const qp = new URLSearchParams(location.search);
@@ -66,6 +74,7 @@ export async function authPage(mode) {
       <span class="dim">${invite.email_masked} 로 초대되었습니다. 초대받은 이메일로 가입해야 하며, 가입 완료 시 ${raw(invite.type === 'WORKSPACE_CREATE' ? html`<b>${invite.workspace_name}</b> Workspace가 생성되고 OWNER가 됩니다.` : html`<b>${invite.workspace_name}</b> Workspace에 ${invite.role_label}로 참여합니다.`)}</span></div>`;
   root.innerHTML = html`<div class="auth${isSignup ? ' auth--su-a' : ''}">
     <main class="auth__form">
+      ${raw(phoneBand(isSignup))}
       <a class="logo" href="/">RELAI</a>
       <h1>${isSignup ? (invite && !invite.invalid ? '초대받은 계정 만들기' : raw('처음 맡은 프로젝트,<br>다음 할 일부터 알려드릴게요.')) : '다시 만나서 반갑습니다'}</h1>
       <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : 'PM 방법론을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다. 얼리 액세스로 12개월 무료이고, AI 크레딧 500(₩5,000)을 무료로 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
