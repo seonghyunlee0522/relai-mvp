@@ -13,6 +13,7 @@ import * as CL from './checklists.js';
 import * as GL from './golive.js';
 import { todayKst } from '../public/app/shared/kst-date.js';
 import { shareMeta } from './share-meta.js';
+import { ga4For } from './ga4.js';
 import { effectiveImportance } from './activities.js';
 import * as D from './definition.js';
 import { buildProjectCharter } from './charter.js';
@@ -1381,7 +1382,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const pub = resolve(here, '../public');
   /* The SPA shell with link-preview tags (server/share-meta.js); read once, origin filled per request. */
   let appShell = null;
-  const sendApp = (req, res) => { appShell ||= readFileSync(resolve(pub, 'app/index.html'), 'utf8'); res.type('html').send(appShell.replace('<!--SHARE_META-->', shareMeta(req, { path: ['/login', '/signup'].includes(req.path) ? req.path : '/' }))); };
+  const sendApp = (req, res) => { appShell ||= readFileSync(resolve(pub, 'app/index.html'), 'utf8'); res.type('html').send(appShell.replace('<!--SHARE_META-->', shareMeta(req, { path: ['/login', '/signup'].includes(req.path) ? req.path : '/' }) + ga4For(req))); };   // GA4: /login and /signup only (server/ga4.js)
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
   // Landing visit: anonymous count only (no user, no IP); signed-in users and bots are not counted.
   const onLanding = (req) => (req.method === 'GET' && !req.user && !isBot(req.get('user-agent')) ? track(db, 'landing_visit') : null);

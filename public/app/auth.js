@@ -138,6 +138,7 @@ export async function authPage(mode) {
       if (isSignup && inviteToken && invite && !invite.invalid) d.invite_token = inviteToken;
       const data = await api('POST', `/api/auth/${mode}`, d);
       Object.assign(state, data); state.workspace = data.workspaces.find((w) => data.accepted && w.id === data.accepted.workspace_id) || data.workspaces[0];
+      if (isSignup) await gaSignUp();
       const dest = safeNext || '/app';
       navigate(dest, { replace: true });
     } catch (err) {
@@ -145,6 +146,13 @@ export async function authPage(mode) {
       showErrors(form, err.fields, err.message);
     }
   });
+}
+
+/* GA4 'sign_up' (server/ga4.js; only present on /signup when GA4_MEASUREMENT_ID is set). No PII: just the method. Waits for the
+ * hit (max 800 ms) because navigating to /app switches GA off (router.js gaGuard). */
+function gaSignUp() {
+  if (!window.RELAI_GA4 || typeof window.gtag !== 'function') return null;
+  return new Promise((done) => { const t = setTimeout(done, 800); window.gtag('event', 'sign_up', { method: 'email', event_callback: () => { clearTimeout(t); done(); } }); });
 }
 
 /* ---------- account security: forgot / reset password, e-mail verification (work with or without a session) ---------- */

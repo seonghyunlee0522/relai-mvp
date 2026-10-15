@@ -13,6 +13,7 @@ import { LEGAL, koDate, legalFooterHtml } from '../public/app/shared/legal-info.
 import { CREDIT_PRICE_KRW, CREDIT_PACKS, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, EARLY_ACCESS } from './plans.js';
 import { aiConfig } from './ai/config.js';
 import { shareMeta } from './share-meta.js';
+import { ga4For } from './ga4.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /** Inline: escape, then **bold** and [text](href). */
@@ -224,6 +225,7 @@ export function privacyMarkdown(L = LEGAL) {
 | 외부 서비스 연동(선택) | Jira 계정 표시명, 계정 식별자, 사이트 주소, 접근 토큰(암호화 저장) | 연동 시 Atlassian으로부터 제공 |
 | 자동 수집 | 로그인 기록(접속 일시, IP 주소, 브라우저 정보), 서비스 이용 기록(작업 이력, AI 기능 사용 기록: 기능, 실행한 회원, 프로젝트, 차감 크레딧), 서비스 이용 통계(사용한 화면·기능, 접속 일자 — 회원·워크스페이스·프로젝트 식별자만 기록), 세션 쿠키, 서버 접속 로그, 이메일 발송 기록 | 서비스 이용 과정 |
 | 랜딩 페이지 광고 측정 | 쿠키, 광고 식별자, 방문 기록 | Google 광고 태그(gtag) |
+| 공개 페이지 유입 분석 | 쿠키, 방문 페이지, 유입 경로(검색·광고·UTM 등), 기기·브라우저 정보 | Google 애널리틱스(랜딩·가입·로그인·약관 페이지에서만) |
 
 **고객이 입력하는 데이터의 개인정보.** 고객은 프로젝트 정의(이해관계자의 이름, 조직, 부서, 역할), 요구사항, 이슈, 주간보고 등에 제3자의 개인정보를 입력할 수 있습니다. 이 정보에 대해서는 고객이 개인정보처리자이고, 회사는 고객의 위탁을 받아 처리하는 수탁자입니다(제5조 제3항). 회사는 주민등록번호 등 고유식별정보와 민감정보를 수집하지 않으며, 이용자는 이를 서비스에 입력해서는 안 됩니다.
 
@@ -233,7 +235,8 @@ export function privacyMarkdown(L = LEGAL) {
 3. 요금 결제와 정산: 유료 요금제 결제, 정기결제, 크레딧 충전·차감·잔액 알림과 사용 내역 제공, 환불, 세금계산서 발행
 4. 고객 지원: 문의 처리, 분쟁 조정을 위한 기록 보존
 5. 서비스 개선과 마케팅(랜딩 페이지 광고 측정): 광고 효과 측정, 이용 통계 분석(개인을 식별할 수 없는 형태)
-6. 서비스 개선을 위한 이용 분석: 가입·기능 사용·재방문 통계. 회사가 직접 운영하는 데이터베이스에서만 분석하며, 외부 분석 도구로 보내거나 별도 쿠키를 쓰지 않습니다.
+6. 서비스 개선을 위한 이용 분석(로그인 후 서비스 화면): 가입·기능 사용·재방문 통계. 회사가 직접 운영하는 데이터베이스에서만 분석하며, 외부 분석 도구로 보내거나 별도 쿠키를 쓰지 않습니다.
+7. 유입 분석(공개 페이지): 방문자가 어떤 경로로 RELAI를 알게 되었는지 파악(Google 애널리틱스, 개인을 식별할 수 없는 통계 형태)
 
 ## 제3조 (개인정보의 보유와 이용 기간)
 1. 회사는 회원 탈퇴 시 또는 처리 목적이 달성된 때 지체 없이 개인정보를 파기합니다. 다만 다음의 경우에는 명시한 기간 동안 보관합니다.
@@ -248,6 +251,7 @@ export function privacyMarkdown(L = LEGAL) {
 
 2. 회원이 탈퇴하면 이름·이메일·비밀번호와 로그인 수단은 즉시 삭제되며, 다른 워크스페이스에 남은 업무 기록에는 '탈퇴한 사용자'로만 표시됩니다. 관리자 조치 기록에서는 이름과 이메일을 지운 형태로 남습니다.
 3. 워크스페이스가 삭제되면 그 워크스페이스의 데이터(초대 정보 포함)는 30일 동안 보관한 후 파기합니다(이용약관 제16조).
+4. Google 애널리틱스로 수집한 유입 분석 정보는 Google 애널리틱스의 데이터 보관 기간 설정(2개월)에 따라 보관된 후 자동 삭제되며, 그 이후에는 개인을 식별할 수 없는 집계 통계만 남습니다.
 
 ## 제4조 (개인정보의 제3자 제공)
 회사는 정보주체의 동의, 법률의 특별한 규정 등 법 제17조와 제18조에 해당하는 경우에만 개인정보를 제3자에게 제공합니다. 현재 회사는 개인정보를 제3자에게 제공하지 않습니다.
@@ -261,6 +265,7 @@ export function privacyMarkdown(L = LEGAL) {
 | Neon(Databricks, Inc.) | 데이터베이스 운영과 저장 |
 | 나이스페이먼츠 주식회사 | 결제 처리, 정기결제(빌링키 발급·관리) |
 | Resend(Plus Five Five, Inc.) | 서비스 이메일(가입 인증, 비밀번호 재설정, 초대, 결제·크레딧 안내) 발송 |
+| Google LLC | 공개 페이지 유입 분석(Google 애널리틱스) |
 | Anthropic, PBC 또는 OpenAI, L.L.C.(AI 기능을 사용하는 경우, 회사가 이용하는 사업자) | AI 기능 처리(요구사항 추출, WBS 생성, 변경 영향 분석, 프로젝트 질의응답) |
 
 2. 회사는 위탁계약 체결 시 법 제26조에 따라 위탁 업무 수행 목적 외 처리 금지, 기술적·관리적 보호조치, 재위탁 제한, 수탁자 관리·감독, 손해배상 등을 계약서 등 문서에 명시하고, 수탁자가 개인정보를 안전하게 처리하는지 감독합니다.
@@ -274,11 +279,11 @@ export function privacyMarkdown(L = LEGAL) {
 | Vercel Inc. (privacy@vercel.com) | 싱가포르(서버 리전), 미국 | 서비스 이용 시 네트워크를 통해 수시 전송 | 제1조의 모든 항목(접속 기록 포함) | 호스팅. 회원 탈퇴 또는 위탁계약 종료 시까지 |
 | Neon(Databricks, Inc.) (privacy@neon.tech) | ${L.dbLocation} | 서비스 이용 시 네트워크를 통해 수시 전송 | 제1조의 모든 항목과 고객 데이터 | 데이터 저장. 회원 탈퇴 또는 위탁계약 종료 시까지 |
 | Resend(Plus Five Five, Inc.) (privacy@resend.com) | 미국 | 이메일 발송 시 네트워크를 통해 전송 | 수신자 이메일 주소, 이름, 이메일 본문 | 이메일 발송. Resend의 발송 기록 보관 정책에 따름 |
-| Google LLC (support.google.com/policies) | 미국 | Google 로그인 시, 랜딩 페이지 방문 시 | 로그인 인증 정보, 쿠키와 방문 기록 | 로그인 인증, 광고 효과 측정. Google 정책에 따름 |
+| Google LLC (support.google.com/policies) | 미국 | Google 로그인 시, 공개 페이지(랜딩·가입·로그인·약관) 방문 시 네트워크를 통해 전송 | 로그인 인증 정보, 쿠키, 방문 페이지, 유입 경로, 기기·브라우저 정보 | 로그인 인증, 광고 효과 측정, 유입 분석. 유입 분석 정보는 제3조 제4항의 기간, 그 밖에는 Google 정책에 따름 |
 | Anthropic, PBC (privacy@anthropic.com) 또는 OpenAI, L.L.C. (privacy@openai.com) | 미국 | AI 기능 실행 시 네트워크를 통해 전송 | AI 기능 요청에 포함된 프로젝트 데이터(이해관계자 정보 등 개인정보가 포함될 수 있음) | AI 결과 생성. 제공사의 API 데이터 보관 정책에 따르며, 제공사는 이 데이터를 모델 학습에 이용하지 않습니다 |
 | Atlassian(Jira 연동 시) | 미국 등 | 연동 동기화 시 | 연동된 프로젝트 데이터, Jira 계정 식별자 | 고객이 요청한 연동 제공. 연동 해제 시까지 |
 
-정보주체는 국외 이전을 거부할 수 있습니다. 다만 호스팅·데이터 저장·이메일 발송을 위한 국외 이전은 서비스 제공에 필수이므로, 거부하는 경우 서비스를 이용할 수 없습니다. AI 기능, Google 로그인, Jira 연동은 선택 기능이며, 이용하지 않으면 해당 국외 이전은 발생하지 않습니다. 거부 방법: 개인정보 보호책임자 이메일(${L.contactEmail})로 요청.
+정보주체는 국외 이전을 거부할 수 있습니다. 다만 호스팅·데이터 저장·이메일 발송을 위한 국외 이전은 서비스 제공에 필수이므로, 거부하는 경우 서비스를 이용할 수 없습니다. AI 기능, Google 로그인, Jira 연동은 선택 기능이며, 이용하지 않으면 해당 국외 이전은 발생하지 않습니다. Google 애널리틱스로의 이전은 제10조 제3항의 방법으로 거부할 수 있습니다. 거부 방법: 개인정보 보호책임자 이메일(${L.contactEmail})로 요청.
 
 ## 제7조 (개인정보의 파기 절차와 방법)
 1. 회사는 보유 기간이 끝나거나 처리 목적이 달성된 개인정보를 지체 없이(5일 이내) 파기합니다.
@@ -306,6 +311,7 @@ export function privacyMarkdown(L = LEGAL) {
 ## 제10조 (개인정보 자동 수집 장치의 설치·운영과 거부)
 1. 회사는 로그인 상태 유지를 위해 필수 쿠키(세션 쿠키)를 사용합니다. 이 쿠키를 거부하면 로그인이 필요한 서비스를 이용할 수 없습니다.
 2. 회사는 랜딩 페이지에서 광고 효과 측정을 위해 Google 광고 태그를 사용합니다. 이용자는 웹 브라우저 설정(예: Chrome → 설정 → 개인정보 및 보안 → 서드파티 쿠키)에서 쿠키 저장을 거부하거나 Google 광고 설정 페이지에서 맞춤 광고를 해제할 수 있습니다.
+3. 회사는 공개 페이지(랜딩·회원가입·로그인·이용약관·개인정보 처리방침)에서 유입 분석을 위해 Google 애널리틱스를 사용하며, 이 과정에서 쿠키가 저장되고 방문 페이지, 유입 경로, 기기·브라우저 정보가 미국의 Google LLC로 전송됩니다(제6조). IP 주소는 익명 처리되며 이름, 이메일 등 회원을 식별하는 정보는 보내지 않고, 로그인 후 서비스 화면에서는 사용하지 않습니다. 이용자는 웹 브라우저의 쿠키 설정에서 저장을 거부하거나 Google 애널리틱스 차단 브라우저 부가기능(tools.google.com/dlpage/gaoptout)을 설치하여 수집을 거부할 수 있으며, 거부하더라도 서비스 이용에는 제한이 없습니다.
 
 ## 제11조 (개인정보 보호책임자)
 회사는 개인정보 처리에 관한 업무를 총괄하여 책임지고, 정보주체의 불만 처리와 피해 구제를 위해 다음과 같이 개인정보 보호책임자를 지정합니다.
@@ -381,14 +387,14 @@ export function mountLegal(app, { pub, plans, onLanding = null }) {
   const cache = {};
   const page = (kind) => (cache[kind] ||= legalPage(kind, { plans }));
   for (const kind of Object.keys(PAGES)) {
-    app.get([`/${kind}`, `/${kind}.html`], (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.type('html').send(page(kind).replace('<!--SHARE_META-->', shareMeta(req, { title: `${PAGES[kind].title} — RELAI`, description: `RELAI ${PAGES[kind].title}`, path: `/${kind}` }))); });
+    app.get([`/${kind}`, `/${kind}.html`], (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.type('html').send(page(kind).replace('<!--SHARE_META-->', shareMeta(req, { title: `${PAGES[kind].title} — RELAI`, description: `RELAI ${PAGES[kind].title}`, path: `/${kind}` }) + ga4For(req))); });
   }
   app.get('/pricing', (req, res) => res.redirect(302, '/#pricing'));
   let landing = null;
   app.get(['/', '/index.html'], async (req, res) => {
     if (onLanding) await onLanding(req);
     landing ||= readFileSync(resolve(pub, 'index.html'), 'utf8').replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
-    res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req)));
+    res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req) + ga4For(req)));
   });
 }
 
