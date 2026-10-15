@@ -1,5 +1,6 @@
 /* Weekly Report page (§26–30): document-like editor. DRAFT = editable sections (markdown textareas, autosave on blur); FINAL = read-only. */
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, fmtDT, html, raw } from '../core/dom.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { download } from '../core/ui.js';
@@ -35,7 +36,7 @@ const RS = { DRAFT: ['초안', 'chip--muted'], FINAL: ['확정', 'chip--done'] }
 export async function reportPage(pid, rid, main = $('#main')) {
   let { report } = await api('GET', wsApi(`/${pid}/weekly-reports/${rid}`));
   const g = await api('GET', wsApi(`/${pid}`)); const proj = g.project;
-  const archived = proj.status === 'ARCHIVED';
+  const isArch = proj.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode (viewer: no PC line, downloads stay)
   const done = report.report_type === 'COMPLETION';   // Phase 7 US-1: 완료보고서 — same screen, buttons and export
   const kind = done ? '완료보고서' : '주간보고';
   document.title = `${report.title} — RELAI`;
@@ -48,11 +49,11 @@ export async function reportPage(pid, rid, main = $('#main')) {
         <div class="doc__meta"><span class="chip ${RS[report.status][1]}">${RS[report.status][0]}</span>
           ${raw(done ? html`<span>${kind} ${raw(term('completion_report'))}</span>` : '')}<span>${done ? '프로젝트 기간' : '보고 기간'} <b>${sc.period.start} ~ ${sc.period.end}</b></span><span>생성 ${fmtDT(report.generated_at)}</span>${raw(report.finalized_at ? html`<span>확정 ${fmtDT(report.finalized_at)}</span>` : '')}<span id="dsave" class="doc__save"></span></div>
         <div class="doc__actions">
-          <button class="btn btn--secondary btn--sm" data-dl="pdf">PDF 다운로드</button><button class="btn btn--secondary btn--sm" data-dl="docx">Word 다운로드</button>
+          <button class="btn btn--secondary btn--sm" data-dl="pdf" data-phone-ok>PDF 다운로드</button><button class="btn btn--secondary btn--sm" data-dl="docx" data-phone-ok>Word 다운로드</button>
           <button class="btn btn--secondary btn--sm" id="copy-md">복사 (Markdown)</button><button class="btn btn--secondary btn--sm" id="copy-txt">복사 (텍스트)</button>
           ${raw(archived ? '' : report.status === 'DRAFT' ? '<button class="btn btn--primary btn--sm" id="finalize">보고서 확정</button>' : '<button class="btn btn--secondary btn--sm" id="reopen">다시 편집</button>')}
         </div></div>
-      ${raw(archived ? '<div class="notice">보관된 프로젝트의 보고서는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트의 보고서는 조회만 할 수 있습니다.</div>' : '')}
       <article class="doc">
         ${raw(ro ? html`<h1 class="doc__title">${report.title}</h1>` : html`<input class="doc__title doc__title--in" id="title" value="${report.title}" maxlength="200" aria-label="보고서 제목">`)}
         <p class="doc__period">${done ? '프로젝트 기간' : '보고 기간'}: ${sc.period.start} ~ ${sc.period.end}</p>

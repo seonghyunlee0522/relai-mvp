@@ -1,4 +1,5 @@
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, fmtDays, fmtKRW, fmtMD, fmtShort, html, raw, todayLocal } from '../core/dom.js';
 import { projectHead } from '../project/guide.js';
 import { CR_PRIORITY, CR_STATUS, CR_STATUS_CHIP, IMPACT_TYPE, RELATION_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE } from '../shared/constants.js';
@@ -6,7 +7,7 @@ import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '..
 import { aiStatus } from '../shared/ai.js';
 import { openImpactDialog } from '../ai/impact.js';
 import { statusChip, prText } from '../shared/badges.js';
-import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, phoneFilters } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
@@ -22,7 +23,7 @@ export async function changesPage(id) {
   const [g, ai, { members }] = await Promise.all([api('GET', wsApi(`/${id}`)), aiStatus(id), api('GET', `/api/workspaces/${state.workspace.id}/members`)]);
   const carry = carryIndex(g);   // Phase 6 US-3: 운영 이관 (오픈 기록)
   const p = g.project;
-  const archived = p.status === 'ARCHIVED';
+  const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
   document.title = `변경 요청 — ${p.name} — RELAI`;
   const cApi = (s = '') => wsApi(`/${id}/changes${s}`);
   const params = () => new URLSearchParams(location.search);
@@ -33,7 +34,7 @@ export async function changesPage(id) {
     { key: 'schedule', label: '일정 영향', format: () => '있음' }, { key: 'cost', label: '비용 영향', format: () => '있음' }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
-  let rows = []; let summary = g.changes; let requesters = []; let people = []; let sel = null; let creating = params().get('new') === '1'; let dtab = 'info';
+  let rows = []; let summary = g.changes; let requesters = []; let people = []; let sel = null; let creating = params().get('new') === '1' && !archived;   /* archived / phone: no create form */ let dtab = 'info';
   let apv = null; let apvMode = null;   // Phase 4 US-2: 고객 승인 Drawer — working copy of the approval record · 'approve' (검토 중 → 승인) | 'record' (승인 기록 추가)
   let reqOptions = null; // lazily loaded requirement list for the filter + picker
   const load = async () => { const d = await api('GET', cApi(listQuery())); rows = d.changes; summary = d.summary; requesters = d.requesters; people = d.people || []; g.changes = summary; };
@@ -46,7 +47,7 @@ export async function changesPage(id) {
     const hasFilter = ['q', ...filterKeys, 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: 'changes', title: '변경 요청' }))}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(coachMark('CHANGE_REQUEST_INTRO'))}
       <div class="summary summary--inline" style="margin-bottom:8px">
         <div><b>${summary.total}</b><span>전체 변경 요청 ${raw(term('change_request'))}</span></div>
@@ -56,13 +57,13 @@ export async function changesPage(id) {
       </div>
       <div class="rtool">
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명, 요청자 검색" value="${q.get('q') || ''}">
-        ${raw(filterSelect('status', '상태', CR_STATUS, q.get('status')))}
+        ${raw(phoneFilters(html`${raw(filterSelect('status', '상태', CR_STATUS, q.get('status')))}
         ${raw(filterSelect('priority', '우선순위', CR_PRIORITY, q.get('priority')))}
         <select class="select select--sm" data-f="requester"><option value="">요청자: 전체</option>${raw(requesters.map((r) => html`<option value="${r}" ${q.get('requester') === r ? 'selected' : ''}>${r}</option>`).join(''))}</select>
         <select class="select select--sm" data-f="requirement" id="f-req"><option value="">관련 요구사항: 전체</option>${raw((reqOptions || []).map((r) => html`<option value="${r.id}" ${q.get('requirement') === r.id ? 'selected' : ''}>${r.display_id} ${r.title}</option>`).join(''))}${raw(!reqOptions && q.get('requirement') ? html`<option value="${q.get('requirement')}" selected>선택됨</option>` : '')}</select>
         <label class="toggle"><input type="checkbox" data-t="schedule" ${q.get('schedule') ? 'checked' : ''}> 일정 영향 있음</label>
         <label class="toggle"><input type="checkbox" data-t="cost" ${q.get('cost') ? 'checked' : ''}> 비용 영향 있음</label>
-        <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
+        <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, ['status', 'priority', 'requester', 'requirement', 'schedule', 'cost', 'archived'], q))}
         <span class="rtool__sp"></span>
         ${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 변경 요청</button>')}
       </div>
@@ -280,6 +281,7 @@ export async function changesPage(id) {
   };
 
   const bind = () => {
+    bindMoreFilters(main);   // phone: 필터 sheet
     const qi = $('#q'); let qt;
     if (qi) qi.oninput = () => { clearTimeout(qt); qt = setTimeout(async () => { setParam('q', qi.value.trim()); await load(); draw(); $('#q').focus(); $('#q').setSelectionRange(99, 99); }, 350); };
     main.querySelectorAll('[data-f]').forEach((sl) => sl.onchange = async () => { setParam(sl.dataset.f, sl.value); await load(); draw(); });

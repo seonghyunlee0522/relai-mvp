@@ -1,5 +1,6 @@
 /* Filter UX (O): selects stay in the toolbar; applied filters are echoed as removable chips + one "필터 초기화". */
 import { html, raw } from '../core/dom.js';
+import { isPhone } from '../core/device.js';
 
 /** <select> with a blank "Label: 전체" option. `cur` may be a comma list (first value is shown as selected). */
 export const filterSelect = (key, label, map, cur, extra = '') => {
@@ -10,7 +11,7 @@ export const filterSelect = (key, label, map, cur, extra = '') => {
 /** Filters beyond search + 2 dropdowns sit behind one "필터 (n)" button (design §3.3): a popover on desktop, a bottom sheet under 640px.
  * The controls inside keep their own ids / data-f, so the page's existing bindings work unchanged. */
 /* K20: on phones the sheet has a dim backdrop (CSS), a header with ✕ and an 적용 button; filters still apply as they change, 적용 closes the sheet. */
-export const moreFilters = (inner, n = 0) => html`<span class="gtools fmore"><button type="button" class="btn btn--secondary btn--sm" data-fmore aria-haspopup="true">필터${n ? ` (${n})` : ''}</button><div class="gpop gpop--filters" hidden><div class="gpop__t"><span>필터</span><button type="button" class="fsheet__x" data-fclose aria-label="닫기">✕</button></div>${raw(inner)}<div class="fsheet__f"><button type="button" class="btn btn--primary" data-fclose>적용</button></div></div></span>`;
+export const moreFilters = (inner, n = 0) => html`<span class="gtools fmore"><button type="button" class="btn btn--secondary btn--sm" data-fmore data-phone-ok aria-haspopup="true">필터${n ? ` (${n})` : ''}</button><div class="gpop gpop--filters" hidden><div class="gpop__t"><span>필터</span><button type="button" class="fsheet__x" data-fclose aria-label="닫기">✕</button></div>${raw(inner)}<div class="fsheet__f"><button type="button" class="btn btn--primary" data-fclose data-phone-ok>적용</button></div></div></span>`;
 let keepSheet = false;   // a filter changed inside the phone sheet → the page redraws; reopen the sheet until 적용 / ✕
 export function bindMoreFilters(root) {
   root.querySelectorAll('[data-fmore]').forEach((btn) => {
@@ -20,19 +21,12 @@ export function bindMoreFilters(root) {
     pop.addEventListener('change', () => { keepSheet = isPhone(); }, true);
     if (keepSheet) { pop.hidden = false; keepSheet = false; }
   });
-  bindPhoneMore(root);
 }
 
-/** Phone width (<640px), decided at render time like the grid's card mode. */
-export const isPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width:640px)').matches;
-/** K18: on phones the secondary toolbar actions (컬럼 · Excel · 정의서 · 마일스톤 …) sit behind one ⋯ menu. Each item clicks the
- * original control (kept in the DOM, hidden by `.ph-hide`), so the page's own bindings work unchanged. items: [{ label, sel }] */
-export const phoneMore = (items) => (isPhone() && items.length ? html`<span class="gtools pmore"><button type="button" class="btn btn--secondary btn--sm" data-pmore aria-haspopup="true" aria-label="더보기">⋯</button><div class="gpop" hidden>${raw(items.map((i) => html`<button type="button" class="gpop__i linkbtn" data-proxy="${i.sel}">${i.label}</button>`).join(''))}</div></span>` : '');
-function bindPhoneMore(root) {
-  const btn = root.querySelector('[data-pmore]'); if (!btn) return; const pop = btn.nextElementSibling;
-  btn.onclick = (e) => { e.stopPropagation(); const open = pop.hidden; document.querySelectorAll('.gpop').forEach((x) => { x.hidden = true; }); pop.hidden = !open; };
-  pop.onclick = (e) => { const b = e.target.closest('[data-proxy]'); if (!b) return; e.stopPropagation(); pop.hidden = true; const t = root.querySelector(b.dataset.proxy); if (t) t.click(); };
-}
+/** Phone width (< 768px, core/device.js), decided at render time like the grid's card mode. */
+export { isPhone };
+/** Phone = view mode: a list toolbar is search + 필터 (n) + tabs, so every other filter control moves into the 필터 sheet. */
+export const phoneFilters = (inner, keys, q) => (isPhone() ? moreFilters(inner, keys.filter((k) => q.get(k)).length) : inner);
 
 /**
  * Applied-filter chips. defs: [{ key, label, map?, format?(value) }]. Values can be comma lists.

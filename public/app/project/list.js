@@ -6,6 +6,7 @@ import { createGrid } from '../shared/grid.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
 import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
+import { isPhone } from '../core/device.js';
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 
 /** Project-0 home: one clear CTA + how RELAI guides a project (product UI, not a landing page). Members see the join message instead. */
@@ -42,16 +43,16 @@ export async function projectsPage(main = $("#main")) {
     grid.setRows(filtered());
     main.innerHTML = html`<div class="page">
       <div class="page__head"><div><h1>프로젝트</h1><p>${state.workspace.name} · ${all.length}개</p></div>
-        ${raw(canManage() ? '<a class="btn btn--primary" href="/app/projects/new" data-link>+ 새 프로젝트</a>' : '')}</div>
+        ${raw(canManage() && !isPhone() ? '<a class="btn btn--primary" href="/app/projects/new" data-link>+ 새 프로젝트</a>' : '')}</div>
       <div class="ptoolbar"><input class="input input--sm" id="pq" type="search" placeholder="프로젝트 검색" value="${q}" style="width:220px">
         <select class="select select--sm" id="pst" style="max-width:120px"><option value="">상태</option>${raw(Object.entries(STATUS).filter(([k]) => k !== 'ARCHIVED').map(([k, l]) => html`<option value="${k}" ${status === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
-        <label class="toggle"><input type="checkbox" id="arch" ${showArchived ? 'checked' : ''}> 보관된 프로젝트 보기</label>
+        ${raw(isPhone() ? '' : html`<label class="toggle"><input type="checkbox" id="arch" ${showArchived ? 'checked' : ''}> 보관된 프로젝트 보기</label>`)}
         <span class="rtool__sp"></span>${raw(grid.toolsHtml())}</div>
       <div class="ptable">${raw(grid.html())}</div></div>`;
     grid.bind(main);
     const pq = $('#pq'); pq.oninput = () => { q = pq.value.trim(); grid.setRows(filtered()); grid.refresh(); };
     $('#pst').onchange = (e) => { status = e.target.value; grid.setRows(filtered()); grid.refresh(); };
-    $('#arch').onchange = async (e) => { showArchived = e.target.checked; await load(); draw(); };
+    if ($('#arch')) $('#arch').onchange = async (e) => { showArchived = e.target.checked; await load(); draw(); };
   };
   await load(); draw();
 }

@@ -2,6 +2,7 @@
  * Generation uses the existing weekly-report builder (server/reports.js: WBS/Changes/Issues/Tests history for the period);
  * no AI draft is produced here. */
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, fmtDT, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { toast } from '../shared/dialogs.js';
@@ -23,7 +24,7 @@ const RS = { DRAFT: ['초안', 'chip--muted'], FINAL: ['확정', 'chip--done'] }
 
 export async function reportsPage(pid, main = $('#main')) {
   const [g, data] = await Promise.all([api('GET', wsApi(`/${pid}`)), api('GET', wsApi(`/${pid}/weekly-reports`))]);
-  const p = g.project; const archived = p.status === 'ARCHIVED';
+  const p = g.project; const archived = p.status === 'ARCHIVED' || isPhone();   // phone = view mode: no 생성 buttons
   document.title = `주간보고 — ${p.name} — RELAI`;
   const items = data.items || [];
   const generate = (def = data.default_period) => periodDialog(def, async (period) => {
@@ -32,6 +33,7 @@ export async function reportsPage(pid, main = $('#main')) {
   });
   main.innerHTML = html`<div class="page page--wide page--flow">
     ${raw(projectHead(p, g, { tab: 'overview-reports', title: '주간보고' }))}
+    ${raw(pcLine())}
     <section class="ovsec rpl" aria-labelledby="rplT">
       <div class="ovsec__h"><h2 id="rplT">주간보고</h2><small class="ovsec__ctx">보고 기간의 WBS · 변경 · 이슈 · 테스트 이력을 모아 초안을 만들고, 편집 후 확정합니다.</small>
         ${raw(archived ? '' : html`<span class="rpl__btns">${raw(completionBtn(p, items))}<button type="button" class="btn btn--primary btn--sm rpl__new" id="rp-new">주간보고 생성</button></span>`)}</div>

@@ -81,15 +81,11 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(`${A.url}/wbs?view=gantt`); await page.waitForSelector('.wempty');
   check('Gantt 0건 copy', /작업에 시작일·종료일을 넣으면 여기에 일정표가 그려집니다\./.test(await page.textContent('.wempty')));
 
-  /* ---------- 375px: empty state + skeleton dialog ---------- */
+  /* ---------- 375px = view mode: empty state without the skeleton trigger, PC line instead ---------- */
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(`${A.url}/wbs`); await page.waitForSelector('.wempty');
-  const bw = await page.$eval('#skel', (b) => b.getBoundingClientRect().width);
-  check('375px: empty-state primary is full width, no sideways scroll', bw > 300 && (await page.evaluate(() => document.documentElement.scrollWidth)) <= 376, `${bw}`);
+  check('375px: no 뼈대 만들기 trigger, one PC line, no sideways scroll', !(await page.$('#skel')) && (await page.$$('.pcline')).length === 1 && (await page.evaluate(() => document.documentElement.scrollWidth)) <= 376);
   await shot('03-wbs-empty-375.png');
-  await page.click('#skel'); await page.waitForSelector('.dialog .skel');
-  await shot('04-skeleton-dialog-375.png');
-  await page.click('.dialog [data-v="0"]');
   await page.setViewportSize({ width: 1440, height: 900 });
 
   /* ---------- US-2 skeleton via ?skeleton=1 (What's Next CTA) ---------- */
@@ -202,10 +198,10 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(`${B.url}/wbs?sel=${bt.id}`); await page.waitForSelector('#drawer [data-field="owner"]');
   check('US-1 only the PM registered → hint + 이해관계자 추가 link', /팀원을 01 착수 › 이해관계자에 추가하면 계정 없이 담당자로 지정할 수 있습니다\./.test(await page.textContent('#drawer .whint')) && /definition\?activity=STAKEHOLDERS/.test(await page.getAttribute('#drawer .whint a', 'href')));
   await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto(`${B.url}/wbs?sel=${bt.id}`); await page.waitForSelector('#drawer [data-field="owner"]');
-  await page.$eval('#drawer [data-field="owner"]', (e) => e.scrollIntoView());
-  check('375px: owner picker without sideways scroll', (await page.evaluate(() => document.documentElement.scrollWidth)) <= 376);
-  await shot('11-owner-picker-375.png');
+  await page.goto(`${B.url}/wbs?sel=${bt.id}`); await page.waitForSelector('#drawer:not([hidden]) .drawer__x'); await page.waitForTimeout(300);
+  check('375px: read-only detail (no owner picker, no input), one PC line, no sideways scroll', !(await page.$('#drawer [data-field="owner"]')) && (await page.$$eval('#drawer input, #drawer select, #drawer textarea', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).length)) === 0
+    && (await page.$$('.pcline')).length === 1 && (await page.evaluate(() => document.documentElement.scrollWidth)) <= 376);
+  await shot('11-wbs-detail-375.png');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(B.url); await page.waitForSelector('.np__list');
   const msRow = await page.textContent('.np__row:has-text("마일스톤 등록")');

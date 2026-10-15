@@ -11,6 +11,7 @@
  */
 import { esc, html, raw, fmtShort } from '../core/dom.js';
 import { store } from '../core/ui.js';
+import { isPhone } from '../core/device.js';
 
 const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
 const SIZES = [50, 100, 200, 500];
@@ -21,7 +22,7 @@ const pairs = (o) => (Array.isArray(o) ? o : Object.entries(o || {}));
 export function createGrid(cfg) {
   const cols = cfg.columns;
   const prefs = store.get(`grid.${cfg.key}`, {}) || {};
-  const select = cfg.select !== false;
+  const select = cfg.select !== false && !isPhone();   // phone = view mode: card rows, no checkboxes, no inline edit
   const st = {
     rows: [],
     sort: cfg.sortable === false ? null : (prefs.sort || cfg.defaultSort || null),
@@ -62,7 +63,7 @@ export function createGrid(cfg) {
 
   /* ---------- markup ---------- */
   const cell = (c, r) => {
-    const ed = c.edit && (!cfg.canEdit || cfg.canEdit(r, c)) ? c.edit : null;
+    const ed = c.edit && !isPhone() && (!cfg.canEdit || cfg.canEdit(r, c)) ? c.edit : null;
     if (!ed) return c.render(r);
     const cur = ed.value ? ed.value(r) : r[ed.field];
     if (ed.type === 'select') {
@@ -119,9 +120,9 @@ export function createGrid(cfg) {
       <span class="gfoot__sp"></span>
       ${raw(paged ? html`<span>${from.toLocaleString('ko-KR')}–${to.toLocaleString('ko-KR')}</span>
         <select class="select select--xs" data-gsize aria-label="페이지당 행 수">${raw(SIZES.map((s) => html`<option value="${s}" ${st.size === s ? 'selected' : ''}>${s}행</option>`).join(''))}</select>
-        <button type="button" class="btn btn--secondary btn--xs" data-gprev ${st.page <= 1 ? 'disabled' : ''} aria-label="이전 페이지">‹</button>
+        <button type="button" class="btn btn--secondary btn--xs" data-phone-ok data-gprev ${st.page <= 1 ? 'disabled' : ''} aria-label="이전 페이지">‹</button>
         <span class="gfoot__pg">${st.page} / ${pages}</span>
-        <button type="button" class="btn btn--secondary btn--xs" data-gnext ${st.page >= pages ? 'disabled' : ''} aria-label="다음 페이지">›</button>` : '')}</div>`;
+        <button type="button" class="btn btn--secondary btn--xs" data-phone-ok data-gnext ${st.page >= pages ? 'disabled' : ''} aria-label="다음 페이지">›</button>` : '')}</div>`;
   };
 
   const inner = () => {

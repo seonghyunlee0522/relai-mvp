@@ -5,6 +5,7 @@
  *   on the server (activities.js): all items done → 완료, otherwise 진행 중. 완료 처리 / 건너뛰기 / 되돌리기 and the activity
  *   memo are the same stored marks What's Next uses (PATCH …/steps/:sid). Inputs save on change; no separate save button. */
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, html, raw, no2, todayLocal } from '../core/dom.js';
 import { projectHead } from './guide.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
@@ -24,7 +25,7 @@ export async function checklistPage(id) {
   let [g, r, mem] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/checklists`)), api('GET', `/api/workspaces/${state.workspace.id}/members`).catch(() => ({ members: [] }))]);
   const members = mem.members || [];
   const textMode = new Set();   // rows switched to 직접 입력 before anything is typed
-  const p = g.project; const ro = p.status === 'ARCHIVED';
+  const p = g.project; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
   let actKey = qs.get('activity');
 
   const pick = () => {
@@ -69,7 +70,7 @@ export async function checklistPage(id) {
 
   const draw = () => {
     const sel = pick();
-    if (!sel) { main.innerHTML = html`<div class="page page--wide">${raw(projectHead(p, g, { title: '체크리스트' }))}<div class="notice">체크리스트를 사용하는 업무가 없습니다.</div></div>`; return; }
+    if (!sel) { main.innerHTML = html`<div class="page page--wide">${raw(projectHead(p, g, { title: '체크리스트' }))}${raw(pcLine())}<div class="notice">체크리스트를 사용하는 업무가 없습니다.</div></div>`; return; }
     const { a, ph, siblings } = sel; actKey = a.step_key;
     history.replaceState(null, '', `/app/projects/${id}/checklist?activity=${a.step_key}`);
     document.title = `${a.title} — ${p.name} — RELAI`;
@@ -85,7 +86,7 @@ export async function checklistPage(id) {
       <span class="badge badge--st is-${stCls(s)}">${(ACTIVITY_STATE[s.state] || ACTIVITY_STATE.NOT_STARTED).label}</span>${s.title}</a>`).join('');
     main.innerHTML = html`<div class="page page--wide clk">
       ${raw(projectHead(p, g, { title: `${no2(ph.sequence)} ${ph.name}` }))}
-      ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. 체크리스트는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 체크리스트는 조회만 할 수 있습니다.</div>' : pcLine())}
       <nav class="clk__tabs" aria-label="${ph.name} 업무">${raw(tabs)}</nav>
       <section class="clk__card" aria-labelledby="clkT">
         <header class="clk__h">

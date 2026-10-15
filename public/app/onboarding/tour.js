@@ -10,6 +10,7 @@ import { navigate } from '../core/router.js';
 import { state } from '../core/state.js';
 import { toast } from '../shared/dialogs.js';
 import { ob } from './state.js';
+import { isPhone } from '../core/device.js';
 
 const MOBILE = () => window.innerWidth <= 720;
 const WAIT_MS = 1500; const POLL_MS = 100;
@@ -18,6 +19,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const T = {
   active: false, paused: false, steps: [], idx: 0, el: null, key: null,
   async start({ replay = false } = {}) {
+    if (isPhone()) return;   // phone = view mode: no product tour
     const o = await ob.get(); if (!o) { toast('가이드를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.'); return; }
     this.steps = usable(o); if (!this.steps.length) { toast('지금 화면에서는 안내할 단계가 없습니다.'); return; }
     let idx = 0;
@@ -29,6 +31,7 @@ const T = {
   },
   /** Called after every page render: resumes an in-progress tour when the page matches (refresh / after project creation). */
   async onRender() {
+    if (isPhone()) { pill(false); return; }
     if (this.active && !this.paused) { this.place(); return; }
     const o = ob.peek() || await ob.get(); if (!o || o.tour.status !== 'IN_PROGRESS' || !o.tour.current_step) { pill(false); return; }
     const cur = o.tour.steps.find((s) => s.key === o.tour.current_step);

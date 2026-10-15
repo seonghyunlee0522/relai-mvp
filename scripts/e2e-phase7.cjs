@@ -347,15 +347,13 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   const mi = (await api('POST', `${M.P}/issues`, { title: '오픈 뒤 확인할 문제', severity: 'MEDIUM' })).json; const mIssue = mi.issue || mi.item || mi;
   await api('POST', `${M.P}/go-live`, { date: T, carryovers: [{ type: 'ISSUE', id: mIssue.id, note: '운영팀 확인' }] });
   await toPhase(M, ['OPERATIONS']);
-  await mp.goto(`${M.url}?handover=1`); await mp.waitForSelector('[data-handover-dialog]');
-  await mp.selectOption(`[data-owner="ISSUE:${mIssue.id}"]`, 'TBD');
-  check('375 HANDOVER dialog = 시트 (footer 고정)', await mp.$eval('[data-handover-dialog] .gl__f', (e) => getComputedStyle(e).position === 'sticky'));
-  await shot('m-03-handover-dialog-375.png', mp); await mcheck('HANDOVER dialog');
-  await mp.selectOption('#ho-r', 's:sh-ops'); await mp.click('[data-ho-ok]'); await mp.waitForSelector('.np');
-  const mg = (await api('GET', M.P)).json;
-  await api('PATCH', `${M.P}/steps/${STEP(mg, 'CLOSE').id}`, { status: 'COMPLETED', reason: '외부 문서' });
-  await mp.goto(`${M.url}?close=1`); await mp.waitForSelector('[data-close-dialog]');
-  await shot('m-04-close-dialog-375.png', mp); await mcheck('종료 dialog');
+  // phone (< 768px) = view mode (hive research/relai-mobile-spec.md): 인수 / 종료 dialogs are PC-only
+  for (const q of ['handover', 'close']) {
+    await mp.goto(`${M.url}?${q}=1`); await mp.waitForSelector('.np'); await mp.waitForTimeout(500);
+    check(`375 ?${q}=1: dialog 없음 (PC에서) · PC 한 줄`, !(await mp.$('[data-handover-dialog], [data-close-dialog]')) && (await mp.$$('.pcline')).length === 1);
+    await mcheck(`What's Next 07 (?${q}=1)`);
+  }
+  await shot('m-03-whatsnext-07-375.png', mp);
 
   /* ---------- migration 38 ---------- */
   if (DB) {

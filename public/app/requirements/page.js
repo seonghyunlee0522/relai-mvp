@@ -1,10 +1,11 @@
 import { api, getMembers, wsApi } from '../core/api.js';
+import { pcLine } from '../core/device.js';
 import { $, fmtShort, html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { download, keepUi } from '../core/ui.js';
 import { projectHead } from '../project/guide.js';
 import { resBadge, statusChip, subtle, prText, verifyChip } from '../shared/badges.js';
-import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, moreFilters, isPhone, phoneMore } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, moreFilters, isPhone } from '../shared/filters.js';
 import { emptyFiltered } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
@@ -28,7 +29,7 @@ export async function requirementsPage(id) {
   const p = g.project;
   // WBS guidance (이동 배너 · 연결 안내 · Delivery Trace · KPI 'WBS 미연결' · 표의 'WBS 없음' 칩) belongs to 03 분석·설계 onward (Phase 2 US-4, P-1)
   const wbsPhase = () => Boolean(g.current_phase && g.current_phase.sequence >= 3);
-  const archived = p.status === 'ARCHIVED';
+  const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
   document.title = `Requirements — ${p.name} — RELAI`;
   const rApi = (s = '') => wsApi(`/${id}/requirements${s}`);
   const meId = state.user.id;
@@ -39,8 +40,8 @@ export async function requirementsPage(id) {
   const rview = () => (params().get('view') === 'trace' ? 'trace' : 'list');
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
-  let rows = []; let summary = g.requirements; let sel = null; let creating = params().get('new') === '1';
-  let apvOpen = params().get('approval') === '1' && Boolean(baseline && baseline.step_id); let bw = null; let confirmAll = true;   // 요구사항 기준선 승인 Drawer (Phase 2 US-1)
+  let rows = []; let summary = g.requirements; let sel = null; let creating = params().get('new') === '1' && !archived;   /* archived / phone: no create form */
+  let apvOpen = params().get('approval') === '1' && !archived && Boolean(baseline && baseline.step_id); let bw = null; let confirmAll = true;   // 요구사항 기준선 승인 Drawer (Phase 2 US-1) — not when archived / on a phone
   let dtab = 'info'; let actFilter = 'ALL';
   // Arrived from an approved Change Request → edits are recorded with that CR as the history source.
   let ctxCr = null;
@@ -64,7 +65,7 @@ export async function requirementsPage(id) {
   /* ---------- grids ---------- */
   const ro = (r) => archived || Boolean(r.archived_at);
   const listGrid = createGrid({
-    key: 'req.list', rowId: (r) => r.id, defaultSort: { key: 'display_id', dir: 'asc' }, pageSize: 100,
+    key: 'req.list', rowId: (r) => r.id, tableClass: 'gtable--req', defaultSort: { key: 'display_id', dir: 'asc' }, pageSize: 100,
     rowClass: (r) => (r.archived_at ? 'is-arch' : ''), canEdit: (r) => !ro(r),
     activeId: () => (sel ? sel.id : null),
     onOpen: (rid) => openDetail(rid),
@@ -176,7 +177,7 @@ export async function requirementsPage(id) {
     const phone = isPhone(); const quick = html`${raw(filterSelect('status', '상태', REQ_STATUS, q.get('status')))}${raw(filterSelect('scope', '범위', REQ_SCOPE, q.get('scope')))}`;
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : q.get('type') === 'UNSPECIFIED' || q.get('priority') === 'UNSPECIFIED' ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived && wbsPhase() ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
       ${raw(summary.total && wbsPhase() ? coachMark('REQ_TRACE_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 History에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
@@ -189,8 +190,6 @@ export async function requirementsPage(id) {
           ${raw(filterSelect('priority', '우선순위', REQ_PRIORITY, q.get('priority')))}
           ${raw(filterSelect('link', '연결 상태', LINK_F, q.get('link')))}
           <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, [...(phone ? ['status', 'scope'] : []), 'owner', 'type', 'priority', 'link', 'archived'].filter((k) => q.get(k)).length))}
-        ${raw(phoneMore([...(archived ? [] : [{ label: 'Excel로 가져오기…', sel: '[data-xl="import"]' }]), { label: 'Excel 등록 템플릿', sel: '[data-xl="template"]' }, { label: 'Excel로 내보내기', sel: '[data-xl="export"]' },
-          { label: '요구사항 정의서 PDF', sel: '[data-reqdoc="pdf"]' }, { label: '요구사항 정의서 Word', sel: '[data-reqdoc="docx"]' }, ...(ai.enabled && !archived ? [{ label: 'AI로 요구사항 추출', sel: '#ai-extract' }] : [])]))}
         <span class="rtool__sp"></span>
         ${raw(rview() === 'list' ? html`<span class="ph-hide">${raw(listGrid.toolsHtml())}</span>` : '')}
         <span class="gtools ph-hide"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
@@ -201,6 +200,7 @@ export async function requirementsPage(id) {
       </div>
       <div class="rrow2"><div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
       ${raw(archived || rview() === 'trace' ? '' : html`<form class="qa" id="qa"><input class="input input--sm" id="qa-t" maxlength="200" placeholder="제목 입력 후 Enter — 요구사항 연속 추가" title="상세 항목은 목록에서 바로 수정하거나 행을 클릭해 입력하세요" autocomplete="off"></form>`)}</div>
+      ${raw(isPhone() ? '<p class="pcdl" data-phone-reqdoc>요구사항 정의서 <button type="button" class="link linkbtn" data-reqdoc="pdf" data-phone-ok>PDF</button> · <button type="button" class="link linkbtn" data-reqdoc="docx" data-phone-ok>Word</button></p>' : '')}
       ${raw(appliedFilters(q, FILTER_DEFS))}
       ${raw(q.get('scope') === 'UNDECIDED' && scopeOut().length ? html`<p class="req-excl" data-scope-excl>착수 때 제외하기로 한 것: <b>${scopeOut().join(', ')}</b>. 여기에 해당하는 요구사항은 '범위 외'로 두세요.</p>` : '')}
       <div id="bulkslot"></div>

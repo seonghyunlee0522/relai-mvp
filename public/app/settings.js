@@ -1,5 +1,6 @@
 import { api, resetMembers } from './core/api.js';
 import { $, fmtShort, html, raw } from './core/dom.js';
+import { isPhone, pcLine } from './core/device.js';
 import { state } from './core/state.js';
 import { confirmDialog, toast } from './shared/dialogs.js';
 import { relTime } from './shared/jira.js';
@@ -18,7 +19,7 @@ export async function settingsPage(main = $('#main')) {
   document.title = '설정 — RELAI';
   const wid = state.workspace.id;
   let integ; const [{ workspace }, { members }, integ0] = await Promise.all([api('GET', `/api/workspaces/${wid}`), api('GET', `/api/workspaces/${wid}/members`), api('GET', `/api/workspaces/${wid}/integrations`).catch(() => null)]);
-  integ = integ0; const perm = workspace.permissions; const me = state.user.id;
+  integ = integ0; const perm = isPhone() ? { ...workspace.permissions, member_manage: false, workspace_settings: false, integration_manage: false } : workspace.permissions; const me = state.user.id;   // phone = view mode: no member / workspace / Jira management
   // Plan & billing (Phase 10): plan, usage against limits, OWNER-only purchase (cycle × users, server-quoted, VAT excluded) / cancel.
   let billing = null; const loadBilling = async () => { try { billing = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch { billing = null; } };
   await loadBilling();
@@ -112,7 +113,7 @@ export async function settingsPage(main = $('#main')) {
   };
   const draw = (members) => {
     resetMembers();
-    main.innerHTML = html`<div class="page page--narrow page--guide"><div class="page__head"><h1>설정</h1></div>
+    main.innerHTML = html`<div class="page page--narrow page--guide"><div class="page__head"><div><h1>설정</h1>${raw(pcLine())}</div></div>
     <div class="panel" id="profile"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd><form id="mef" class="inline-form"><input class="input input--sm" name="name" value="${state.user.name}" maxlength="50" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form></dd>
       <dt>이메일</dt><dd>${state.user.email}</dd>
@@ -126,14 +127,14 @@ export async function settingsPage(main = $('#main')) {
       ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">Workspace 삭제</button></div>' : '')}</div></div>
     ${raw(billingCard())}
     <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
-      <div class="rtable-wrap--in"><table class="rtable rtable--raid" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
+      <div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
       <tbody>${raw(members.map((m) => html`<tr>
         <td>${m.name}${raw(m.id === me ? ' <small class="dim">(나)</small>' : '')}</td><td class="dim">${m.email}</td>
         <td>${raw(perm.member_manage ? html`<select class="select select--sm" data-role="${m.id}">${raw(Object.entries(ROLE).map(([k, l]) => html`<option value="${k}" ${m.role === k ? 'selected' : ''} ${k === 'OWNER' && !perm.owner_grant ? 'disabled' : ''}>${l}</option>`).join(''))}</select>` : ROLE[m.role])}</td>
         <td class="dim">${fmtShort(m.created_at)}</td>
         ${raw(perm.member_manage ? html`<td><button class="link linkbtn" data-remove="${m.id}" style="width:auto;color:#B42318">제거</button></td>` : '')}</tr>`).join(''))}</tbody></table></div>
       ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
-    </div>${raw(inviteTable())}${raw(jiraCard())}</div>`;
+    </div>${raw(inviteTable())}${raw(isPhone() ? '' : jiraCard())}${raw(isPhone() ? '<button type="button" class="btn btn--secondary phone-logout" data-logout data-phone-ok>로그아웃</button>' : '')}</div>`;
     members0 = members; bindBuy();
     const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 Free 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });

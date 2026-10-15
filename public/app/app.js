@@ -1,5 +1,6 @@
 /* RELAI app entry — wires routes to page modules. All pages are ES modules under /assets/. */
 import { registerRoutes, render } from './core/router.js';
+import { onDeviceChange } from './core/device.js';
 import { shell } from './shell.js';
 import { authPage, forgotPage, resetPage, verifyPage } from './auth.js';
 import { invitePage } from './invite.js';
@@ -67,4 +68,5 @@ registerRoutes([
   [/^\/admin\/audit\/?$/, adminAuditPage],
 ], { shell: (path, view, token) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view, token)), auth: authPage, invite: invitePage,
   account: { 'forgot-password': forgotPage, 'reset-password': resetPage, 'verify-email': verifyPage } });
+onDeviceChange(render);   // rotate / resize across 768px → same page in the other mode, no reload
 render();

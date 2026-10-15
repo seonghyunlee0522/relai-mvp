@@ -275,29 +275,22 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   const C = await mkProject('모바일 확인');
   const RC = await mkReqs(C, 3);
   await toPhase(C, ['REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING']);
-  await mp.goto(`${C.url}/tests`); await mp.waitForSelector('[data-empty="tests"]');
-  const ew = await mp.$eval('#gen', (b) => [Math.round(b.getBoundingClientRect().width), document.documentElement.scrollWidth]);
-  check('375px 빈 상태: primary 전체 폭, 가로 스크롤 없음', ew[0] >= 300 && ew[1] <= 375, JSON.stringify(ew));
+  // phone (< 768px) = view mode (hive research/relai-mobile-spec.md): generate / run / exclude are PC-only; the PC line replaces them
+  const vw = () => mp.evaluate(() => document.documentElement.scrollWidth);
+  await mp.goto(`${C.url}/tests`); await mp.waitForSelector('[data-phone-empty]');
+  check('375px 빈 상태: 생성 버튼 없음 · PC 한 줄 · 가로 스크롤 없음', !(await mp.$('#gen')) && (await mp.$$('.pcline')).length === 1 && (await vw()) <= 375);
   await shot('m-01-tests-empty.png', mp);
-  await mp.click('#gen'); await mp.waitForSelector('.dialog .skel');
-  await shot('m-02-generate-dialog.png', mp);
-  await mp.click('.dialog [data-v="1"]'); await toastText(mp);
+  await api('POST', `${C.P}/tests/from-requirements`, {});
   const tm = (await api('GET', `${C.P}/tests`)).json.items[0];
   const fm = (await api('POST', `${C.P}/tests/${tm.id}/executions`, { result: 'FAIL', actual_result: '오류' })).json.execution;
   await api('POST', `${C.P}/tests/${tm.id}/executions/${fm.id}/issue`, {});
-  await mp.goto(`${C.url}/tests?sel=${tm.id}`); await mp.waitForSelector('#drawer #run');
-  await mp.click('#run'); await mp.waitForSelector('[data-dialog="run"]'); await mp.click('[data-dialog="run"] .resq--pass');
-  const rw = await mp.evaluate(() => document.documentElement.scrollWidth);
-  check('375px 실행 dialog (이슈 체크 포함): 가로 스크롤 없음, 체크박스 보임', rw <= 375 && !(await mp.$eval('#rd-resolve', (e) => e.hidden)), `scrollWidth=${rw}`);
-  await shot('m-03-run-dialog-issue.png', mp);
-  await mp.click('[data-dialog="run"] [data-v="0"]');
-  const [RX] = await mkReqs(C, 1);   // a confirmed requirement without a test → 테스트 추가 · 테스트 제외
+  await mp.goto(`${C.url}/tests?sel=${tm.id}`); await mp.waitForSelector('#drawer:not([hidden]) .drawer__x'); await mp.waitForTimeout(300);
+  check('375px 테스트 상세: 실행 버튼 없음 · 입력칸 없음 · 가로 스크롤 없음', !(await mp.$$eval('#drawer #run', (els) => els.some((e) => e.getBoundingClientRect().width > 0))) && (await mp.$$eval('#drawer input, #drawer select, #drawer textarea', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).length)) === 0 && (await vw()) <= 375);
+  await shot('m-03-test-detail.png', mp);
+  await mkReqs(C, 1);   // a confirmed requirement without a test
   await mp.goto(`${C.url}/tests?tab=coverage`); await mp.waitForSelector('[data-cov-sum]');
+  check('375px 커버리지: 테스트 추가 · 제외 없음 · 가로 스크롤 없음', !(await mp.$$eval('[data-exclude], a[href*="tests?new=1"]', (els) => els.some((e) => e.getBoundingClientRect().width > 0))) && (await vw()) <= 375);
   await shot('m-04-coverage.png', mp);
-  await mp.click(`[data-exclude="${RX.id}"]`); await mp.waitForSelector('[data-dialog="exclude"]'); await mp.fill('#ex-in', '문서로 대체');
-  const exB = await mp.$$eval('[data-dialog="exclude"] .actions .btn', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return { t: e.textContent.trim(), y: Math.round(r.y), w: Math.round(r.width) }; })).catch(() => []);
-  check('375px 제외 dialog: 버튼 세로, primary 위', exB.length === 2 && exB.find((b) => b.t === '제외').y < exB.find((b) => b.t === '취소').y && exB[0].w >= 250, JSON.stringify(exB));
-  await shot('m-05-exclude-dialog.png', mp);
   await m.close();
 
   await browser.close();

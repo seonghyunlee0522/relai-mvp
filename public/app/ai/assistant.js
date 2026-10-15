@@ -3,6 +3,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, esc, html, raw } from '../core/dom.js';
 import { aiErrorMessage, aiStatus, canRun, creditLine } from '../shared/ai.js';
+import { isPhone } from '../core/device.js';
 
 const SUGGEST = ['지금 프로젝트에서 가장 위험한 것은?', '이번 주에 확인할 건 뭐야?', 'WBS에 연결되지 않은 요구사항이 있어?', '테스트 실패한 항목 정리해줘', '오픈 일정에 영향을 줄 만한 건 뭐야?'];
 const TYPE_LABEL = { REQUIREMENT: 'REQ', WBS: 'WBS', CHANGE: 'CR', ISSUE: '이슈', RISK: 'Risk', TEST: 'Test', ACCEPTANCE: 'Acc.' };
@@ -11,10 +12,12 @@ const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+
 
 /** Shows the header CTA once the status says AI is on (the header is rendered synchronously, before the status is known). */
 export function revealAskButton(pid) {
+  if (isPhone()) return;   // phone = view mode: no AI assistant
   aiStatus(pid).then((st) => { document.querySelectorAll(`[data-ai-ask="${pid}"]`).forEach((b) => { b.hidden = !st.enabled; }); });
 }
 
 export async function openAssistant(pid) {
+  if (isPhone()) return;
   document.querySelector('.aipanel')?.remove();
   const st = await aiStatus(pid, { fresh: true });
   const history = sessions.get(pid) || []; sessions.set(pid, history);

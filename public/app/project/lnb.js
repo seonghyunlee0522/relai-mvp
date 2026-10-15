@@ -107,6 +107,7 @@ export function mountLnb(p, g, activeKey = null) {
     <div class="side__bottom side__bottom--project">
       <a class="navlink" href="/app" data-link title="홈"><span class="lnb__ic">⌂</span><span class="nl">홈</span></a>
       <a class="navlink" href="/app/settings" data-link title="설정"><span class="lnb__ic">⚙</span><span class="nl">설정</span></a>
+      <button type="button" class="navlink linkbtn phone-only" data-logout title="로그아웃"><span class="lnb__ic">⇥</span><span class="nl">로그아웃</span></button>
       <button type="button" class="navlink linkbtn side__fold" id="fold" title="메뉴 접기/펼치기"><span class="lnb__ic">⇤</span><span class="nl">메뉴 접기</span></button>
     </div>`;
   const fold = $('#fold', side);

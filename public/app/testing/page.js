@@ -1,11 +1,12 @@
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, fmtDT, fmtShort, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { state } from '../core/state.js';
 import { projectHead } from '../project/guide.js';
 import { resBadge, verifyChip } from '../shared/badges.js';
 import { ACC_ACTIONS, ACC_ACTION_LABEL, ACC_STATUS, ACC_STATUS_CHIP, ISSUE_STATUS, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RESULT, TC_PRIORITY, TC_STATUS, TC_STATUS_CHIP, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE, testSummaryText } from '../shared/constants.js';
-import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, phoneFilters } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
@@ -24,7 +25,7 @@ export async function testsPage(id) {
   const main = $('#main');
   const g = await api('GET', wsApi(`/${id}`));
   const p = g.project;
-  const archived = p.status === 'ARCHIVED';
+  const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
   const { members } = await api('GET', `/api/workspaces/${state.workspace.id}/members`);
   const params = () => new URLSearchParams(location.search);
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
@@ -36,7 +37,7 @@ export async function testsPage(id) {
   const filterKeys = () => (isAcc() ? ACC_F : CASE_F);
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys()]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
-  let rows = []; let cov = []; let ts = g.tests; let ac = g.acceptances; let sel = null; let creating = params().get('new') === '1'; let dtab = 'info';
+  let rows = []; let cov = []; let ts = g.tests; let ac = g.acceptances; let sel = null; let creating = params().get('new') === '1' && !archived;   /* archived / phone: no create form */ let dtab = 'info';
   const load = async () => {
     if (isCases()) { const d = await api('GET', tApi(listQuery())); rows = d.items; ts = d.tests; }
     else if (isAcc()) { const d = await api('GET', aApi(listQuery())); rows = d.items; ac = d.acceptances; }
@@ -57,6 +58,7 @@ export async function testsPage(id) {
   document.title = `테스트 — ${p.name} — RELAI`;
   // Phase 5 US-5: '최근 결과' is the default; '상태' column is hidden until switched on (per viewer, browser storage)
   const COLST = 'relai.tests.statusCol'; let showStatus = false; try { showStatus = localStorage.getItem(COLST) === '1'; } catch {}
+  if (isPhone()) showStatus = false;   // phone card = TC-006 + 최근 결과 / 제목 / 요구 · 담당 · 우선순위
   const before06 = ['INITIATION', 'REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING'].includes(p.current_phase);   // US-7: 검수 탭 꼬리표 "06에서 진행"
   let performers = { team: [], clients: [] };
   /* Phase 6 US-1: 검수 승인 = 고객 승인 기록 (the 01·02·04 approval Drawer, 4th reuse) — working copy · 'approve' (요청 → 승인) | 'record' (승인 기록 추가) */
@@ -70,7 +72,7 @@ export async function testsPage(id) {
     const hasFilter = ['q', ...filterKeys(), 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('tab') === 'acceptance' ? 'acceptance' : q.get('tab') === 'coverage' ? 'test-plan' : q.get('last_result') === 'FAIL' ? 'defects' : 'tests'; })(), title: new URLSearchParams(location.search).get('tab') === 'acceptance' ? '검수 / 인수 승인' : '테스트' }))}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 테스트와 검수는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 테스트와 검수는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(T === 'acceptance' ? coachMark('ACCEPTANCE_INTRO') : coachMark('TESTING_INTRO'))}
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객이 결과물을 확인하고 승인하는 검수를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">
         <button class="${T === 'cases' ? 'is-on' : ''}" data-tab="cases" role="tab">테스트 케이스${raw(ts.total ? html`<em>${ts.total}</em>` : '')}</button>
@@ -86,11 +88,11 @@ export async function testsPage(id) {
         : '')}</div>
       ${raw(T === 'coverage' || (T === 'cases' && !rows.length && !hasFilter) ? '' : html`<div class="rtool">
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
-        ${raw(T === 'cases' ? html`${raw(filterSelect('last_result', '최근 결과', RESULT, q.get('last_result')))}${raw(filterSelect('status', '상태', TC_STATUS, q.get('status')))}
+        ${raw(phoneFilters(html`${raw(T === 'cases' ? html`${raw(filterSelect('last_result', '최근 결과', RESULT, q.get('last_result')))}${raw(filterSelect('status', '상태', TC_STATUS, q.get('status')))}
           ${raw(filterSelect('priority', '우선순위', TC_PRIORITY, q.get('priority')))}${raw(filterSelect('owner', '담당자', ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}`
         : html`${raw(filterSelect('status', '상태', ACC_STATUS, q.get('status')))}`)}
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
-        ${raw(T === 'cases' ? html`<label class="toggle" title="열 표시"><input type="checkbox" id="colst" ${showStatus ? 'checked' : ''}> 상태 열</label>` : '')}
+        ${raw(T === 'cases' ? html`<label class="toggle" title="열 표시"><input type="checkbox" id="colst" ${showStatus ? 'checked' : ''}> 상태 열</label>` : '')}`, ['last_result', 'status', 'priority', 'owner', 'archived'], q))}
         <span class="rtool__sp"></span>
         ${raw(T === 'cases' ? html`<span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>` : '')}
@@ -118,7 +120,7 @@ export async function testsPage(id) {
   };
   /** K10: no 기대 결과 anywhere (field or steps) → a grey hint in the list. */
   const noExpected = (x) => !String(x.expected_result || '').trim() && !(Array.isArray(x.steps) && x.steps.some((st) => String(st.expected || '').trim()));
-  const caseTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>최근 결과</th><th>요구사항</th>${raw(showStatus ? '<th>상태</th>' : '')}<th>우선순위</th><th>담당자</th><th class="num">실행</th><th>수정일</th></tr></thead>
+  const caseTable = () => html`<table class="rtable rtable--raid rtable--tc"><thead><tr><th>ID</th><th>제목</th><th>최근 결과</th><th>요구사항</th>${raw(showStatus ? '<th>상태</th>' : '')}<th>우선순위</th><th>담당자</th><th class="num">실행</th><th>수정일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
       <td class="ttl"><span>${x.title}</span>${raw(x.archived_at ? '<small>보관됨</small>' : '')}${raw(noExpected(x) ? '<small class="dim">기대 결과 없음</small>' : '')}${raw(carryTag(carry, 'TEST', x.id))}</td>
@@ -127,7 +129,7 @@ export async function testsPage(id) {
       ${raw(showStatus ? html`<td>${raw(statusChip(TC_STATUS, TC_STATUS_CHIP, x.status))}</td>` : '')}<td>${raw(prText(x.priority))}</td>
       <td>${x.owner_name || raw('<span class="dim">-</span>')}</td>
       <td class="num">${x.execution_count || raw('<span class="dim">0</span>')}</td><td class="dim">${fmtShort(x.updated_at)}</td></tr>`).join(''))}</tbody></table>`;
-  const accTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>상태</th><th class="num">대상 요구사항</th><th>테스트 상태</th><th>요청일</th><th>기한</th><th>수정일</th></tr></thead>
+  const accTable = () => html`<table class="rtable rtable--raid rtable--acc"><thead><tr><th>ID</th><th>제목</th><th>상태</th><th class="num">대상 요구사항</th><th>테스트 상태</th><th>요청일</th><th>기한</th><th>수정일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
       <td class="ttl"><span>${x.title}</span>${raw(x.archived_at ? '<small>보관됨</small>' : '')}${raw(carryTag(carry, 'ACCEPTANCE', x.id))}</td>
@@ -422,6 +424,7 @@ export async function testsPage(id) {
   };
 
   const bind = () => {
+    bindMoreFilters(main);   // phone: 필터 sheet
     main.querySelectorAll('[data-tab]').forEach((b) => b.onclick = async () => { const next = b.dataset.tab; if (next === tab()) return; for (const k of ['q', ...CASE_F, ...ACC_F, 'archived', 'sel', 'new']) setParam(k, ''); setParam('tab', next === 'cases' ? '' : next); sel = null; creating = false; await load(); draw(); });
     const qi = $('#q'); let qt;
     if (qi) qi.oninput = () => { clearTimeout(qt); qt = setTimeout(async () => { setParam('q', qi.value.trim()); await load(); draw(); $('#q').focus(); $('#q').setSelectionRange(99, 99); }, 350); };

@@ -10,6 +10,7 @@
  * No nested drawers: Excel upload for 이해관계자 is a modal on top of the drawer. Completion is the INITIATION step status
  * (server/definition.js), so What's Next, the LNB badge and the phase gate all read the same source. */
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, no2, fmtShort, html, raw } from '../core/dom.js';
 import { download, fileToBase64 } from '../core/ui.js';
 import { projectHead, moveToPhase } from './guide.js';
@@ -65,7 +66,7 @@ const STATE_ICON = { done: '✓', skip: '—', review: '!', prog: '●', todo: '
 export async function definitionPage(id) {
   const main = $('#main');
   let [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`))]);
-  const p = g.project; const ro = p.status === 'ARCHIVED';
+  const p = g.project; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
   document.title = `01 착수 · 프로젝트 정의 — ${p.name} — RELAI`;
   const u = `/app/projects/${p.id}`;
   const fresh = () => {   // definition + 프로젝트 기본 특성 (stored on the project)
@@ -121,7 +122,7 @@ export async function definitionPage(id) {
         <div class="pvp__h"><div><b>프로젝트 기본 특성</b><small>프로젝트 유형과 수행 환경 · 생성 시 입력한 값이며 여기서 수정합니다.</small></div>${raw(ro ? '' : '<button type="button" class="link linkbtn pv__go" data-open="PROFILE">수정 →</button>')}</div>
         ${raw(traitGrid(m.project_traits))}
       </div>
-      ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 정의는 조회만 할 수 있습니다.</div>' : nowRow)}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 정의는 조회만 할 수 있습니다.</div>' : ro ? pcLine() : nowRow)}
       <ol class="pv__list">${raw(rows)}</ol>
       ${raw(foot)}
     </section>`;
