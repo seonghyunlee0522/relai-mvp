@@ -43,11 +43,10 @@ const globalNav = () => html`<a class="logo" href="/app" data-link><span class="
     <a class="navlink" data-nav="projects" href="/app/projects" data-link title="프로젝트" data-tour-id="nav-projects">${raw(icon.projects)}<span class="nl">프로젝트</span></a>
   </nav>
   <div class="side__bottom">
-    <a class="navlink" data-nav="settings" href="/app/settings" data-link title="설정" data-tour-id="nav-settings">${raw(icon.settings)}<span class="nl">설정</span></a>
     <div class="navlink navlink--help">${raw(helpButton())}<span class="nl">도움말</span></div>
     ${raw(state.user.system_role === 'SYSTEM_ADMIN' ? html`<a class="navlink navlink--admin" href="/admin" data-link title="Admin Console">${raw(icon.admin)}<span class="nl">Admin Console</span></a>` : '')}
-    <div class="me"><span class="avatar">${[...state.user.name][0]}</span>
-      <div class="me__t" style="min-width:0"><b>${state.user.name}</b><small>${state.user.email}</small></div></div>
+    <a class="me" data-nav="settings" href="/app/settings" data-link title="설정" data-tour-id="nav-settings"><span class="avatar">${[...state.user.name][0]}</span>
+      <div class="me__t" style="min-width:0"><b>${state.user.name}</b><small>설정 · ${state.user.email}</small></div></a>
     <button class="navlink linkbtn" id="logout" title="로그아웃">${raw(icon.logout)}<span class="nl">로그아웃</span></button>
     <button class="navlink linkbtn side__fold" id="fold" title="메뉴 접기/펼치기">${raw(icon.collapse)}<span class="nl">메뉴 접기</span></button>
   </div>`;

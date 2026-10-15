@@ -181,7 +181,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-1 7절 교훈: 빈 3칸 + placeholder', lessons.length === 3 && lessons.every(([v, ph]) => v === '' && /^예: /.test(ph)) && /요구사항 확정 승인을 일찍 받아 변경 다툼이 적었다/.test(lessons[0][1]), JSON.stringify(lessons));
   const repPrim = await primaries(page, 'main');
   check('US-1 같은 버튼 줄 (PDF · Word · 복사 · 보고서 확정 primary 1개)', repPrim.length === 1 && repPrim[0] === '보고서 확정' && (await page.$$('[data-dl]')).length === 2, JSON.stringify(repPrim));
-  check('US-1 ? 툴팁 완료보고서', /프로젝트 결과·계획 대비 차이·남은 일·교훈/.test(await page.getAttribute('.doc__meta .term', 'data-tip')));
+  check('US-1 no ? 툴팁 on 완료보고서 (fb-app: 용어 설명 removed)', !(await page.$('.doc__meta .term')));
   const enRep = enOf(await textOf('main'));
   check('US-6 완료보고서 화면 영어 UI 없음', !enRep, enRep);
   await page.waitForSelector('.rail__i.is-active', { timeout: 5000 }).catch(() => {});
@@ -206,7 +206,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   const wDef = await page.$eval('#cl-w', (e) => e.value); const dDef = await page.$eval('#cl-d', (e) => e.value);
   check('US-2 종료일 기본 오늘 · 하자보수 기본 = 종료일 + 12개월', dDef === T && wDef === addMonths(T, 12), `${dDef} ${wDef}`);
   check('US-2 dialog: 남은 운영 이관 2건 (담당 지정 1건) · [나중에] [프로젝트 종료]', /남은 운영 이관 2건 \(담당 지정 1건\)/.test(await page.textContent('[data-close-dialog]')) && /나중에/.test(await page.textContent('[data-cl-later]')) && (await page.$$('[data-close-dialog] .btn--primary')).length === 1);
-  check('US-6 ? 툴팁 하자보수', /오픈 후 일정 기간 결함을 무상으로/.test(await page.getAttribute('[data-close-dialog] .term', 'data-tip')));
+  check('US-6 no ? 툴팁 on 하자보수 (fb-app: 용어 설명 removed)', !(await page.$('[data-close-dialog] .term')));
   await shot('g-05-close-dialog.png');
   // PDF / Word sample
   for (const ext of ['pdf', 'docx']) {

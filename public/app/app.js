@@ -22,7 +22,6 @@ import { raidPage } from './raid/page.js';
 import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
 import { creditsPage } from './credits.js';
-import { watchTerms } from './shared/term-auto.js';
 import './shared/upgrade.js';   // 402 plan_limit_reached → upgrade prompt (Phase 10)
 import { adminShell } from './admin/shell.js';
 import { adminDashboardPage } from './admin/dashboard.js';
@@ -73,6 +72,5 @@ registerRoutes([
   [/^\/admin\/audit\/?$/, adminAuditPage],
 ], { shell: (path, view, token) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view, token)), auth: authPage, invite: invitePage,
   account: { 'forgot-password': forgotPage, 'reset-password': resetPage, 'verify-email': verifyPage } });
-watchTerms();   // R3b: "?" on the first WBS · 간트 · 기준선 · 마일스톤 · 완료 조건 of each page
 onDeviceChange(render);   // rotate / resize across 768px → same page in the other mode, no reload
 render();

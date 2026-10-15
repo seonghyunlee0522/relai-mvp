@@ -20,7 +20,7 @@ import { aiStatus } from '../shared/ai.js';
 import { openExtractDialog } from '../ai/extract.js';
 import { guardEdit, needsPrompt, needsAddPrompt, changePromptDialog, createChangeDraft, proposalLine } from './change-guard.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
-import { term, reqDocMenu, bindReqDocMenu } from '../project/initiation.js';
+import { reqDocMenu, bindReqDocMenu } from '../project/initiation.js';
 import { josa } from '../shared/josa.js';
 import { toolMenu, tmItem, aiPrice } from '../shared/toolmenu.js';
 import { bindArrowNav } from '../shared/drawer.js';
@@ -315,7 +315,7 @@ export async function requirementsPage(id) {
           <div class="cols2">
             <div class="field"><label>유형</label><select class="select" name="type">${raw(opt(REQ_TYPE, 'UNSPECIFIED'))}</select></div>
             <div class="field"><label>우선순위</label><select class="select" name="priority">${raw(opt(REQ_PRIORITY, 'UNSPECIFIED'))}</select><small class="hint req-phint">${PRIORITY_HINT}</small></div>
-            <div class="field"><label>범위 ${raw(term('scope'))}</label><select class="select" name="scope">${raw(opt(REQ_SCOPE, 'UNDECIDED'))}</select></div>
+            <div class="field"><label>범위</label><select class="select" name="scope">${raw(opt(REQ_SCOPE, 'UNDECIDED'))}</select></div>
             <div class="field"><label>상태</label><select class="select" name="status">${raw(opt(REQ_STATUS, 'DRAFT'))}</select></div>
             <div class="field"><label>담당자</label><select class="select" name="owner_user_id">${raw(ownerOpts(''))}</select><div class="err" data-for="owner_user_id"></div></div>
             <div class="field"></div>
@@ -324,7 +324,7 @@ export async function requirementsPage(id) {
           </div>
           <div class="field" style="margin-bottom:0"><label for="c-desc">설명</label><textarea class="textarea" id="c-desc" name="description" maxlength="5000" placeholder="요구사항의 배경과 내용을 적어주세요." style="min-height:96px"></textarea></div>
         </div>
-        <div class="fsec"><h4>완료 조건 ${raw(term('criteria'))}</h4><div id="c-crit"></div>
+        <div class="fsec"><h4>완료 조건</h4><div id="c-crit"></div>
           <div class="crit-add"><input class="input input--sm" id="c-crit-in" maxlength="1000" placeholder="완료 조건을 입력하고 Enter"><button type="button" class="btn btn--secondary btn--sm" id="c-crit-add">추가</button></div></div>
       </div>
       <div class="drawer__f"><span class="hint">Ctrl+Enter로 저장</span><span style="display:flex;gap:8px;margin-left:auto"><button class="btn btn--secondary" type="button" id="dcancel">취소</button><button class="btn btn--secondary" type="submit" data-more="1">저장 후 계속 추가</button><button class="btn btn--primary" type="submit">저장</button></span></div></form>`;
@@ -372,7 +372,7 @@ export async function requirementsPage(id) {
     const empty = !done && !c.in_scope;   // nothing in scope → no baseline to approve (Q6-2; the API refuses too)
     const methods = Object.entries(b.methods);
     d.className = 'drawer drawer--side'; d.dataset.mode = 'approval';   // the same right-side panel as 01 착수 결과 승인 (Q6-1)
-    d.innerHTML = html`<div class="wd__h"><div class="wd__ht"><b>요구사항 확정 승인(고객)${raw(done ? ' <span class="chip chip--done">승인 기록됨</span>' : '')}</b><small>확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 확정본 ${raw(term('req_baseline'))}이 됩니다.</small></div><button class="wd__ib" id="dclose" aria-label="닫기">×</button></div>
+    d.innerHTML = html`<div class="wd__h"><div class="wd__ht"><b>요구사항 확정 승인(고객)${raw(done ? ' <span class="chip chip--done">승인 기록됨</span>' : '')}</b><small>확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 확정본이 됩니다.</small></div><button class="wd__ib" id="dclose" aria-label="닫기">×</button></div>
       <div class="drawer__b apv" data-approval-drawer>
         ${raw(!done && b.bypass ? html`<div class="notice notice--soft">승인 전 진행 — 사유: ${b.bypass.reason} (${[b.bypass.date, b.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
         ${raw(done ? html`<div class="notice">고객 승인이 기록되었습니다 · ${b.summary}</div>` : '')}
@@ -424,7 +424,7 @@ export async function requirementsPage(id) {
 
   /** 완료 조건 list + add row (shared by the desktop drawer and the phone sheet). */
   const critHtml = (r, readOnly) => html`
-            <h4 class="dh">완료 조건 ${raw(term('criteria'))} <em>${r.criteria.length}</em></h4>
+            <h4 class="dh">완료 조건 <em>${r.criteria.length}</em></h4>
             <ol class="crit">${raw(r.criteria.map((c, i) => html`<li data-crit="${c.id}">
               <span class="crit__n">${i + 1}</span>
               <input class="crit__in" value="${c.content}" maxlength="1000" ${readOnly ? 'disabled' : ''} data-crit-in="${c.id}">
@@ -434,14 +434,14 @@ export async function requirementsPage(id) {
   let moreOpen = false;
   // Jim P1-2: 유형 sits with 범위·우선순위 while the 02 분류 step is open (some 유형 미지정), on the 분류·우선순위 tab, or while it is 미지정
   const typeTop = (r) => r.type === 'UNSPECIFIED' || classifyView() || Boolean(g.current_phase && g.current_phase.phase_key === 'REQUIREMENTS' && summary && Number(summary.type_unspecified) > 0);
-  const typeField = (r, readOnly) => fieldRow(html`유형 ${raw(term('nonfunctional'))}`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''} aria-label="유형">${raw(opt(REQ_TYPE, r.type))}</select>`);
+  const typeField = (r, readOnly) => fieldRow(html`유형`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''} aria-label="유형">${raw(opt(REQ_TYPE, r.type))}</select>`);
   const deskInfo = (r, readOnly) => html`<div class="dstack">
     <input class="dtitle" data-field="title" value="${r.title}" maxlength="200" ${readOnly ? 'disabled' : ''} aria-label="제목">
     <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요. 예) 고객이 주문번호로 배송 상태를 조회한다." ${readOnly ? 'disabled' : ''} aria-label="설명">${r.description}</textarea>
     ${raw(critHtml(r, readOnly))}
     <div class="dgrid">
       ${raw(typeTop(r) ? typeField(r, readOnly) : '')}
-      ${raw(fieldRow(html`범위 ${raw(term('scope'))}`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''} aria-label="범위">${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
+      ${raw(fieldRow(html`범위`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''} aria-label="범위">${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
       ${raw(fieldRow('우선순위', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''} aria-label="우선순위">${raw(opt(REQ_PRIORITY, r.priority))}</select><small class="hint req-phint">${PRIORITY_HINT}</small>`))}
       ${raw(fieldRow('담당자', html`<select class="select select--sm" data-field="owner_user_id" ${readOnly ? 'disabled' : ''} aria-label="담당자">${raw(ownerOpts(r.owner_user_id || ''))}</select>`))}
     </div>
@@ -476,9 +476,9 @@ export async function requirementsPage(id) {
           </div>
           <div class="dside">
             ${raw(fieldRow('상태', html`<select class="select select--sm" data-field="status" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_STATUS, r.status))}</select>`))}
-            ${raw(fieldRow(html`범위 ${raw(term('scope'))}`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
+            ${raw(fieldRow(html`범위`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
             ${raw(fieldRow('우선순위', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_PRIORITY, r.priority))}</select><small class="hint req-phint">${PRIORITY_HINT}</small>`))}
-            ${raw(fieldRow(html`유형 ${raw(term('nonfunctional'))}`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_TYPE, r.type))}</select>`))}
+            ${raw(fieldRow(html`유형`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_TYPE, r.type))}</select>`))}
             ${raw(fieldRow('담당자', html`<select class="select select--sm" data-field="owner_user_id" ${readOnly ? 'disabled' : ''}>${raw(ownerOpts(r.owner_user_id || ''))}</select>`))}
             ${raw(fieldRow('요청자', html`<input class="input input--sm" data-field="requester_name" value="${r.requester_name}" maxlength="100" placeholder="이름" ${readOnly ? 'disabled' : ''}>`))}
             ${raw(fieldRow('요청자 소속', html`<input class="input input--sm" data-field="requester_organization" value="${r.requester_organization}" maxlength="100" placeholder="소속" ${readOnly ? 'disabled' : ''}>`))}

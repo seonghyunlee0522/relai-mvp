@@ -15,7 +15,6 @@ import { bindDtabs, dtabs } from '../shared/detail.js';
 import { state } from '../core/state.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 import { md } from '../shared/kst-date.js';
-import { term } from '../project/initiation.js';
 import { carryIndex, carryTag, carryLine } from '../project/golive.js';
 import { approverDefault } from '../shared/owner-picker.js';
 
@@ -52,7 +51,7 @@ export async function changesPage(id) {
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(coachMark('CHANGE_REQUEST_INTRO'))}
       <div class="summary summary--inline" style="margin-bottom:8px">
-        <div><b>${summary.total}</b><span>전체 변경 요청 ${raw(term('change_request'))}</span></div>
+        <div><b>${summary.total}</b><span>전체 변경 요청</span></div>
         <div class="${summary.under_review ? 'is-warn' : ''}"><b>${summary.under_review}</b><span>검토 중</span></div>
         <div class="${summary.approved_unimplemented ? 'is-warn' : ''}"><b>${summary.approved_unimplemented}</b><span>승인 후 미반영</span></div>
         <div><b>${fmtDays(summary.approved_schedule_days)}</b><span>승인 변경 일정 영향 <small>(입력 기준)</small></span></div>
@@ -175,7 +174,7 @@ export async function changesPage(id) {
       </div>
       <div class="field"><span class="lbl">관련 요구사항</span><div id="c-reqs" class="crit-pending-list"></div><div class="actions" style="margin-top:6px"><button type="button" class="btn btn--secondary btn--sm" id="c-req-add">+ 요구사항 연결</button></div></div>
     </div>
-    <div class="drawer__f"><button class="btn btn--primary" type="submit">변경 요청 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
+    <div class="drawer__f"><button class="btn btn--secondary" type="button" id="dcancel">취소</button><button class="btn btn--primary" type="submit">변경 요청 등록</button></div></form>`;
 
   const impactSummary = (c) => {
     const liveReq = c.requirements.filter((x) => !x.archived_at).length; const liveImp = c.impacts.filter((x) => !x.archived_at).length;

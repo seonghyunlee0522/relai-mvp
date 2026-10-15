@@ -112,7 +112,7 @@ export async function raidPage(id) {
         <div class="field"><label>담당자</label><select class="select" name="owner">${raw(OP.ownerOptions(members, owners, ''))}</select></div>
         <div class="field"><label>발견일</label><input class="input" type="date" name="identified_at" value="${todayLocal()}"></div>
         <div class="field"><label>기한</label><input class="input" type="date" name="due_date"></div></div></div>
-    <div class="drawer__f"><button class="btn btn--primary" type="submit">이슈 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
+    <div class="drawer__f"><button class="btn btn--secondary" type="button" id="dcancel">취소</button><button class="btn btn--primary" type="submit">이슈 등록</button></div></form>`;
   const createRisk = () => html`<form id="cf" novalidate><div class="drawer__h"><b>새 리스크</b><button type="button" class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
     <div class="drawer__b"><div class="form-err" role="alert" hidden></div>
       <div class="field"><label for="c-title">제목 <span class="req">*</span></label><input class="input" id="c-title" name="title" maxlength="200" placeholder="예: 고객 API 일정 지연 가능성"><div class="err" data-for="title"></div></div>
@@ -127,7 +127,7 @@ export async function raidPage(id) {
         <div class="field"><label>식별일</label><input class="input" type="date" name="identified_at" value="${todayLocal()}"></div>
         <div class="field"><label>검토일</label><input class="input" type="date" name="review_date"></div></div>
       <div class="field"><label>대응 계획</label><textarea class="textarea" name="mitigation_plan" maxlength="5000" style="min-height:60px"></textarea></div></div>
-    <div class="drawer__f"><button class="btn btn--primary" type="submit">리스크 등록</button><button class="btn btn--secondary" type="button" id="dcancel">취소</button></div></form>`;
+    <div class="drawer__f"><button class="btn btn--secondary" type="button" id="dcancel">취소</button><button class="btn btn--primary" type="submit">리스크 등록</button></div></form>`;
 
   const linkBlocks = (x, ro, labels) => ['WBS', 'REQUIREMENT', 'CHANGE'].map((t) => {
     const list = t === 'WBS' ? x.links.wbs : t === 'REQUIREMENT' ? x.links.requirements : x.links.changes;

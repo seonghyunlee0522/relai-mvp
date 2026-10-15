@@ -13,7 +13,6 @@ import { state } from '../core/state.js';
 import { todayKst, md } from '../shared/kst-date.js';
 import { teamFor } from '../shared/owner-picker.js';
 import { confirmDialog, promptDialog, toast } from '../shared/dialogs.js';
-import { term } from './initiation.js';
 
 const LABEL = { ISSUE: '이슈', TEST: '테스트', CR: '변경 요청', ACCEPTANCE: '검수' };
 const ymdSlash = (d) => (d ? String(d).slice(0, 10).replace(/-/g, '/') : '');
@@ -53,7 +52,7 @@ export function handoverDialog(pid) {
             <div class="field"><label for="ho-r">인수자 <span class="req">*</span></label><select class="select select--sm" id="ho-r" required><option value="">선택하세요</option>${raw(personOptions(members, d.owners, receiver))}</select><div class="err" data-ho-err="receiver"></div></div>
             <div class="field"><label for="ho-d">인수일 <span class="req">*</span></label><input class="input input--sm gl__date" type="date" id="ho-d" value="${date}" max="${today}" required><div class="err" data-ho-err="date"></div></div>
           </div>
-          ${raw(items.length ? html`<h4 class="gl__h">운영 이관 항목 ${items.length}건 ${raw(term('carryover'))}</h4><ol class="gl__list">${raw(items.map((c) => { const k = `${c.type}:${c.id}`; return html`<li class="gl__row ho__row">
+          ${raw(items.length ? html`<h4 class="gl__h">운영 이관 항목 ${items.length}건</h4><ol class="gl__list">${raw(items.map((c) => { const k = `${c.type}:${c.id}`; return html`<li class="gl__row ho__row">
             <div class="gl__m"><span class="gl__type">${LABEL[c.type] || c.type}</span><span class="mono">${c.display_id}</span><span class="gl__t">${c.title}</span>${raw(c.note ? html`<small class="dim">${c.note}</small>` : '')}</div>
             <div class="ho__own"><label class="sr-only" for="ho-o-${c.id}">${c.display_id} 운영 담당</label><select class="select select--sm" id="ho-o-${c.id}" data-owner="${k}"><option value="" ${owner[k] ? '' : 'selected'}>운영 담당 선택</option><option value="TBD" ${owner[k] === 'TBD' ? 'selected' : ''}>미정</option>${raw(personOptions(members, d.owners, owner[k]))}</select></div>
           </li>`; }).join(''))}</ol>` : '<p class="hint">운영 이관 항목이 없습니다.</p>')}
@@ -112,7 +111,7 @@ export function closeDialog(pid, g) {
       <p class="gl__d">종료하면 홈과 안내가 더 이상 할 일을 독촉하지 않습니다. 기록은 그대로 남고 언제든 종료를 취소할 수 있습니다.</p>
       <div class="gl__b">
         <div class="field"><label for="cl-d">종료일 <span class="req">*</span></label><input class="input input--sm gl__date" type="date" id="cl-d" value="${closed}" ${floor ? raw(`min="${floor.date}"`) : ''} max="${today}" required><div class="err" data-cl-err="closed_on"></div></div>
-        <div class="field"><label for="cl-w">하자보수 종료일 ${raw(term('warranty'))}</label><input class="input input--sm gl__date" type="date" id="cl-w" value="${warranty}"><small class="hint">기본: 종료일 + 12개월</small><div class="err" data-cl-err="warranty_end_on"></div></div>
+        <div class="field"><label for="cl-w">하자보수 종료일</label><input class="input input--sm gl__date" type="date" id="cl-w" value="${warranty}"><small class="hint">기본: 종료일 + 12개월</small><div class="err" data-cl-err="warranty_end_on"></div></div>
         ${raw(carry.length ? html`<p class="cl__carry">남은 운영 이관 ${carry.length}건 (담당 지정 ${assigned}건)</p>` : '')}
         ${raw(openWbs.tasks || openWbs.milestones ? html`<p class="gl__warn" data-cl-open><i class="st st--warn" aria-hidden="true">!</i>WBS에 아직 완료되지 않은 ${[openWbs.tasks ? `작업 ${openWbs.tasks}건` : '', openWbs.milestones ? `마일스톤 ${openWbs.milestones}건` : ''].filter(Boolean).join(' · ')}이 있습니다. 그대로 종료할 수도 있습니다. <a class="link" href="/app/projects/${pid}/wbs?f=open" data-cl-wbs>WBS에서 확인 →</a></p>` : '')}
         ${raw(ready ? '' : '<p class="gl__warn"><i class="st st--warn" aria-hidden="true">!</i>07 필수 업무(운영 이관 / 인수인계 · 프로젝트 종료 정리)를 마치면 종료할 수 있습니다.</p>')}

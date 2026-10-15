@@ -14,7 +14,6 @@ const run = (k) => !ONLY || ONLY.split(',').includes(k);
 
 /* English-word lint (spec R3): words of 3+ Latin letters in the rendered page, outside IDs (REQ-001, CR-002 …), e-mail addresses,
  * the user's own data and these product / format names. */
-const TERM_SKIP = 'button,a,select,option,textarea,input,label,summary,script,style,th,h1,.term,.stabs,.dtabs,[role="tab"],.chip,.mono,.wcode,.toast,.gtable,.rtable,.gantt,.np__menu,.tmenu,.gpop,[contenteditable="true"]';   // = public/app/shared/term-auto.js
 const ALLOW = ['RELAI', 'PDF', 'Word', 'Excel', 'Jira', 'AI', 'WBS', 'Ctrl', 'Enter', 'Cloud', 'Atlassian', 'Team', 'Free'];   // + Jira Cloud / Atlassian and the plan names (Team · Free)
 
 (async () => {
@@ -133,24 +132,14 @@ const ALLOW = ['RELAI', 'PDF', 'Word', 'Excel', 'Jira', 'AI', 'WBS', 'Ctrl', 'En
 
   /* ---------- 4b. ? tooltip on the first use of WBS · 간트 · 기준선 · 마일스톤 · 완료 조건 per page ---------- */
   if (run('terms')) {
-    const TERMS = ['WBS', '간트', '확정본', '마일스톤', '완료 조건'];
-    const miss = {};
+    // fb-app: the founder removed 용어 설명 — no "?" tooltip on any page; the plain words (WBS · 마일스톤 …) stay
+    const left = {};
     for (const u of [U, `${U}/requirements`, `${U}/requirements?sel=${R[1].id}`, `${U}/wbs`, `${U}/wbs?view=gantt`, `${U}/definition?activity=MILESTONES`, `${U}/reports`, `${U}/changes?sel=${C[0].id}`]) {
       await page.goto(`${BASE}${u}`); await settle(); await page.waitForTimeout(300);
-      const m = await page.evaluate(({ terms, skip }) => {
-        const out = [];
-        for (const term of terms) {   // first visible use in page text (controls, tabs, chips, table headers, titles are not a "use")
-          const w = document.createTreeWalker(document.querySelector('#main'), NodeFilter.SHOW_TEXT); let n; let host = null;
-          while ((n = w.nextNode())) { const el = n.parentElement; if (!el || el.closest(skip) || !el.getClientRects().length) continue; if (n.nodeValue.includes(term)) { host = el; break; } }
-          if (!host) continue;
-          const has = (x) => x && x.matches('.term') && (x.getAttribute('aria-label') || '').split(':')[0].includes(term);
-          if (![...host.querySelectorAll('.term')].some(has) && !has(host.nextElementSibling)) out.push(`${term}: ${host.textContent.trim().slice(0, 50)}`);
-        }
-        return out;
-      }, { terms: TERMS, skip: TERM_SKIP });
-      if (m.length) miss[u.replace(P.id, 'P')] = m;
+      const n = await page.$$eval('.term', (els) => els.length);
+      if (n) left[u.replace(P.id, 'P')] = n;
     }
-    check('first use of WBS · 간트 · 확정본 · 마일스톤 · 완료 조건 on each page has a ? tooltip', !Object.keys(miss).length, JSON.stringify(miss));
+    check('no ? glossary tooltip on any page (용어 설명 removed)', !Object.keys(left).length, JSON.stringify(left));
   }
 
   /* ---------- 5. empty states: one sentence + one button on every list page ---------- */

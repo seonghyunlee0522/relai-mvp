@@ -6,7 +6,6 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { download } from '../core/ui.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { projectHead } from './guide.js';
-import { term } from './initiation.js';
 import { closeDialog } from './closing.js';
 import { navigate } from '../core/router.js';
 
@@ -47,7 +46,7 @@ export async function reportPage(pid, rid, main = $('#main')) {
       ${raw(done || !isPhone() ? '' : coachMark('WEEKLY_REPORT_INTRO'))}
       <div class="doc__bar">
         <div class="doc__meta"><span class="chip ${RS[report.status][1]}">${RS[report.status][0]}</span>
-          ${raw(done ? html`<span>${kind} ${raw(term('completion_report'))}</span>` : '')}<span>${done ? '프로젝트 기간' : '보고 기간'} <b>${sc.period.start} ~ ${sc.period.end}</b></span><span>생성 ${fmtDT(report.generated_at)}</span>${raw(report.finalized_at ? html`<span>확정 ${fmtDT(report.finalized_at)}</span>` : '')}<span id="dsave" class="doc__save"></span></div>
+          ${raw(done ? html`<span>${kind}</span>` : '')}<span>${done ? '프로젝트 기간' : '보고 기간'} <b>${sc.period.start} ~ ${sc.period.end}</b></span><span>생성 ${fmtDT(report.generated_at)}</span>${raw(report.finalized_at ? html`<span>확정 ${fmtDT(report.finalized_at)}</span>` : '')}<span id="dsave" class="doc__save"></span></div>
         <div class="doc__actions">
           ${raw(isPhone() ? `<button class="btn btn--secondary btn--sm" data-dl="pdf" data-phone-ok>PDF 다운로드</button><button class="btn btn--secondary btn--sm" data-dl="docx" data-phone-ok>Word 다운로드</button>
           <button class="btn btn--secondary btn--sm" id="copy-md">복사 (Markdown)</button><button class="btn btn--secondary btn--sm" id="copy-txt">복사 (텍스트)</button>`

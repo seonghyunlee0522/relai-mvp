@@ -10,7 +10,7 @@ import { api, wsApi } from '../core/api.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { $, html, raw, todayLocal, fmtDate } from '../core/dom.js';
 import { projectHead } from './guide.js';
-import { planMenu, bindPlanMenu, term } from './initiation.js';
+import { planMenu, bindPlanMenu } from './initiation.js';
 
 const SPARK = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg>';
 const CAT_ORDER = ['CLIENT', 'OWN', 'PARTNER', 'OTHER'];
@@ -101,7 +101,7 @@ export async function charterPage(id) {
   const shTable = sh.length ? html`<div class="chx__tblw"><table class="chx__tbl"><thead><tr><th>이름</th><th>소속</th><th>구분</th><th>역할</th><th>주요 책임</th></tr></thead><tbody>
       ${raw(sh.map((s) => html`<tr><td class="chx__nm">${s.name}</td><td>${[s.org, s.department].filter(Boolean).join(' · ') || '-'}</td><td><span class="chx__cat chx__cat--${s.category.toLowerCase()}">${s.category_label}</span></td><td>${s.role || '-'}</td><td>${s.responsibility || '-'}</td></tr>`).join(''))}</tbody></table></div>`
     : empty('관계자가 아직 등록되지 않았습니다.', '고객사·당사·협력사의 담당자와 역할을 등록하면 AI가 업무 담당자와 의사결정 상대를 이해할 수 있습니다.', def('STAKEHOLDERS'), '관계자 입력 →');
-  const stake = section('4', 'stakeholders', raw(html`관계자 및 의사결정 구조 ${raw(term('stakeholder'))}`), '프로젝트 참여자, 업무 담당자 및 의사결정 구조를 이해하는 데 활용합니다.', html`
+  const stake = section('4', 'stakeholders', raw(html`관계자 및 의사결정 구조`), '프로젝트 참여자, 업무 담당자 및 의사결정 구조를 이해하는 데 활용합니다.', html`
     <div class="chx__blk"><h3 class="chx__lbl">관계자${raw(sh.length ? html` <small>${sh.length}명</small>` : '')}</h3>${raw(shTable)}</div>
     ${raw(block('의사결정 / 승인 체계', c.governance, ['의사결정 / 승인 체계가 정의되지 않았습니다.', '범위·일정 변경을 누가 어떤 절차로 승인하는지 작성하면 AI가 변경 요청의 다음 절차를 정확하게 안내할 수 있습니다.', def('OPERATIONS', 'decisions'), '의사결정 체계 입력 →']))}`);
 
@@ -139,7 +139,7 @@ export async function charterPage(id) {
   };
   const msList = tl.milestones.length ? html`<ol class="chx__ml">${raw(tl.milestones.map((m) => html`<li class="${m.date && m.date < today ? 'is-past' : ''}"><time>${m.date ? fmtDate(m.date) : '날짜 미정'}</time><span>${m.title}</span>${raw(m.source === 'WBS' ? html`<small>WBS ${m.wbs_code}</small>` : '')}</li>`).join(''))}</ol>`
     : empty('주요 마일스톤이 아직 등록되지 않았습니다.', '주요 의사결정 및 완료 시점을 작성하면 AI가 남은 주요 작업을 더 정확하게 판단할 수 있습니다.', def('MILESTONES', 'key_dates'), '마일스톤 입력 →');
-  const time = section('5', 'timeline', raw(html`일정 및 마일스톤 ${raw(term('milestone'))}`), '현재 진행 상황과 남은 주요 일정을 기준으로 일정 위험과 다음 작업을 판단합니다.', html`${raw(timeline())}${raw(msList)}`);
+  const time = section('5', 'timeline', raw(html`일정 및 마일스톤`), '현재 진행 상황과 남은 주요 일정을 기준으로 일정 위험과 다음 작업을 판단합니다.', html`${raw(timeline())}${raw(msList)}`);
 
   /* ---------- 6. Assumptions, Constraints & Risks ---------- */
   const acr = section('6', 'conditions', '전제 · 제약 · 초기 리스크', 'WBS 생성, 요구사항 검토 및 변경 영향 분석 시 프로젝트의 전제조건과 제약, 위험요소를 함께 고려합니다.', html`
@@ -162,10 +162,10 @@ export async function charterPage(id) {
     ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — 사유: ${a.bypass.reason} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
       : html`<dl class="chx__kvs">${raw(kv('승인자', a.approver ? `${a.approver.name}${a.approver.title ? ` ${a.approver.title}` : ''}` : ''))}${raw(kv('승인일', a.date ? fmtDate(a.date) : ''))}${raw(kv('승인 방법', a.method_label))}${raw(kv('근거', a.evidence))}</dl>
         ${raw(a.status === 'REAPPROVAL' ? '<p class="chx__p chx__bypass">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.</p>' : '')}${raw(a.conditions ? html`<h3 class="chx__lbl">조건 / 보완 요청</h3>${raw(body(a.conditions))}` : '')}`)}</div>`;
-  const kickInner = !k || k.skipped ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수보고회 ${raw(term('kickoff'))}</h3>
+  const kickInner = !k || k.skipped ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수보고회</h3>
     ${raw(k.status === 'COMPLETED' ? html`<dl class="chx__kvs">${raw(kv('일시', fmtDT(k.datetime)))}${raw(kv('장소/방식', k.place))}${raw(kv('참석자', k.attendees.map((x) => x.name).join(', ')))}</dl>${raw(k.decisions.length ? html`<h3 class="chx__lbl">결정사항</h3><ul class="chx__ul">${raw(k.decisions.map((x) => html`<li>${x}</li>`).join(''))}</ul>` : '')}`
       : empty(k.datetime ? `착수보고회 예정 · ${fmtDT(k.datetime)}` : '착수보고회가 아직 열리지 않았습니다.', '착수보고회에서 목표·범위·일정을 고객과 함께 확인하고, 결과를 기록하면 여기에 표시됩니다.', def('KICKOFF'), '착수보고회 준비 →'))}</div>`;
-  const gate = a || (k && !k.skipped) ? section('8', 'approval', raw(html`착수보고회 · 승인 ${raw(term('baseline'))}`), '승인된 목표·범위·일정을 기준으로 이후 변경 요청과 검수를 판단합니다.', html`${raw(kickInner)}${raw(approvalInner)}`) : '';
+  const gate = a || (k && !k.skipped) ? section('8', 'approval', raw(html`착수보고회 · 승인`), '승인된 목표·범위·일정을 기준으로 이후 변경 요청과 검수를 판단합니다.', html`${raw(kickInner)}${raw(approvalInner)}`) : '';
 
   /* ---------- right rail: outline (scroll-spy) · next milestone · what to complete · fill status ---------- */
   const SECTIONS = [['profile', '기본 정보'], ['goals', '목표 · 성공 기준'], ['scope', '범위 · 산출물'], ['stakeholders', '관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(gate ? [['approval', '착수보고회 · 승인']] : [])];
@@ -193,7 +193,7 @@ export async function charterPage(id) {
   main.innerHTML = html`<div class="page page--wide page--flow chp">
     ${raw(projectHead(p, g, { tab: 'overview-charter', title: isPhone() ? '프로젝트 개요' : '사업수행계획서' }))}
     <div class="chl"><div class="chx">
-      <div class="chx__head"><div class="chx__ht"><h1>프로젝트 개요 ${raw(term('charter'))}</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
+      <div class="chx__head"><div class="chx__ht"><h1>프로젝트 개요</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 개요는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(hero)}
       ${raw(profile)}${raw(goals)}${raw(scope)}${raw(stake)}${raw(time)}${raw(acr)}${raw(ops)}${raw(gate)}

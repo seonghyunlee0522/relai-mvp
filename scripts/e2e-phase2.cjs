@@ -71,7 +71,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await shot('02-scope-undecided-exclusions.png');
   await page.goto(`${reqUrl}?sel=${r1.id}`); await page.waitForSelector('#drawer .dtitle');
   const terms = await page.$$eval('#drawer .term', (els) => els.map((e) => e.getAttribute('aria-label')));
-  check('US-5 terms: 완료 조건 · 범위 내/외 · 비기능 on the 02 detail', ['완료 조건', '범위 내 / 범위 외', '비기능 요구사항'].every((t) => terms.some((x) => x.startsWith(t))), JSON.stringify(terms));
+  check('US-5 no (?) glossary tooltips on the 02 detail (fb-app: 용어 설명 removed (founder))', terms.length === 0, JSON.stringify(terms));
   check('US-5 priority hint', /높음 = 없으면 오픈할 수 없는 것/.test(await page.textContent('#drawer')));
   await page.click('[data-dtab="links"]');
   check('US-4(4) no Delivery Trace in 02', !(await page.$('#drawer .trace')));
