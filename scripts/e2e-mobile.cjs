@@ -175,7 +175,7 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   for (const u of ['/app/projects/new', `${A.url}/edit`, '/admin']) {
     await go(u);
     const t = await mp.evaluate(() => { const e = document.querySelector('[data-pc-only]'); return e ? { h: e.querySelector('h2').textContent, home: Boolean(e.querySelector('a[href="/app"]')) } : null; });
-    check(`A8 ${u}: PC-only page + 홈으로`, Boolean(t && t.home && (u === '/admin' ? t.h === 'Admin Console은 PC에서 사용할 수 있습니다.' : t.h === '프로젝트 만들기와 수정은 PC에서 할 수 있습니다.')), JSON.stringify(t));
+    check(`A8 ${u}: PC-only page + 홈으로`, Boolean(t && t.home && (u === '/admin' ? t.h === '운영자 콘솔은 PC에서 사용할 수 있습니다.' : t.h === '프로젝트 만들기와 수정은 PC에서 할 수 있습니다.')), JSON.stringify(t));
   }
   await mp.screenshot({ path: `${SHOTS}/m-pc-only.png` });
 

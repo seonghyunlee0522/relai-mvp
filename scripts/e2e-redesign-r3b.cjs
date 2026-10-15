@@ -133,7 +133,7 @@ const ALLOW = ['RELAI', 'PDF', 'Word', 'Excel', 'Jira', 'AI', 'WBS', 'Ctrl', 'En
 
   /* ---------- 4b. ? tooltip on the first use of WBS · 간트 · 기준선 · 마일스톤 · 완료 조건 per page ---------- */
   if (run('terms')) {
-    const TERMS = ['WBS', '간트', '기준선', '마일스톤', '완료 조건'];
+    const TERMS = ['WBS', '간트', '확정본', '주요 일정', '완료 조건'];
     const miss = {};
     for (const u of [U, `${U}/requirements`, `${U}/requirements?sel=${R[1].id}`, `${U}/wbs`, `${U}/wbs?view=gantt`, `${U}/definition?activity=MILESTONES`, `${U}/reports`, `${U}/changes?sel=${C[0].id}`]) {
       await page.goto(`${BASE}${u}`); await settle(); await page.waitForTimeout(300);
@@ -150,7 +150,7 @@ const ALLOW = ['RELAI', 'PDF', 'Word', 'Excel', 'Jira', 'AI', 'WBS', 'Ctrl', 'En
       }, { terms: TERMS, skip: TERM_SKIP });
       if (m.length) miss[u.replace(P.id, 'P')] = m;
     }
-    check('first use of WBS · 간트 · 기준선 · 마일스톤 · 완료 조건 on each page has a ? tooltip', !Object.keys(miss).length, JSON.stringify(miss));
+    check('first use of WBS · 간트 · 확정본 · 주요 일정 · 완료 조건 on each page has a ? tooltip', !Object.keys(miss).length, JSON.stringify(miss));
   }
 
   /* ---------- 5. empty states: one sentence + one button on every list page ---------- */

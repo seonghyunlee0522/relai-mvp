@@ -223,7 +223,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   const g2 = (await api('GET', P)).json;
   const st = (k) => g2.current_phase.steps.find((x) => x.step_key === k).state;
   check('US-1 CONFIRM + BASELINE_APPROVAL completed', st('CONFIRM') === 'COMPLETED' && st('BASELINE_APPROVAL') === 'COMPLETED');
-  check('US-1 REQ_DONE guidance after approval', /요구사항 정의가 마무리되었습니다/.test(await page.textContent('.rg__title')) && /기준선이 잡혔습니다/.test(await page.textContent('.rg')));
+  check('US-1 REQ_DONE guidance after approval', /요구사항 정의가 마무리되었습니다/.test(await page.textContent('.rg__title')) && /요구사항이 확정되었습니다/.test(await page.textContent('.rg')));
   await shot('09-whats-next-req-done.png');
   // US-3 add after approval: new 범위 내 requirement → dialog (adding)
   await page.goto(`${reqUrl}?new=1`); await page.waitForSelector('#cf');

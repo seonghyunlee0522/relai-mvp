@@ -31,7 +31,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   /* 1. not connected: one sentence + 지라 연결 (OWNER) */
   await openJiraTab(R[0].id);
   check('J1 drawer has a Jira tab', await page.locator('.dtabs [data-dtab="jira"]').count() === 1);
-  check('J1 not connected → one sentence', /워크스페이스에 Jira가 연결되어 있지 않습니다/.test(await text('[data-pane="jira"]')));
+  check('J1 not connected → one sentence', /워크스페이스에 지라가 연결되어 있지 않습니다/.test(await text('[data-pane="jira"]')));
   check('J1 OWNER sees 지라 연결 button', await page.locator('[data-pane="jira"] [data-jira-connect]').isVisible().catch(() => false));
   await shot('01-not-connected');
 
@@ -52,7 +52,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   const cb = await api('GET', `/api/integrations/jira/callback?code=good-code&state=${encodeURIComponent(st.json.state)}`);
   check('J3 OAuth callback redirects', cb.status === 302, String(cb.status));
   await openJiraTab(R[0].id);
-  check('J3 connected, unmapped → one sentence', /이 프로젝트에 연결된 Jira 프로젝트가 없습니다/.test(await text('[data-pane="jira"]')));
+  check('J3 connected, unmapped → one sentence', /이 프로젝트에 연결된 지라 프로젝트가 없습니다/.test(await text('[data-pane="jira"]')));
   await page.click('[data-pane="jira"] [data-jira-map]');
   await page.waitForSelector('.scrim--jira #jp-key option[value="ABC"]', { timeout: 8000 }).catch(() => {});
   await page.selectOption('.scrim--jira #jp-key', 'ABC');
@@ -66,7 +66,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
 
   /* 4. 지라 태스크 만들기 from the drawer */
   await openJiraTab(R[0].id);
-  check('J4 empty linked state + two actions', /아직 연결된 Jira 이슈가 없습니다/.test(await text('[data-pane="jira"]')) && await page.locator('#rjcreate').isEnabled() && await page.locator('#rjlink').isVisible());
+  check('J4 empty linked state + two actions', /아직 연결된 지라 이슈가 없습니다/.test(await text('[data-pane="jira"]')) && await page.locator('#rjcreate').isEnabled() && await page.locator('#rjlink').isVisible());
   await page.click('#rjcreate');
   const sum = await page.inputValue('#rjc-summary');
   check('J4 summary = REQ-ID + 제목', sum === `${R[0].display_id} 주문 조회`, sum);
@@ -75,7 +75,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   const key1 = (await text('[data-rjira-list] .jrow__k')).trim();
   check('J4 issue created and shown with key + status chip + link', /^ABC-\d+$/.test(key1) && /To Do/.test(await text('[data-rjira-list] .jrow')) && /\/browse\/ABC-/.test(await page.getAttribute('[data-rjira-list] .jrow__k', 'href') || ''), key1);
   check('J4 지라 진행률 0 / 1', /지라 진행률\s*0 \/ 1 완료/.test(await text('[data-jira-rate]')));
-  check('J4 tab count 1', /Jira\s*1/.test(await text('.dtabs [data-dtab="jira"]')));
+  check('J4 tab count 1', /지라\s*1/.test(await text('.dtabs [data-dtab="jira"]')));
   await shot('03-created');
 
   /* 5. bulk 지라 태스크 만들기 from the list (select mode) */
@@ -138,7 +138,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.click('[data-rjira-list] [data-junlink]');
   await page.click('.scrim [data-v="1"]').catch(() => {});
   await page.waitForSelector('[data-pane="jira"] .empty-inline', { timeout: 8000 }).catch(() => {});
-  check('J10 unlink → back to empty linked state', /아직 연결된 Jira 이슈가 없습니다/.test(await text('[data-pane="jira"]')));
+  check('J10 unlink → back to empty linked state', /아직 연결된 지라 이슈가 없습니다/.test(await text('[data-pane="jira"]')));
 
   /* 11. WBS link of the same issue still works (WBS rule unchanged) */
   const wi = (await api('POST', `${pa}/wbs`, { title: '주문 조회 개발' })).json.item;

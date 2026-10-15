@@ -108,7 +108,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   await moveBtn.click();
   await page.waitForSelector('.scrim .dialog');
   const gapTxt = await page.textContent('.scrim .dialog').catch(() => '');
-  check('US-6 06→07 dialog: "앞 단계 미완료 필수 업무 N건 (01 착수 5건 · 02 요구사항 기준선 승인(고객) · …)"', /앞 단계 미완료 필수 업무 \d+건 \(01 착수 5건 · 02 요구사항 기준선 승인\(고객\) · /.test(gapTxt), gapTxt.replace(/\s+/g, ' ').slice(0, 200));
+  check('US-6 06→07 dialog: "앞 단계 미완료 필수 업무 N건 (01 착수 5건 · 02 요구사항 확정 승인(고객) · …)"', /앞 단계 미완료 필수 업무 \d+건 \(01 착수 5건 · 02 요구사항 확정 승인\(고객\) · /.test(gapTxt), gapTxt.replace(/\s+/g, ' ').slice(0, 200));
   check('US-6 요약 줄 항목이 링크 (막지 않음)', (await page.$$('[data-prior-gaps] a')).length >= 1);
   await shot('g-01-06-to-07-dialog.png');
   await confirmMoves();
@@ -176,9 +176,9 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-1 3절 일정: 미룬 작업 1건 · +5일 · 사유', /미룬 작업 1건 · 최초 계획 대비 총 \+5일/.test(sch) && /\+5일 · 고객 데이터 이관 지연/.test(sch), sch);
   check('US-1 4절 품질: 테스트 1 · 통과 1 · 제외 1(사유) · 이슈 1(해결 1)', /테스트 1건 · 최근 통과 1건 · 제외 1건/.test(q) && /제외 사유: 고객이 운영 데이터로 직접 확인/.test(q) && /테스트에서 나온 이슈 1건 \(해결 1건\)/.test(q), q);
   check('US-1 5절 검수: 고객 승인자 · 날짜 · 방법', ac.includes(`1차 검수 — 오지현 고객 PM · ${approval.date} · 서명본 수령`), ac);
-  check('US-1 6절 남은 일: 이관 2건 + 운영 담당 + 앞 단계 요약 (같은 숫자)', /운영 이관 2건/.test(co) && /운영 담당 김운영\(고객사\)/.test(co) && /운영 담당 미정/.test(co) && co.includes(`앞 단계 미완료 필수 업무 ${gapsApi}건 (01 착수 5건 · 02 요구사항 기준선 승인(고객)`) && gapTxt.includes(co.split('- 앞 단계 ')[1].trim()), co);
+  check('US-1 6절 남은 일: 이관 2건 + 운영 담당 + 앞 단계 요약 (같은 숫자)', /운영 이관 2건/.test(co) && /운영 담당 김운영\(고객사\)/.test(co) && /운영 담당 미정/.test(co) && co.includes(`앞 단계 미완료 필수 업무 ${gapsApi}건 (01 착수 5건 · 02 요구사항 확정 승인(고객)`) && gapTxt.includes(co.split('- 앞 단계 ')[1].trim()), co);
   const lessons = await page.$$eval('[data-lesson]', (els) => els.map((e) => [e.value, e.placeholder]));
-  check('US-1 7절 교훈: 빈 3칸 + placeholder', lessons.length === 3 && lessons.every(([v, ph]) => v === '' && /^예: /.test(ph)) && /요구사항 기준선 승인을 일찍 받아 변경 다툼이 적었다/.test(lessons[0][1]), JSON.stringify(lessons));
+  check('US-1 7절 교훈: 빈 3칸 + placeholder', lessons.length === 3 && lessons.every(([v, ph]) => v === '' && /^예: /.test(ph)) && /요구사항 확정 승인을 일찍 받아 변경 다툼이 적었다/.test(lessons[0][1]), JSON.stringify(lessons));
   const repPrim = await primaries(page, 'main');
   check('US-1 같은 버튼 줄 (PDF · Word · 복사 · 보고서 확정 primary 1개)', repPrim.length === 1 && repPrim[0] === '보고서 확정' && (await page.$$('[data-dl]')).length === 2, JSON.stringify(repPrim));
   check('US-1 ? 툴팁 완료보고서', /프로젝트 결과·계획 대비 차이·남은 일·교훈/.test(await page.getAttribute('.doc__meta .term', 'data-tip')));
@@ -187,7 +187,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   await page.waitForSelector('.rail__i.is-active', { timeout: 5000 }).catch(() => {});
   const lnbAct = await page.$$eval('.rail__i.is-active, .stabs__i.is-active', (e) => e.map((x) => x.textContent.trim()));
   check('Q16-4 완료보고서 화면: 메뉴 = 보고서 › 공식 문서 (주간보고 아님)', JSON.stringify(lnbAct) === JSON.stringify(['보고서', '공식 문서']), JSON.stringify(lnbAct));
-  await page.fill('[data-lesson="good"]', '- 요구사항 기준선 승인을 일찍 받아 변경 다툼이 적었다'); await page.dispatchEvent('[data-lesson="good"]', 'change');
+  await page.fill('[data-lesson="good"]', '- 요구사항 확정 승인을 일찍 받아 변경 다툼이 적었다'); await page.dispatchEvent('[data-lesson="good"]', 'change');
   await page.fill('[data-lesson="next"]', '- 이관 리허설을 두 번 한다'); await page.dispatchEvent('[data-lesson="next"]', 'change');
   await page.waitForFunction(() => /저장됨/.test(document.querySelector('#dsave')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
   await shot('g-04-completion-report-draft.png');

@@ -139,7 +139,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   // ---- Jim L1: 보고서 › 공식 문서 says 사업수행계획서 once (the body's 프로젝트 헌장 heading stays on the phone)
   await page.goto(`${BASE}${U}/charter`); await settle();
   const doc = await page.evaluate(() => ({ title: document.querySelector('.phead__title').textContent.trim(), h: [...document.querySelectorAll('#main h1')].filter((e) => e.getClientRects().length).map((e) => e.textContent.trim()) }));
-  check('L1 공식 문서 title = 사업수행계획서, shown once (no 프로젝트 헌장 heading on desktop)', doc.title === '사업수행계획서' && doc.h.length === 1, JSON.stringify(doc));
+  check('L1 공식 문서 title = 사업수행계획서, shown once (no 프로젝트 개요 heading on desktop)', doc.title === '사업수행계획서' && doc.h.length === 1, JSON.stringify(doc));
 
   await page.click('[data-stab-action="activity"]'); await page.waitForSelector('.actpanel', { timeout: 4000 }).catch(() => {});
   check('보고서 › 활동 기록 tab opens the activity panel', Boolean(await page.$('.actpanel')));

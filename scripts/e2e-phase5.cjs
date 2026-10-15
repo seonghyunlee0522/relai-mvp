@@ -121,7 +121,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   check('디자인: 커버리지 \'없음\' 행에 빨강·주황 배지 없음, 요약 \'없음 14\'에만 경고색', redNone.length === 0 && Boolean(warnColor), JSON.stringify(redNone) + warnColor);
   check('US-7 ? 툴팁: 커버리지 ("범위 내 요구사항 중 테스트가 연결된 비율")', (await page.$('.term[data-tip="범위 내 요구사항 중 테스트가 연결된 비율"]')) !== null);
   const tabs = await page.$$eval('[data-tab]', (els) => els.map((e) => e.textContent.trim()));
-  check('US-7 탭: 테스트 케이스 / 검수 (06에서 진행) / 요구사항 커버리지', /^테스트 케이스/.test(tabs[0]) && /^검수/.test(tabs[1]) && /06에서 진행/.test(tabs[1]) && /^요구사항 커버리지/.test(tabs[2]), JSON.stringify(tabs));
+  check('US-7 탭: 테스트 케이스 / 검수 (06에서 진행) / 테스트 연결률', /^테스트 케이스/.test(tabs[0]) && /^검수/.test(tabs[1]) && /06에서 진행/.test(tabs[1]) && /^테스트 연결률/.test(tabs[2]), JSON.stringify(tabs));
 
   // 제외 dialog
   await page.click(`[data-exclude="${R[1].id}"]`); await page.waitForSelector('[data-dialog="exclude"]');
