@@ -3085,3 +3085,8 @@ html:not(.is-phone) .seg:has(>[data-view="gantt"]),html:not(.is-phone) .seg:has(
 /* 공식 문서 (사업수행계획서): the page header carries the title — the body's own 프로젝트 헌장 heading stays on the phone only */
 html:not(.is-phone) .chx__head>.chx__ht{display:none}
 html:not(.is-phone) .chx__head{justify-content:flex-end}
+/* wide layout (desktop ≥ 768px; the prototype bhsn-client fills the width beside the rail): work pages (home, 프로젝트, reports…)
+ * take the full width next to the rail with 24px gutters; reading/form pages (설정, AI 크레딧, 프로젝트 설정, report document)
+ * start at the rail too — left-aligned, never centered — and stop at a readable 1200px. Phone keeps its own layout. */
+html:not(.is-phone) .page{max-width:none;margin-left:0;margin-right:0}
+html:not(.is-phone) .page--narrow,html:not(.is-phone) .page--form,html:not(.is-phone) .page--doc{max-width:1200px}
