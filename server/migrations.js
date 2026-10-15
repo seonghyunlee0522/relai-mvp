@@ -187,6 +187,11 @@ export const migrations = [
     await topUpStarterCredits(db);
   } },
   { version: 42, name: 'Sample projects: projects.sample_key (schema.sql) — example projects for new users, excluded from usage and plan limits', up() {} },
+  { version: 43, name: 'Jira requirement links: integration_entity_links.requirement_id + link_role REQUIREMENT (wbs_item_id nullable), WBS-only unique index, integration_project_mappings.auto_mark_requirements, requirements.jira_done_at (columns/indexes in schema.sql)', async up(db) {
+    await db.run('ALTER TABLE integration_entity_links DROP CONSTRAINT IF EXISTS integration_entity_links_link_role_check');
+    await db.run(`ALTER TABLE integration_entity_links ADD CONSTRAINT integration_entity_links_link_role_check CHECK (link_role IN ('EXECUTION','EPIC','REQUIREMENT'))`);
+    await db.run('DROP INDEX IF EXISTS uq_iel_external_live');   // replaced by uq_iel_external_live_wbs (schema.sql)
+  } },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

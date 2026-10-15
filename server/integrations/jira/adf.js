@@ -18,3 +18,12 @@ export function wbsDescription({ wbsCode, title, description, reqs = [], project
   if (projectUrl) blocks.push(paragraph(text('RELAI 프로젝트: '), link(projectName || projectUrl, projectUrl)));
   return doc(...blocks);
 }
+
+/** Description for an issue created from a requirement: 설명 + 완료 조건 + the RELAI link back. */
+export function requirementDescription({ displayId, title, description, criteria = [], reqUrl, projectName }) {
+  const blocks = [paragraph(strong('RELAI 요구사항'), text(` ${displayId} ${title}`))];
+  if (description) blocks.push(...textBlocks(description));
+  if (criteria.length) { blocks.push(paragraph(strong('완료 조건'))); blocks.push(bulletList(criteria)); }
+  if (reqUrl) blocks.push(paragraph(text('RELAI에서 보기: '), link(projectName ? `${projectName} · ${displayId}` : displayId, reqUrl)));
+  return doc(...blocks);
+}
