@@ -119,6 +119,7 @@ test('samples are not usage: plan usage counts 0 projects, the first real projec
   assert.ok(await db.get(`SELECT 1 FROM admin_audit_logs WHERE action = 'FIRST_PROJECT_CREATED' AND target_id = ?`, [p.json.project.id]), 'the first real project is the first project (samples do not count)');
   const home = (await A.c('GET', `/api/workspaces/${A.w}/projects/home`)).json;
   assert.equal(home.projects.length, 4); assert.ok(home.projects.filter((c) => c.sample_key).length === 3);
+  assert.equal(home.projects[0].sample_key, null, 'real work first, samples after');
   server.close();
 });
 

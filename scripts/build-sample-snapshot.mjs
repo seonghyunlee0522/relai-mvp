@@ -56,6 +56,9 @@ const { SAMPLE_CASES } = await import('../server/samples/fixtures.js');
 const OWNER_NAME = 'SAMPLEOWNERNAME'; const OWNER_EMAIL = 'sample-owner@relai.invalid'; const OWNER_PW = 'sample-build-1';
 const schema = 'sample_build_' + randomUUID().replace(/-/g, '').slice(0, 10);
 const db = await openDb({ schema, createSchema: true, max: 4 });
+// a failed replay must not leave its throwaway schema behind
+process.on('uncaughtException', async (e) => { console.error(e); try { await db.close(); await db.dropSchema(); } finally { process.exit(1); } });
+process.on('unhandledRejection', (e) => { throw e; });
 simSql = true;
 const server = createApp(db).listen(0, '127.0.0.1');
 await new Promise((r) => server.once('listening', r));

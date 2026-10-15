@@ -57,7 +57,7 @@ function rekey({ t0, owner, workspace_id: snapWs }, { workspaceId, userId, userN
     if (typeof v === 'string') return text(v);
     return v;
   };
-  return { value, ids };
+  return { value };
 }
 
 /** Copies the snapshot's projects (all, or `keys`) into `workspaceId`. Caller passes a db or a tx. */
@@ -69,7 +69,7 @@ export async function addSampleProjects(db, { workspaceId, userId, userName, key
   const keep = new Set(cases.map((c) => c.project_id));
   const keyOf = new Map(cases.map((c) => [c.project_id, c.key]));
   const delta = weekShift(snap.t0, today);
-  const { value, ids } = rekey(snap, { workspaceId, userId, userName, delta });
+  const { value } = rekey(snap, { workspaceId, userId, userName, delta });
   // rows of the chosen projects only: tables with project_id filter directly; children follow their parent's kept ids
   const keptIds = new Set(keep);
   const created = [];
@@ -92,7 +92,6 @@ export async function addSampleProjects(db, { workspaceId, userId, userName, key
       }
     }
   });
-  void ids;
   return created;
 }
 

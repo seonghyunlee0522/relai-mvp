@@ -154,7 +154,7 @@ export async function workspaceHome(db, rows, { ensure = null, today = todayStr(
   let i = 0;
   const worker = async () => { while (i < live.length) { const k = i++; const row = ensure ? await ensure(live[k]) : live[k]; cards[k] = await homeCard(db, row, { today }); } };
   await Promise.all(Array.from({ length: Math.min(concurrency, live.length) }, worker));
-  cards.sort(comparePriority);
+  cards.sort((a, b) => Number(Boolean(a.sample_key)) - Number(Boolean(b.sample_key)) || comparePriority(a, b));   // 샘플 프로젝트 after real work
   const counts = {}; for (const c of cards) counts[c.priority] = (counts[c.priority] || 0) + 1;
   // Phase 7 US-2: 완료된 프로젝트 = name · 완료일 · 완료보고서 link (no progress, no 다음 할 일)
   const reports = completed.length ? new Map((await db.all(`SELECT project_id, id FROM weekly_reports WHERE report_type = 'COMPLETION' AND project_id IN (${completed.map(() => '?').join(',')})`, completed.map((r) => r.id))).map((r) => [r.project_id, r.id])) : new Map();

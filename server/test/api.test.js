@@ -77,7 +77,7 @@ test('project CRUD defaults, validation, edit, archive (no delete)', async () =>
   assert.equal(p.client_name, 'A사'); assert.equal(p.project_scale, '3억 원 · 6개월');
   const upd = await c('PATCH', `/api/workspaces/${w}/projects/${p.id}`, project({ name: '수정됨' }));
   assert.equal(upd.json.project.name, '수정됨');
-  assert.equal((await c('DELETE', `/api/workspaces/${w}/projects/${p.id}`, {})).status, 404);
+  assert.equal((await c('DELETE', `/api/workspaces/${w}/projects/${p.id}`, {})).status, 409, 'a real project is never deleted (only 샘플 프로젝트 are)');
   assert.equal((await c('POST', `/api/workspaces/${w}/projects/${p.id}/archive`, {})).json.project.status, 'ARCHIVED');
   assert.equal((await c('GET', `/api/workspaces/${w}/projects`)).json.projects.length, 0);
   assert.equal((await c('GET', `/api/workspaces/${w}/projects?include_archived=1`)).json.projects.length, 1);
