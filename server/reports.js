@@ -17,6 +17,7 @@ import { LEAF_SQL, OWNER_NAME_SQL } from './wbs.js';
 import { accApprovalView } from './testing.js';
 import { priorGapsText } from './closing.js';
 import { goLiveMilestone } from './golive.js';
+import { listItems } from './checklists.js';
 import { diffDays, weekKst, todayKst } from '../public/app/shared/kst-date.js';
 
 const TODAY = 'CURRENT_DATE';
@@ -132,13 +133,17 @@ export async function buildReportData(db, project, { period_start: s, period_end
     .map((r) => ({ ...r, days: diffDays(r.before, r.after) }));
 
   const nextWeek = (await M.upcomingDates(db, pid, { from: addDays(e, 1), to: addDays(e, 7), limit: 30 }));
+  // v1 P2-4: decisions recorded in 04 주요 의사결정 기록 (DECISIONS log) whose 결정일 (else the day they were recorded) falls in the period
+  const decisionsMade = (await listItems(db, pid)).filter((it) => it.step_key === 'DECISIONS')
+    .map((it) => ({ date: it.due_date ? String(it.due_date).slice(0, 10) : todayKst(new Date(it.created_at)), title: it.title, by: it.owner_display || '', note: it.note || '' }))
+    .filter((x) => x.date >= s && x.date <= e).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   return {
     period: { start: s, end: e },
     summary: { phase_key: project.current_phase, phase_name: guide.current_phase?.name || project.current_phase, health: { status: health.status, label: health.status_label, partial_unknown: health.partial_unknown },
       dimensions: Object.values(health.dimensions).map((d) => ({ key: d.key, label: d.label, status: d.status, status_label: d.status_label, reasons: d.reasons })), kpis },
     completed_items: completed, in_progress_items: inProgress, issues_and_risks: { issues, risks }, changes, test_and_acceptance: testAcceptance,
-    attention_items: attention, next_week_plan: nextWeek, schedule_changes: scheduleChanges,
+    attention_items: attention, next_week_plan: nextWeek, schedule_changes: scheduleChanges, decisions_made: decisionsMade,
   };
 }
 
@@ -196,7 +201,12 @@ export function sectionsFromData(d) {
   tl.push(`- 검수 현황: 요청 ${an.requested} · 승인 ${an.accepted} · 보완 필요 ${an.rework} · 반려 ${an.rejected}`);
   const apl = Object.entries(ap).map(([k, v]) => `${ACC_STATUS[k] || k} ${v}`); if (apl.length) tl.push(`- 기간 내 검수 상태 변경: ${apl.join(', ')}`);
   out.test_acceptance = tl.join('\n');
-  out.decisions = d.attention_items.length ? d.attention_items.map((a) => `- [${TYPE_KO[a.type] || a.type}] ${a.display_id} ${a.title} — ${a.meta}`).join('\n') : '- 확인 및 의사결정이 필요한 항목이 없습니다.';
+  const made = d.decisions_made || [];   // v1 P2-4: older stored reports have no decisions_made
+  const need = d.attention_items.map((a) => `- [${TYPE_KO[a.type] || a.type}] ${a.display_id} ${a.title} — ${a.meta}`);
+  out.decisions = made.length || need.length ? [
+    ...(made.length ? [`**기간 내 결정 ${made.length}건**`, ...made.map((x) => `- ${md(x.date)} ${x.title}${x.by ? ` · ${x.by}` : ''}${x.note ? ` · ${x.note}` : ''}`)] : []),
+    ...(made.length && need.length ? ['**확인 및 의사결정 필요**'] : []), ...need,
+  ].join('\n') : '- 확인 및 의사결정이 필요한 항목이 없습니다.';
   out.next_week = d.next_week_plan.length ? d.next_week_plan.map((u) => `- ${md(u.date)} ${u.label}: ${[u.display_id, u.title].filter(Boolean).join(' ')}`).join('\n') : '- 차주 예정된 일정(WBS 시작/종료, 마일스톤, 리스크 검토, 검수 기한)이 없습니다.';
   return SECTIONS.map(([key, title]) => ({ key, title, body: out[key] }));
 }
@@ -298,10 +308,16 @@ export async function buildCompletionData(db, project, { gaps = [], goLive = nul
     FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL AND w.item_type <> 'SUMMARY' AND w.original_planned_end_date IS NOT NULL
       AND (CASE WHEN w.item_type = 'MILESTONE' THEN w.milestone_date ELSE w.planned_end_date END) > w.original_planned_end_date ORDER BY w.sequence`, [pid]))
     .map((r) => ({ ...r, days: diffDays(r.orig, r.cur) }));
-  const reasons = (await db.all(`SELECT w.wbs_code AS display_id, w.title, h.old_value AS before, h.new_value AS after, h.note FROM wbs_history h JOIN wbs_items w ON w.id = h.wbs_item_id
+  const noted = (await db.all(`SELECT w.id AS wbs_id, w.wbs_code AS display_id, w.title, h.old_value AS before, h.new_value AS after, h.note FROM wbs_history h JOIN wbs_items w ON w.id = h.wbs_item_id
     WHERE w.project_id = ? AND w.archived_at IS NULL AND h.action_type = 'UPDATED' AND h.field_name IN ('planned_end_date','milestone_date') AND h.note IS NOT NULL AND btrim(h.note) <> ''
       AND h.old_value ~ '^\\d{4}-\\d{2}-\\d{2}$' AND h.new_value ~ '^\\d{4}-\\d{2}-\\d{2}$' AND h.new_value > h.old_value`, [pid]))
-    .map((r) => ({ ...r, days: diffDays(r.before, r.after) })).sort((a, b) => b.days - a.days).slice(0, 3);
+    .map((r) => ({ ...r, days: diffDays(r.before, r.after) }));
+  // v1 P2-5: a push with no typed reason that came from an approved change request cites that CR (its WBS impact)
+  const crOf = new Map((await db.all(`SELECT x.wbs_item_id, c.display_id, c.title FROM change_request_wbs_impacts x JOIN change_requests c ON c.id = x.change_request_id
+    WHERE c.project_id = ? AND c.archived_at IS NULL AND c.status IN ('APPROVED','IMPLEMENTED') ORDER BY c.display_id DESC`, [pid])).map((r) => [r.wbs_item_id, r]));
+  const fromCr = pushed.filter((w) => !noted.some((r) => r.wbs_id === w.id) && crOf.has(w.id))
+    .map((w) => { const c = crOf.get(w.id); return { wbs_id: w.id, display_id: w.wbs_code, title: w.title, days: w.days, note: `변경 요청 ${c.display_id} ${c.title} (승인)` }; });
+  const reasons = [...noted, ...fromCr].sort((a, b) => b.days - a.days).slice(0, 3);
   const tst = await db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((${LAST} = 'PASS')::int), 0) AS pass FROM test_cases t WHERE t.project_id = ? AND t.archived_at IS NULL`, [pid]);
   const excluded = await db.all(`SELECT display_id, title, test_exclusion_reason AS reason FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status = 'CONFIRMED'
     AND COALESCE(btrim(test_exclusion_reason), '') <> '' AND NOT EXISTS (SELECT 1 FROM test_links l JOIN test_cases tc ON tc.id = l.test_case_id WHERE l.target_type = 'REQUIREMENT' AND l.target_id = requirements.id AND tc.archived_at IS NULL)

@@ -6,6 +6,7 @@
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import { LEAF_SQL } from './wbs.js';
+import { SAMPLE_ACTOR } from './samples/index.js';
 
 const RECENT_LIMIT = 15; const OVERDUE_LIMIT = 20; const TIMELINE_LIMIT = 40; const MILESTONE_LIMIT = 100;
 const TODAY = 'CURRENT_DATE';
@@ -81,7 +82,8 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT) {
     ...integ.map((r) => ({ ...r, entity_type: 'JIRA', title: r.title || 'Jira', href: r.entity_id ? `wbs?sel=${r.entity_id}` : 'wbs', summary: r.summary })),
   ];
   events.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.seq - a.seq));
-  return events.slice(0, lim).map((e) => ({ at: e.at, actor_name: e.actor_name, entity_type: e.entity_type, entity_id: e.entity_id, display_id: e.display_id, title: e.title, summary: e.summary, href: e.href }));
+  const sample = Boolean((await db.get('SELECT sample_key FROM projects WHERE id = ?', [pid]))?.sample_key);   // v1 P2-1: replayed sample history has no actor
+  return events.slice(0, lim).map((e) => ({ at: e.at, actor_name: e.actor_name || (sample ? SAMPLE_ACTOR : null), entity_type: e.entity_type, entity_id: e.entity_id, display_id: e.display_id, title: e.title, summary: e.summary, href: e.href }));
 }
 
 /** Timeline rows: SUMMARY items and top-level items, in tree order; SUMMARY dates are the span of everything below them. */
@@ -145,7 +147,7 @@ export async function projectActivity(db, pid, { limit = 80 } = {}) {
   const lim = Math.max(1, Math.min(200, Number(limit) || 80));
   const [events, comments] = await Promise.all([
     recentChanges(db, pid, lim),
-    db.all(`SELECT c.id, c.entity_type, c.entity_id, c.body, c.created_at AS at, u.name AS actor_name,
+    db.all(`SELECT c.id, c.entity_type, c.entity_id, c.body, c.created_at AS at, COALESCE(c.author_label, u.name) AS actor_name,
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT display_id FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT wbs_code FROM wbs_items w WHERE w.id = c.entity_id) END AS display_id,
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT title FROM wbs_items w WHERE w.id = c.entity_id) END AS title
       FROM comments c LEFT JOIN users u ON u.id = c.created_by WHERE c.project_id = ? ORDER BY c.created_at DESC, c.seq DESC LIMIT ${lim}`, [pid]),
