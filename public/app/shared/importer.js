@@ -7,8 +7,8 @@ import { download, fileToBase64 } from '../core/ui.js';
 import { toast } from './dialogs.js';
 
 const STEPS = ['파일 선택', '검증·수정', '가져오기 결과'];
-const STEPS_WBS = ['파일 선택', '열 매핑', '검증·미리보기', '가져오기 결과'];
-const MAP_LABEL = { title: 'WBS명', code: 'WBS Code', lv1: 'Lv1', lv2: 'Lv2', lv3: 'Lv3', lv4: 'Lv4', lv5: 'Lv5', owner: '담당자', start: '시작일', end: '종료일', progress: '진행률', status: '상태', description: '설명', item_type: '유형(마일스톤)' };
+const STEPS_WBS = ['파일 선택', '열 연결', '검증·미리보기', '가져오기 결과'];
+const MAP_LABEL = { title: 'WBS명', code: 'WBS Code', lv1: 'Lv1', lv2: 'Lv2', lv3: 'Lv3', lv4: 'Lv4', lv5: 'Lv5', owner: '담당자', start: '시작일', end: '종료일', progress: '진행률', status: '상태', description: '설명', item_type: '유형(주요 일정)' };
 const KIND_LABEL = { requirements: '요구사항', wbs: 'WBS', tests: '테스트' };
 const TEMPLATE_NAME = { requirements: '요구사항 등록 템플릿.xlsx', wbs: 'WBS 등록 템플릿.xlsx', tests: '테스트 케이스 등록 템플릿.xlsx' };
 
@@ -76,7 +76,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
     const layout = layoutOf();
     const used = new Set(Object.values(mapping).map(String));
     el.innerHTML = shell(html`
-      <div class="imp__maphead"><p>파일의 열을 WBS 항목에 연결합니다. <b>WBS Code</b>(1, 1.1, 1.1.1)가 있으면 그 번호로, 없으면 <b>Lv1~Lv5</b> 열의 위치로 계층을 만듭니다. 둘 다 없으면 모든 행이 최상위 항목이 됩니다.</p>
+      <div class="imp__maphead"><p>파일의 열을 WBS 항목에 연결합니다. <b>WBS Code</b>(1, 1.1, 1.1.1)가 있으면 그 번호로, 없으면 <b>Lv1~Lv5</b> 열로 계층을 만듭니다. 둘 다 없으면 모든 행이 최상위 항목이 됩니다.</p>
         <span class="chip ${layout === 'flat' ? 'chip--hold' : 'chip--done'}">${layout === 'code' ? 'WBS Code 기반 계층' : layout === 'levels' ? 'Lv 열 기반 계층' : '계층 없음 (모두 최상위)'}</span></div>
       <div class="imp__map">
         <div class="imp__mapcol"><h4>계층 · 이름</h4>
@@ -86,7 +86,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
         </div>
         <div class="imp__mapcol"><h4>속성 (선택)</h4>
           ${raw(['owner', 'start', 'end', 'progress', 'status', 'item_type', 'description'].map((f) => html`<label><span>${MAP_LABEL[f]}</span>${raw(sel(f))}</label>`).join(''))}
-          <p class="hint">담당자는 Workspace 멤버 이름/이메일, 날짜는 YYYY-MM-DD, 진행률은 0~100, 유형은 '마일스톤'일 때만 마일스톤으로 만듭니다.</p>
+          <p class="hint">담당자는 워크스페이스 멤버 이름/이메일, 날짜는 YYYY-MM-DD, 진행률은 0~100, 유형이 '주요 일정'일 때만 주요 일정으로 만듭니다.</p>
         </div>
       </div>
       <h4 class="imp__h4">파일 미리보기 <small class="dim">(첫 ${inspect.sample.length}행)</small></h4>
@@ -100,7 +100,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
   };
   /** Tree rendered from the WBS Code column of the (validated) rows — what will actually be created. */
   const treeHtml = () => {
-    const nodes = rows.map((r) => ({ code: String(r.values.code || ''), title: r.values.title || '', ok: r.ok, ms: /마일스톤|MILESTONE/i.test(r.values.item_type || '') })).filter((n) => n.code);
+    const nodes = rows.map((r) => ({ code: String(r.values.code || ''), title: r.values.title || '', ok: r.ok, ms: /마일스톤|주요 일정|MILESTONE/i.test(r.values.item_type || '') })).filter((n) => n.code);
     if (!nodes.length) return '';
     const depth = (c) => c.split('.').length - 1;
     return html`<details class="imp__tree" open><summary>생성될 WBS 구조 <small class="dim">(${nodes.length}건 · 번호는 가져올 때 다시 매겨집니다)</small></summary>
@@ -136,7 +136,7 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
         <span class="hint">셀을 직접 수정한 뒤 [다시 검증]을 누르세요. 오류가 남은 행은 가져오지 않습니다.</span></div>
       <div class="imp__tbl"><table><thead><tr><th>행</th><th>상태</th>${raw(columns.map((c) => html`<th>${c.label}${raw(c.required ? ' <span class="req">*</span>' : '')}</th>`).join(''))}</tr></thead>
         <tbody id="ptb">${raw(shown.map(([r, i]) => rowHtml(r, i)).join('') || `<tr><td colspan="${columns.length + 2}" class="hint" style="padding:18px">표시할 행이 없습니다.</td></tr>`)}</tbody></table></div>`,
-    html`<button class="btn btn--secondary" data-back>${isWbs ? '← 열 매핑' : '다른 파일 선택'}</button>
+    html`<button class="btn btn--secondary" data-back>${isWbs ? '← 열 연결' : '다른 파일 선택'}</button>
       ${raw(s.error ? '<button class="btn btn--secondary" data-errxlsx>오류 행 Excel 내려받기</button>' : '')}<span class="sp"></span>
       <button class="btn btn--secondary" data-revalidate>다시 검증</button>
       <button class="btn btn--primary" data-run ${s.ok ? '' : 'disabled'}>${s.ok.toLocaleString('ko-KR')}건 가져오기${s.error ? ` (오류 ${s.error.toLocaleString('ko-KR')}건 제외)` : ''}</button>`);

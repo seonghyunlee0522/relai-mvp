@@ -6,7 +6,7 @@ import { aiErrorMessage, aiStatus, canRun, creditLine } from '../shared/ai.js';
 import { isPhone } from '../core/device.js';
 
 const SUGGEST = ['지금 프로젝트에서 가장 위험한 것은?', '이번 주에 확인할 건 뭐야?', 'WBS에 연결되지 않은 요구사항이 있어?', '테스트 실패한 항목 정리해줘', '오픈 일정에 영향을 줄 만한 건 뭐야?'];
-const TYPE_LABEL = { REQUIREMENT: 'REQ', WBS: 'WBS', CHANGE: 'CR', ISSUE: '이슈', RISK: 'Risk', TEST: 'Test', ACCEPTANCE: 'Acc.' };
+const TYPE_LABEL = { REQUIREMENT: '요구사항', WBS: 'WBS', CHANGE: '변경 요청', ISSUE: '이슈', RISK: '리스크', TEST: '테스트', ACCEPTANCE: '검수' };
 const sessions = new Map();   // pid → [{ role, content, references?, warnings? }]
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
 

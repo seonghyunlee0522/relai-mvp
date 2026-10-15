@@ -2,7 +2,7 @@
  * items: [{ label, value, sub?, href?, tone?: 'ok'|'warn'|'crit'|'' }] — summary + drill-down, never the full relation dump. */
 import { html, raw } from '../core/dom.js';
 
-export function traceStrip(items, { title = '딜리버리 추적', compact = false } = {}) {
+export function traceStrip(items, { title = '연결 추적', compact = false } = {}) {
   const cell = (it) => {
     const textVal = typeof it.value === 'string' && !/^\d/.test(it.value);
     const inner = html`<b class="${textVal ? 'is-text' : ''}">${it.value}</b><span>${it.label}</span>${raw(it.sub ? html`<small>${it.sub}</small>` : '')}`;

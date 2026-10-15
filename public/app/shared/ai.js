@@ -24,7 +24,7 @@ export const creditLine = (st, feature) => {
   const short = typeof cost === 'number' && typeof bal === 'number' && bal < cost;
   const low = !short && typeof bal === 'number' && typeof st.low_balance_threshold === 'number' && bal < st.low_balance_threshold;
   const pay = st.payments_enabled !== false;   // v1: payments off → no 충전 link
-  if (short) return html`<span class="ai-credit is-short" title="AI 사용량은 Workspace 크레딧으로 집계됩니다">크레딧이 부족합니다 (필요 <b>${fmt(cost)}</b> · 잔액 <b>${fmt(bal)}</b>)${raw(pay ? html` · <a href="${CREDITS_URL}" data-link>크레딧 충전</a>` : '')}</span>`;
+  if (short) return html`<span class="ai-credit is-short" title="AI 사용량은 워크스페이스 크레딧으로 집계됩니다">크레딧이 부족합니다 (필요 <b>${fmt(cost)}</b> · 잔액 <b>${fmt(bal)}</b>)${raw(pay ? html` · <a href="${CREDITS_URL}" data-link>크레딧 충전</a>` : '')}</span>`;
   return html`<span class="ai-credit ${low ? 'is-low' : ''}" title="실행하면 이 크레딧만 차감됩니다. 실패하면 차감하지 않습니다.">예상 <b>${typeof cost === 'number' ? fmt(cost) : '-'}</b> 크레딧 (₩${typeof cost === 'number' ? fmt(cost * rate) : '-'}) · 잔액 <b>${typeof bal === 'number' ? fmt(bal) : '-'}</b> 크레딧${raw(low && pay ? ` · <a href="${CREDITS_URL}" data-link>충전</a>` : '')}</span>`;
 };
 /** Kept for older imports: credits are bought on the AI 크레딧 page. */

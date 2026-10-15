@@ -15,7 +15,7 @@ async function teamPrice() {
   try {
     const b = (await api('GET', `/api/workspaces/${state.workspace.id}/billing`)).billing; const co = b?.checkout;
     if (b?.payments_enabled === false) return null;   // v1: payments off → no upgrade offer
-    return co?.base_monthly ? `Team: ${won(co.base_monthly)}/월 · Workspace 1개(소유자 포함) · 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월 (부가세 별도)` : '';
+    return co?.base_monthly ? `Team: ${won(co.base_monthly)}/월 · 워크스페이스 1개(소유자 포함) · 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월 (부가세 별도)` : '';
   } catch { return ''; }
 }
 export async function showUpgradePrompt(err) {
@@ -34,7 +34,7 @@ export async function showUpgradePrompt(err) {
     const isOwner = state.workspace?.role === 'OWNER';
     const body = html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>
       ${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}
-      <p class="dim" style="margin-top:8px">${isOwner ? 'Team 플랜은 프로젝트·요구사항·WBS·주간보고 한도가 없고, 멤버는 구매한 사용자 수만큼 초대할 수 있습니다. 기존 데이터는 그대로 유지됩니다.' : '업그레이드는 Workspace OWNER가 할 수 있습니다. OWNER에게 Team 플랜 전환을 요청하세요.'}</p>
+      <p class="dim" style="margin-top:8px">${isOwner ? 'Team 플랜은 프로젝트·요구사항·WBS·주간보고 한도가 없고, 멤버는 구매한 사용자 수만큼 초대할 수 있습니다. 기존 데이터는 그대로 유지됩니다.' : '업그레이드는 워크스페이스 소유자가 할 수 있습니다. 소유자에게 Team 플랜 전환을 요청하세요.'}</p>
       ${raw(price ? html`<p style="margin-top:8px"><b>${price}</b></p>` : '')}`;
     const go = await confirmDialog({ title: l.seats ? '구매한 사용자 수에 도달했습니다' : 'Free 플랜 한도에 도달했습니다', body: raw(body), confirm: isOwner ? 'Team 플랜 보기' : '플랜 확인하기' });
     if (go) navigate(err?.upgrade?.url || '/app/settings#billing');

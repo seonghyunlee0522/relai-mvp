@@ -81,7 +81,7 @@ export async function testsPage(id) {
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객이 결과물을 확인하고 승인하는 검수를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">
         <button class="${T === 'cases' ? 'is-on' : ''}" data-tab="cases" role="tab">테스트 케이스${raw(ts.total ? html`<em>${ts.total}</em>` : '')}</button>
         <button class="${T === 'acceptance' ? 'is-on' : ''}" data-tab="acceptance" role="tab">검수${raw(ac.in_progress ? html`<em>${ac.in_progress}</em>` : '')}${raw(before06 ? '<span class="tag-later">06에서 진행</span>' : '')}</button>
-        <button class="${T === 'coverage' ? 'is-on' : ''}" data-tab="coverage" role="tab"><span class="ph-hide">요구사항 </span>커버리지${raw(ts.verify_coverage !== null && ts.verify_coverage !== undefined ? html`<em>${ts.verify_coverage}%</em>` : '')}</button></div>
+        <button class="${T === 'coverage' ? 'is-on' : ''}" data-tab="coverage" role="tab">테스트 연결률${raw(ts.verify_coverage !== null && ts.verify_coverage !== undefined ? html`<em>${ts.verify_coverage}%</em>` : '')}</button></div>
       ${raw(T === 'cases' ? html`<div class="summary summary--inline">
           <div><b>${ts.total}</b><span>전체 <small>(미실행 ${ts.total - ts.executed})</small></span></div><div><b>${ts.ready}</b><span>준비됨</span></div>
           <div class="${ts.last_fail ? 'is-crit' : ''}"><b>${ts.last_fail}</b><span>실패</span></div><div class="${ts.last_blocked ? 'is-warn' : ''}"><b>${ts.last_blocked}</b><span>막힘</span></div></div>`
@@ -108,7 +108,7 @@ export async function testsPage(id) {
           : rows.length ? (T === 'cases' ? caseTable() : accTable())
           : hasFilter ? emptyFiltered(T === 'cases' ? '테스트' : '검수')
           : T === 'cases' ? emptyCases()
-          : emptyState({ title: raw(html`검수 대상 요구사항과 테스트를 묶어 고객에게 검수(UAT${raw(term('uat'))})를 요청하세요.`), cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }))}</div>
+          : emptyState({ title: raw(html`검수 대상 요구사항과 테스트를 묶어 고객에게 검수(인수 테스트${raw(term('uat'))})를 요청하세요.`), cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }))}</div>
         <aside class="drawer ${sel && apv ? 'drawer--cr drawer--side' : desk && sel && !creating ? 'drawer--lg' : 'drawer--cr'}" id="drawer" ${sel || creating ? '' : 'hidden'} ${raw(sel && apv ? 'data-mode="approval"' : '')}>${raw(creating ? (isAcc() ? createAcc() : createTest()) : sel && apv && isAcc() ? drawerAccApproval() : sel ? (isAcc() ? detailAcc() : detailTest()) : '')}</aside>
       </div></div>`;
     bind(); bindCoach(main);
@@ -143,10 +143,10 @@ export async function testsPage(id) {
       <td>${raw(dcell(x.requested_at))}</td><td>${raw(dcell(x.due_date))}</td><td class="dim">${fmtShort(x.updated_at)}</td></tr>`).join(''))}</tbody></table>`;
   /* US-1 커버리지: numbers first (warn color only on '없음 N'), rows = 테스트 있음 (TC 링크) · 없음 (— + 테스트 추가 · 테스트 제외) · 제외 (회색 사유 + 제외 취소) */
   const coverageTable = () => {
-    if (!cov.length) return html`<div class="empty"><h2>범위 내 요구사항이 없습니다.</h2><p>요구사항의 범위를 '범위 내'로 정하면 여기에 테스트 커버리지가 표시됩니다.</p><a class="btn btn--secondary" href="/app/projects/${p.id}/requirements" data-link>요구사항 관리</a></div>`;
+    if (!cov.length) return html`<div class="empty"><h2>범위 내 요구사항이 없습니다.</h2><p>요구사항의 범위를 '범위 내'로 정하면 여기에 테스트 연결률이 표시됩니다.</p><a class="btn btn--secondary" href="/app/projects/${p.id}/requirements" data-link>요구사항 관리</a></div>`;
     const k = Number(ts.in_scope_untested) || 0; const un = Number(ts.in_scope_unconfirmed) || 0;
     const head = html`<div class="covhead"><span class="covhead__n" data-cov-sum>검증 대상 ${ts.verify_target}건 중 <b>${ts.target_tested}</b>건 테스트 있음${raw(ts.excluded ? html` · 제외 ${ts.excluded}건` : '')}${raw(k ? html` · <span class="is-warn">없음 ${k}건</span>` : '')}</span>
-      <span class="dim">커버리지 ${ts.verify_coverage === null || ts.verify_coverage === undefined ? '-' : ts.verify_coverage + '%'} ${raw(term('coverage'))}</span><span class="covhead__sp"></span>
+      <span class="dim">테스트 연결률 ${ts.verify_coverage === null || ts.verify_coverage === undefined ? '-' : ts.verify_coverage + '%'} ${raw(term('coverage'))}</span><span class="covhead__sp"></span>
       ${raw(k && !archived ? '<button class="btn btn--primary btn--sm" id="gen">요구사항별 테스트 만들기</button>' : '')}</div>
       ${raw(un ? html`<p class="covwarn" data-cov-warn><i class="st st--warn" aria-hidden="true">!</i>확정되지 않은 범위 내 요구사항 ${un}건 — 확정하면 테스트 대상에 들어갑니다 <a class="link" href="/app/projects/${p.id}/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD" data-link>미확정 요구사항 보기</a></p>` : '')}`;
     const cell = (r) => {
@@ -303,7 +303,7 @@ export async function testsPage(id) {
           <dl data-acc-card><dt>요구사항</dt><dd>${c.requirements || 0}건</dd><dt>테스트 통과</dt><dd>${c.tests_pass || 0}건</dd><dt>테스트 제외 (05 사유)</dt><dd>${c.excluded || 0}건</dd>
             <dt>열린 이슈</dt><dd class="${c.open_issues ? 'is-warn' : ''}" data-acc-open>${c.open_issues || 0}건</dd></dl></div>
         <div class="wd__form">${raw(approvalFields(apv, { people: x.stakeholders || [], methods: Object.entries(ACC_APPROVAL_METHODS), approverHint: '<small class="dim">고객 결정권자 (고객사 PM 등)</small>', evidencePh: '예: 검수확인서 서명본 10/20 수령, 문서번호 …' }))}</div>
-        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 저장할 수 있습니다. 직접 입력한 승인자는 01 이해관계자(고객사)에도 추가됩니다.</p>
+        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 저장할 수 있습니다. 직접 입력한 승인자는 01 관계자(고객사)에도 추가됩니다.</p>
       </div>
       <div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${approvalStatusText(apv)}</span><span style="display:flex;gap:8px;margin-left:auto"><button type="button" class="btn btn--secondary btn--sm" id="apv-cancel">취소</button><button type="button" class="btn btn--primary btn--sm" id="apv-save">승인 기록 저장</button></span></div>`;
   };
@@ -549,7 +549,7 @@ export async function testsPage(id) {
     });
     const ab = $('#xarchive');
     if (ab) ab.onclick = async () => {
-      if (!(await confirmDialog({ title: `${x.display_id}을 보관할까요?`, body: '보관된 테스트는 기본 목록과 요구사항 커버리지에서 제외되고 수정할 수 없습니다. 실행 이력과 연결 관계는 보존됩니다.', confirm: '보관하기', danger: true }))) return;
+      if (!(await confirmDialog({ title: `${x.display_id}을 보관할까요?`, body: '보관된 테스트는 기본 목록과 테스트 연결률 집계에서 제외되고 수정할 수 없습니다. 실행 이력과 연결 관계는 보존됩니다.', confirm: '보관하기', danger: true }))) return;
       try { await apply(await api('POST', tApi(`/${x.id}/archive`), {})); toast('보관했습니다.'); } catch (e) { toast(e.message); }
     };
   };
