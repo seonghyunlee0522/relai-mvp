@@ -6,6 +6,8 @@ import { setFakeProvider, fakeCalls, createProvider, AiProviderError } from '../
 import { normalizeQuestions, normalizeCandidates, computeCoverage, knownAreasFrom, mergeEdits } from '../ai/planner.js';
 
 process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '1000'; process.env.AI_MODEL = '';
+// Planner mechanics are asserted at the pre-v41 WBS price (15); the current price (50) is covered by credits-billing.test.js.
+process.env.AI_CREDIT_COST_WBS_GENERATION = '15';
 delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT;
 
 const mkReq = async (A, body) => (await A.c('POST', A.req, body)).json.requirement;

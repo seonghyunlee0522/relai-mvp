@@ -31,7 +31,7 @@ const signupSide = () => html`<aside class="auth__side su-a">
         <span class="su-a__cta">프로젝트 정의 시작 →</span>
       </div>
     </div>
-    <p class="su-a__foot">프로젝트 1개는 무료 · Team ₩20,000/월(소유자 포함) + 사용자 추가 1명당 ₩5,000 · VAT 별도</p>
+    <p class="su-a__foot"><b>얼리 액세스</b> · 12개월 동안 전체 기능 무료 · 가입하면 <b>AI 크레딧 500 (₩5,000)</b> 무료 · AI는 쓴 만큼만 (1 크레딧 = ₩10)</p>
   </div></aside>`;
 /** Small screens hide the side panel, so the 7 phases move under the headline. */
 const signupMobile = () => html`<div class="su-mobile su-a-m" aria-label="프로젝트 7단계">${raw(PHASES.map((p, i) => html`<span class="${i === 0 ? 'is-current' : ''}"><i>${i + 1}</i>${p}</span>`).join(''))}</div>`;
@@ -57,7 +57,7 @@ export async function authPage(mode) {
     <main class="auth__form">
       <a class="logo" href="/">RELAI</a>
       <h1>${isSignup ? (invite && !invite.invalid ? '초대받은 계정 만들기' : raw('처음 맡은 프로젝트,<br>다음 할 일부터 알려드릴게요.')) : '다시 만나서 반갑습니다'}</h1>
-      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : 'PM 방법론을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
+      <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : 'PM 방법론을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다. 얼리 액세스로 12개월 무료이고, AI 크레딧 500(₩5,000)을 무료로 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
       ${raw(isSignup ? signupMobile() : '')}
       <form id="f" novalidate>
         <div class="form-err" id="ferr" role="alert" hidden></div>

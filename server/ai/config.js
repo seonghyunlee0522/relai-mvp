@@ -10,9 +10,12 @@ export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI 요구사항 추출',
 
 const envInt = (k, def) => { const n = Number(process.env[k]); return Number.isFinite(n) && process.env[k] !== undefined && process.env[k] !== '' ? n : def; };
 
-/** Per-feature credit cost (development defaults). Overridable per feature with AI_CREDIT_COST_<FEATURE>. */
+/**
+ * Per-feature price in credits (1 credit = ₩10 VAT incl., plans.js CREDIT_PRICE_KRW) — a fixed price per action, never per token,
+ * shown before every click. AI-credits-only billing §3.2. Overridable per feature with AI_CREDIT_COST_<FEATURE>.
+ */
 export function featureCreditCost(feature) {
-  const def = { REQUIREMENT_EXTRACTION: 10, WBS_GENERATION: 15, CHANGE_IMPACT: 8, PROJECT_QA: 3, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0 }[feature];   // Planner: one WBS_GENERATION charge per plan; question / fix calls are free (token cost still recorded)
+  const def = { REQUIREMENT_EXTRACTION: 30, WBS_GENERATION: 50, CHANGE_IMPACT: 20, PROJECT_QA: 10, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0 }[feature];   // Planner: one WBS_GENERATION charge per plan; question / fix calls are free (token cost still recorded)
   if (def === undefined) throw new Error(`unknown AI feature ${feature}`);
   return Math.max(0, envInt(`AI_CREDIT_COST_${feature}`, def));
 }
@@ -50,7 +53,7 @@ export function aiConfig(env = process.env) {
     dailyLimit: Math.max(0, envInt('AI_DAILY_LIMIT', 300)),            // per workspace per day (0 = unlimited)
     userMinuteLimit: Math.max(0, envInt('AI_USER_MINUTE_LIMIT', 10)),  // per user per minute (0 = unlimited)
     devInitialCredits: Math.max(0, envInt('DEV_INITIAL_AI_CREDITS', 0)),      // dev/test only; when > 0 it REPLACES the production trial grant
-    trialCredits: Math.max(0, envInt('AI_INITIAL_TRIAL_CREDITS', 100)),       // production: one-time trial grant when a workspace's account is first created (0 = none)
+    trialCredits: Math.max(0, envInt('AI_INITIAL_TRIAL_CREDITS', 500)),       // production: one-time starter grant (500 = ₩5,000) when a workspace's account is first created (0 = none)
     maxOutputTokens: Math.max(256, envInt('AI_MAX_OUTPUT_TOKENS', 4_000)),
     disabledReason: !flag ? 'AI_ENABLED=false' : !provider ? 'AI_PROVIDER 미설정' : !apiKey ? 'Provider API Key 미설정' : null,
   };

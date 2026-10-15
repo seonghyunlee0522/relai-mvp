@@ -17,7 +17,7 @@ const TONE = { RECONNECT_REQUIRED: 'warn', ERROR: 'bad', DISABLED: 'muted', PART
   REGISTERED: 'muted', WORKSPACE_CREATED: 'warn', PROJECT_CREATED: 'act', ACTIVE_USER: 'ok', ok: 'ok', warn: 'warn', attention: 'bad', act: 'act', muted: 'muted', bad: 'bad' };
 const LABEL = { RECONNECT_REQUIRED: '재연결 필요', ERROR: '오류', DISABLED: '해제됨', PARTIAL: '부분 실패', SUCCESS: '성공', RUNNING: '실행 중', ACTIVE: '정상', SUSPENDED: '정지', DEACTIVATED: '탈퇴', CLOSED: '종료', SYSTEM_ADMIN: 'System Admin', NONE: '-', REGISTERED: '가입', WORKSPACE_CREATED: 'Workspace 생성', PROJECT_CREATED: 'Project 생성', ACTIVE_USER: '활성 사용자', ok: '정상', warn: '주의', attention: '확인 필요' };
 export const chip = (v, label) => html`<span class="achip achip--${TONE[v] || 'muted'}">${label ?? LABEL[v] ?? v ?? '-'}</span>`;
-export const ACTIONS = { SUSPEND_USER: '사용자 정지', REACTIVATE_USER: '사용자 정지 해제', SUSPEND_WORKSPACE: 'Workspace 정지', REACTIVATE_WORKSPACE: 'Workspace 정지 해제', GRANT_AI_CREDITS: 'AI Credit 지급', ADJUST_AI_CREDITS: 'AI Credit 조정' };
+export const ACTIONS = { SUSPEND_USER: '사용자 정지', REACTIVATE_USER: '사용자 정지 해제', SUSPEND_WORKSPACE: 'Workspace 정지', REACTIVATE_WORKSPACE: 'Workspace 정지 해제', GRANT_AI_CREDITS: 'AI Credit 지급', ADJUST_AI_CREDITS: 'AI Credit 조정', CREDIT_REFUND: 'AI 크레딧 환불', REFUND_PAYMENT: '결제 환불' };
 export const TARGET = { USER: 'User', WORKSPACE: 'Workspace', SUBSCRIPTION: 'Subscription', PAYMENT: 'Payment' };
 
 /* ---- query string state (list pages keep filters in the URL so reloads and back navigation keep them) ---- */

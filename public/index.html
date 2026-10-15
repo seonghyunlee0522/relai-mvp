@@ -366,6 +366,12 @@ p{margin:0}
 .plan li::before{content:"✓";color:var(--ok);font-weight:700;flex:none}
 .plan .btn{margin-top:auto}
 .pricing__note{margin-top:22px;text-align:center;font-size:13.5px;color:var(--muted)}
+.aiprice{max-width:760px;margin:26px auto 0;background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px 24px;font-size:14.5px;color:var(--text-2)}
+.aiprice__t{margin:0 0 10px;color:var(--navy)}
+.aiprice__l{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 20px}
+.aiprice__l b{color:var(--navy)}
+.aiprice__p{margin:12px 0 0;font-size:13.5px;color:var(--muted)}
+@media (max-width:640px){.aiprice{padding:16px}.aiprice__l{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms !important;transition-duration:.001ms !important}
   .reveal,.msg--ai ol li{opacity:1;transform:none}
@@ -750,7 +756,7 @@ p{margin:0}
       <h2 class="h2">작게 시작하고,<br>팀이 커지면 Team으로.</h2>
       <p class="lead" style="margin-top:18px">Free로 프로젝트 하나를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 Team 플랜으로 한도 없이 사용하세요.</p>
     </div>
-    <p class="pricing__offer reveal"><b>파운딩 고객 혜택</b> · 선착순 10개 팀, 첫 1년 <b>40% 할인</b></p>
+    <p class="pricing__offer reveal" id="early-access"><b>얼리 액세스</b> · 12개월 동안 RELAI 전체 기능 무료 · AI는 쓴 만큼만 (1 크레딧 = 10원, 부가세 포함) · 가입하면 <b>AI 크레딧 500 무료</b></p>
     <!-- 가격은 server/plans.js(PLANS.TEAM base_monthly · extra_user_monthly, FOUNDING_OFFER)와 같은 값이어야 한다 -->
     <div class="pgrid reveal">
       <div class="plan">
@@ -793,7 +799,13 @@ p{margin:0}
         <a href="mailto:enj.shlee@gmail.com?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" class="btn btn--secondary btn--block" data-loc="pricing_enterprise">도입 문의</a>
       </div>
     </div>
-    <p class="pricing__note reveal">모든 가격은 부가세(VAT) 별도입니다. 한도를 넘으면 기존 데이터는 그대로 두고 새 항목 추가만 제한됩니다.</p>
+    <!-- AI 크레딧 가격은 server/ai/config.js featureCreditCost · server/plans.js CREDIT_PACKS와 같은 값이어야 한다 -->
+    <div class="aiprice reveal" id="ai-credits">
+      <p class="aiprice__t"><b>AI 크레딧</b> — 실행 전에 가격을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p>
+      <ul class="aiprice__l"><li>AI 요구사항 추출 <b>30 크레딧 (₩300)</b></li><li>AI WBS 초안 <b>50 크레딧 (₩500)</b></li><li>AI 영향 분석 <b>20 크레딧 (₩200)</b></li><li>RELAI에게 물어보기 <b>10 크레딧 (₩100)</b></li></ul>
+      <p class="aiprice__p">충전: ₩10,000 = 1,000 크레딧 · ₩30,000 = 3,000 크레딧 · ₩100,000 = 10,000 크레딧 (부가세 포함, 자동 결제 없음)</p>
+    </div>
+    <p class="pricing__note reveal">얼리 액세스가 끝난 뒤에는 위 플랜 가격이 적용됩니다(부가세 별도). 한도를 넘으면 기존 데이터는 그대로 두고 새 항목 추가만 제한됩니다.</p>
   </div>
 </section>
 

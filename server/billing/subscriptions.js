@@ -11,8 +11,9 @@
  */
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
-import { PLANS, DEFAULT_PLAN, FOUNDING_OFFER } from '../plans.js';
+import { PLANS, DEFAULT_PLAN, FOUNDING_OFFER, EARLY_ACCESS } from '../plans.js';
 import { grantMonthlyCredits } from './ai-grants.js';
+import { applyPackEvent } from './credit-packs.js';
 
 export const STATUSES = ['ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED'];
 export const GRACE_DAYS = 7;
@@ -23,10 +24,26 @@ export const GRANTS_PLAN_SQL = `(
   (s.status = 'ACTIVE' AND NOT ((s.cancel_at_period_end OR NOT s.auto_renew) AND s.current_period_end IS NOT NULL AND s.current_period_end <= now()))
   OR (s.status = 'PAST_DUE' AND s.grace_period_end > now()))`;
 
-/** The plan a workspace is on right now ('FREE' without a granting subscription). */
+/**
+ * The plan a workspace is on right now: a granting subscription's plan (an existing TEAM keeps working until its period ends),
+ * else EARLY while workspaces.early_access_until > now(), else FREE. Time is compared in SQL (never the client clock).
+ */
 export async function effectivePlan(db, workspaceId) {
-  const r = await db.get(`SELECT s.plan FROM subscriptions s WHERE s.workspace_id = ? AND ${GRANTS_PLAN_SQL}`, [workspaceId]);
-  return r && PLANS[r.plan] ? r.plan : DEFAULT_PLAN;
+  const r = await db.get(`SELECT (SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS plan,
+      (w.early_access_until IS NOT NULL AND w.early_access_until > now()) AS early FROM workspaces w WHERE w.id = ?`, [workspaceId]);
+  if (r?.plan && PLANS[r.plan]) return r.plan;
+  return r?.early ? 'EARLY' : DEFAULT_PLAN;
+}
+
+/**
+ * Early access (AI-credits-only billing): workspaces created on or before EARLY_ACCESS.cutoff get
+ * early_access_until = max(created_at, launch) + EARLY_ACCESS.months. `workspaceId` null = every workspace still without it
+ * (the v41 backfill; re-running changes nothing). Returns the number of workspaces set.
+ */
+export async function grantEarlyAccess(db, workspaceId = null) {
+  const r = await db.run(`UPDATE workspaces SET early_access_until = GREATEST(created_at, ?::timestamptz) + make_interval(months => ${Number(EARLY_ACCESS.months)})
+    WHERE early_access_until IS NULL AND created_at <= ?::timestamptz${workspaceId ? ' AND id = ?' : ''}`, [EARLY_ACCESS.launch, EARLY_ACCESS.cutoff, ...(workspaceId ? [workspaceId] : [])]);
+  return r.changes;
 }
 
 const PUBLIC_COLS = 's.id, s.workspace_id, s.plan, s.status, s.provider, s.current_period_start, s.current_period_end, s.next_billing_at, s.cancel_at_period_end, s.grace_period_end, s.payment_method_summary, s.canceled_at, s.created_at, s.updated_at, s.seats, s.billing_cycle, s.auto_renew, s.founding_until';
@@ -161,6 +178,8 @@ export async function processWebhookEvent(db, provider, ev) {
       let order = null;
       if (ev.order_id) {
         order = await db.get('SELECT * FROM billing_orders WHERE id = ? FOR UPDATE', [String(ev.order_id)]);
+        // AI credit packs never touch the subscription: amount check → PURCHASE ledger row (billing/credit-packs.js).
+        if (order?.kind === 'CREDIT_PACK') return finish(await applyPackEvent(db, provider, order, ev, ins.id), { workspace_id: order.workspace_id, id: null });
         const checked = checkOrder(order, ev);
         if (checked.ignore) {
           if (checked.fail) await db.run(`UPDATE billing_orders SET status = 'FAILED', failure_code = ?, updated_at = now() WHERE id = ? AND status = 'PENDING'`, [checked.ignore, order.id]);

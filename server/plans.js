@@ -25,6 +25,9 @@ export const PLANS = {
     limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
   ENTERPRISE: { key: 'ENTERPRISE', label: 'Enterprise', per_seat: true, contact_sales: true, ai_credits_monthly: AI_CREDITS_MONTHLY.ENTERPRISE,
     limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
+  // Early access (AI-credits-only billing, 2026-10-15): the whole app with TEAM limits for EARLY_ACCESS.months, no subscription row.
+  // effectivePlan() answers EARLY while workspaces.early_access_until > now() and no paid subscription grants a plan.
+  EARLY: { key: 'EARLY', label: '얼리 액세스', base_monthly: 0, ai_credits_monthly: 0, limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
 };
 export const DEFAULT_PLAN = 'FREE';
 export const VAT_RATE = 0.1;
@@ -39,6 +42,36 @@ export const CYCLES = {
 };
 /** Monthly list price (VAT excluded) of a plan for `users` total users: base + each user beyond included_users. */
 export const monthlyPrice = (plan, users) => plan.base_monthly + Math.max(0, users - (plan.included_users || 0)) * (plan.extra_user_monthly || 0);
+
+/**
+ * AI credits (AI-credits-only billing). 1 credit = ₩10, VAT included; ₩ is always credits × CREDIT_PRICE_KRW and never stored.
+ * Packs are prepaid through the NicePay one-time checkout (billing/credit-packs.js). No bonus credits, so a refund is linear.
+ */
+export const CREDIT_PRICE_KRW = 10;
+export const CREDIT_PACKS = [
+  { key: 'P10', amount: 10000, credits: 1000 },
+  { key: 'P30', amount: 30000, credits: 3000 },
+  { key: 'P100', amount: 100000, credits: 10000 },
+];
+/** Below this balance the page and the AI cost line turn amber and the OWNER gets one e-mail (re-armed by a purchase). */
+export const LOW_BALANCE_CREDITS = envInt(process.env.AI_LOW_BALANCE_CREDITS, 500);
+/** Refunds of unused purchased credits: full within REFUND_FULL_DAYS of an untouched pack, else less REFUND_FEE_PCT. */
+export const REFUND_FULL_DAYS = 7;
+export const REFUND_FEE_PCT = 10;
+/** Purchased credits are valid this many years (terms; no expiry job in this round). */
+export const PURCHASED_VALID_YEARS = 5;
+/**
+ * Early access: every workspace created on or before `cutoff` is free (TEAM limits) for `months` months, counted from
+ * max(created_at, launch). After that it needs TEAM to keep unlimited limits, else FREE limits apply (data kept, read-only over the limit).
+ */
+export const EARLY_ACCESS = {
+  months: 12,
+  get launch() { return process.env.EARLY_ACCESS_LAUNCH || '2026-10-15T00:00:00+09:00'; },
+  get cutoff() { return process.env.EARLY_ACCESS_CUTOFF || '2027-06-30T23:59:59+09:00'; },   // founder decision pending; env overrides
+  notice_days: [30, 7],
+};
+/** Supply / VAT split of a VAT-inclusive amount (₩10,000 → 9,091 + 909). */
+export const splitVat = (amount) => { const supply = Math.round(amount / (1 + VAT_RATE)); return { supply, vat: amount - supply }; };
 
 /** Usage dimension labels in UI order. weekly_reports is counted per calendar month (see usage.js). */
 export const USAGE_DIMS = [

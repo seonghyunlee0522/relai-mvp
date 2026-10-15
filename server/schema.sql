@@ -54,6 +54,11 @@ DO $$ BEGIN
     ALTER TABLE workspaces ADD CONSTRAINT workspaces_status_check CHECK (status IN ('ACTIVE','SUSPENDED','CLOSED')); END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_workspaces_created ON workspaces(created_at);
+-- Early access (migration v41): free with TEAM limits until early_access_until (NULL = no early access). The 30-/7-day ending
+-- notices are claimed once each through the *_notice_at columns.
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS early_access_until timestamptz;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS early_notice_30_at timestamptz;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS early_notice_7_at timestamptz;
 CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status);
 
 CREATE TABLE IF NOT EXISTS workspace_members (
@@ -717,6 +722,15 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_workspace ON credit_ledger(workspace_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_created ON credit_ledger(created_at);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_run ON credit_ledger(ai_run_id);
+-- AI-credits-only billing (migration v41): PURCHASE = a paid credit pack (reference ORDER:<billing_orders.id>); REFUND is written as a
+-- negative amount when unused purchased credits are refunded. low_balance_notified_at = the one low-balance e-mail was sent (NULL = armed).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'credit_ledger_type_check' AND conrelid = 'credit_ledger'::regclass AND pg_get_constraintdef(oid) LIKE '%PURCHASE%') THEN
+    ALTER TABLE credit_ledger DROP CONSTRAINT IF EXISTS credit_ledger_type_check;
+    ALTER TABLE credit_ledger ADD CONSTRAINT credit_ledger_type_check CHECK (type IN ('PLAN_GRANT','ADMIN_GRANT','AI_USAGE','REFUND','ADJUSTMENT','PROMOTION','PURCHASE')); END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_ref ON credit_ledger(workspace_id, reference_type, reference_id);
+ALTER TABLE workspace_credit_accounts ADD COLUMN IF NOT EXISTS low_balance_notified_at timestamptz;
 
 /* ================= Integrity triggers (plpgsql) =================
    Defence in depth. Every rule here is also enforced by the service layer (common.js resolveLinkTarget etc.).
@@ -1191,6 +1205,19 @@ CREATE TABLE IF NOT EXISTS billing_orders (
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_billing_orders_ws ON billing_orders(workspace_id, created_at);
+-- AI-credits-only billing (migration v41): prepaid credit packs are billing_orders of kind CREDIT_PACK (plan / cycle / seats / months
+-- NULL), credited as a PURCHASE ledger row once paid. Partial refunds (NicePay cancelAmt) add up in refunded_amount / refunded_credits;
+-- receipt_url is the NicePay card receipt (매출전표) from the approval response.
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS credits INTEGER;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS refunded_amount INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS refunded_credits INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+ALTER TABLE billing_orders ALTER COLUMN plan DROP NOT NULL, ALTER COLUMN cycle DROP NOT NULL, ALTER COLUMN seats DROP NOT NULL, ALTER COLUMN months DROP NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'billing_orders_kind_check' AND conrelid = 'billing_orders'::regclass AND pg_get_constraintdef(oid) LIKE '%CREDIT_PACK%') THEN
+    ALTER TABLE billing_orders DROP CONSTRAINT IF EXISTS billing_orders_kind_check;
+    ALTER TABLE billing_orders ADD CONSTRAINT billing_orders_kind_check CHECK (kind IN ('ONE_TIME','RECURRING_FIRST','RECURRING_RENEWAL','CREDIT_PACK')); END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS billing_events (
   id                TEXT PRIMARY KEY,

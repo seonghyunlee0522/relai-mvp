@@ -20,6 +20,7 @@ import { changesPage } from './changes/page.js';
 import { raidPage } from './raid/page.js';
 import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
+import { creditsPage } from './credits.js';
 import './shared/upgrade.js';   // 402 plan_limit_reached → upgrade prompt (Phase 10)
 import { adminShell } from './admin/shell.js';
 import { adminDashboardPage } from './admin/dashboard.js';
@@ -50,6 +51,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/issues\/?$/, raidPage],
   [/^\/app\/projects\/([\w-]+)\/tests\/?$/, testsPage],
   [/^\/app\/settings\/?$/, settingsPage],
+  [/^\/app\/settings\/credits\/?$/, creditsPage],      // 설정 › AI 크레딧 (AI-credits-only billing)
   // Admin Console — separate shell, operator-only (the server refuses /admin and /api/admin/* to everyone else)
   [/^\/admin\/?$/, adminDashboardPage],
   [/^\/admin\/users\/?$/, adminUsersPage],

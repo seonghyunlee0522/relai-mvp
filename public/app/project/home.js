@@ -4,7 +4,7 @@
  * CTA goes straight to the work screen; progress / schedule come from scheduleState() (Overview); attention from attentionAll().
  * Projects / Project Home / What's Next / Overview are untouched — Home only decides what to show first. */
 import { api, wsApi } from '../core/api.js';
-import { $, fmtShort, html, no2, raw } from '../core/dom.js';
+import { $, fmtShort, fmtDT, html, no2, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
@@ -105,7 +105,7 @@ export async function homePage(main = $('#main')) {
   const live = h.projects || []; const done = h.completed || [];
   const any = live.length || done.length;
   main.innerHTML = html`<div class="page page--guide home">
-    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${wsName(state.workspace.name)}</p></div>
+    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${wsName(state.workspace.name)}<span id="home-credits"></span></p></div>
       ${raw(any && canManage() ? `<a class="btn ${live.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
     ${raw(any ? checklistCard(o, { compact: true }) : '')}
     ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
@@ -115,4 +115,9 @@ export async function homePage(main = $('#main')) {
     ${raw(done.length ? html`<details class="hdone"><summary>완료된 프로젝트 <b>${done.length}</b>개</summary><div class="hdone__l">${raw(done.map(completedRow).join(''))}</div></details>` : '')}
   </div>`;
   bindChecklist(main);
+  // AI credits at a glance (AI-credits-only billing): balance + early access, linked to 설정 › AI 크레딧. Never blocks Home.
+  api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
+    const el = $('#home-credits', main); if (!el) return;
+    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>AI 크레딧 ${c.balance.toLocaleString('ko-KR')} (₩${c.balance_krw.toLocaleString('ko-KR')})${c.purchased_remaining === 0 && c.free_remaining > 0 ? ' 무료 제공' : ''}</a>${raw(c.plan === 'EARLY' && c.early_access_until ? html` · 얼리 액세스 ${fmtDT(c.early_access_until).slice(0, 10)}까지 무료` : '')}`;
+  }).catch(() => {});
 }

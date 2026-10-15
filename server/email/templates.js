@@ -49,3 +49,35 @@ export function renewalReminderEmail({ workspaceName, periodEnd, seats, link, su
   const text = `${workspaceName} Workspace의 Team 플랜 이용 기간이 ${until}에 끝납니다.\n연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다(데이터는 유지).\n${link ? `\n연장하기: ${link}\n` : ''}`;
   return { subject, html, text };
 }
+
+/* ---------- AI-credits-only billing ---------- */
+const krw = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
+const credits = (n) => `${Number(n).toLocaleString('ko-KR')} 크레딧`;
+
+export function lowBalanceEmail({ workspaceName, balance, threshold, link, support }) {
+  const subject = `[RELAI] ${workspaceName} AI 크레딧 잔액이 ${credits(threshold)} 아래로 내려갔습니다`;
+  const html = shell('AI 크레딧 잔액이 얼마 남지 않았습니다', `<p><b>${esc(workspaceName)}</b> Workspace의 AI 크레딧 잔액이 <b>${esc(credits(balance))} (${esc(krw(balance * 10))})</b>입니다.</p>
+    <p>잔액이 0이 되면 AI 기능(요구사항 추출, WBS 초안, 영향 분석, 질문)을 쓸 수 없습니다. 다른 기능은 그대로 쓸 수 있습니다.</p>${link ? button(link, '크레딧 충전하기') : ''}
+    <p style="font-size:13px;color:#667085">충전은 Workspace OWNER가 설정 › AI 크레딧에서 할 수 있습니다. 이 안내는 충전 후 다시 ${esc(credits(threshold))} 아래로 내려갈 때만 다시 보내 드립니다.</p>`, support);
+  const text = `${workspaceName} Workspace의 AI 크레딧 잔액이 ${credits(balance)} (${krw(balance * 10)})입니다.\n잔액이 0이 되면 AI 기능을 쓸 수 없습니다.\n${link ? `\n충전하기: ${link}\n` : ''}`;
+  return { subject, html, text };
+}
+
+export function earlyAccessEndingEmail({ workspaceName, until, days, teamMonthly, link, support }) {
+  const day = new Date(until).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+  const subject = `[RELAI] ${workspaceName} 얼리 액세스 무료 기간이 ${days}일 뒤(${day}) 끝납니다`;
+  const html = shell('얼리 액세스 무료 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> Workspace의 얼리 액세스(전체 기능 무료) 기간이 <b>${esc(day)}</b>에 끝납니다.</p>
+    <p>이후에도 프로젝트·멤버·요구사항을 제한 없이 쓰려면 Team 플랜(${esc(krw(teamMonthly))}/월, 부가세 별도)이 필요합니다. 결제하지 않으면 Free 플랜 한도가 적용되며, 한도를 넘는 기존 데이터는 삭제되지 않고 읽기 전용으로 남습니다.</p>
+    <p>남은 AI 크레딧은 그대로 쓸 수 있습니다.</p>${link ? button(link, '플랜 확인하기') : ''}`, support);
+  const text = `${workspaceName} Workspace의 얼리 액세스 무료 기간이 ${day}에 끝납니다.\n이후 Team 플랜(${krw(teamMonthly)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다(데이터는 유지).\nAI 크레딧은 그대로 쓸 수 있습니다.\n${link ? `\n${link}\n` : ''}`;
+  return { subject, html, text };
+}
+
+export function creditRefundRequestEmail({ workspaceName, workspaceId, requester, refundable, note }) {
+  const subject = `[RELAI] AI 크레딧 환불 요청 — ${workspaceName}`;
+  const html = shell('AI 크레딧 환불 요청', `<p>Workspace <b>${esc(workspaceName)}</b> (${esc(workspaceId)})</p><p>요청자: ${esc(requester)}</p>
+    <p>환불 가능한 미사용 구매 크레딧: <b>${esc(credits(refundable))}</b></p>${note ? `<p>메모: ${esc(note)}</p>` : ''}
+    <p style="font-size:13px;color:#667085">Admin 콘솔 › Workspace › AI 크레딧 환불에서 처리합니다.</p>`, '');
+  const text = `Workspace ${workspaceName} (${workspaceId})\n요청자: ${requester}\n환불 가능: ${credits(refundable)}\n${note ? `메모: ${note}\n` : ''}`;
+  return { subject, html, text };
+}

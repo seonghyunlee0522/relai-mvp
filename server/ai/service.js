@@ -5,6 +5,7 @@
  * Nothing here writes project data; approval endpoints do that separately through the existing services.
  */
 import { aiConfig, estimateProviderCost, featureCreditCost, publicConfig } from './config.js';
+import { CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS } from '../plans.js';
 import { createProvider, AiProviderError } from './provider.js';
 import { SCHEMAS, validateSchema, trimDeep } from './schemas.js';
 import { retryHint } from './prompts.js';
@@ -20,7 +21,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Public status for the frontend: flag, costs, notice, and this workspace's credit balance. */
 export async function aiStatus(db, wid) {
   const pub = publicConfig();
-  return { ...pub, plan: await effectivePlan(db, wid), credits: pub.enabled ? await getBalance(db, wid) : null };
+  return { ...pub, plan: await effectivePlan(db, wid), credits: pub.enabled ? await getBalance(db, wid) : null, credit_price_krw: CREDIT_PRICE_KRW, low_balance_threshold: LOW_BALANCE_CREDITS };
 }
 
 async function checkLimits(db, cfg, { wid, userId }) {

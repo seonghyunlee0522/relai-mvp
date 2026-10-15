@@ -8,6 +8,7 @@ import { createFakeProvider, assertProvider, providerFromEnv } from '../billing/
 import { effectivePlan } from '../billing/subscriptions.js';
 import { resetBillingCache } from '../billing-admin.js';
 import { LATEST_VERSION } from '../migrations.js';
+process.env.EARLY_ACCESS_CUTOFF = '2000-01-01T00:00:00Z';   // these suites test FREE/TEAM on fresh workspaces: no early access (AI-credits billing is in credits-billing.test.js)
 
 process.env.PLAN_LIMITS = 'on';   // helpers.js turns enforcement off for the legacy suites
 

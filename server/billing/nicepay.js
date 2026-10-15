@@ -15,7 +15,7 @@
  *   registerBillingKey (POST /v1/subscribe/regist, card data AES-encrypted in encData, never stored or logged),
  *   chargeBillingKey (POST /v1/subscribe/{bid}/payments; takes the bid or its stored ciphertext), expireBillingKey (POST /v1/subscribe/{bid}/expire).
  * Webhook: JSON payment object, signature sha256(tid + amount + ediDate + secretKey); NicePay expects a 200 text/html "OK".
- * Refund: POST /v1/payments/{tid}/cancel { reason, orderId } (full cancel).
+ * Refund: POST /v1/payments/{tid}/cancel { reason, orderId } (full cancel); refundPartial adds cancelAmt (AI credit packs, partial cancel).
  *
  * Keys: NICEPAY_CLIENT_KEY (clientId) and NICEPAY_SECRET_KEY from the environment only. NICEPAY_MODE=live selects
  * api.nicepay.co.kr; anything else is the sandbox. A key/mode mismatch (live key in sandbox mode or the reverse) disables
@@ -98,7 +98,8 @@ export function createNicepayProvider({ env = process.env, fetch: fetchImpl = gl
   /** Normalized event for a NicePay payment object tied to one of our orders. */
   const eventFromPayment = (p, extra = {}) => {
     const status = String(p.status || '');
-    const payment = { amount: Number(p.amount), currency: p.currency || 'KRW', provider_tid: p.tid, moid: p.orderId, provider_result_code: p.resultCode };
+    const payment = { amount: Number(p.amount), currency: p.currency || 'KRW', provider_tid: p.tid, moid: p.orderId, provider_result_code: p.resultCode,
+      ...(p.receiptUrl ? { receipt_url: String(p.receiptUrl).slice(0, 500) } : {}) };
     if (status === 'paid') return { id: `paid:${p.tid}`, type: 'subscription.activated', order_id: p.orderId, payment_method_summary: methodSummary(p),
       payment: { ...payment, status: 'PAID' }, payload: safePayload(p), ...extra };
     if (status === 'failed') return { id: `failed:${p.tid}`, type: 'payment.failed', order_id: p.orderId,
@@ -171,11 +172,11 @@ export function createNicepayProvider({ env = process.env, fetch: fetchImpl = gl
       return { ok: true };
     },
 
-    async refundTid({ tid, orderId, reason }) {
+    async refundTid({ tid, orderId, reason, cancelAmt }) {
       const edi = ediDate();
       const p = await call('POST', `/v1/payments/${encodeURIComponent(tid)}/cancel`, { reason: String(reason || '환불').slice(0, 100), orderId, ediDate: edi,
-        signData: sha256hex(`${tid}${edi}${cfg.secretKey}`) });
-      if (p.resultCode !== '0000' || p.status !== 'cancelled') throw new BillingError(402, 'refund_failed', String(p.resultMsg || '환불에 실패했습니다.').slice(0, 200));
+        ...(cancelAmt ? { cancelAmt: Number(cancelAmt) } : {}), signData: sha256hex(`${tid}${edi}${cfg.secretKey}`) });
+      if (p.resultCode !== '0000' || !['cancelled', 'partialCancelled'].includes(p.status)) throw new BillingError(402, 'refund_failed', String(p.resultMsg || '환불에 실패했습니다.').slice(0, 200));
       if (!verifyPayment(p)) throw new BillingError(502, 'refund_unverified', '환불 응답 서명을 확인할 수 없습니다. 결제사 관리자에서 상태를 확인해 주세요.');
       return p;
     },
@@ -183,6 +184,13 @@ export function createNicepayProvider({ env = process.env, fetch: fetchImpl = gl
     async refund({ order, reason }) {
       if (!order?.provider_tid) throw new BillingError(409, 'not_refundable', '환불할 결제가 없습니다.');
       return eventFromPayment(await this.refundTid({ tid: order.provider_tid, orderId: order.id, reason }));
+    },
+    /** Partial cancel of `amount` on a paid order (AI credit pack refund). Returns { cancelled_tid, balance_amount }. */
+    async refundPartial({ order, amount, reason }) {
+      if (!order?.provider_tid) throw new BillingError(409, 'not_refundable', '환불할 결제가 없습니다.');
+      if (!(Number.isInteger(amount) && amount > 0 && amount <= Number(order.amount))) throw new BillingError(400, 'bad_amount', '환불 금액이 올바르지 않습니다.');
+      const p = await this.refundTid({ tid: order.provider_tid, orderId: order.id, reason, cancelAmt: amount });
+      return { cancelled_tid: p.cancelledTid || null, balance_amount: p.balanceAmt ?? null };
     },
     async netCancel(orderId) {
       const edi = ediDate();

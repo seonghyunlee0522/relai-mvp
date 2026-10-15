@@ -31,7 +31,7 @@ export async function openExtractDialog({ pid, onDone }) {
   };
   const drawResult = (r) => {
     const n = candidates.length;
-    d.body.innerHTML = html`<div class="aid__sum"><b>요구사항 후보 ${n}건</b>${raw(r.run ? html`<small class="dim"> · ${r.run.credit_cost} Credits 사용 · 잔여 ${r.run.balance}</small>` : '')}<span class="aid__sp"></span>
+    d.body.innerHTML = html`<div class="aid__sum"><b>요구사항 후보 ${n}건</b>${raw(r.run ? html`<small class="dim"> · ${r.run.credit_cost} 크레딧 (₩${(r.run.credit_cost * 10).toLocaleString('ko-KR')}) 사용 · 잔액 ${r.run.balance}</small>` : '')}<span class="aid__sp"></span>
         <label class="toggle"><input type="checkbox" id="ai-all" checked> 전체 선택</label></div>
       ${raw(warningsHtml(r.warnings))}
       ${raw(n ? html`<ol class="aic">${raw(candidates.map((c, i) => html`<li class="aic__i ${c._sel ? 'is-sel' : ''}" data-i="${i}">

@@ -55,6 +55,7 @@ import { ensureAccount } from './ai/credits.js';
 import { assertWithinLimit, PlanLimitError } from './billing/limits.js';
 import { providerFromEnv } from './billing/provider.js';
 import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
+import { mountCreditRoutes } from './billing/credit-routes.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
@@ -1289,7 +1290,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     sessionHash: (req) => (req.sessionToken ? tokenHash(req.sessionToken) : null) });   // profile, password change, 회원 탈퇴, workspace delete
   mountMaintenanceRoutes({ app, db, wrap, fail });                                        // GET /api/cron/purge (Vercel cron)
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
-  mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
+  mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });
+  mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });    // AI credits: customer page, pack checkout, refund request, operator refund   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };

@@ -68,8 +68,8 @@ export async function adminWorkspacePage(id, main = $('#main')) {
           <div><div class="asec__h">최근 AI 요청</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'feature', label: '기능', w: 120, render: (r) => AI_FEATURE[r.feature] || r.feature }, { key: 'user_name', label: '사용자', w: 90 }, { key: 'status', label: '상태', w: 90, render: (r) => chip(r.status === 'SUCCEEDED' ? (r.error_code ? 'ON_HOLD' : 'ACTIVE') : r.status === 'FAILED' ? 'SUSPENDED' : 'DRAFT', r.status === 'SUCCEEDED' ? (r.error_code ? '성공 · 정산 충돌' : '성공') : r.status === 'FAILED' ? `실패 ${r.error_code || ''}` : '진행 중') }, { key: 'credit_cost', label: 'Credit', w: 70, render: (r) => (r.credit_status === 'CHARGED' ? n(r.credit_cost) : html`<span class="dim">0</span>`) }, { key: 'tokens', label: '토큰', w: 110, render: (r) => `${n(r.input_tokens)} / ${n(r.output_tokens)}` }], ai.runs, { empty: 'AI 요청 기록이 없습니다.', id: 'airuns' }))}</div>
           <div><div class="asec__h">Credit Ledger</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'type', label: '유형', w: 110 }, { key: 'amount', label: '증감', w: 70, render: (r) => html`<b style="color:${r.amount < 0 ? '#B42318' : '#067647'}">${r.amount > 0 ? '+' : ''}${n(r.amount)}</b>` }, { key: 'balance_after', label: '잔액', w: 80, render: (r) => n(r.balance_after) }, { key: 'reason', label: '사유', render: (r) => html`${r.feature ? AI_FEATURE[r.feature] || r.feature : r.reason}${r.created_by_name ? html` <small class="dim">· ${r.created_by_name}</small>` : ''}` }], ai.ledger, { empty: '원장 기록이 없습니다.', id: 'ailed' }))}</div>
         </div>
-        <p class="hint">Credit은 Ledger를 통해서만 증감합니다. 가격·Plan별 지급량·Top-up은 아직 정하지 않았으며, 지급은 운영자 사유와 함께 Audit에 기록됩니다.</p>`,
-        w.status === 'CLOSED' ? '' : '<button class="btn btn--secondary btn--sm" id="ai-grant">Credit 지급 / 조정</button>') : '')}
+        <p class="hint">Credit은 Ledger를 통해서만 증감합니다. 1 크레딧 = ₩10 (부가세 포함). 지급·조정·환불은 운영자 사유와 함께 Audit에 기록됩니다.</p>`,
+        w.status === 'CLOSED' ? '' : '<button class="btn btn--secondary btn--sm" id="ai-grant">Credit 지급 / 조정</button> <button class="btn btn--secondary btn--sm" id="ai-refund">미사용 크레딧 환불</button>') : '')}
       <div class="agrid2">
         ${raw(section('최근 Activity', d.activity.length ? html`<ul class="aact">${raw(d.activity.map((x) => html`<li><time>${fmtD(x.at)}</time><span>${ACT[x.type] || x.type}</span></li>`).join(''))}</ul>` : '<div class="aempty">활동 기록이 없습니다.</div>'))}
         ${raw(section('운영자 조작', table([{ key: 'created_at', label: '일시', w: 150, render: (r) => fmtD(r.created_at) }, { key: 'admin_name', label: 'Admin', w: 150 }, { key: 'summary', label: 'Summary', render: (r) => html`${ACTIONS[r.action] || r.action}${r.metadata?.reason ? ` — ${r.metadata.reason}` : ''}` }], d.audit, { empty: '기록 없음' })))}
@@ -86,6 +86,23 @@ export async function adminWorkspacePage(id, main = $('#main')) {
       const r = await creditDialog(w.name, ai ? ai.account.balance : 0);
       if (!r) return;
       try { const out = await api('POST', `/api/admin/workspaces/${id}/ai/credits`, r); toast(`Credit을 반영했습니다. 현재 잔액 ${out.balance.toLocaleString('ko-KR')}`); await draw(); } catch (e) { toast(e.message); }
+    };
+    // AI-credits-only billing: refund of unused PURCHASED credits (newest pack first; 7-day untouched pack 100%, else −10%) via NicePay partial cancel.
+    const rf = $('#ai-refund'); if (rf) rf.onclick = async () => {
+      const base = `/api/billing/admin/workspaces/${id}/credit-refund`;
+      try {
+        const { refundable } = await api('GET', base);
+        if (!refundable) return toast('환불할 수 있는 미사용 구매 크레딧이 없습니다. 무료 크레딧은 환불되지 않습니다.');
+        const c = await promptDialog({ title: '미사용 크레딧 환불', body: `환불 가능한 미사용 구매 크레딧: ${refundable.toLocaleString('ko-KR')}`, label: '환불할 크레딧 수', required: true, confirm: '금액 계산' });
+        if (c === null) return;
+        const { quote } = await api('GET', `${base}?credits=${encodeURIComponent(c)}`);
+        const lines = quote.allocations.map((a) => `${a.credits.toLocaleString('ko-KR')} 크레딧 → ₩${a.amount.toLocaleString('ko-KR')}${a.full ? ' (7일 이내 미사용: 전액)' : ' (수수료 10% 차감)'}${a.manual ? ' · 카드 취소 기한 지남: 계좌 환불' : ''}`).join(' / ');
+        const reason = await promptDialog({ title: `₩${quote.amount.toLocaleString('ko-KR')} 환불할까요?`, body: `${lines}. 결제한 카드로 부분 취소하고, 크레딧 원장과 Audit에 기록합니다.`, label: '환불 사유 (필수)', required: true, confirm: '환불', danger: true });
+        if (reason === null) return;
+        const out = await api('POST', base, { credits: Number(c), reason });
+        toast(out.failed?.length ? `일부 환불 실패: ${out.failed.map((f) => f.error).join(', ')}` : `₩${out.amount.toLocaleString('ko-KR')} 환불했습니다. 현재 잔액 ${out.balance.toLocaleString('ko-KR')}`);
+        await draw();
+      } catch (e) { toast(e.message); }
     };
     const rb = $('#reactivate'); if (rb) rb.onclick = () => run('reactivate', `'${w.name}' Workspace 정지를 해제할까요?`, '멤버가 다시 접근할 수 있게 됩니다.', '정지 해제', false);
   };
