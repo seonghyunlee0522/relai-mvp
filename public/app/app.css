@@ -3390,5 +3390,6 @@ html.is-phone .kpi__s{white-space:normal;overflow:visible;text-overflow:clip}
 .afunnel__h{font-size:var(--fs-xs);color:var(--text-3);border-bottom:1px solid var(--border-soft)}.afunnel__h b,.afunnel__h small{font-weight:600}
 .afunnel__r.is-drop{background:var(--danger-bg);border-radius:var(--r-sm);margin:0 -6px;padding:5px 6px}.afunnel__r.is-drop .afunnel__b i{background:var(--danger-fg)}
 .afunnel__r .achip{margin-left:6px;font-style:normal}
+#firstuse{min-width:0}.afunnel__r.is-side>span:first-child{color:var(--text-2);padding-left:10px}.asec__note{margin:0;padding:8px 14px 12px}
 .atool--range{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.atool--range .input{width:auto}
 @media (max-width:767px){.afunnel--wide .afunnel__r{grid-template-columns:1fr 44px 44px 52px}.afunnel--wide .afunnel__b{display:none}}

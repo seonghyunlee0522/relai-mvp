@@ -14,12 +14,13 @@ export const ONCE = ['signup', 'email_verified', 'sample_opened', 'project_creat
 export const STAGES = { INITIATION: '01', REQUIREMENTS: '02', ANALYSIS_DESIGN: '03', DEVELOPMENT: '04', TESTING: '05', TRANSITION_GO_LIVE: '06', OPERATIONS: '07' };
 const STAGE_NAMES = { '01': '착수', '02': '요구사항 정의', '03': '분석·설계', '04': '구현', '05': '시험', '06': '전환 및 오픈', '07': '운영 및 유지보수' };
 
-/** Main funnel, in journey order. `stage` steps are stage_reached with that key. */
+/** Main funnel, in journey order. `stage` steps are stage_reached with that key. A `side` step does not gate the next one
+ * (you can create a project without verifying your e-mail), so it and the step after it compare with the last non-side step. */
 export const FUNNEL = [
   { key: 'landing_visit', label: '랜딩 방문' },
   { key: 'signup', label: '가입' },
-  { key: 'email_verified', label: '이메일 인증' },
-  { key: 'sample_opened', label: '샘플 프로젝트 열람' },
+  { key: 'email_verified', label: '이메일 인증', side: true },
+  { key: 'sample_opened', label: '샘플 프로젝트 열람', side: true },
   { key: 'project_created', label: '첫 프로젝트 생성 (01 착수)' },
   ...['02', '03', '04', '05', '06', '07'].map((s) => ({ key: `stage_${s}`, label: `${s} ${STAGE_NAMES[s]} 도달` })),
   { key: 'project_closed', label: '프로젝트 종료' },
@@ -56,6 +57,13 @@ export const FEATURE_LABELS = {
   'POST /projects/:pid/ai/requirements/extract': 'AI 요구사항 추출', 'POST /projects/:pid/ai/wbs/generate': 'AI WBS 생성', 'POST /projects/:pid/ai/ask': 'AI 질문', 'POST /projects/:pid/changes/:cid/ai/impact': 'AI 영향 분석',
   'POST /invitations': '팀원 초대', 'POST /members': '팀원 추가', 'POST /integrations/jira/connect': 'Jira 연결 시작', 'POST /projects/:pid/integrations/jira/sync': 'Jira 동기화',
   'POST /samples': '샘플 프로젝트 다시 추가', 'DELETE /samples': '샘플 프로젝트 삭제',
+  'POST /onboarding/:key/:action(start|step|complete|skip|replay)': '시작 안내(온보딩) 진행', 'POST /projects/:pid/archive': '프로젝트 보관',
+  'POST /projects/:pid/steps/:sid/checklist': '체크리스트 항목 추가', 'PATCH /projects/:pid/checklist/:iid': '체크리스트 체크',
+  'POST /projects/:pid/requirements/:rid/links': '요구사항–WBS 연결', 'POST /projects/:pid/wbs/:iid/links': 'WBS–요구사항 연결', 'POST /projects/:pid/requirements/:rid/criteria': '인수 기준 추가',
+  'POST /projects/:pid/changes/:cid/transition': '변경 요청 처리', 'PATCH /projects/:pid/issues/:xid': '이슈 수정', 'PATCH /projects/:pid/risks/:xid': '리스크 수정',
+  'POST /projects/:pid/acceptances/:aid/transition': '검수 진행', 'POST /projects/:pid/go-live': '오픈 기록', 'POST /projects/:pid/handover': '운영 인수 기록',
+  'PATCH /projects/:pid/weekly-reports/:rid': '보고서 편집', 'POST /projects/:pid/requirements/:rid/comments': '요구사항 댓글', 'POST /projects/:pid/wbs/:iid/comments': 'WBS 댓글',
+  'GET /projects/:pid/weekly-reports/:rid/export.pdf': '보고서 PDF 내보내기', 'GET /projects/:pid/weekly-reports/:rid/export.docx': '보고서 Word 내보내기',
 };
 const SCREEN_LABELS = {
   '/app': '홈', '/app/projects': '프로젝트 목록', '/app/projects/new': '새 프로젝트', '/app/projects/:id': '프로젝트 개요', '/app/projects/:id/requirements': '요구사항',
@@ -190,9 +198,12 @@ export async function funnel(db, { from, to }) {
   const by = Object.fromEntries(rows.map((r) => [r.step, Number(r.n)]));
   by.landing_visit = visits;
   const signups = by.signup || 0;
+  let gate = null;   // last non-side step
   const steps = FUNNEL.map((s, i) => {
-    const count = by[s.key] || 0; const prev = i ? by[FUNNEL[i - 1].key] || 0 : null;
-    return { key: s.key, label: s.label, count, pct_prev: i ? pct(count, prev) : null, pct_signup: i >= 1 ? pct(count, signups) : null, drop: i && prev ? prev - count : 0 };
+    const count = by[s.key] || 0; const prev = gate ? by[gate.key] || 0 : null;
+    const out = { key: s.key, label: s.label, side: Boolean(s.side), base: gate ? gate.key : null, count, pct_prev: i ? pct(count, prev) : null, pct_signup: i >= 1 ? pct(count, signups) : null, drop: i && prev ? Math.max(0, prev - count) : 0 };
+    if (!s.side) gate = s;
+    return out;
   });
   // Biggest drop-off: the step that loses the largest share of the step before it (needs a non-empty previous step).
   let biggest = null;

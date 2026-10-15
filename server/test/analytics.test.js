@@ -4,6 +4,10 @@ import assert from 'node:assert/strict';
 import { boot, setup } from './api-helpers.js';
 import { track, markActive, parseRange, screenKey, funnel, topFeatures, cohorts, activeUsers, funnelCsv, funnelReport, isBot } from '../analytics.js';
 import { todayKst } from '../../public/app/shared/kst-date.js';
+import { setEmailProvider } from '../email/service.js';
+import { fakeEmailProvider } from '../email/provider.js';
+
+const mail = fakeEmailProvider(); setEmailProvider(mail);
 
 const count = async (db, where, params = []) => Number((await db.get(`SELECT COUNT(*) AS n FROM analytics_events WHERE ${where}`, params)).n);
 const at = (day, hh = '03') => `${day}T${hh}:00:00Z`;   // 12:00 KST that day
@@ -67,6 +71,8 @@ describe('aggregates', () => {
       assert.deepEqual([c.landing_visit, c.signup, c.email_verified, c.sample_opened, c.project_created, c.stage_02, c.stage_03], [10, 4, 3, 2, 2, 1, 0]);
       const step = (k) => f.steps.find((s) => s.key === k);
       assert.equal(step('signup').pct_prev, 40); assert.equal(step('email_verified').pct_prev, 75); assert.equal(step('sample_opened').pct_signup, 50);
+      // side steps (e-mail, sample) don't gate: they and the next step compare with 가입
+      assert.equal(step('sample_opened').pct_prev, 50); assert.equal(step('project_created').pct_prev, 50); assert.equal(step('project_created').base, 'signup'); assert.equal(step('stage_02').pct_prev, 50);
       assert.equal(f.biggest_drop.key, 'stage_03'); assert.equal(f.biggest_drop.pct_lost, 100);
       const fu = Object.fromEntries(f.first_use.map((x) => [x.key, x]));
       assert.equal(fu.first_requirement.count, 1); assert.equal(fu.first_requirement.pct_signup, 25); assert.equal(fu.first_wbs.count, 0);
@@ -132,6 +138,11 @@ describe('server-side tracking through the API', () => {
       assert.equal(await count(db, `name = 'stage_reached' AND key = '01' AND user_id = ?`, [A.uid]), 1);
       assert.equal(await ev('feature', `AND key = 'POST /projects'`), 1);
       assert.equal(Number((await db.get('SELECT COUNT(*) n FROM analytics_active_days WHERE user_id = ?', [A.uid])).n), 1);
+      assert.equal(await ev('email_verified'), 0);
+      const link = mail.find((m) => m.to === 'pm@x.com').map((m) => `${m.text || ''}${m.html || ''}`).join('').match(/verify-email\?token=([\w-]+)/);
+      assert.ok(link, 'verification mail has a link');
+      assert.equal((await client()('POST', '/api/auth/email/verify', { token: link[1] })).status, 200);
+      assert.equal(await ev('email_verified'), 1);
 
       await A.c('POST', A.req, { title: '로그인', description: '이메일 로그인' });
       await A.c('POST', A.req, { title: '로그아웃', description: '로그아웃' });

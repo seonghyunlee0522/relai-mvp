@@ -10,13 +10,13 @@ const PRESETS = [[7, '7일'], [30, '30일'], [90, '90일']];
 
 const funnelRows = (d) => {
   const top = Math.max(1, ...d.steps.map((s) => s.count));
-  return html`<div class="afunnel afunnel--wide" data-funnel><div class="afunnel__r afunnel__h"><span>단계</span><span></span><small>사용자</small><small>전 단계</small><small>가입 대비</small></div>${raw(d.steps.map((s, i) => {
+  return html`<div class="afunnel afunnel--wide" data-funnel><div class="afunnel__r afunnel__h"><span>단계</span><span></span><small>사용자</small><small>앞 단계</small><small>가입 대비</small></div>${raw(d.steps.map((s, i) => {
     const drop = d.biggest_drop && d.biggest_drop.key === s.key;
-    return html`<div class="afunnel__r ${drop ? 'is-drop' : ''}" data-step="${s.key}"><span>${s.label}${raw(drop ? ' <em class="achip achip--bad" data-biggest-drop>가장 큰 이탈</em>' : '')}</span>
+    return html`<div class="afunnel__r ${drop ? 'is-drop' : ''} ${s.side ? 'is-side' : ''}" data-step="${s.key}"><span>${s.side ? '↳ ' : ''}${s.label}${raw(drop ? ' <em class="achip achip--bad" data-biggest-drop>가장 큰 이탈</em>' : '')}</span>
       <div class="afunnel__b"><i style="width:${Math.round((s.count / top) * 100)}%"></i></div><b data-count>${n(s.count)}</b>
-      <small title="전 단계 대비">${i ? p(s.pct_prev) : ''}</small><small title="가입 대비">${i > 1 ? p(s.pct_signup) : ''}</small></div>`;
+      <small title="${s.side ? '가입 대비 (선택 단계)' : '앞 단계 대비'}">${i ? p(s.pct_prev) : ''}</small><small title="가입 대비">${i > 1 ? p(s.pct_signup) : ''}</small></div>`;
   }).join(''))}
-    <p class="hint">기간 안에 가입한 사용자가 이후 각 단계에 도달했는지 셉니다. 랜딩 방문은 기간 안의 익명 방문 수입니다(로그인 사용자·봇 제외). 샘플 프로젝트와 운영자 계정은 빠집니다.</p></div>`;
+    <p class="hint">기간 안에 가입한 사용자가 이후 각 단계에 도달했는지 셉니다. ↳ 표시는 건너뛸 수 있는 단계라 가입과 비교하고, 다음 단계도 그 앞의 필수 단계와 비교합니다. 랜딩 방문은 기간 안의 익명 방문 수입니다(로그인 사용자·봇 제외). 샘플 프로젝트와 운영자 계정은 빠집니다.</p></div>`;
 };
 
 const cohortCell = (c) => (!c ? html`<span class="dim">아직</span>` : html`<b>${p(c.pct)}</b> <small class="dim">${n(c.returned)}/${n(c.eligible)}</small>`);
@@ -45,7 +45,7 @@ export async function adminFunnelPage(main = $('#main')) {
         ${raw(section('핵심 기능 첫 사용 (가입자 대비)', html`${raw(table([
           { key: 'label', label: '기능', cls: 'ttl' }, { key: 'count', label: '사용자', w: 80, render: (f) => n(f.count) },
           { key: 'pct', label: '가입 대비', w: 160, render: (f) => html`<span class="auv"><b>${p(f.pct_signup)}</b>${raw(f.pct_signup === null ? '' : html`<i style="width:${Math.min(100, f.pct_signup)}%"></i>`)}</span>` },
-        ], d.first_use, { id: 'firstuse' }))}<p class="hint">순서와 상관없이, 기간 안에 가입한 사용자 중 그 기능을 한 번이라도 쓴 비율입니다.</p>`))}
+        ], d.first_use, { id: 'firstuse' }))}<p class="hint asec__note">순서와 상관없이, 기간 안에 가입한 사용자 중 그 기능을 한 번이라도 쓴 비율입니다.</p>`))}
       </div>
       ${raw(section('많이 쓰는 기능', table([
         { key: 'label', label: '기능', cls: 'ttl' }, { key: 'kind', label: '구분', w: 70, render: (f) => (f.kind === 'screen' ? '화면' : '작업') },
@@ -54,11 +54,13 @@ export async function adminFunnelPage(main = $('#main')) {
       ${raw(section('주간 가입 코호트 재방문', html`${raw(table([
         { key: 'week', label: '가입 주 (월요일)', w: 150 }, { key: 'users', label: '가입자', w: 80, render: (c) => n(c.users) },
         { key: 'd1', label: 'D1', render: (c) => cohortCell(c.d1) }, { key: 'd7', label: 'D7', render: (c) => cohortCell(c.d7) }, { key: 'd30', label: 'D30', render: (c) => cohortCell(c.d30) },
-      ], d.cohorts, { empty: '이 기간에 가입한 사용자가 없습니다.', id: 'cohorts' }))}<p class="hint">D1·D7·D30 = 가입 후 1·7·30일째 이후 다시 접속한 비율. 그날이 아직 오지 않은 가입자는 분모에서 빠지고, 아무도 해당하지 않으면 '아직'으로 표시합니다.</p>`))}
+      ], d.cohorts, { empty: '이 기간에 가입한 사용자가 없습니다.', id: 'cohorts' }))}<p class="hint asec__note">D1·D7·D30 = 가입 후 1·7·30일째 이후 다시 접속한 비율. 그날이 아직 오지 않은 가입자는 분모에서 빠지고, 아무도 해당하지 않으면 '아직'으로 표시합니다.</p>`))}
     </div>`;
     const go = (patch) => { setQs(patch); draw(); };
-    main.querySelector('[data-from]').onchange = (e) => go({ from: e.target.value, to });
-    main.querySelector('[data-to]').onchange = (e) => go({ from, to: e.target.value });
+    // Moving one end past the other (or beyond a year) pulls the other end along to a 30-day window instead of swapping.
+    const bad = (f, t) => f > t || addDays(f, 366) < t;
+    main.querySelector('[data-from]').onchange = (e) => { const f = e.target.value; if (f) go({ from: f, to: bad(f, to) ? [addDays(f, 29), todayKst()].sort()[0] : to }); };
+    main.querySelector('[data-to]').onchange = (e) => { const t = e.target.value; if (t) go({ from: bad(from, t) ? addDays(t, -29) : from, to: t }); };
     main.querySelectorAll('[data-preset]').forEach((b) => { b.onclick = () => { const t = todayKst(); go({ from: addDays(t, -(Number(b.dataset.preset) - 1)), to: t }); }; });
   };
   await draw();
