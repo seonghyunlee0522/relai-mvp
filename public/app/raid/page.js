@@ -35,7 +35,7 @@ export async function raidPage(id) {
   let rows = []; let is = g.issues; let rs = g.risks; let sel = null; let creating = params().get('new') === '1'; let dtab = 'info';
   let owners = { team: [], stakeholders_total: 0 };   // Phase 4 US-6: Issue 담당자 = the Phase 3 picker (RELAI 사용자 · 팀원 (계정 없음))
   const load = async () => { const d = await api('GET', xApi(listQuery())); rows = d.items; is = d.issues; rs = d.risks; g.issues = is; g.risks = rs; if (d.owners) owners = d.owners; };
-  const teamMap = () => Object.fromEntries((owners.team || []).map((t) => [`s:${t.id}`, `${t.name} (계정 없음)`]));
+  const teamMap = (cur = null) => Object.fromEntries((cur === null ? owners.team || [] : OP.teamFor(owners.team, cur)).map((t) => [`s:${t.id}`, `${t.name} (계정 없음)`]));   // the 담당자 filter lists a member once (K13), unless it is the active filter
   const RES_HINT = '어떻게 해결했는지 한 줄 남겨 두면 주간보고에 나옵니다.';   // US-5: a hint, never a block
   const loadSel = async (xid) => { sel = xid ? (await api('GET', xApi(`/${xid}`)))[key()] : null; setParam('sel', xid); };
   const opt = (map, cur, blank) => (blank ? html`<option value="">${blank}</option>` : '') + Object.entries(map).map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
@@ -67,7 +67,7 @@ export async function raidPage(id) {
         ${raw(I ? html`${raw(filterSelect('status', '상태', ISSUE_STATUS, q.get('status')))}${raw(filterSelect('severity', '심각도', SEVERITY, q.get('severity')))}`
         : html`${raw(filterSelect('status', '상태', RISK_STATUS, q.get('status')))}${raw(filterSelect('risk_level', '등급', RISK_LEVEL, q.get('risk_level')))}
           ${raw(filterSelect('probability', '발생 가능성', LEVEL3, q.get('probability')))}${raw(filterSelect('impact', '영향도', LEVEL3, q.get('impact')))}${raw(filterSelect('response_strategy', '전략', STRATEGY, q.get('response_strategy')))}`)}
-        ${raw(filterSelect('owner', '담당자', I ? { ...ownerMap, ...teamMap() } : ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
+        ${raw(filterSelect('owner', '담당자', I ? { ...ownerMap, ...teamMap(q.get('owner') || '') } : ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
         <label class="toggle"><input type="checkbox" data-t="${I ? 'overdue' : 'review'}" ${q.get(I ? 'overdue' : 'review') ? 'checked' : ''}> ${I ? '기한 지남만' : '검토 필요만'}</label>
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         <span class="rtool__sp"></span>

@@ -11,6 +11,8 @@
 import { createWbs, renumber, projectStakeholders, teamOf, todayStr } from './wbs.js';
 import { addLink } from './trace.js';
 
+/** A key date that names the 오픈 ('서비스 오픈', 'Go-Live') becomes the go-live milestone (tagged 06 전환 및 오픈) — 완료보고서 §1 and 오픈 완료 use it. */
+export const GO_LIVE_TITLE = /오픈|go[- ]?live/i;
 export const SKELETON_SOURCE = '뼈대로 생성';
 export class WbsNotEmpty extends Error { constructor() { super('WBS에 이미 항목이 있어 뼈대를 만들 수 없습니다. 뼈대는 WBS가 비어 있을 때만 만들 수 있습니다.'); this.code = 'wbs_not_empty'; } }
 
@@ -83,20 +85,33 @@ export async function milestonesFromKeyDates(db, project, userId, { source = '�
   const ids = []; const seen = new Set(); const today = todayStr();
   for (const k of await pendingKeyDates(db, project)) {
     const key = `${k.title}\u0000${k.date || ''}`; if (seen.has(key)) continue; seen.add(key);   // the same key date twice in 01 → one milestone
-    ids.push(await createWbs(db, project, { item_type: 'MILESTONE', title: String(k.title).slice(0, 200), milestone_date: k.date || null, ...(k.date && k.date < today ? { status: 'COMPLETED', actual_end_date: k.date } : {}), history_source: source }, userId, { skipRenumber: true, skipGuard: true }));
+    ids.push(await createWbs(db, project, { item_type: 'MILESTONE', title: String(k.title).slice(0, 200), ...(GO_LIVE_TITLE.test(k.title) ? { lifecycle_phase: 'TRANSITION_GO_LIVE' } : {}), milestone_date: k.date || null, ...(k.date && k.date < today ? { status: 'COMPLETED', actual_end_date: k.date } : {}), history_source: source }, userId, { skipRenumber: true, skipGuard: true }));
   }
   if (ids.length && !skipRenumber) await renumber(db, project.id);
   return ids;
+}
+
+const norm = (v) => String(v || '').toLowerCase().replace(/\s+/g, '');
+const TITLE_WORD = /^(pm|pl|pmo|po|팀장|대표|이사|상무|전무|부장|차장|과장|대리|주임|사원|매니저|책임|선임|수석|님)$/i;
+/** Same person as a workspace member? Email, or the name with spaces ignored — a member signed up as '김하늘 PM' (a trailing title word) is the
+ *  stakeholder '김하늘' (role '수행 PM'); '김하늘 수행 PM' (name + role) matches too. Pure — unit-tested (demo finding: PM listed twice). */
+export function isMemberStakeholder(sh, members) {
+  const em = norm(sh.email); const nm = norm(sh.name); if (!nm && !em) return false;
+  const shKeys = new Set([nm, norm(`${sh.name || ''}${sh.role || ''}`)].filter(Boolean));
+  return (members || []).some((m) => {
+    if (em && norm(m.email) === em) return true;
+    const words = String(m.name || '').trim().split(/\s+/).filter(Boolean); if (!words.length) return false;
+    while (words.length > 1 && TITLE_WORD.test(words[words.length - 1])) words.pop();
+    return shKeys.has(norm(m.name)) || shKeys.has(norm(words.join('')));
+  });
 }
 
 /** Team (계정 없는 팀원) for the WBS owner picker + the "only the PM is registered" hint (US-1). */
 export async function ownerOptions(db, project) {
   const all = await projectStakeholders(db, project.id);
   // A stakeholder who IS a workspace member (01 tells the PM to list themself) is offered once, as the RELAI 사용자 (J-A2).
-  const norm = (v) => String(v || '').trim().toLowerCase();
   const members = await db.all('SELECT u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', [project.workspace_id]);
-  const names = new Set(members.map((m) => norm(m.name)).filter(Boolean)); const emails = new Set(members.map((m) => norm(m.email)).filter(Boolean));
   // K13: such a stakeholder is flagged `member` and every picker hides them unless THIS item already names them (shared/owner-picker.js teamFor).
-  const team = teamOf(all).map((x) => (names.has(norm(x.name)) || emails.has(norm(all.find((s) => s.id === x.id)?.email)) ? { ...x, member: true } : x));
+  const team = teamOf(all).map((x) => (isMemberStakeholder(all.find((s) => s.id === x.id) || x, members) ? { ...x, member: true } : x));
   return { team, stakeholders_total: all.length };
 }

@@ -125,7 +125,11 @@ export async function issueStats(db, projectId) {
     COALESCE(SUM((status = 'RESOLVED')::int), 0) AS resolved, COALESCE(SUM((status = 'CLOSED')::int), 0) AS closed,
     COALESCE(SUM((status NOT IN ('RESOLVED','CLOSED'))::int), 0) AS active,
     COALESCE(SUM((severity = 'CRITICAL' AND status NOT IN ('RESOLVED','CLOSED'))::int), 0) AS critical,
-    COALESCE(SUM((due_date IS NOT NULL AND due_date < ${TODAY} AND status NOT IN ('RESOLVED','CLOSED'))::int), 0) AS overdue
+    COALESCE(SUM((due_date IS NOT NULL AND due_date < ${TODAY} AND status NOT IN ('RESOLVED','CLOSED'))::int), 0) AS overdue,
+    COALESCE(SUM((source_test_execution_id IS NOT NULL)::int), 0) AS test_total,
+    COALESCE(SUM((source_test_execution_id IS NOT NULL AND status NOT IN ('RESOLVED','CLOSED'))::int), 0) AS test_active,
+    COALESCE(SUM((source_test_execution_id IS NOT NULL AND severity = 'CRITICAL' AND status NOT IN ('RESOLVED','CLOSED'))::int), 0) AS test_critical,
+    COALESCE(SUM((source_test_execution_id IS NOT NULL AND status = 'BLOCKED')::int), 0) AS test_blocked
     FROM issues WHERE project_id = ? AND archived_at IS NULL`, [projectId]));
 }
 export async function riskStats(db, projectId) {

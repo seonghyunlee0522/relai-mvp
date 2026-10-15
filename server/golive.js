@@ -45,9 +45,11 @@ export async function openChecklistItems(db, projectId) {
 }
 export const goLiveStep = (db, projectId) => db.get(`SELECT s.* FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE p.project_id = ? AND p.phase_key = 'TRANSITION_GO_LIVE' AND s.step_key = 'GO_LIVE'`, [projectId]);
 
-/** WBS '오픈' milestone: title '오픈' (Phase 3 뼈대 · 01 주요 일정) or tagged TRANSITION_GO_LIVE — the latest one. */
+/** WBS '오픈' milestone (the planned go-live date): tagged TRANSITION_GO_LIVE first (01 주요 일정 / 뼈대 milestones whose title names the
+ *  오픈 are tagged when created), then a title of exactly '오픈', then any title with '오픈' (milestones created before the tag) — latest first. */
 export const goLiveMilestone = (db, projectId) => db.get(`SELECT * FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND item_type = 'MILESTONE'
-  AND (btrim(title) = '오픈' OR lifecycle_phase = 'TRANSITION_GO_LIVE') ORDER BY milestone_date DESC NULLS LAST, created_at DESC LIMIT 1`, [projectId]);
+  AND (lifecycle_phase = 'TRANSITION_GO_LIVE' OR title LIKE '%오픈%')
+  ORDER BY (lifecycle_phase = 'TRANSITION_GO_LIVE') DESC NULLS LAST, (btrim(title) = '오픈') DESC, milestone_date DESC NULLS LAST, created_at DESC LIMIT 1`, [projectId]);
 
 const err422 = (code, message, fields) => { const e = new ValidationError(fields); e.status = 422; e.code = code; e.message = message; return e; };
 
