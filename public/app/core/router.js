@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { state } from './state.js';
+import { isPhone } from './device.js';
 
 /* BUG-001: every navigation gets a sequence number. A render that awaited past a newer navigation must not paint
  * (shell checks isCurrent(token)), and late replaceState() calls use replaceIfCurrent() so they cannot drag the URL back. */
@@ -36,6 +37,10 @@ export async function render() {
       Object.assign(state, me); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0];
     } catch { return; }
   }
+  // phone = view mode: creating/editing a project and the Admin Console are PC-only pages (spec §4)
+  const pcOnly = isPhone() && (/^\/app\/projects\/new\/?$/.test(path) || /^\/app\/projects\/[\w-]+\/edit\/?$/.test(path) ? '프로젝트 만들기와 수정은 PC에서 할 수 있습니다.'
+    : /^\/admin(\/|$)/.test(path) ? 'Admin Console은 PC에서 사용할 수 있습니다.' : '');
+  if (pcOnly) return shellFn('/app/pc-only', (main) => { main.innerHTML = `<div class="page"><div class="empty pconly" data-pc-only><h2>${pcOnly}</h2><a class="link" href="/app" data-link>홈으로</a></div></div>`; }, token);
   for (const [re, fn] of routes) {
     const m = path.match(re);
     if (m) return shellFn(path, () => fn(...m.slice(1)), token);

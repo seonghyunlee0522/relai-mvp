@@ -283,12 +283,13 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
     check(`US-2 ${fmt.toUpperCase()} downloaded (v1.0)`, new RegExp(`_요구사항정의서_v1\\.0_\\d{8}\\.${fmt}$`).test(d.suggestedFilename()) && fs.statSync(f).size > 1000, d.suggestedFilename());
   }
 
-  // mobile width: Drawer + term tooltips do not widen the page
+  // phone (< 768px) = view mode (hive research/relai-mobile-spec.md): the approval drawer is PC-only; the PC line replaces it
   await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto(`${BASE}/app/projects/${B.p.id}/requirements?approval=1`); await page.waitForSelector('[data-approval-drawer]');
+  await page.goto(`${BASE}/app/projects/${B.p.id}/requirements?approval=1`); await page.waitForSelector('.pcline');
+  await page.waitForTimeout(500);
   const sw = await page.evaluate(() => document.documentElement.scrollWidth);
-  check('375px: no sideways scroll with the Drawer open', sw <= 376, String(sw));
-  await shot('11-approval-drawer-375.png');
+  check('375px: no approval drawer (PC line instead), no sideways scroll', !(await page.$('[data-approval-drawer]')) && (await page.$$('.pcline')).length === 1 && sw <= 376, String(sw));
+  await shot('11-approval-375-view.png');
 
   await browser.close();
   const fails = results.filter((x) => !x[1]);

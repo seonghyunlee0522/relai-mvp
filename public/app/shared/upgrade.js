@@ -5,7 +5,8 @@ import { html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { api } from '../core/api.js';
 import { navigate } from '../core/router.js';
-import { confirmDialog } from './dialogs.js';
+import { confirmDialog, noticeDialog } from './dialogs.js';
+import { isPhone } from '../core/device.js';
 
 let open = false;
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
@@ -20,6 +21,10 @@ export async function showUpgradePrompt(err) {
   if (open) return; open = true;
   try {
     const l = err?.limit || {};
+    if (isPhone()) {   // phone = view mode: the limit + where to pay, and 닫기 only
+      await noticeDialog({ title: l.seats ? '구매한 사용자 수에 도달했습니다' : 'Free 플랜 한도에 도달했습니다', bodyHtml: html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}<p style="margin-top:8px" data-pay-pc>결제는 PC에서 할 수 있습니다</p>` });
+      return;
+    }
     const isOwner = state.workspace?.role === 'OWNER';
     const price = state.workspace?.id ? await teamPrice() : '';
     const body = html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>

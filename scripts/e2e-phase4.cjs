@@ -310,25 +310,19 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   const sw = await mp.evaluate(() => document.documentElement.scrollWidth);
   check('US-8 Q9-1 375px 주간보고 목록 (≥1건): page scrollWidth ≤ 375', sw <= 375, `scrollWidth=${sw}`);
   await shot('m-01-reports-list.png', mp);
-  await mp.goto(`${A.url}/wbs?ctx=monitor&sel=${t2.id}`); await mp.waitForSelector('#drawer [data-field="planned_end_date"]');
-  await api('PATCH', `${A.P}/wbs/${t2.id}`, { status: 'IN_PROGRESS', progress: 5 });
-  await mp.reload(); await mp.waitForSelector('#drawer [data-field="planned_end_date"]');
-  await mp.$eval('#drawer [data-field="planned_end_date"]', (el, v) => { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }, d(22));
-  await mp.waitForSelector('[data-delay-dialog]');
-  const btns = await mp.$$eval('[data-delay-dialog] .actions .btn', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return { t: e.textContent.trim(), y: r.y, w: Math.round(r.width) }; }));
-  check('375px delay dialog: buttons full width, primary on top', btns.length === 2 && btns[0].y < btns[1].y ? btns[0].t === '일정 변경 저장' : btns.find((b) => b.t === '일정 변경 저장').y < btns.find((b) => b.t === '취소').y, JSON.stringify(btns));
-  await shot('m-02-delay-dialog.png', mp);
-  await mp.click('[data-delay-dialog] [data-v="0"]');
+  // phone (< 768px) = view mode (hive research/relai-mobile-spec.md): the delay dialog, CR approval sheet and 반영 dialog are PC-only
+  const roDetail = () => mp.evaluate(() => { const d = document.querySelector('#drawer'); const vis = (e) => e.getBoundingClientRect().width > 0;
+    return { open: Boolean(d && !d.hidden), w: d ? Math.round(d.getBoundingClientRect().width) : 0, fields: d ? [...d.querySelectorAll('input, select, textarea')].filter(vis).length : -1, acts: d ? [...d.querySelectorAll('button.btn, [data-tr]')].filter(vis).length : -1, sw: document.documentElement.scrollWidth }; });
+  await mp.goto(`${A.url}/wbs?ctx=monitor&sel=${t2.id}`); await mp.waitForSelector('#drawer:not([hidden]) .drawer__x'); await mp.waitForTimeout(300);
+  const wd = await roDetail();
+  check('375px WBS 상세: 읽기 전용 (날짜 입력 없음 → 지연 사유 dialog 없음), 가로 스크롤 없음', wd.open && wd.fields === 0 && wd.acts === 0 && wd.sw <= 375, JSON.stringify(wd));
+  await shot('m-02-wbs-detail.png', mp);
   const cr3 = (await api('POST', `${A.P}/changes`, { title: '알림톡 추가' })).json.change;
   await api('POST', `${A.P}/changes/${cr3.id}/transition`, { action: 'submit' });
-  await mp.goto(`${A.url}/changes?sel=${cr3.id}`); await mp.waitForSelector('[data-tr="approve"]');
-  await mp.click('[data-tr="approve"]'); await mp.waitForSelector('[data-approval-drawer]');
-  const sheet = await mp.$eval('#drawer', (e) => { const r = e.getBoundingClientRect(); return { w: Math.round(r.width), sw: document.documentElement.scrollWidth }; });
-  check('375px CR 승인 sheet: full width, no horizontal scroll', sheet.w <= 375 && sheet.sw <= 375, JSON.stringify(sheet));
-  await shot('m-03-cr-approval-sheet.png', mp);
-  await mp.goto(`${A.url}/changes?sel=${cr.id}`); await mp.waitForSelector('[data-tr="implement"]');
-  await mp.click('[data-tr="implement"]'); await mp.waitForSelector('.dialog');
-  await shot('m-04-implement-dialog.png', mp);
+  await mp.goto(`${A.url}/changes?sel=${cr3.id}`); await mp.waitForSelector('#drawer:not([hidden]) .drawer__x'); await mp.waitForTimeout(300);
+  const cd = await roDetail();
+  check('375px CR 상세: 승인·반영 버튼 없음, 전체 폭, 가로 스크롤 없음', cd.open && cd.acts === 0 && cd.fields === 0 && cd.w >= 375 && cd.sw <= 375, JSON.stringify(cd));
+  await shot('m-03-cr-detail.png', mp);
   await m.close();
 
   /* ---------- 01·02 approval regression is e2e-phase1/2; C1 week (Mon 08:00 KST) is unit-tested in server/test/phase4.test.js ---------- */

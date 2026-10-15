@@ -1,6 +1,7 @@
 /* Jira integration UI pieces (Phase 12): status chips, execution summary, the WBS "Jira 실행" pane, the project mapping modal.
  * Everything renders from RELAI's snapshots — no Jira call from the browser. Jira execution is shown apart from WBS progress. */
 import { api, wsApi } from '../core/api.js';
+import { isPhone } from '../core/device.js';
 import { $, fmtShort, html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { confirmDialog, toast } from './dialogs.js';
@@ -116,6 +117,7 @@ function linkIssuesDialog(ctx) {
 
 /* ---------- Project ⋯ → Jira 연동 설정 (modal) ---------- */
 export async function openJiraProjectSettings(pid) {
+  if (isPhone()) return;   // phone = view mode: Jira is PC-only
   document.querySelector('.scrim--jira')?.remove();
   const el = document.createElement('div'); el.className = 'scrim scrim--jira';
   el.innerHTML = '<div class="dialog dialog--wide" role="dialog" aria-modal="true"><h3>Jira 연동 설정</h3><p class="hint">불러오는 중…</p></div>';

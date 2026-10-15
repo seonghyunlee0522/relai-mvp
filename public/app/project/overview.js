@@ -7,6 +7,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, fmtShort, html, no2, raw, todayLocal } from '../core/dom.js';
 import { projectHead } from './guide.js';
+import { pcLine } from '../core/device.js';
 import { daysUntil, exceptions, scheduleState, varianceText, varianceTone } from './status.js';
 import { relTime } from '../shared/jira.js';
 import { toast } from '../shared/dialogs.js';
@@ -122,7 +123,7 @@ export async function overviewPage(id, main = $('#main')) {
   // Overview sub navigation (프로젝트 현황 · WBS · 주간보고 · 일정/마일스톤 · Project Health) lives in the LNB — nothing is duplicated here.
   main.innerHTML = html`<div class="page page--wide page--flow ov">
     ${raw(projectHead(p, g, { tab: location.hash === '#health' ? 'overview-health' : 'overview-main', title: '프로젝트 현황' }))}
-    ${raw(p.status === 'ARCHIVED' ? '<div class="notice">보관된 프로젝트입니다. 현황은 조회만 할 수 있습니다.</div>' : '')}
+    ${raw(p.status === 'ARCHIVED' ? '<div class="notice">보관된 프로젝트입니다. 현황은 조회만 할 수 있습니다.</div>' : pcLine())}
     ${raw(progressSection(g, p))}
     ${raw(attentionSection(g, snap, p.id))}
     <section class="ovsec ovband" aria-label="Schedule · Scope · Quality">${raw(scheduleCol(g, p, dash))}${raw(scopeCol(g, p))}${raw(qualityCol(g, p))}</section>

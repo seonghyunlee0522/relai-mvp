@@ -4,6 +4,7 @@
  * Inline: quick-add rows (Enter/Esc), cell edits, row menu (하위/같은 레벨/마일스톤/들여쓰기/내어쓰기/복제/삭제), drag & drop, undo toasts.
  * Detail: large modal with tabs 기본 정보 / 관련 요구사항 / 선행 작업 / 변경 이력 / 댓글. */
 import { api, getMembers, wsApi } from '../core/api.js';
+import { isPhone as onPhone, pcLine } from '../core/device.js';
 import { $, fmtShort, html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { download, keepUi } from '../core/ui.js';
@@ -13,7 +14,7 @@ import { resBadge, sevBadge, verifyChip } from '../shared/badges.js';
 import { ISSUE_STATUS, ISSUE_STATUS_CHIP, LINK_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RISK_STATUS, RISK_STATUS_CHIP, WBS_CSTATUS, WBS_CSTATUS_CHIP, WBS_STATUS, WBS_TYPE } from '../shared/constants.js';
 import { traceStrip } from '../shared/trace-strip.js';
 import { drawerFoot, bindEscape } from '../shared/drawer.js';
-import { appliedFilters, bindFilterClears, bindMoreFilters, moreFilters, isPhone, phoneMore } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, moreFilters, isPhone } from '../shared/filters.js';
 import { emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { createGrid } from '../shared/grid.js';
@@ -35,7 +36,7 @@ export async function wbsPage(id) {
   const main = $('#main');
   const [g, members, ai] = await Promise.all([api('GET', wsApi(`/${id}`)), getMembers(), aiStatus(id)]);
   const p = g.project;
-  const archived = p.status === 'ARCHIVED';
+  const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
   // Lifecycle V2: one WBS, two entry points — 03 분석·설계 > WBS 작성 (plan) and Overview > WBS (monitor). Same screen, same data; only the context label differs.
   const ctx = () => (params().get('ctx') === 'monitor' ? 'monitor' : 'plan');
   document.title = `WBS — ${p.name} — RELAI`;
@@ -56,7 +57,7 @@ export async function wbsPage(id) {
   if (params().get('requirement')) { try { ctxReq = (await api('GET', wsApi(`/${id}/requirements/${params().get('requirement')}`))).requirement; } catch { setParam('requirement', ''); } }
   if (params().get('cr')) { try { ctxCr = (await api('GET', wsApi(`/${id}/changes/${params().get('cr')}`))).change; } catch { setParam('cr', ''); } }
   const collapsed = new Set(); const gx = { px: 16, mode: 'fit', left: 0, start: null }; // Gantt viewport: mode = fit | today | keep
-  const view = () => (params().get('view') === 'gantt' ? 'gantt' : 'list');
+  const view = () => (!onPhone() && params().get('view') === 'gantt' ? 'gantt' : 'list');   // phone: no Gantt (spec §4 — list + one line)
   const quick = () => params().get('f') || '';
   const QUICK_LABEL = { no_owner: '담당자 미지정 작업', no_dates: '일정 미설정 작업', linked: '요구사항 연결됨', unlinked: '요구사항 미연결 작업', overdue: '지연 작업', over_end: '종료일 초과 작업' };
   /* Phase 3 US-1: one owner value for both kinds — 'u:<user>' (RELAI 사용자) · 's:<stakeholder>' (팀원, 계정 없음) · '' (미지정) */
@@ -346,7 +347,8 @@ export async function wbsPage(id) {
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: ctx() === 'monitor' ? 'overview-wbs' : 'wbs', title: ctx() === 'monitor' ? 'WBS · 운영 조회' : 'WBS 작성' }))}
       ${raw(params().get('phase') && !items.some((it) => it.lifecycle_phase === params().get('phase')) && items.length ? html`<div class="notice notice--soft">${LIFECYCLE_LABEL[params().get('phase')] || params().get('phase')} 단계로 지정된 작업이 아직 없어 전체 WBS를 표시합니다. 작업 상세에서 Lifecycle 단계를 지정할 수 있습니다.</div>` : '')}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. WBS는 조회만 할 수 있습니다.</div>' : pcLine())}
+      ${raw(onPhone() && params().get('view') === 'gantt' ? '<p class="pcnote" data-gantt-pc>간트 차트는 PC에서 볼 수 있습니다</p>' : '')}
       ${raw(msSuggest())}
       ${raw(items.length && !jira && !archived ? coachMark('JIRA_OPTIONAL_INTRO', { title: 'Jira를 사용하고 있나요? (선택)', body: 'RELAI WBS와 Jira 이슈를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 WBS 진행률만으로 프로젝트를 계속 진행할 수 있습니다.', cta: { label: '연결하기 (설정 › 연동)', href: '/app/settings' } }) : '')}
       ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}
@@ -358,8 +360,6 @@ export async function wbsPage(id) {
         ${raw(phone ? '' : quickSel)}
         ${raw(moreFilters(html`${raw(phone ? quickSel : '')}<select class="select select--sm" id="quick" aria-label="보기"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>
           <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, [...(phone ? [q.get('owner'), q.get('cst')] : []), f, q.get('archived')].filter(Boolean).length))}
-        ${raw(phoneMore([{ label: '모두 펼치기', sel: '#expall' }, { label: '모두 접기', sel: '#colall' }, ...(archived ? [] : [{ label: '◆ 마일스톤 추가', sel: '#add-ms' }, { label: 'Excel로 가져오기…', sel: '[data-xl="import"]' }]),
-          { label: 'Excel 등록 템플릿', sel: '[data-xl="template"]' }, { label: 'Excel로 내보내기', sel: '[data-xl="export"]' }, ...(archived || !ai.enabled ? [] : [{ label: 'AI로 WBS 만들기', sel: '#ai-wbs' }])]))}
         <span class="ph-hide"><button class="link linkbtn" id="expall" style="width:auto">모두 펼치기</button><button class="link linkbtn" id="colall" style="width:auto">모두 접기</button></span>
         <span class="rtool__sp"></span>
         ${raw(v === 'list' && items.length ? html`<span class="ph-hide">${raw(grid.toolsHtml())}</span>` : '')}

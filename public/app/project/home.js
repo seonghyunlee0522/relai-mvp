@@ -11,6 +11,7 @@ import { ob } from '../onboarding/state.js';
 import { bindChecklist, checklistCard } from '../onboarding/ui.js';
 import { scheduleState } from './status.js';
 import { newWorkspaceHome } from './list.js';
+import { isPhone, pcLine } from '../core/device.js';
 
 /** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
 const wsName = (v) => String(v || '').replace(/ Workspace$/, ' 워크스페이스');
@@ -42,6 +43,8 @@ const nextBlock = (c, first = false) => {
       ${raw(g.primary_action ? html`<a class="link hc__go" href="${g.primary_action.href}" data-link>${g.primary_action.label}</a>` : '')}</div>`;
   }
   const pa = g.primary_action;
+  // phone = view mode: the next step is text, not a button (`다음: 02 요구사항 정의 시작`)
+  if (isPhone()) return html`<div class="hc__next"><span class="hc__k">다음 할 일</span><p class="hc__t">${pa && isMove(pa) && c.next_phase ? `다음: ${no2(c.next_phase.sequence)} ${c.next_phase.name} 시작` : g.title}</p></div>`;
   const cta = !pa ? '' : isMove(pa)
     ? html`<a class="btn ${bc} btn--sm" href="${u}?move=next" data-link>${c.next_phase ? `${no2(c.next_phase.sequence)} ${c.next_phase.name} 단계 시작 →` : pa.label}</a>`
     : html`<a class="btn ${bc} btn--sm" href="${pa.href}" data-link>${pa.label}</a>`;
@@ -105,13 +108,14 @@ export async function homePage(main = $('#main')) {
   const live = h.projects || []; const done = h.completed || [];
   const any = live.length || done.length;
   main.innerHTML = html`<div class="page page--guide home">
-    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${wsName(state.workspace.name)}</p></div>
-      ${raw(any && canManage() ? `<a class="btn ${live.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
-    ${raw(any ? checklistCard(o, { compact: true }) : '')}
+    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${wsName(state.workspace.name)}</p>${raw(any ? pcLine() : '')}</div>
+      ${raw(any && canManage() && !isPhone() ? `<a class="btn ${live.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
+    ${raw(any && !isPhone() ? checklistCard(o, { compact: true }) : '')}
     ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
     ${raw(live.length ? html`<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
         <div class="hgrid">${raw(live.map(card).join(''))}</div></section>`
-      : any ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>완료된 프로젝트는 아래에 있습니다.</p></div>' : newWorkspaceHome(o))}
+      : any ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>완료된 프로젝트는 아래에 있습니다.</p></div>'
+      : isPhone() ? html`<div class="empty empty--sm" data-phone-empty><p>프로젝트 만들기는 PC에서 할 수 있습니다. PC에서 ${location.host} 에 로그인하세요.</p></div>` : newWorkspaceHome(o))}
     ${raw(done.length ? html`<details class="hdone"><summary>완료된 프로젝트 <b>${done.length}</b>개</summary><div class="hdone__l">${raw(done.map(completedRow).join(''))}</div></details>` : '')}
   </div>`;
   bindChecklist(main);

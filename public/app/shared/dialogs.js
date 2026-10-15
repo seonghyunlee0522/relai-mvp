@@ -1,8 +1,10 @@
 import { $, html, raw } from '../core/dom.js';
+import { PHONE_MSG } from '../core/device.js';
 import { LINK_TYPE } from './constants.js';
 import { needsDelayReason, planShiftText, todayKst } from './kst-date.js';
 
 export function toast(msg) {
+  if (msg === PHONE_MSG && document.querySelector('.toast--ro')) return;   // core/api.js already said it (phone view mode)
   const t = document.createElement('div');
   t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
   document.body.append(t);
@@ -37,6 +39,21 @@ export function choiceDialog({ title, body, options, cancel = '취소' }) {
   });
 }
 
+/** One-button notice (닫기). Resolves when closed. */
+export function noticeDialog({ title, bodyHtml }) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'scrim';
+    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgT" data-notice>
+      <h3 id="dlgT">${title}</h3><div class="dialog__b">${raw(bodyHtml)}</div>
+      <div class="actions"><button class="btn btn--secondary" data-v="0" data-phone-ok>닫기</button></div></div>`;
+    const done = () => { el.remove(); resolve(); };
+    el.addEventListener('click', (e) => { if (e.target.closest('[data-v]') || e.target === el) done(); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(); });
+    document.body.append(el);
+    $('[data-v="0"]', el).focus();
+  });
+}
 export function confirmDialog({ title, body, bodyHtml = null, confirm, danger }) {   // bodyHtml: trusted markup built with html`` (e.g. a small preview list)
   return new Promise((resolve) => {
     const el = document.createElement('div');

@@ -28,6 +28,8 @@ let wired = false;
 function wireOnce() {
   if (wired) return; wired = true;
   document.addEventListener('click', (e) => { if (e.target.closest('[data-ws-menu]')) toggleNav(); });
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-tab-more]')) { e.preventDefault(); toggleNav(); } });
+  document.addEventListener('click', async (e) => { if (!e.target.closest('[data-logout]')) return; try { await api('POST', '/api/auth/logout', {}); } finally { state.user = null; location.href = '/login'; } });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#side') && $('#side').classList.contains('is-open')) closeNav(); });
 }
 
@@ -55,15 +57,49 @@ const wireSideButtons = () => {
   const fo = $('#fold'); if (fo) fo.onclick = () => { const c = !store.get('nav.collapsed', false); store.set('nav.collapsed', c); $('.shell').classList.toggle('is-collapsed', c); };
 };
 
+/* ---- phone (< 768px, view mode): top bar name · status strip · bottom tab bar. CSS shows them only under html.is-phone. ---- */
+const TAB_ICON = {
+  next: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10h11M11 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  overview: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 16V9M8 16V4M13 16v-5M18 16V7" stroke-linecap="round"/></svg>',
+  wbs: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2.5v3M13 2.5v3" stroke-linecap="round"/></svg>',
+  reports: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 3h7l3 3v11H5z" stroke-linejoin="round"/><path d="M8 10h4M8 13h4" stroke-linecap="round"/></svg>',
+  more: '<svg viewBox="0 0 20 20" fill="currentColor"><circle cx="4.5" cy="10" r="1.6"/><circle cx="10" cy="10" r="1.6"/><circle cx="15.5" cy="10" r="1.6"/></svg>',
+};
+const projectIdOf = (path) => (isWorkspacePath(path) ? path.split('/')[3] : null);
+const tabbar = (path) => {
+  const pid = projectIdOf(path);
+  const tab = (key, href, label, ic, active) => html`<a class="tabbar__i ${active ? 'is-active' : ''}" href="${href}" data-link data-tab="${key}" ${active ? 'aria-current="page"' : ''}>${raw(ic)}<span>${label}</span></a>`;
+  if (!pid) {
+    const key = path === '/app' || path === '/app/' ? 'home' : path.startsWith('/app/projects') ? 'projects' : path.startsWith('/app/settings') ? 'settings' : '';
+    return tab('home', '/app', '홈', icon.home, key === 'home') + tab('projects', '/app/projects', '프로젝트', icon.projects, key === 'projects') + tab('settings', '/app/settings', '설정', icon.settings, key === 'settings');
+  }
+  const u = `/app/projects/${pid}`; const rest = path.slice(u.length).replace(/\/$/, '');
+  const key = rest === '' ? 'next' : rest === '/overview' ? 'overview' : rest === '/wbs' ? 'wbs' : rest.startsWith('/reports') ? 'reports' : 'more';
+  return tab('next', u, '다음', TAB_ICON.next, key === 'next') + tab('overview', `${u}/overview`, '현황', TAB_ICON.overview, key === 'overview')
+    + tab('wbs', `${u}/wbs`, '일정', TAB_ICON.wbs, key === 'wbs') + tab('reports', `${u}/reports`, '보고서', TAB_ICON.reports, key === 'reports')
+    + html`<button type="button" class="tabbar__i ${key === 'more' ? 'is-active' : ''}" data-tab="more" data-tab-more aria-label="더보기 메뉴">${raw(TAB_ICON.more)}<span>더보기</span></button>`;
+};
+
+/** Project screens (projectHead) put the project name in the phone top bar and `03 / 07 · 분석·설계` + status chip under it. */
+export function phoneHead(p, g, pill) {
+  const name = $('#ptop'); const strip = $('#pstrip'); if (!name || !strip) return;
+  name.textContent = p.name; name.title = p.name; name.hidden = false;
+  const cur = g && g.current_phase; const total = (g && g.phases && g.phases.length) || 7;
+  strip.innerHTML = cur ? html`<a class="pstrip__a" href="/app/projects/${p.id}" data-link><span class="pstrip__n">${String(cur.sequence).padStart(2, '0')} / ${String(total).padStart(2, '0')} · ${cur.name}</span>${raw(pill)}</a>` : pill;
+  strip.hidden = false;
+}
+
 export async function shell(path, view, token = null) {
   const stale = () => token !== null && !isCurrent(token);
   wireOnce();
   if (!$('.shell')) {
     root.innerHTML = html`<div class="shell">
-      <header class="topbar"><a class="logo" href="/app" data-link>RELAI</a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
+      <header class="topbar"><a class="logo" href="/app" data-link>RELAI</a><a class="ptop" id="ptop" href="/app/projects" data-link hidden></a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
+      <div class="pstrip" id="pstrip" hidden></div>
       <aside class="side" id="side"></aside>
       <div class="sidescrim" id="sidescrim" hidden></div>
-      <div class="maincol">${raw(verifyBanner())}<main class="main" id="main"></main>${raw(appFooter())}</div></div>`;
+      <div class="maincol">${raw(verifyBanner())}<main class="main" id="main"></main>${raw(appFooter())}</div>
+      <nav class="tabbar" id="tabbar" aria-label="하단 메뉴"></nav></div>`;
     $('#menu').onclick = toggleNav;
     wireVerifyBanner();
     wireHelp(root);
@@ -80,6 +116,8 @@ export async function shell(path, view, token = null) {
     side.classList.add('side--project'); side.innerHTML = '<div class="lnb__wrap"><div class="loading loading--sm">불러오는 중…</div></div>';
   }
   closeNav();
+  $('#tabbar').innerHTML = tabbar(path);
+  if (!ws || projectIdOf(path) !== $('#pstrip').dataset.pid) { $('#ptop').hidden = true; $('#pstrip').hidden = true; $('#pstrip').dataset.pid = projectIdOf(path) || ''; }
   const key = path === '/app' || path === '/app/' ? 'home' : path.startsWith('/app/projects') ? 'projects' : path.startsWith('/app/settings') ? 'settings' : '';
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('is-active', a.dataset.nav === key));
   const main = $('#main');

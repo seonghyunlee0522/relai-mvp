@@ -7,6 +7,7 @@
  *   Not here          execution status, KPI, Health (that is 프로젝트 현황). No percentage of elapsed time.
  * Document layout: section title · divider · whitespace. Only the AI Project Context strip is emphasised. */
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, html, raw, todayLocal, fmtDate } from '../core/dom.js';
 import { projectHead } from './guide.js';
 import { planMenu, bindPlanMenu, term } from './initiation.js';
@@ -26,7 +27,7 @@ const body = (text) => {
 export async function charterPage(id) {
   const main = $('#main');
   const [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/charter`))]);
-  const p = g.project; const c = r.charter; const ro = p.status === 'ARCHIVED';
+  const p = g.project; const c = r.charter; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
   document.title = `프로젝트 헌장 — ${p.name} — RELAI`;
   const u = `/app/projects/${p.id}`;
   const def = (activity, field) => `${u}/definition?activity=${activity}${field ? `&field=${field}` : ''}`;
@@ -193,7 +194,7 @@ export async function charterPage(id) {
     ${raw(projectHead(p, g, { tab: 'overview-charter', title: '프로젝트 헌장' }))}
     <div class="chl"><div class="chx">
       <div class="chx__head"><div><h1>프로젝트 헌장 ${raw(term('charter'))}</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
-      ${raw(ro ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 헌장은 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 헌장은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(hero)}
       ${raw(profile)}${raw(goals)}${raw(scope)}${raw(stake)}${raw(time)}${raw(acr)}${raw(ops)}${raw(gate)}
       <p class="chx__src">이 화면은 조회 전용입니다. 모든 내용은 <a class="link" href="${u}/definition" data-link>01 착수 › 프로젝트 정의</a>${raw(ro ? '' : html`와 <a class="link" href="${u}/edit" data-link>프로젝트 정보</a>`)}에서 관리됩니다.</p>

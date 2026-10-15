@@ -1,10 +1,11 @@
 import { api, wsApi } from '../core/api.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { $, fmtShort, html, raw, todayLocal } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { projectHead } from '../project/guide.js';
 import { sevBadge } from '../shared/badges.js';
 import { CR_STATUS, CR_STATUS_CHIP, ISSUE_STATUS, ISSUE_STATUS_CHIP, ISSUE_TRANSITIONS, LEVEL3, RAID_TARGET, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RISK_LEVEL, RISK_STATUS, RISK_STATUS_CHIP, RISK_TRANSITIONS, SEVERITY, STRATEGY, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE } from '../shared/constants.js';
-import { appliedFilters, bindFilterClears, filterSelect } from '../shared/filters.js';
+import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, phoneFilters } from '../shared/filters.js';
 import { emptyFiltered, emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape } from '../shared/drawer.js';
@@ -19,7 +20,7 @@ export async function raidPage(id) {
   const g = await api('GET', wsApi(`/${id}`));
   const carry = carryIndex(g);   // Phase 6 US-3: 운영 이관 (오픈 기록)
   const p = g.project;
-  const archived = p.status === 'ARCHIVED';
+  const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
   const { members } = await api('GET', `/api/workspaces/${state.workspace.id}/members`);
   const params = () => new URLSearchParams(location.search);
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
@@ -32,7 +33,7 @@ export async function raidPage(id) {
   const filterKeys = () => (isIssue() ? ISSUE_F : RISK_F);
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys()]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
-  let rows = []; let is = g.issues; let rs = g.risks; let sel = null; let creating = params().get('new') === '1'; let dtab = 'info';
+  let rows = []; let is = g.issues; let rs = g.risks; let sel = null; let creating = params().get('new') === '1' && !archived;   /* archived / phone: no create form */ let dtab = 'info';
   let owners = { team: [], stakeholders_total: 0 };   // Phase 4 US-6: Issue 담당자 = the Phase 3 picker (RELAI 사용자 · 팀원 (계정 없음))
   const load = async () => { const d = await api('GET', xApi(listQuery())); rows = d.items; is = d.issues; rs = d.risks; g.issues = is; g.risks = rs; if (d.owners) owners = d.owners; };
   const teamMap = (cur = null) => Object.fromEntries((cur === null ? owners.team || [] : OP.teamFor(owners.team, cur)).map((t) => [`s:${t.id}`, `${t.name} (계정 없음)`]));   // the 담당자 filter lists a member once (K13), unless it is the active filter
@@ -53,7 +54,7 @@ export async function raidPage(id) {
     const hasFilter = ['q', ...filterKeys(), 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
       ${raw(projectHead(p, g, { tab: 'raid', title: '이슈·리스크' }))}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 이슈와 리스크는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 이슈와 리스크는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(coachMark('ISSUE_RISK_INTRO'))}
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? '이슈는 이미 발생해 대응이 필요한 문제입니다.' : '리스크는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">이슈${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">리스크${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>
       ${raw(I ? html`<div class="summary summary--inline">
@@ -64,12 +65,12 @@ export async function raidPage(id) {
         <div class="${rs.review_needed ? 'is-warn' : ''}"><b>${rs.review_needed}</b><span>검토 필요</span></div><div><b>${rs.materialized}</b><span>발생</span></div></div>`)}</div>
       <div class="rtool">
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
-        ${raw(I ? html`${raw(filterSelect('status', '상태', ISSUE_STATUS, q.get('status')))}${raw(filterSelect('severity', '심각도', SEVERITY, q.get('severity')))}`
+        ${raw(phoneFilters(html`${raw(I ? html`${raw(filterSelect('status', '상태', ISSUE_STATUS, q.get('status')))}${raw(filterSelect('severity', '심각도', SEVERITY, q.get('severity')))}`
         : html`${raw(filterSelect('status', '상태', RISK_STATUS, q.get('status')))}${raw(filterSelect('risk_level', '등급', RISK_LEVEL, q.get('risk_level')))}
           ${raw(filterSelect('probability', '발생 가능성', LEVEL3, q.get('probability')))}${raw(filterSelect('impact', '영향도', LEVEL3, q.get('impact')))}${raw(filterSelect('response_strategy', '전략', STRATEGY, q.get('response_strategy')))}`)}
         ${raw(filterSelect('owner', '담당자', I ? { ...ownerMap, ...teamMap(q.get('owner') || '') } : ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
         <label class="toggle"><input type="checkbox" data-t="${I ? 'overdue' : 'review'}" ${q.get(I ? 'overdue' : 'review') ? 'checked' : ''}> ${I ? '기한 지남만' : '검토 필요만'}</label>
-        <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
+        <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, ['status', 'severity', 'risk_level', 'probability', 'impact', 'response_strategy', 'owner', 'overdue', 'review', 'archived'], q))}
         <span class="rtool__sp"></span>
         ${raw(archived ? '' : html`<button class="btn btn--primary btn--sm" id="add">+ ${I ? '이슈' : '리스크'} 등록</button>`)}
       </div>
@@ -84,7 +85,7 @@ export async function raidPage(id) {
     bind(); bindCoach(main);
   };
 
-  const issueTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>심각도</th><th>상태</th><th>담당자</th><th>기한</th><th class="num">관련 WBS</th><th>수정일</th></tr></thead>
+  const issueTable = () => html`<table class="rtable rtable--raid rtable--iss"><thead><tr><th>ID</th><th>제목</th><th>심각도</th><th>상태</th><th>담당자</th><th>기한</th><th class="num">관련 WBS</th><th>수정일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
       <td class="ttl"><span>${x.title}</span>${raw([x.source_risk_display_id ? html`<small title="원본 리스크">${x.source_risk_display_id}</small>` : '', x.source_test_execution_id ? '<small title="테스트 실패에서 등록">테스트 실패</small>' : '', x.archived_at ? '<small>보관됨</small>' : '', carryTag(carry, 'ISSUE', x.id)].filter(Boolean).map((t) => ` ${t}`).join(''))}</td>
@@ -92,7 +93,7 @@ export async function raidPage(id) {
       <td>${x.owner_name || raw('<span class="dim">-</span>')}${raw(OP.noAcct(x))}</td>
       <td class="${x.is_overdue ? 'is-overdue' : ''}">${raw(dcell(x.due_date))}${raw(x.is_overdue ? ' <small class="over">지남</small>' : '')}</td>
       <td class="num">${x.wbs_count || raw('<span class="dim">0</span>')}</td><td class="dim">${fmtShort(x.updated_at)}</td></tr>`).join(''))}</tbody></table>`;
-  const riskTable = () => html`<table class="rtable rtable--raid"><thead><tr><th>ID</th><th>제목</th><th>발생 가능성</th><th>영향도</th><th>등급</th><th>상태</th><th>담당자</th><th>검토일</th></tr></thead>
+  const riskTable = () => html`<table class="rtable rtable--raid rtable--risk"><thead><tr><th>ID</th><th>제목</th><th>발생 가능성</th><th>영향도</th><th>등급</th><th>상태</th><th>담당자</th><th>검토일</th></tr></thead>
     <tbody>${raw(rows.map((x) => html`<tr class="${sel && sel.id === x.id ? 'is-sel' : ''} ${x.archived_at ? 'is-arch' : ''}" data-row="${x.id}">
       <td class="mono">${x.display_id}</td>
       <td class="ttl"><span>${x.title}</span>${raw(x.converted_issue_display_id ? html`<small title="전환된 이슈">→ ${x.converted_issue_display_id}</small>` : '')}${raw(x.archived_at ? '<small>보관됨</small>' : '')}</td>
@@ -220,6 +221,7 @@ export async function raidPage(id) {
   };
 
   const bind = () => {
+    bindMoreFilters(main);   // phone: 필터 sheet
     main.querySelectorAll('[data-tab]').forEach((b) => b.onclick = async () => { const next = b.dataset.tab; if (next === tab()) return; for (const k of ['q', ...ISSUE_F, ...RISK_F, 'archived', 'sel', 'new']) setParam(k, ''); setParam('tab', next === 'risks' ? 'risks' : ''); sel = null; creating = false; await load(); draw(); });
     const qi = $('#q'); let qt;
     if (qi) qi.oninput = () => { clearTimeout(qt); qt = setTimeout(async () => { setParam('q', qi.value.trim()); await load(); draw(); $('#q').focus(); $('#q').setSelectionRange(99, 99); }, 350); };

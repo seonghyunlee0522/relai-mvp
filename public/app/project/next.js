@@ -9,6 +9,7 @@
  * data-driven ones complete on their work screen. */
 import { api, wsApi } from '../core/api.js';
 import { $, html, no2, raw } from '../core/dom.js';
+import { isPhone, pcLine } from '../core/device.js';
 import { moveToPhase, projectHead } from './guide.js';
 import { phaseStepper, phaseState } from './status.js';
 import { ACTIVITY_STATE } from '../shared/constants.js';
@@ -57,7 +58,7 @@ const activityRow = (a, archived, isCurrent, browse = false, markable = false) =
   const st = ACTIVITY_STATE[a.state] || ACTIVITY_STATE.NOT_STARTED; const cls = stateCls(a);
   const manualDone = a.status === 'COMPLETED'; const skipped = a.status === 'SKIPPED';
   // browse = another phase's list opened from the stepper: every row with a work screen is a way into it
-  const href = !archived && a.cta && (browse || isCurrent || a.state === 'IN_PROGRESS' || a.linked_feature_type === 'definition') ? a.cta.href : null;   // the row itself opens the work screen (same href the server CTA carries) — no separate '… →' link
+  const href = (!archived || isPhone()) && a.cta && (browse || isCurrent || a.state === 'IN_PROGRESS' || a.linked_feature_type === 'definition') ? a.cta.href : null;   // the row itself opens the work screen (same href the server CTA carries) — no separate '… →' link
   const acts = [];
   // US-3: an inline row action (주간보고 만들기 / 이어서 작성) — secondary: the Guide CTA stays the screen's only primary
   if (!archived && a.row_action && a.cta) acts.push(html`<a class="btn btn--secondary btn--xs np__rowcta" href="${a.cta.href}" data-link data-row-cta="${a.step_key}">${a.cta.label}</a>`);
@@ -143,7 +144,7 @@ export async function nextPage(id, main = $('#main')) {
   let g = await api('GET', wsApi(`/${id}`));
   const p = g.project;
   document.title = `지금 할 일 — ${p.name} — RELAI`;
-  const archived = p.status === 'ARCHIVED';
+  const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
   const created = nextPage._flag === `created:${id}`; const moveNext = nextPage._flag === `move:${id}`;
   let pendingGoLive = nextPage._flag === `golive:${id}`; let pendingCarry = nextPage._flag === `carry:${id}`;
   let pendingHandover = nextPage._flag === `handover:${id}`; let pendingClose = nextPage._flag === `close:${id}`; nextPage._flag = null;   // Phase 7: 인수 완료 처리 · 프로젝트 종료   // Phase 6: guide CTA '오픈 완료 처리' · 07 '오픈 때 운영으로 넘긴 항목'
@@ -154,7 +155,7 @@ export async function nextPage(id, main = $('#main')) {
     const view = viewKey ? (g.phases || []).find((x) => x.phase_key === viewKey && !x.is_current) : null;
     main.innerHTML = html`<div class="page page--wide page--flow page--guide nx">
       ${raw(projectHead(g.project, g, { tab: 'next' }))}
-      ${raw(archived ? '<div class="notice">보관된 프로젝트입니다. 단계와 업무는 조회만 할 수 있습니다.</div>' : '')}
+      ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 단계와 업무는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(phaseStepper(g, p.id, view ? view.phase_key : null))}
       ${raw(view ? '' : g.project.status === 'COMPLETED' ? closedPanel(g) : guideCard(g, p, archived, created))}
       ${raw(view ? otherPhasePanel(g, view, archived) : g.project.status === 'COMPLETED' ? html`<details class="closed__ph"><summary>단계 업무 보기</summary>${raw(phasePanel(g, p, archived))}</details>` : phasePanel(g, p, archived))}

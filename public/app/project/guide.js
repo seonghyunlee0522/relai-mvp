@@ -10,6 +10,7 @@ import { revealAskButton, wireAssistant } from '../ai/assistant.js';
 import { headerActions, wireProjectActions } from './actions.js';
 import { helpButton } from '../onboarding/ui.js';
 import { mountLnb } from './lnb.js';
+import { phoneHead } from '../shell.js';
 import { josa } from '../shared/josa.js';
 import { navigate } from '../core/router.js';
 import { md } from '../shared/kst-date.js';
@@ -28,7 +29,7 @@ export const statusPill = (p) => (p.status === 'COMPLETED' && p.closed_on
 export const projectHead = (p, g, { tab = null, title = '' } = {}) => {
   wireProjectActions();
   wireAssistant(); queueMicrotask(() => revealAskButton(p.id));   // CTA appears only when /ai/status says AI is on
-  queueMicrotask(() => mountLnb(p, g, tab));
+  queueMicrotask(() => { mountLnb(p, g, tab); phoneHead(p, g, statusPill(p)); });
   const cur = g.current_phase;
   return html`<header class="wsh">
     <div class="wsh__row">
