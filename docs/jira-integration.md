@@ -52,6 +52,8 @@ integration_events(연결+payload_hash unique) · integration_sync_runs(trigger 
 * `GET /api/workspaces/:wid/integrations`, `POST …/integrations/jira/connect`(OWNER/ADMIN → {url}), `POST …/jira/disconnect`, `GET /api/integrations/jira/callback`
 * `GET/PUT/DELETE …/projects/:pid/integrations/jira[/mapping]`, `GET …/jira/projects?q`, `GET …/jira/issue-types?project_key`, `POST …/jira/sync`, `GET …/jira/issues/search?q`
 * `GET …/wbs/:iid/jira`, `POST …/wbs/:iid/jira/issues`, `POST …/wbs/:iid/jira/links {issue_keys[], link_role}`, `DELETE …/wbs/:iid/jira/links/:lid`, `POST …/wbs/:iid/jira/refresh`
+* 요구사항 ↔ Jira (v42): `GET …/requirements/:rid/jira`, `POST …/requirements/:rid/jira/issues {summary?}`(지라 태스크 만들기: 제목 = `REQ-ID 제목`, 설명 = 설명 + 완료 조건 + RELAI 링크), `POST …/requirements/:rid/jira/links {issue_keys[]}`, `DELETE …/requirements/:rid/jira/links/:lid`, `POST …/requirements/:rid/jira/refresh`, `POST …/requirements/jira/bulk-create {ids[]}`(≤50, 이미 연결된 요구사항은 건너뜀). 링크는 `integration_entity_links`(link_role REQUIREMENT, requirement_id, wbs_item_id NULL) — 같은 이슈를 WBS 하나와 여러 요구사항에 연결할 수 있다. 요구사항 상태는 바꾸지 않는다. 매핑의 `auto_mark_requirements`(기본 꺼짐)가 켜지면 연결된 이슈가 모두 완료일 때 `requirements.jira_done_at`(‘구현 완료 (Jira)’ 표시)을 채우고, 아니면 지운다. `GET /requirements` → `jira {enabled, auto_mark, by}`(목록 Jira 열·추적).
+* 로컬 e2e: `INTEGRATION_PROVIDER=fake` 서버에서만 `POST /api/integrations/jira/fake/status {key,status}`가 열린다(`scripts/e2e-jira-req.cjs`).
 * 응답에 포함: `GET /wbs` → `jira {enabled, by}` / `GET /wbs/:id` → `item.jira` / `GET /requirements/:id` → `requirement.jira` / `GET /:pid` → `jira`(홈 요약)
 * `GET /api/admin/integrations` (operator)
 

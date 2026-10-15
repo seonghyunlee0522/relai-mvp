@@ -16,7 +16,7 @@ const valueControl = (f) => {
  * Mounts the bar into `slot` (an empty container) and returns { update(count), destroy() }.
  * onApply({ field, value }) / onArchive() / onClear() may be async; the Apply button is disabled while they run.
  */
-export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive, onClear, initial = null }) {   // initial = the field picked first (R2: 담당자 지정 → 담당자)
+export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive, onClear, initial = null, extra = [] }) {   // extra = [{ key, label, onClick }] — more buttons before 보관 (v42: 지라 태스크 만들기)   // initial = the field picked first (R2: 담당자 지정 → 담당자)
   const first = Math.max(0, fields.findIndex((f) => f.key === initial));
   let bar = null;
   const build = (count) => {
@@ -26,6 +26,7 @@ export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive,
       <span data-bslot>${raw(valueControl(fields[first]))}</span>
       <button type="button" class="btn btn--primary btn--sm" data-bapply disabled>일괄 변경</button>
       <span class="bulk__sp"></span>
+      ${raw(extra.map((x) => html`<button type="button" class="btn btn--secondary btn--sm" data-bextra="${x.key}">${x.label}</button>`).join(''))}
       ${raw(canArchive ? '<button type="button" class="btn btn--danger btn--sm" data-barch>보관</button>' : '')}
       <button type="button" class="btn btn--secondary btn--sm" data-bclear>선택 해제</button></div>`;
     bar = slot.firstElementChild;
@@ -41,6 +42,7 @@ export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive,
       await onApply({ field: f.key, value: f.type === 'number' ? Number(v) : v });
     });
     const arch = bar.querySelector('[data-barch]'); if (arch) arch.onclick = (e) => run(e.currentTarget, onArchive);
+    bar.querySelectorAll('[data-bextra]').forEach((b) => { b.onclick = (e) => run(e.currentTarget, () => extra.find((x) => x.key === b.dataset.bextra).onClick()); });
     bar.querySelector('[data-bclear]').onclick = () => onClear();
   };
   return {

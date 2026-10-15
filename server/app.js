@@ -49,7 +49,7 @@ import { mountOnboardingRoutes } from './onboarding-routes.js';
 import { recordFirst } from './onboarding.js';
 import { guidanceContext, workspaceHome } from './home.js';
 import * as XL from './xlsx.js';
-import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary } from './integrations/jira/sync.js';
+import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary, requirementJiraMap } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
 import { assertWithinLimit, PlanLimitError } from './billing/limits.js';
@@ -692,7 +692,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(rbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
-    res.json({ requirements: (await R.listRequirements(db, project, req.query)), summary: (await R.requirementStats(db, project.id)) });
+    res.json({ requirements: (await R.listRequirements(db, project, req.query)), summary: (await R.requirementStats(db, project.id)), jira: (await requirementJiraMap(db, project.id)) });   // v42: null unless mapped to Jira
   }));
 
   app.post(rbase, guard, wrap(async (req, res) => {
@@ -711,7 +711,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const project = (await loadProject(req, res));
     if (!project) return;
     const r = (await loadReq(req, res, project));
-    if (r) res.json({ requirement: { ...r, jira: (await executionForRequirement(db, project.id, r.id)) } });   // read-only trace via WBS (no requirement↔Jira table)
+    if (r) res.json({ requirement: { ...r, jira: (await executionForRequirement(db, project.id, r.id)) } });   // trace via WBS; direct requirement↔Jira links: GET …/requirements/:rid/jira
   }));
 
   // Phase 5 US-1: 테스트 제외 {reason} / 제외 취소 {reason: null}

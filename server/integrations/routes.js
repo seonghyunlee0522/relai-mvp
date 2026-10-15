@@ -14,6 +14,8 @@
  *     POST …/:pid/integrations/jira/sync                           manual sync
  *     GET  …/:pid/integrations/jira/issues/search?q=               search in the mapped Jira project (live)
  *     GET  …/:pid/wbs/:iid/jira | POST …/jira/issues | POST …/jira/links | DELETE …/jira/links/:lid | POST …/jira/refresh
+ *     GET  …/:pid/requirements/:rid/jira | POST …/jira/issues | POST …/jira/links | DELETE …/jira/links/:lid | POST …/jira/refresh   (v42)
+ *     POST …/:pid/requirements/jira/bulk-create {ids}                 지라 태스크 만들기 for several requirements
  *   Webhook (no session):  POST /api/integrations/jira/webhook/:cid/:secret
  *   Admin (operator):      GET /api/admin/integrations
  */
@@ -24,6 +26,8 @@ import * as J from './jira/sync.js';
 import { handleJiraWebhook } from './jira/webhook.js';
 import { listActivity } from './events.js';
 import { JiraApiError } from './jira/client.js';
+import { integrationConfig } from './config.js';
+import { getProvider } from './registry.js';
 
 export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base }) {
   const manage = [...guard, requireAction('integration_manage')];
@@ -69,6 +73,26 @@ export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth
   app.post(`${W}/links`, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.linkIssues(db, c.project, c.w.id, req.body, req.user.id)); })));
   app.delete(`${W}/links/:lid`, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.json(await J.unlinkIssue(db, c.project, c.w.id, req.params.lid, req.user.id)); })));
   app.post(`${W}/refresh`, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; const run = await J.syncProject(db, c.project, { trigger: 'MANUAL', wbsId: c.w.id, userId: req.user.id }); res.json({ run, links: await J.linksForWbs(db, c.w.id), summary: await J.executionForWbs(db, c.project.id, c.w.id) }); })));
+
+  const RQ = `${base}/:pid/requirements/:rid/jira`;
+  const reqCtx = async (req, res, { write = false } = {}) => {
+    const project = await loadProject(req, res); if (!project) return null;
+    if (write && !mutable(res, project)) return null;
+    const r = await db.get('SELECT id FROM requirements WHERE id = ? AND project_id = ?', [req.params.rid, project.id]);
+    if (!r) { fail(res, 404, 'not_found', '요구사항을 찾을 수 없습니다.'); return null; }
+    return { project, r };
+  };
+  app.post(`${base}/:pid/requirements/jira/bulk-create`, guard, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; res.json({ ...(await J.bulkCreateForRequirements(db, project, req.body?.ids, req.user.id)), jira: await J.requirementJiraMap(db, project.id) }); })));
+  app.get(RQ, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res); if (!c) return; res.json(await J.requirementJira(db, c.project, c.r.id)); })));
+  app.post(`${RQ}/issues`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.createIssueForRequirement(db, c.project, c.r.id, req.body, req.user.id)); })));
+  app.post(`${RQ}/links`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.linkIssuesToRequirement(db, c.project, c.r.id, req.body, req.user.id)); })));
+  app.delete(`${RQ}/links/:lid`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.json(await J.unlinkRequirementIssue(db, c.project, c.r.id, req.params.lid, req.user.id)); })));
+  app.post(`${RQ}/refresh`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; const run = await J.syncProject(db, c.project, { trigger: 'MANUAL', requirementId: c.r.id, userId: req.user.id }); res.json({ run, jira: await J.requirementJira(db, c.project, c.r.id) }); })));
+
+  // INTEGRATION_PROVIDER=fake only (local e2e): change an issue's status in the in-memory Jira, as a person would in Jira. Never mounted otherwise.
+  if (integrationConfig().provider === 'fake') {
+    app.post('/api/integrations/jira/fake/status', requireAuth, wrap(async (req, res) => { const f = getProvider('JIRA'); try { f.setStatus(String(req.body?.key || ''), String(req.body?.status || 'done')); res.json({ ok: true }); } catch (e) { fail(res, 404, 'not_found', e.message); } }));
+  }
 
   // Provider webhook — no session, JSON body up to 256 KB, always answers quickly.
   app.post('/api/integrations/jira/webhook/:cid/:secret', express.json({ limit: '256kb' }), wrap(async (req, res) => {

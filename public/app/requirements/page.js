@@ -24,6 +24,7 @@ import { term, reqDocMenu, bindReqDocMenu } from '../project/initiation.js';
 import { josa } from '../shared/josa.js';
 import { toolMenu, tmItem, aiPrice } from '../shared/toolmenu.js';
 import { bindArrowNav } from '../shared/drawer.js';
+import { reqJiraPaneHtml, bindReqJiraPane, reqJiraCell, bulkCreateReqIssues } from '../shared/jira.js';
 
 export async function requirementsPage(id) {
   const main = $('#main');
@@ -48,13 +49,17 @@ export async function requirementsPage(id) {
   let rows = []; let summary = g.requirements; let sel = null; let creating = params().get('new') === '1' && !archived;   /* archived / phone: no create form */
   let apvOpen = params().get('approval') === '1' && !archived && Boolean(baseline && baseline.step_id); let bw = null; let confirmAll = true;   // 요구사항 기준선 승인 Drawer (Phase 2 US-1) — not when archived / on a phone
   let dtab = 'info'; let actFilter = 'ALL';
+  let reqJira = null;        // v42: { enabled, auto_mark, by: { reqId: summary + keys } } when the project is mapped to Jira, else null
+  let reqJiraDetail = null;  // Jira tab data of the open requirement (fetched when the tab is first opened)
   // Arrived from an approved Change Request → edits are recorded with that CR as the history source.
   let ctxCr = null;
   if (params().get('cr')) { try { ctxCr = (await api('GET', wsApi(`/${id}/changes/${params().get('cr')}`))).change; } catch { setParam('cr', ''); } }
   const crBody = () => (ctxCr ? { source_change_request_id: ctxCr.id } : {});
 
-  const load = async () => { const d = await api('GET', rApi(listQuery())); rows = d.requirements; summary = d.summary; listGrid.setRows(rows); traceGrid.setRows(rows); };
-  const loadSel = async (rid) => { sel = rid ? (await api('GET', rApi(`/${rid}`))).requirement : null; setParam('sel', rid); };
+  const load = async () => { const d = await api('GET', rApi(listQuery())); rows = d.requirements; summary = d.summary; reqJira = d.jira || null; listGrid.setRows(rows); traceGrid.setRows(rows); };
+  const loadSel = async (rid) => { if (!sel || sel.id !== rid) reqJiraDetail = null; sel = rid ? (await api('GET', rApi(`/${rid}`))).requirement : null; setParam('sel', rid); };
+  const jiraCell = (r) => (reqJira ? reqJiraCell(reqJira.by[r.id], { done: reqJira.auto_mark && Boolean(r.jira_done_at) }) || dim() : dim());
+  const jiraSort = (r) => { const j = reqJira && reqJira.by[r.id]; return j ? j.rate ?? -1 : -2; };
 
   const opt = (map, cur) => Object.entries(map).map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
   const ownerOpts = (cur) => html`<option value="">미지정</option>` + members.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
@@ -97,6 +102,7 @@ export async function requirementsPage(id) {
       { key: 'requester_name', label: '요청자', width: 110, hidden: true, sort: (r) => r.requester_name || '', render: (r) => r.requester_name || dim() },
       { key: 'requester_organization', label: '요청자 소속', width: 120, hidden: true, sort: (r) => r.requester_organization || '', render: (r) => r.requester_organization || dim() },
       { key: 'updated', label: '수정일', width: 80, card: false, hidden: desk, sort: (r) => r.updated_at, cls: 'mono', render: (r) => fmtShort(r.updated_at) },
+      { key: 'jira', label: 'Jira', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v42: column option (⋯ → 보기)
     ],
   });
   const traceGrid = createGrid({
@@ -109,6 +115,7 @@ export async function requirementsPage(id) {
       { key: 'scope', label: '범위', width: 100, sort: (r) => REQ_SCOPE[r.scope], render: (r) => subtle(REQ_SCOPE[r.scope]) },
       { key: 'wbs', label: '연결 WBS', width: 90, align: 'right', sort: (r) => r.linked_wbs_count, render: (r) => String(r.linked_wbs_count) },
       { key: 'link', label: '연결 상태', width: 110, sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? '<span class="chip chip--done">연결됨</span>' : r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' ? '<span class="chip chip--hold">미연결</span>' : '<span class="chip chip--muted">미연결</span>') },
+      { key: 'jira', label: 'Jira', width: 160, sort: jiraSort, render: jiraCell },   // v42: linked Jira issues (요구사항 › 추적)
     ],
   });
   const curGrid = () => (rview() === 'trace' ? traceGrid : listGrid);
@@ -166,6 +173,7 @@ export async function requirementsPage(id) {
         try { reportBulk(await bulkRun(rApi('/bulk'), ids, { action: 'archive', ...crBody() }), '보관'); await bulkAfter(); } catch (e) { toast(e.message); }
       },
       onClear: () => listGrid.clearSelection(),
+      extra: reqJira && !archived ? [{ key: 'jira', label: '지라 태스크 만들기', onClick: async () => { try { if (await bulkCreateReqIssues(id, listGrid.selectedIds())) await bulkAfter(); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); } } }] : [],
     });
     bulk.update = b.update; bulk.destroy = b.destroy;
   };
@@ -452,7 +460,7 @@ export async function requirementsPage(id) {
     d.innerHTML = html`<div class="drawer__h"><b class="mono">${r.display_id}</b>${raw(statusChip(REQ_STATUS, REQ_STATUS_CHIP, r.status) + subtle(REQ_SCOPE[r.scope]))}${raw(r.archived_at ? '<span class="chip">보관됨</span>' : '')}
         <span class="dnav"><button type="button" data-nav="-1" aria-label="이전 요구사항" title="이전 (목록 순서)" ${at <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-nav="1" aria-label="다음 요구사항" title="다음 (목록 순서)" ${at < 0 || at >= ids.length - 1 ? 'disabled' : ''}>↓</button></span>
         <button class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
-      ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: 'WBS 연결', count: r.links.filter((l) => !l.archived_at).length }, { key: 'activity', label: '댓글·활동', count: events.length }], dtab))}
+      ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: 'WBS 연결', count: r.links.filter((l) => !l.archived_at).length }, { key: 'jira', label: 'Jira', count: reqJira && reqJira.by[r.id] ? reqJira.by[r.id].total : null }, { key: 'activity', label: '댓글·활동', count: events.length }], dtab))}
       <div class="drawer__b">
         <section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
           ${raw(desk ? deskInfo(r, readOnly) : html`
@@ -482,6 +490,7 @@ export async function requirementsPage(id) {
           ${raw(r.acceptances && r.acceptances.length ? html`<p class="raidline">${raw(r.acceptances.map((a) => html`<a href="/app/projects/${p.id}/tests?tab=acceptance&sel=${a.id}" data-link>${a.display_id} <b>${ACC_STATUS[a.status]}</b></a>`).join(''))}</p>` : '')}
           ${raw(r.raid && (r.raid.issues.length || r.raid.risks.length) ? html`<p class="raidline">${raw(r.raid.issues.length ? html`<a href="/app/projects/${p.id}/issues?requirement=${r.id}" data-link>관련 이슈 <b>${r.raid.issues.length}</b></a>` : '')}${raw(r.raid.risks.length ? html`<a href="/app/projects/${p.id}/issues?tab=risks&requirement=${r.id}" data-link>관련 리스크 <b>${r.raid.risks.length}</b></a>` : '')}</p>` : '')}
         </section>
+        <section data-pane="jira" class="dpane-jira" ${dtab === 'jira' ? '' : 'hidden'}>${raw(reqJiraPaneHtml(reqJiraDetail, r, { ro: readOnly }))}</section>
         <section data-pane="activity" ${dtab === 'activity' ? '' : 'hidden'}>${raw(activityPane({ events, filter: actFilter, ro: archived }))}</section>
       </div>
       ${raw(desk ? deskFoot(r, readOnly) : drawerFoot({ ro: readOnly, meta: `등록 ${fmtShort(r.created_at)}`, label: '요구사항 보관', id: 'rarchive' }))}`;
@@ -495,7 +504,8 @@ export async function requirementsPage(id) {
     const acc = r.acceptances && r.acceptances.length ? r.acceptances[0] : null;
     return traceStrip([
       { label: 'WBS', value: live.length, href: `${u}/wbs?requirement=${r.id}`, tone: live.length ? '' : r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' ? 'warn' : 'muted' },
-      ...(r.jira && r.jira.total ? [{ label: 'Jira', value: `${r.jira.done}/${r.jira.total} 완료`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
+      ...((() => { const j = reqJira && reqJira.by[r.id]; return j && j.total ? [{ label: 'Jira', value: `${j.done}/${j.total} 완료`, sub: `지라 진행률 ${j.rate}%`, href: `${location.pathname}?sel=${r.id}&tab=jira`, tone: j.done === j.total ? 'ok' : '' }] : []; })()),
+      ...(r.jira && r.jira.total && !(reqJira && reqJira.by[r.id]) ? [{ label: 'Jira', value: `${r.jira.done}/${r.jira.total} 완료`, sub: `${r.jira.rate}% · WBS 경유`, href: `${u}/wbs?requirement=${r.id}`, tone: r.jira.done === r.jira.total ? 'ok' : '' }] : []),
       { label: '변경 요청', value: r.changes ? r.changes.length : 0, href: `${u}/changes?requirement=${r.id}`, tone: r.changes && r.changes.length ? '' : 'muted' },
       { label: '이슈', value: issues, sub: risks ? `리스크 ${risks}` : '', href: `${u}/issues?requirement=${r.id}`, tone: issues ? 'warn' : 'muted' },
       { label: '테스트', value: t.total, sub: t.total ? `통과 ${t.pass} · 실패 ${t.fail}` : r.test_exclusion_reason ? '테스트 제외' : '', href: `${u}/tests?requirement=${r.id}`, tone: t.fail ? 'crit' : t.total && t.verification === 'VERIFIED' ? 'ok' : t.total ? '' : 'muted' },
@@ -530,6 +540,10 @@ export async function requirementsPage(id) {
       case 'CRITERION_REMOVED': return html`완료 조건 삭제 <q>${h.old_value}</q>`;
       case 'LINKED_WBS': return html`WBS 연결 <q>${lt(h.new_value)}</q>`;
       case 'UNLINKED_WBS': return html`WBS 연결 해제 <q>${h.old_value}</q>`;
+      case 'JIRA_LINKED': return html`Jira 이슈 연결 <q>${h.new_value}</q>`;
+      case 'JIRA_UNLINKED': return html`Jira 이슈 연결 해제 <q>${h.old_value}</q>`;
+      case 'JIRA_DONE': return html`연결된 Jira 이슈가 모두 완료 — 구현 완료로 표시`;
+      case 'JIRA_DONE_CLEARED': return html`Jira 이슈가 다시 진행 중 — 구현 완료 표시 해제`;
       case 'LINK_TYPE_CHANGED': return html`연결 유형 변경 <q>${lt(h.old_value)}</q> → <q>${lt(h.new_value)}</q>`;
       default: {
         const f = h.field_name; const long = f === 'title' || f === 'description';
@@ -541,7 +555,10 @@ export async function requirementsPage(id) {
   const bindDetail = () => {
     const r = sel; const d = $('#drawer'); const status = $('#dsave');
     $('#dclose').onclick = closeDrawer;
-    bindDtabs(d, (k) => { dtab = k; });
+    bindDtabs(d, (k) => { dtab = k; if (k === 'jira' && !reqJiraDetail) loadJira(); });
+    const loadJira = async () => { const rid = r.id; try { reqJiraDetail = await api('GET', rApi(`/${rid}/jira`)); } catch (e) { reqJiraDetail = { error: e.message }; } if (sel && sel.id === rid) drawDetail(); };
+    if (dtab === 'jira' && !reqJiraDetail) loadJira();
+    bindReqJiraPane(d.querySelector('[data-pane="jira"]'), { pid: id, rid: r.id, r, onChange: async (j) => { reqJiraDetail = j; try { await load(); sel = (await api('GET', rApi(`/${r.id}`))).requirement; } catch { /* keep */ } curGrid().refresh(); drawDetail(); } });
     d.querySelectorAll('[data-nav]').forEach((b) => b.onclick = () => { const ids = curGrid().orderedIds(); const n = ids[ids.indexOf(r.id) + Number(b.dataset.nav)]; if (n) openDetail(n); });
     bindArrowNav((dir) => { if (!sel) return; const ids = curGrid().orderedIds(); const n = ids[ids.indexOf(sel.id) + dir]; if (n) openDetail(n); });   // R2: keyboard ↑/↓ between items
     const dm = d.querySelector('[data-dmore]'); if (dm) dm.ontoggle = () => { moreOpen = dm.open; };
@@ -621,6 +638,7 @@ export async function requirementsPage(id) {
   if (params().get('approval') === '1' && !apvOpen) setParam('approval', '');
   await load();
   const initSel = params().get('sel');
+  if (initSel && params().get('tab') === 'jira') { dtab = 'jira'; setParam('tab', ''); }
   if (initSel && !creating) { try { await loadSel(initSel); } catch { setParam('sel', ''); } }
   draw();
 }

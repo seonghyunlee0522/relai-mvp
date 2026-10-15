@@ -171,8 +171,8 @@ test('WBS links: leaf create/link, multiple issues per WBS, same issue second WB
   const h = (await A.c('GET', `${A.wbs}/${leaf.id}`)).json.item.history.map((x) => x.action_type); assert.ok(h.includes('JIRA_LINKED') && h.includes('JIRA_UNLINKED'));
   // re-link allowed after unlink (unique index only on live links)
   r = await A.c('POST', `${WJ(A, leaf2.id)}/links`, { issue_keys: ['ABC-142'] }); assert.equal(r.json.results[0].ok, true);
-  // requirement: no direct Jira endpoints, indirect trace through WBS
-  assert.equal((await A.c('POST', `${A.req}/${req.id}/jira/links`, { issue_keys: ['ABC-145'] })).status, 404);
+  // requirement: direct links (v42, jira-req.test.js) do not change the indirect trace through WBS
+  assert.equal((await A.c('POST', `${A.req}/${req.id}/jira/links`, { issue_keys: ['ABC-145'] })).status, 201);
   r = await A.c('GET', `${A.req}/${req.id}`); assert.equal(r.json.requirement.jira.total, 3); assert.equal(r.json.requirement.jira.done, 1); assert.equal(r.json.requirement.jira.wbs[0].jira.total, 3);
   server.close();
 });

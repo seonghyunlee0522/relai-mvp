@@ -945,11 +945,12 @@ CREATE TABLE IF NOT EXISTS integration_entity_links (
   id                    TEXT PRIMARY KEY,
   connection_id         TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
   project_id            TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  wbs_item_id           TEXT NOT NULL REFERENCES wbs_items(id) ON DELETE CASCADE,   -- stable id; wbs_code is display-only
+  wbs_item_id           TEXT REFERENCES wbs_items(id) ON DELETE CASCADE,   -- stable id; wbs_code is display-only. NULL for a REQUIREMENT link
+  requirement_id        TEXT REFERENCES requirements(id) ON DELETE CASCADE,   -- v42: requirement ↔ Jira issue (link_role REQUIREMENT)
   external_entity_type  TEXT NOT NULL DEFAULT 'ISSUE',
   external_entity_id    TEXT NOT NULL,
   external_key          TEXT NOT NULL,
-  link_role             TEXT NOT NULL CHECK (link_role IN ('EXECUTION','EPIC')),
+  link_role             TEXT NOT NULL CHECK (link_role IN ('EXECUTION','EPIC','REQUIREMENT')),
   status                TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','MISSING','ERROR','REMOVED')),
   created_by            TEXT REFERENCES users(id),
   created_at            timestamptz NOT NULL DEFAULT now(),
@@ -957,7 +958,15 @@ CREATE TABLE IF NOT EXISTS integration_entity_links (
   last_synced_at        timestamptz,
   removed_at            timestamptz
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_iel_external_live ON integration_entity_links(connection_id, external_entity_id) WHERE status <> 'REMOVED';
+/* v42: requirement links live in the same table. One live WBS link per Jira issue (as before); a requirement link is unique per (requirement, issue),
+ * so the same issue can be linked to a WBS leaf and to one or more requirements. */
+ALTER TABLE integration_entity_links ALTER COLUMN wbs_item_id DROP NOT NULL;
+ALTER TABLE integration_entity_links ADD COLUMN IF NOT EXISTS requirement_id TEXT REFERENCES requirements(id) ON DELETE CASCADE;
+ALTER TABLE integration_project_mappings ADD COLUMN IF NOT EXISTS auto_mark_requirements BOOLEAN NOT NULL DEFAULT false;   -- '지라 완료 시 요구사항 구현 완료로 표시' (default off)
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS jira_done_at timestamptz;   -- set by sync when auto_mark_requirements is on and every linked Jira issue is Done; requirement status is never changed
+CREATE UNIQUE INDEX IF NOT EXISTS uq_iel_external_live_wbs ON integration_entity_links(connection_id, external_entity_id) WHERE status <> 'REMOVED' AND wbs_item_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_iel_req_live ON integration_entity_links(requirement_id, external_entity_id) WHERE status <> 'REMOVED' AND requirement_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_iel_req ON integration_entity_links(requirement_id, status);
 CREATE INDEX IF NOT EXISTS idx_iel_wbs ON integration_entity_links(wbs_item_id, status);
 CREATE INDEX IF NOT EXISTS idx_iel_project ON integration_entity_links(project_id, status);
 CREATE TABLE IF NOT EXISTS integration_activity (
