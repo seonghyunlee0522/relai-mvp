@@ -13,10 +13,11 @@ import { LIFECYCLE_LABEL } from '../shared/constants.js';
 import { resBadge, sevBadge, verifyChip } from '../shared/badges.js';
 import { ISSUE_STATUS, ISSUE_STATUS_CHIP, LINK_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, RISK_STATUS, RISK_STATUS_CHIP, WBS_CSTATUS, WBS_CSTATUS_CHIP, WBS_STATUS, WBS_TYPE } from '../shared/constants.js';
 import { traceStrip } from '../shared/trace-strip.js';
-import { drawerFoot, bindEscape } from '../shared/drawer.js';
+import { drawerFoot, bindEscape , bindArrowNav } from '../shared/drawer.js';
 import { appliedFilters, bindFilterClears, bindMoreFilters, moreFilters, isPhone } from '../shared/filters.js';
 import { emptyState } from '../shared/empty-state.js';
 import { bindCoach, coachMark } from '../onboarding/ui.js';
+import { toolMenu, tmItem, aiPrice } from '../shared/toolmenu.js';
 import { createGrid } from '../shared/grid.js';
 import { bulkRun, mountBulk } from '../shared/bulk.js';
 import { activityPane, bindActivity, bindDtabs, dtabs, mergeActivity } from '../shared/detail.js';
@@ -42,6 +43,10 @@ export async function wbsPage(id) {
   document.title = `WBS — ${p.name} — RELAI`;
   const wApi = (s = '') => wsApi(`/${id}/wbs${s}`);
   const meId = state.user.id;
+  const desk = !isPhone();   // Redesign R2: quiet toolbar, 6 default columns, 480px side drawer — desktop only
+  const ownerMode = new URLSearchParams(location.search).get('select') === 'owner';   // Jim M3: 지금 할 일 › 담당자 지정 → checkboxes + the owner bar
+  let selMode = ownerMode || new URLSearchParams(location.search).get('select') === '1';
+  let moreOpen = false;
   const params0 = () => new URLSearchParams(location.search);
   const params = params0;
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
@@ -166,8 +171,13 @@ export async function wbsPage(id) {
     if (it.is_group || it.item_type === 'SUMMARY') return f === 'owner' || f === 'weight';   // status is computed from children (보류 via the detail view)
     return true;
   };
+  /** R2 §5.5: one 기간 column "10/19–10/31" (plan-change note under it); the editable 계획 시작 / 계획 종료 columns stay in 컬럼. */
+  const periodCol = () => (desk ? [{ key: 'period', label: '기간', width: 130, render: (r) => { if (r._ghost) return '';
+    if (r.item_type === 'MILESTONE') return html`${raw(dateCell(r.milestone_date, false, r.past_end))}${raw(shiftLine(r))}`;
+    const s0 = r.planned_start; const e0 = r.planned_end; if (!s0 && !e0) return dim();
+    return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(shiftLine(r))}`; } }] : []);
   const grid = createGrid({
-    key: 'wbs.tree', rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
+    key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
     rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
     canEdit: editable, activeId: () => (sel ? sel.id : null), onOpen: (iid) => { if (iid !== GHOST) openDetail(iid); },
     onSelect: (s) => bulk.update(s.size),
@@ -178,17 +188,17 @@ export async function wbsPage(id) {
       catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); throw e; }
     },
     columns: [
-      { key: 'code', label: 'WBS', width: 70, sticky: true, fixed: true, cls: 'mono wcode', render: (r) => html`${r.wbs_code}` },
-      { key: 'title', label: '업무명', width: 400, min: 200, sticky: true, fixed: true, cls: 'ttl', render: (r) => titleCell(r) },
-      { key: 'start', label: '계획 시작', width: 118, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
-      { key: 'end', label: '계획 종료', width: 118, edit: { type: 'date', field: 'planned_end_date', cls: (r) => (r.past_end ? 'cell--past' : r.computed_status === 'DELAYED' ? 'cell--late' : ''), title: (r) => (r.past_end ? PAST_END() : ''), prefix: (r) => (r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : ''), value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date), after: shiftLine }, render: (r) => (r._ghost ? '' : (r.item_type === 'MILESTONE' ? dateCell(r.milestone_date, false, r.past_end) : dateCell(r.planned_end, r.rollup, r.past_end)) + shiftLine(r)) },   // US-3: past the project end → warn colour + !, never red
+      { key: 'code', label: desk ? '번호' : 'WBS', width: 70, sticky: true, fixed: true, cls: 'mono wcode', render: (r) => html`${r.wbs_code}` },
+      { key: 'title', label: desk ? '작업' : '업무명', width: desk ? 300 : 400, min: 200, sticky: true, fixed: true, cls: 'ttl', render: (r) => titleCell(r) },
+      ...periodCol(), { key: 'start', label: '계획 시작', width: 118, hidden: desk, edit: { type: 'date', field: 'planned_start_date' }, render: (r) => (r._ghost ? '' : r.item_type === 'MILESTONE' ? dim('—') : dateCell(r.planned_start, r.rollup)) },
+      { key: 'end', label: '계획 종료', width: 118, hidden: desk, edit: { type: 'date', field: 'planned_end_date', cls: (r) => (r.past_end ? 'cell--past' : r.computed_status === 'DELAYED' ? 'cell--late' : ''), title: (r) => (r.past_end ? PAST_END() : ''), prefix: (r) => (r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : ''), value: (r) => (r.item_type === 'MILESTONE' ? r.milestone_date : r.planned_end_date), after: shiftLine }, render: (r) => (r._ghost ? '' : (r.item_type === 'MILESTONE' ? dateCell(r.milestone_date, false, r.past_end) : dateCell(r.planned_end, r.rollup, r.past_end)) + shiftLine(r)) },   // US-3: past the project end → warn colour + !, never red
       { key: 'astart', label: '실적 시작', width: 118, hidden: true, edit: { type: 'date', field: 'actual_start_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_start, r.rollup)) },
       { key: 'aend', label: '실적 종료', width: 118, hidden: true, edit: { type: 'date', field: 'actual_end_date' }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : dateCell(r.actual_end, r.rollup)) },
-      { key: 'progress', label: '진행률', width: 126, card: false, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress, display: (r) => progCell(r) },
+      { key: 'progress', label: '진행률', width: desk ? 112 : 126, card: false, align: 'right', edit: { type: 'number', field: 'progress', value: (r) => r.progress, display: (r) => progCell(r) },
         render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : progCell(r)) },
-      { key: 'owner', label: '담당자', width: 176, edit: { type: 'select', field: 'owner', options: (r) => ownerChoices(ownerKey(r), true), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: noAcct },
+      { key: 'owner', label: '담당자', width: desk ? 140 : 176, edit: { type: 'select', field: 'owner', options: (r) => ownerChoices(ownerKey(r), true), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: noAcct },
         render: (r) => (r._ghost ? '' : ownerCell(r)) },
-      { key: 'status', label: '상태', width: 118, edit: { type: 'select', field: 'status', options: STATUS_EDIT, cls: (r) => (r.computed_status === 'DELAYED' ? 'cell--late' : ''), prefix: (r) => (r.computed_status === 'DELAYED' ? '<i class="wlate" title="계획 종료일이 지났습니다">지연</i>' : '') }, render: (r) => (r._ghost ? '' : statusBadge(r)) },   // UI-006: leaf rows show 지연 on the select too
+      { key: 'status', label: '상태', width: desk ? 104 : 118, edit: { type: 'select', field: 'status', options: STATUS_EDIT, cls: (r) => (r.computed_status === 'DELAYED' ? 'cell--late' : ''), prefix: (r) => (r.computed_status === 'DELAYED' ? '<i class="wlate" title="계획 종료일이 지났습니다">지연</i>' : '') }, render: (r) => (r._ghost ? '' : statusBadge(r)) },   // UI-006: leaf rows show 지연 on the select too
       { key: 'weight', label: '가중치', width: 76, hidden: true, align: 'right', edit: { type: 'number', field: 'weight', value: (r) => r.weight, min: 0, max: 1000 }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`${r.weight}`) },
       { key: 'type', label: '유형', width: 80, hidden: true, render: (r) => (r._ghost ? '' : r.is_group ? '작업 그룹' : WBS_TYPE[r.item_type]) },
       { key: 'jira', label: 'Jira 실행', width: 110, hidden: true, render: (r) => (r._ghost || !jira || r.item_type === 'MILESTONE' ? '' : execChip(jira.by[r.id]) || dim()) },
@@ -217,7 +227,7 @@ export async function wbsPage(id) {
   const mountBulkBar = () => {
     const slot = $('#bulkslot'); if (!slot) return;
     const b = mountBulk(slot, {
-      fields: bulkFields, canArchive: !archived,
+      fields: bulkFields, canArchive: !archived, initial: ownerMode ? 'owner_user_id' : null,
       onApply: async ({ field, value }) => {
         const n = grid.selected.size; const f = bulkFields.find((x) => x.key === field);
         const shown = value === NONE ? '미지정' : (Array.isArray(f.options) ? f.options : Object.entries(f.options || {})).find(([v]) => v === value)?.[1] || value;
@@ -334,6 +344,26 @@ export async function wbsPage(id) {
     catch (e) { toast(e.message); }
   };
 
+  /* ---------- desktop toolbar (R2 §5.5): status segments · search · 담당자 · ⋯ · + 작업 추가 (≤ 5 controls) ---------- */
+  const deskTool = (v, q, f) => {
+    const leaf = items.filter((x) => !x.is_group && x.item_type !== 'SUMMARY' && !x.archived_at); const cnt = (k) => leaf.filter((x) => x.computed_status === k).length;
+    const cur = q.get('cst') || '';
+    const SEG = [['', '전체', leaf.length], ['IN_PROGRESS', '진행 중', cnt('IN_PROGRESS')], ['DELAYED', '지연', cnt('DELAYED')], ['COMPLETED', '완료', cnt('COMPLETED')]];
+    const seg = html`<div class="sseg" role="group" aria-label="상태" data-status-seg>${raw(SEG.map(([k, l, c]) => html`<button type="button" class="${cur === k ? 'is-on' : ''}" data-cstf="${k}" aria-pressed="${cur === k}">${l} <b>${c}</b></button>`).join(''))}${raw(cur && !SEG.some(([k]) => k === cur) ? html`<button type="button" class="is-on" data-cstf="${cur}" aria-pressed="true">${WBS_CSTATUS[cur] || cur}</button>` : '')}</div>`;
+    const ownerSel = html`<select class="select select--sm" id="f-owner" aria-label="담당자"><option value="">담당자</option><option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>${raw(members.map((m) => html`<option value="${m.id}" ${q.get('owner') === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}${raw(owners.team.some((t) => !t.member) ? html`<optgroup label="팀원 (계정 없음)">${raw(owners.team.filter((t) => !t.member).map((t) => html`<option value="s:${t.id}" ${q.get('owner') === `s:${t.id}` ? 'selected' : ''}>${t.name}</option>`).join(''))}</optgroup>` : '')}</select>`;
+    const fl = (label, inner) => html`<label class="tmenu__f"><span>${label}</span>${raw(inner)}</label>`;
+    const menu = toolMenu([
+      ['필터 더보기', html`${raw(fl('보기', html`<select class="select select--sm" id="quick" aria-label="보기"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>`))}
+        ${raw(fl('상태', html`<select class="select select--sm" id="f-cst" aria-label="상태"><option value="">전체</option>${raw(Object.entries(WBS_CSTATUS).map(([k, l]) => html`<option value="${k}" ${cur === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>`))}
+        <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`],
+      ['보기', html`${raw(v === 'gantt' ? tmItem('전체 일정 맞추기', 'id="gfit"') + tmItem('오늘로 이동', 'id="gtoday"') : '')}${raw(tmItem('모두 펼치기', 'id="expall"'))}${raw(tmItem('모두 접기', 'id="colall"'))}${raw(v === 'list' ? grid.toolsHtml() : '')}${raw(v === 'list' && !archived ? tmItem('여러 개 선택', `data-selmode class="tmenu__i ${selMode ? 'is-on' : ''}"`, '체크박스로 여러 작업의 담당자·일정을 한 번에 바꿉니다') : '')}`],
+      [archived ? '' : '추가', archived ? '' : tmItem('◆ 마일스톤 추가', 'id="add-ms"', '기간 없이 날짜만 있는 주요 시점')],
+      ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 WBS 내보내기 (Excel)', 'data-xl="export"'))}`],
+      [archived ? '' : 'AI', archived ? '' : ai.enabled ? tmItem('AI로 초안 만들기', 'id="ai-wbs" title="요구사항과 프로젝트 수행 업무(이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs"', aiPrice(ai, 'WBS_GENERATION')) : tmItem('AI로 초안 만들기', 'id="ai-wbs" disabled', 'AI 기능이 설정되지 않았습니다')],
+    ], { label: '일정 메뉴 더보기' });
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
+  };
+
   const draw = () => {
     const rows = visible(); const v = view(); const f = quick(); const q = params();
     // K18: on phones 담당자 · 상태 move into the 필터 sheet (search + 필터 + one primary stay in the toolbar)
@@ -352,7 +382,9 @@ export async function wbsPage(id) {
       ${raw(msSuggest())}
       ${raw(items.length && jira ? coachMark('JIRA_EXECUTION_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. ${ctxCr.impacts && ctxCr.impacts.length ? `영향 WBS ${ctxCr.impacts.length}건만 표시합니다.` : '영향 WBS가 등록되지 않아 전체를 표시합니다.'} 반영이 끝나면 변경 요청을 '반영 완료'로 바꾸세요.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">컨텍스트 해제</button></div>` : '')}
-      ${raw(items.length ? html`<div class="rtool">
+      ${raw(items.length && desk ? deskTool(v, q, f) : '')}
+      ${raw(items.length && ownerMode && desk && !archived ? html`<div class="ownbar" data-owner-bar><b>담당자 지정</b><span>작업을 선택하면 아래에 담당자 막대가 열립니다. 표 맨 위 체크박스로 보이는 작업을 모두 선택할 수 있습니다.</span></div>` : '')}
+      ${raw(items.length && !desk ? html`<div class="rtool">
         <div class="seg" role="tablist"><button class="${v === 'list' ? 'is-on' : ''}" data-view="list" role="tab">WBS</button><button class="${v === 'gantt' ? 'is-on' : ''}" data-view="gantt" role="tab">Gantt</button></div><span class="wterms">${raw(term('wbs'))}${raw(term('gantt'))}</span>
         ${raw(v === 'gantt' ? '<span class="gtools"><button class="btn btn--secondary btn--sm" id="gfit">전체 일정</button><button class="btn btn--secondary btn--sm" id="gtoday">오늘</button></span>' : '')}
         <input class="input input--sm" id="q" type="search" placeholder="WBS명, 번호 검색" value="${q.get('q') || ''}" style="max-width:200px">
@@ -510,6 +542,9 @@ export async function wbsPage(id) {
     const fo = $('#f-owner'); if (fo) fo.onchange = () => { setParam('owner', fo.value); syncRows(); draw(); };
     const fc = $('#f-cst'); if (fc) fc.onchange = () => { setParam('cst', fc.value); syncRows(); draw(); };
     const qk = $('#quick'); if (qk) qk.onchange = () => { setParam('f', qk.value); syncRows(); draw(); };
+    main.querySelectorAll('[data-cstf]').forEach((b) => { b.onclick = () => { setParam('cst', b.dataset.cstf); syncRows(); draw(); }; });
+    const sm = main.querySelector('[data-selmode]'); if (sm) sm.onclick = () => { selMode = !selMode; setParam('select', selMode ? '1' : ''); grid.setSelectMode(selMode); draw(); };
+    main.querySelectorAll('.tmenu [data-xl]').forEach((b) => { b.onclick = async () => { try { if (b.dataset.xl === 'import') openImport({ kind: 'wbs', base: wApi(), onDone: async () => { await load(); draw(); } }); else if (b.dataset.xl === 'template') await download(`${wApi()}/template.xlsx`, { filename: 'WBS 등록 템플릿.xlsx' }); else await download(`${wApi()}/export.xlsx`); } catch (err) { toast(err.message); } }; });
     main.querySelectorAll('[data-kf]').forEach((b) => b.onclick = () => { setParam('f', b.dataset.kf); setParam('requirement', ''); ctxReq = null; syncRows(); draw(); });
     bindMoreFilters(main);
     bindFilterClears(main, { setParam, keys: ['q', 'owner', 'cst', 'f', 'requirement'], reload: async () => { if (!params().get('requirement')) ctxReq = null; syncRows(); draw(); } });
@@ -639,12 +674,13 @@ export async function wbsPage(id) {
                 <div class="field"><label>계획 종료일</label>${raw(dateInput('planned_end_date', it.planned_end_date, readOnly))}<div class="err" data-for="planned_end_date"></div></div></div>
                 ${raw(shiftNote(it))}
                 ${raw(live.past_end ? html`<p class="def__warn wpast__msg">${PAST_END()}</p>` : '')}
-                <div class="cols2"><div class="field"><label>실적 시작일</label>${raw(dateInput('actual_start_date', it.actual_start_date, readOnly))}</div><div class="field"><label>실적 종료일</label>${raw(dateInput('actual_end_date', it.actual_end_date, readOnly))}</div></div>
+                <div class="cols2 dx"><div class="field"><label>실적 시작일</label>${raw(dateInput('actual_start_date', it.actual_start_date, readOnly))}</div><div class="field"><label>실적 종료일</label>${raw(dateInput('actual_end_date', it.actual_end_date, readOnly))}</div></div>
                 <div class="dfield"><span>진행률 (%)</span><div><input class="input input--sm" type="number" min="0" max="100" step="1" data-field="progress" value="${it.progress}" ${readOnly ? 'disabled' : ''}></div></div>`)}
-            ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield"><span>단계</span><div><select class="select select--sm" data-field="lifecycle_phase" ${readOnly ? 'disabled' : ''}><option value="" ${it.lifecycle_phase ? '' : 'selected'}>미지정</option>${raw(Object.entries(LIFECYCLE_LABEL).map(([k, l]) => html`<option value="${k}" ${it.lifecycle_phase === k ? 'selected' : ''}>${l}</option>`).join(''))}</select></div></div>`)}
-            ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield"><span>가중치 <small class="dim">(상위 진행률 계산)</small></span><div><input class="input input--sm" type="number" min="0" max="1000" step="1" data-field="weight" value="${it.weight ?? 1}" ${readOnly ? 'disabled' : ''}></div></div>`)}
-            <div class="dfield"><span>상위 항목</span><div><select class="select select--sm" id="mv-parent" ${readOnly ? 'disabled' : ''}>${raw(parentOpts(it.parent_id || '', it.id))}</select></div></div>
-            ${raw(readOnly ? '' : html`<div class="actions"><button class="btn btn--secondary btn--xs" id="mv-up" ${idx <= 0 ? 'disabled' : ''}>↑ 위로</button><button class="btn btn--secondary btn--xs" id="mv-down" ${idx < 0 || idx >= sibs.length - 1 ? 'disabled' : ''}>↓ 아래로</button><button class="btn btn--secondary btn--xs" id="mv-in" ${idx <= 0 ? 'disabled' : ''}>들여쓰기 →</button><button class="btn btn--secondary btn--xs" id="mv-out" ${it.parent_id ? '' : 'disabled'}>← 내어쓰기</button>${raw(t === 'MILESTONE' ? '' : '<button class="btn btn--secondary btn--xs" id="addchild">+ 하위 작업</button>')}</div>`)}
+            ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield dx"><span>단계</span><div><select class="select select--sm" data-field="lifecycle_phase" ${readOnly ? 'disabled' : ''}><option value="" ${it.lifecycle_phase ? '' : 'selected'}>미지정</option>${raw(Object.entries(LIFECYCLE_LABEL).map(([k, l]) => html`<option value="${k}" ${it.lifecycle_phase === k ? 'selected' : ''}>${l}</option>`).join(''))}</select></div></div>`)}
+            ${raw(t === 'MILESTONE' ? '' : html`<div class="dfield dx"><span>가중치 <small class="dim">(상위 진행률 계산)</small></span><div><input class="input input--sm" type="number" min="0" max="1000" step="1" data-field="weight" value="${it.weight ?? 1}" ${readOnly ? 'disabled' : ''}></div></div>`)}
+            <div class="dfield dx"><span>상위 항목</span><div><select class="select select--sm" id="mv-parent" ${readOnly ? 'disabled' : ''}>${raw(parentOpts(it.parent_id || '', it.id))}</select></div></div>
+            ${raw(readOnly ? '' : html`<div class="actions dx"><button class="btn btn--secondary btn--xs" id="mv-up" ${idx <= 0 ? 'disabled' : ''}>↑ 위로</button><button class="btn btn--secondary btn--xs" id="mv-down" ${idx < 0 || idx >= sibs.length - 1 ? 'disabled' : ''}>↓ 아래로</button><button class="btn btn--secondary btn--xs" id="mv-in" ${idx <= 0 ? 'disabled' : ''}>들여쓰기 →</button><button class="btn btn--secondary btn--xs" id="mv-out" ${it.parent_id ? '' : 'disabled'}>← 내어쓰기</button>${raw(t === 'MILESTONE' ? '' : '<button class="btn btn--secondary btn--xs" id="addchild">+ 하위 작업</button>')}</div>`)}
+            ${raw(desk ? html`<button type="button" class="link linkbtn dmore__b" data-dx aria-expanded="${moreOpen}">${moreOpen ? '세부 정보 접기 ▴' : '세부 정보 더보기 ▾'}</button>` : '')}
             <div class="dsave" id="dsave"></div>
           </div></div>
         </section>
@@ -686,6 +722,9 @@ export async function wbsPage(id) {
     const jiraChanged = async (r) => { jiraDetail = { ...(jiraDetail || {}), ...(r.links ? { links: r.links } : {}), ...(r.summary ? { summary: r.summary } : {}) }; try { const t = await api('GET', wApi()); apply(t); sel = (await api('GET', wApi(`/${it.id}`))).item; } catch { /* keep pane */ } grid.refresh(); drawDetail(); };
     bindJiraPane(d.querySelector('[data-pane="jira"]'), { pid: id, wbsId: it.id, it: byId().get(it.id) || it, onChange: jiraChanged });
     d.querySelectorAll('[data-nav]').forEach((b) => b.onclick = () => { const ids = (view() === 'gantt' ? visible().map((x) => x.id) : grid.orderedIds()).filter((x) => x !== GHOST); const n = ids[ids.indexOf(it.id) + Number(b.dataset.nav)]; if (n) openDetail(n); });
+    bindArrowNav((dir) => { if (!sel) return; const ids = (view() === 'gantt' ? visible().map((x) => x.id) : grid.orderedIds()).filter((x) => x !== GHOST); const n = ids[ids.indexOf(sel.id) + dir]; if (n) openDetail(n); });   // R2: keyboard ↑/↓ between items
+    d.classList.toggle('is-more', moreOpen);
+    const dxb = d.querySelector('[data-dx]'); if (dxb) dxb.onclick = () => { moreOpen = !moreOpen; d.classList.toggle('is-more', moreOpen); dxb.setAttribute('aria-expanded', String(moreOpen)); dxb.textContent = moreOpen ? '세부 정보 접기 ▴' : '세부 정보 더보기 ▾'; };
     const after = async (r) => { apply(r); sel = (await api('GET', wApi(`/${it.id}`))).item; grid.refresh(); drawDetail(); };
     const save = async (field, value) => {
       status.textContent = '저장 중…';

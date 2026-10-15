@@ -22,7 +22,8 @@ const pairs = (o) => (Array.isArray(o) ? o : Object.entries(o || {}));
 export function createGrid(cfg) {
   const cols = cfg.columns;
   const prefs = store.get(`grid.${cfg.key}`, {}) || {};
-  const select = cfg.select !== false && !isPhone();   // phone = view mode: card rows, no checkboxes, no inline edit
+  const canSelect = cfg.select !== false && !isPhone();   // phone = view mode: card rows, no checkboxes, no inline edit
+  let select = canSelect && cfg.selectMode !== false;   // Redesign R2: desktop lists start without checkboxes; ⋯ › 여러 개 선택 turns them on
   const st = {
     rows: [],
     sort: cfg.sortable === false ? null : (prefs.sort || cfg.defaultSort || null),
@@ -35,7 +36,7 @@ export function createGrid(cfg) {
     el: null,
   };
   const save = () => store.set(`grid.${cfg.key}`, { sort: st.sort, hidden: [...st.hidden], widths: st.widths, size: st.size });
-  const visibleCols = () => cols.filter((c) => !st.hidden.has(c.key));
+  const visibleCols = () => { const force = cfg.forceShow ? cfg.forceShow() : []; return cols.filter((c) => !st.hidden.has(c.key) || force.includes(c.key)); };   // forceShow: shown for this view only (not saved)
   const colW = (c) => Math.max(c.min || 56, st.widths[c.key] || c.width || 120);
   const paged = cfg.paginate !== false;
 
@@ -226,7 +227,7 @@ export function createGrid(cfg) {
   };
 
   /* ---------- column menu (button lives in the page toolbar) ---------- */
-  const popHtml = () => html`<div class="gpop__t">표시할 컬럼</div>${raw(cols.filter((c) => !c.fixed).map((c) => html`<label class="gpop__i"><input type="checkbox" data-gcol="${c.key}" ${st.hidden.has(c.key) ? '' : 'checked'}> ${c.label}</label>`).join(''))}<button type="button" class="link linkbtn gpop__r" data-greset>기본값으로 복원</button>`;
+  const popHtml = () => html`<div class="gpop__t">표시할 컬럼</div>${raw(cols.filter((c) => !c.fixed).map((c) => html`<label class="gpop__i"><input type="checkbox" data-gcol="${c.key}" ${st.hidden.has(c.key) && !(cfg.forceShow ? cfg.forceShow() : []).includes(c.key) ? '' : 'checked'}> ${c.label}</label>`).join(''))}<button type="button" class="link linkbtn gpop__r" data-greset>기본값으로 복원</button>`;
   const bindTools = (root) => {
     root.querySelectorAll('[data-gtools]').forEach((box) => {
       if (box.dataset.gtools !== cfg.key) return;
@@ -273,6 +274,9 @@ export function createGrid(cfg) {
     refresh,
     rowById,
     clearSelection() { st.selected.clear(); st.anchor = null; syncSelectionUi(); },
+    get selectMode() { return select; },
+    /** Show / hide the checkbox column (turning it off clears the selection). */
+    setSelectMode(on) { select = canSelect && Boolean(on); if (!select) { st.selected.clear(); st.anchor = null; notify(); } refresh(); },
     selectedIds: () => [...st.selected],
     /** Visible (filtered, sorted) row ids across all pages — used for prev/next navigation in the detail view. */
     orderedIds: () => sortedRows().map((r) => String(cfg.rowId(r))),

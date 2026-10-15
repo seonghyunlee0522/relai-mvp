@@ -14,3 +14,18 @@ export const drawerSection = (title, count = null, right = '') =>
 export function bindEscape(close) {
   document.onkeydown = (e) => { if (e.key === 'Escape' && !document.querySelector('.scrim') && !e.target.closest('select')) close(); };
 }
+
+/** Redesign R2: ↑ / ↓ move the open detail drawer to the previous / next item in list order (when focus is not in a field or menu).
+ * `fn(dir)` with dir = -1 | 1. One document listener; each page render replaces the target. */
+let arrowNav = null;
+export function bindArrowNav(fn) {
+  arrowNav = fn;
+  if (document.body.dataset.arrowNav) return;
+  document.body.dataset.arrowNav = '1';
+  document.addEventListener('keydown', (e) => {
+    if (!arrowNav || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const d = document.querySelector('#drawer:not([hidden])'); if (!d || !d.querySelector('[data-nav]') || document.querySelector('.scrim')) return;
+    const t = e.target; if (t && t.closest && t.closest('input,select,textarea,[contenteditable="true"],.tmenu,.np__menu,.dmenu,.gpop,.amenu,#grid')) return;
+    e.preventDefault(); arrowNav(e.key === 'ArrowDown' ? 1 : -1);
+  });
+}

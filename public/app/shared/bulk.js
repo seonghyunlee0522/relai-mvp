@@ -16,13 +16,14 @@ const valueControl = (f) => {
  * Mounts the bar into `slot` (an empty container) and returns { update(count), destroy() }.
  * onApply({ field, value }) / onArchive() / onClear() may be async; the Apply button is disabled while they run.
  */
-export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive, onClear }) {
+export function mountBulk(slot, { fields, canArchive = true, onApply, onArchive, onClear, initial = null }) {   // initial = the field picked first (R2: 담당자 지정 → 담당자)
+  const first = Math.max(0, fields.findIndex((f) => f.key === initial));
   let bar = null;
   const build = (count) => {
     slot.innerHTML = html`<div class="bulk" role="region" aria-label="일괄 작업">
       <b class="bulk__n"><span data-bcount>${count}</span>건 선택</b>
-      <select class="select select--sm" data-bf aria-label="변경할 항목">${raw(fields.map((f, i) => html`<option value="${f.key}" ${i === 0 ? 'selected' : ''}>${f.label}</option>`).join(''))}</select>
-      <span data-bslot>${raw(valueControl(fields[0]))}</span>
+      <select class="select select--sm" data-bf aria-label="변경할 항목">${raw(fields.map((f, i) => html`<option value="${f.key}" ${i === first ? 'selected' : ''}>${f.label}</option>`).join(''))}</select>
+      <span data-bslot>${raw(valueControl(fields[first]))}</span>
       <button type="button" class="btn btn--primary btn--sm" data-bapply disabled>일괄 변경</button>
       <span class="bulk__sp"></span>
       ${raw(canArchive ? '<button type="button" class="btn btn--danger btn--sm" data-barch>보관</button>' : '')}

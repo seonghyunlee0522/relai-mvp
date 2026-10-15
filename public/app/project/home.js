@@ -12,6 +12,9 @@ import { bindChecklist, checklistCard } from '../onboarding/ui.js';
 import { scheduleState } from './status.js';
 import { newWorkspaceHome } from './list.js';
 import { isPhone, pcLine } from '../core/device.js';
+import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
+import { pickJosa } from '../shared/josa.js';
+import { upcomingList, activityList } from './next.js';
 
 /** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
 const wsName = (v) => String(v || '').replace(/ Workspace$/, ' 워크스페이스');
@@ -102,17 +105,71 @@ const summaryLine = (live) => {
   return k ? html`<span class="hgrid__sum"><span class="hc__cnt is-blocker"><i></i>막힘 ${k}</span></span>` : '';
 };
 
+
+/* ======================================================================================================================
+ * Desktop Home dashboard (Redesign R2 — hive research/relai-redesign-spec.md §5.1). Phone keeps the cards above.
+ *   one summary sentence → one card per live project (mini stepper + next step + one button; only the first is blue)
+ *   beside 다가오는 일정 + 최근 활동. Red / 막힘 only when work is actually overdue; "not done yet" is the next step, never an alert.
+ * ==================================================================================================================== */
+const isOverdue = (c) => Boolean(n(c.wbs && c.wbs.overdue_tasks) || n(c.wbs && c.wbs.overdue_milestones));
+const hasTodo = (c) => Boolean(c.guidance && c.guidance.kind !== 'MONITOR' && c.status !== 'ON_HOLD' && c.status !== 'DRAFT' && c.guidance.primary_action);
+const todoText = (c) => (isMove(c.guidance.primary_action) && c.next_phase ? `${c.next_phase.name} 단계를 시작할 차례입니다` : `'${c.guidance.title}'`);
+/** "오늘 할 일 2건이 있습니다. 한빛 챗봇은 '요구사항 2건을 확정하세요', 사내 포털은 …" — rule-based, from the same next-step data. */
+export const homeSummary = (live) => {
+  const todo = live.filter(hasTodo); const late = live.filter(isOverdue);
+  if (!todo.length) return html`<b>오늘 처리할 다음 단계가 없습니다.</b> 진행 중인 프로젝트 ${live.length}개가 모두 정상 진행 중입니다.`;
+  const parts = todo.slice(0, 2).map((c) => html`${c.name}${pickJosa(c.name, '은')} ${todoText(c)}`);
+  return html`<b>오늘 할 일 ${todo.length}건</b>이 있습니다. ${raw(parts.join(', '))}${todo.length > 2 ? ` 외 ${todo.length - 2}개 프로젝트에도 다음 단계가 있습니다` : ''}.${late.length ? ` 지연된 작업이 있는 프로젝트 ${late.length}개는 일정을 먼저 확인하세요.` : ''}`;
+};
+const miniStepper = (c) => { const states = c.phase_states || []; return html`<ol class="hmini" aria-label="단계">${raw(LIFECYCLE_PHASES.map((ph, i) => { const st = states[i] || (i + 1 < c.current_phase_sequence ? 'done' : i + 1 === c.current_phase_sequence ? 'cur' : 'todo');
+  return html`<li class="is-${st === 'quiet' ? 'done' : st}" title="${no2(i + 1)} ${ph.long}">${st === 'done' || st === 'quiet' ? '✓ ' : ''}${ph.short}</li>`; }).join(''))}</ol>`; };
+const dNext = (c, first) => {
+  const g = c.guidance; const u = `/app/projects/${c.id}`; if (!g) return '';
+  const bc = first ? 'btn--primary' : 'btn--secondary';   // one blue button on the page: the top card's next step
+  if (c.status === 'ON_HOLD' || c.status === 'DRAFT') return html`<div class="hnx hnx--quiet"><div><span class="hnx__k">상태</span><p class="hnx__t">${c.status === 'ON_HOLD' ? '보류 중입니다.' : '초안 상태입니다. 프로젝트 정보를 확정하면 안내가 시작됩니다.'}</p></div><a class="btn btn--secondary btn--sm" href="${u}" data-link>${c.status === 'ON_HOLD' ? '프로젝트 열기' : '지금 할 일 보기'}</a></div>`;
+  if (g.kind === 'MONITOR') { const nd = c.next_date; return html`<div class="hnx hnx--quiet"><div><span class="hnx__k">상태</span><p class="hnx__t">정상 진행 중${raw(nd ? html` · 다음 확인 <b>${fmtShort(nd.date)} ${nd.title}</b>` : '')}</p></div>${raw(g.primary_action ? html`<a class="btn btn--secondary btn--sm" href="${g.primary_action.href}" data-link>${g.primary_action.label}</a>` : '')}</div>`; }
+  const pa = g.primary_action;
+  const cta = !pa ? '' : isMove(pa) ? html`<a class="btn ${bc} btn--sm" href="${u}?move=next" data-link data-home-cta>${c.next_phase ? `${no2(c.next_phase.sequence)} ${c.next_phase.name} 단계 시작 →` : pa.label}</a>`
+    : html`<a class="btn ${bc} btn--sm" href="${pa.href}" data-link data-home-cta>${pa.label}</a>`;
+  return html`<div class="hnx"><div><span class="hnx__k">다음 할 일</span><p class="hnx__t">${g.title}</p>${raw(g.description ? html`<p class="hnx__d">${g.description}</p>` : '')}</div>${raw(cta)}</div>`;
+};
+const dCard = (c, i) => {
+  const late = isOverdue(c); const w = c.wbs || {};
+  return html`<article class="hc hc--r2 ${late ? 'is-blocker' : ''}" data-pid="${c.id}">
+    <header class="hc__h">
+      <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a><span class="hc__client">${c.client_name || ''}</span>
+      ${raw(late ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 마일스톤이 있습니다" data-overdue>지연</span>' : '')}
+      ${raw(c.status !== 'ACTIVE' ? html`<span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>` : '')}
+      <span class="hc__pos">${no2(c.current_phase_sequence)} 단계 / 07</span>
+    </header>
+    ${raw(miniStepper(c))}
+    ${raw(dNext(c, i === 0))}
+    ${raw(n(w.tasks) || late ? html`<p class="hc__foot">${raw(n(w.tasks) ? html`진행률 <b>${n(w.progress)}%</b>` : '')}${raw(late ? html`${n(w.tasks) ? ' · ' : ''}<a class="link is-crit" href="/app/projects/${c.id}/wbs?f=overdue" data-link>지연 작업 ${n(w.overdue_tasks)}건${n(w.overdue_milestones) ? ` · 지난 마일스톤 ${n(w.overdue_milestones)}건` : ''}</a>` : '')}</p>` : '')}
+  </article>`;
+};
+const homeSide = (live) => {
+  const up = live.flatMap((c) => (c.upcoming || []).map((u) => ({ ...u, pid: c.id, sub: c.name }))).sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 6);
+  const act = live.flatMap((c) => (c.recent || []).map((e) => ({ ...e, pid: c.id, project: live.length > 1 ? c.name : '' }))).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 6);
+  return html`<aside class="nxside" aria-label="일정과 활동">
+    <section class="nxbox" aria-labelledby="hUpT" data-home-upcoming><div class="nxbox__h"><h2 id="hUpT">다가오는 일정</h2></div><div class="nxbox__b">${raw(upcomingList(up, ''))}</div></section>
+    <section class="nxbox" aria-labelledby="hAcT" data-home-activity><div class="nxbox__h"><h2 id="hAcT">최근 활동</h2></div><div class="nxbox__b">${raw(activityList(act, ''))}</div></section>
+  </aside>`;
+};
+
 export async function homePage(main = $('#main')) {
   document.title = '홈 — RELAI';
   const [h, o] = await Promise.all([api('GET', wsApi('/home')), ob.get()]);
   const live = h.projects || []; const done = h.completed || [];
   const any = live.length || done.length;
+  const desk = !isPhone();   // Redesign R2 dashboard on desktop; the phone keeps today's cards
   main.innerHTML = html`<div class="page page--guide home">
-    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${wsName(state.workspace.name)}<span id="home-credits"></span></p>${raw(any ? pcLine() : '')}</div>
+    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${raw(desk && live.length ? html`진행 중인 프로젝트 ${live.length}개 · ` : '')}${wsName(state.workspace.name)}<span id="home-credits"></span></p>${raw(any ? pcLine() : '')}</div>
       ${raw(any && canManage() && !isPhone() ? `<a class="btn ${live.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
     ${raw(any && !isPhone() ? checklistCard(o, { compact: true }) : '')}
     ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
-    ${raw(live.length ? html`<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
+    ${raw(live.length && desk ? html`<p class="hsum" data-home-summary>${raw(homeSummary(live))}</p>
+        <div class="hdash"><section class="hgrid__sec" aria-labelledby="hgT"><h2 id="hgT" class="sr-only">프로젝트 현황</h2><div class="hgrid">${raw(live.map(dCard).join(''))}</div></section>${raw(homeSide(live))}</div>`
+      : live.length ? html`<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
         <div class="hgrid">${raw(live.map(card).join(''))}</div></section>`
       : any ? '<div class="empty empty--sm"><h2>진행 중인 프로젝트가 없습니다.</h2><p>완료된 프로젝트는 아래에 있습니다.</p></div>'
       : isPhone() ? html`<div class="empty empty--sm" data-phone-empty><p>프로젝트 만들기는 PC에서 할 수 있습니다. PC에서 ${location.host} 에 로그인하세요.</p></div>` : newWorkspaceHome(o))}

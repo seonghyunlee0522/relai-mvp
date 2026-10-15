@@ -18,6 +18,7 @@ import { bulkRequirements, bulkWbs } from './bulk.js';
 import { parseComment, listComments, addComment, getComment, deleteComment } from './comments.js';
 import { can } from './authz.js';
 import { projectDashboard, projectActivity } from './dashboard.js';
+import { upcomingDates } from './metrics.js';
 import * as WR from './reports.js';
 import { PDF_MIME, DOCX_MIME, renderReportPdf, renderReportDocx } from './report-export.js';
 
@@ -182,6 +183,12 @@ export function mountDashboardRoute({ app, db, guard, wrap, loadProject, base })
   app.get(`${base}/:pid/activity`, guard, wrap(async (req, res) => {
     const project = await loadProject(req, res); if (!project) return;
     res.json(await projectActivity(db, project.id, { limit: req.query.limit }));
+  }));
+  /** Redesign R2: 지금 할 일 › 다가오는 일정 — milestone-type dates and task ends in the next N days (read-only, computed). */
+  app.get(`${base}/:pid/upcoming`, guard, wrap(async (req, res) => {
+    const project = await loadProject(req, res); if (!project) return;
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    res.json({ items: await upcomingDates(db, project.id, { days, limit: 6 }) });
   }));
 }
 

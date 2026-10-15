@@ -68,7 +68,7 @@ export function projectGuidance(ctx) {
       act('완료보고서 보기', completion && completion.report_id ? u(`/reports/${completion.report_id}`) : u('/reports')), null, null);
   }
   // Cross-phase warnings (guidance, never gates)
-  if (n(req.total) && n(req.scope_undecided) && key !== 'REQUIREMENTS') warnings.push(`범위가 결정되지 않은 요구사항 ${req.scope_undecided}건`);
+  if (n(req.total) && n(req.scope_undecided) && key !== 'REQUIREMENTS') warnLink(`범위가 결정되지 않은 요구사항 ${req.scope_undecided}건`, u('/requirements?scope=UNDECIDED'));   // Redesign R2 (Jim M2): opens the filtered list with the 범위 column shown
   if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope) && key !== 'INITIATION' && key !== 'REQUIREMENTS' && key !== 'TESTING') warnings.push(`미확정 요구사항 ${n(req.in_scope) - n(req.in_scope_confirmed)}건`);
   // Phase 5 C1: in 05 the unconfirmed in-scope requirements are named with what confirming does (never blocks)
   if (key === 'TESTING' && n(tst.in_scope_unconfirmed)) warnLink(unconfirmedTestText(tst.in_scope_unconfirmed), u(UNCONFIRMED_HREF));

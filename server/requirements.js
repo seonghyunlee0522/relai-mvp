@@ -107,6 +107,8 @@ export async function requirementStats(db, projectId) {
       COALESCE(SUM((status = 'CONFIRMED')::int), 0) AS confirmed,
       COALESCE(SUM((status = 'REVIEWING')::int), 0) AS reviewing,
       COALESCE(SUM((status = 'DRAFT')::int), 0) AS draft,
+      COALESCE(SUM((status = 'ON_HOLD')::int), 0) AS on_hold,
+      COALESCE(SUM((status = 'REJECTED')::int), 0) AS rejected,
       COALESCE(SUM((type = 'UNSPECIFIED')::int), 0) AS type_unspecified,
       COALESCE(SUM((priority = 'UNSPECIFIED')::int), 0) AS priority_unspecified,
       COALESCE(SUM((scope = 'IN_SCOPE' AND status = 'CONFIRMED')::int), 0) AS in_scope_confirmed,

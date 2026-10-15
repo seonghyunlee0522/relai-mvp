@@ -6,8 +6,10 @@ import { $, fmtShort, html, raw, root } from './core/dom.js';
 import { navigate } from './core/router.js';
 import { state } from './core/state.js';
 import { googleButton } from './auth.js';
+/** Default names were stored as '홍길동님의 Workspace' — shown in Korean (Redesign R2; the stored name stays). Workspace → 워크스페이스. */
+const wn = (v) => `${String(v || '').replace(/ ?(Workspace|워크스페이스)$/, '')} 워크스페이스`.trim();
 
-const DEAD = { ACCEPTED: ['이미 수락된 초대입니다', '이 초대는 이미 사용되었습니다. 로그인해서 Workspace로 이동해 주세요.'], REVOKED: ['취소된 초대입니다', '초대한 분이 이 초대를 취소했습니다. 필요하면 새 초대를 요청해 주세요.'], EXPIRED: ['만료된 초대입니다', '초대 링크의 유효기간이 지났습니다. 초대한 분에게 재발송을 요청해 주세요.'] };
+const DEAD = { ACCEPTED: ['이미 수락된 초대입니다', '이 초대는 이미 사용되었습니다. 로그인해서 워크스페이스로 이동해 주세요.'], REVOKED: ['취소된 초대입니다', '초대한 분이 이 초대를 취소했습니다. 필요하면 새 초대를 요청해 주세요.'], EXPIRED: ['만료된 초대입니다', '초대 링크의 유효기간이 지났습니다. 초대한 분에게 재발송을 요청해 주세요.'] };
 
 export async function invitePage(token) {
   document.title = '초대 — RELAI';
@@ -25,13 +27,13 @@ export async function invitePage(token) {
     return;
   }
   const summary = html`<div class="invite__card">
-      <div class="invite__k">${isCreate ? '새 Workspace' : 'Workspace'}</div><div class="invite__v"><b>${inv.workspace_name}</b></div>
-      <div class="invite__k">${isCreate ? '역할' : '초대 역할'}</div><div class="invite__v">${isCreate ? 'OWNER (Workspace 소유자)' : inv.role_label}</div>
+      <div class="invite__k">${isCreate ? '새 워크스페이스' : '워크스페이스'}</div><div class="invite__v"><b>${String(inv.workspace_name || '').replace(/ Workspace$/, ' 워크스페이스')}</b></div>
+      <div class="invite__k">${isCreate ? '역할' : '초대 역할'}</div><div class="invite__v">${isCreate ? '관리자 (워크스페이스 소유자)' : inv.role_label}</div>
       <div class="invite__k">초대받은 이메일</div><div class="invite__v mono">${inv.email_masked}</div>
       ${raw(inv.inviter_name ? html`<div class="invite__k">초대한 사람</div><div class="invite__v">${inv.inviter_name}</div>` : '')}
       <div class="invite__k">유효기간</div><div class="invite__v">${fmtShort(inv.expires_at)} 까지</div></div>`;
-  const title = isCreate ? `${inv.workspace_name} Workspace 생성 초대` : `${inv.workspace_name} Workspace 초대`;
-  const lead = isCreate ? html`RELAI에서 <b>${inv.workspace_name}</b> Workspace를 생성하고 OWNER가 됩니다. 초대받은 이메일 계정으로 계속해 주세요.` : html`<b>${inv.inviter_name || '팀'}</b>님이 <b>${inv.workspace_name}</b> Workspace에 ${inv.role_label}로 초대했습니다. 초대받은 이메일 계정으로 계속해 주세요.`;
+  const title = isCreate ? `${wn(inv.workspace_name)} 생성 초대` : `${wn(inv.workspace_name)} 초대`;
+  const lead = isCreate ? html`RELAI에서 <b>${wn(inv.workspace_name)}</b>를 생성하고 관리자가 됩니다. 초대받은 이메일 계정으로 계속해 주세요.` : html`<b>${inv.inviter_name || '팀'}</b>님이 <b>${wn(inv.workspace_name)}</b>에 ${inv.role_label}로 초대했습니다. 초대받은 이메일 계정으로 계속해 주세요.`;
   if (!inv.me.logged_in) {
     frame(html`<h1>${title}</h1><p class="sub">${raw(lead)}</p>${raw(summary)}
       <div class="invite__cta">
@@ -51,7 +53,7 @@ export async function invitePage(token) {
     return;
   }
   frame(html`<h1>${title}</h1><p class="sub">${raw(lead)}</p>${raw(summary)}
-    <div class="notice notice--invite"><b>${state.user.name}</b> (${state.user.email}) 계정으로 수락합니다. ${raw(isCreate ? html`수락하면 <b>${inv.workspace_name}</b> Workspace가 생성되고 OWNER로 설정됩니다.` : html`수락하면 <b>${inv.workspace_name}</b> Workspace에 ${inv.role_label}로 참여합니다.`)}</div>
+    <div class="notice notice--invite"><b>${state.user.name}</b> (${state.user.email}) 계정으로 수락합니다. ${raw(isCreate ? html`수락하면 <b>${wn(inv.workspace_name)}</b>가 생성되고 관리자로 설정됩니다.` : html`수락하면 <b>${wn(inv.workspace_name)}</b>에 ${inv.role_label}로 참여합니다.`)}</div>
     <div class="form-err" id="ierr" role="alert" hidden></div>
     <div class="invite__cta"><button class="btn btn--primary btn--lg btn--block" id="accept">초대 수락</button><a class="btn btn--ghost btn--lg btn--block" href="/app" data-link>나중에</a></div>`);
   $('#accept').onclick = async () => {

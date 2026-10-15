@@ -21,6 +21,7 @@ import { weeklyReportState, completionState } from './reports.js';
 import { PHASE_BY_KEY } from './templates/default-phases.js';
 import { goLiveOf } from './golive.js';
 import { handoverOf, ownerCounts } from './closing.js';
+import { projectActivity } from './dashboard.js';
 
 const n = (v) => Number(v) || 0;
 
@@ -108,11 +109,12 @@ export const wbsExpected = (phaseKey) => (PHASE_BY_KEY[phaseKey] ? !['INITIATION
 export async function homeCard(db, row, { today } = {}) {
   const project = row;
   const early = !wbsExpected(project.current_phase);
-  const [ctx, health, attentionRaw, upcomingAll] = await Promise.all([
+  const [ctx, health, attentionRaw, upcomingAll, activity] = await Promise.all([
     guidanceContext(db, project),
     early ? H.healthFacts(db, project).then((f) => H.evaluateHealth({ ...f, req: { ...f.req, confirmed_unlinked: 0 } })) : H.projectHealth(db, project),
     M.attentionAll(db, project.id),
     M.upcomingDates(db, project.id, { days: 120, limit: 30 }),
+    projectActivity(db, project.id, { limit: 3 }),   // Redesign R2: Home 최근 활동 (newest 3 per project, merged on the client)
   ]);
   const attentionAll = notCarried(early ? attentionRaw.filter((i) => i.kind !== 'CONFIRMED_UNLINKED_REQUIREMENT') : attentionRaw, project.current_phase === 'OPERATIONS' ? ctx.carriedIds : null);
   const w = ctx.stats.wbs || {}; const iss = ctx.stats.issues || {};
@@ -136,6 +138,7 @@ export async function homeCard(db, row, { today } = {}) {
     upcoming,
     next_date: nextDate ? { kind: nextDate.kind, title: nextDate.title, date: nextDate.date, label: nextDate.label, href: nextDate.href } : null,
     next_date_days: nextDate && today ? daysFromToday(nextDate.date, today) : null,
+    recent: (activity.items || []).slice(0, 3).map(({ at, actor_name, display_id, title, summary, href, kind }) => ({ at, actor_name, display_id, title, summary, href, kind })),
   };
   card.priority = homePriority({ project, health, attention, guidance: g, issues: iss, upcoming });
   card.priority_label = PRIORITY_LABEL[card.priority];
