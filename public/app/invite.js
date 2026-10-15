@@ -1,6 +1,6 @@
 /* /invite/:token — public invitation landing. Works logged-out (CTAs: Google / 이메일 가입 / 로그인) and logged-in
  * (explicit [초대 수락] when the session e-mail matches; otherwise a clear "다른 계정" message). Type-specific copy:
- *   WORKSPACE_CREATE → "{name} Workspace를 생성하고 OWNER가 됩니다"   WORKSPACE_MEMBER → "{name} Workspace에 {role}로 참여합니다" */
+ *   WORKSPACE_CREATE → "{name} 워크스페이스를 생성하고 소유자가 됩니다"   WORKSPACE_MEMBER → "{name} 워크스페이스에 {role}로 참여합니다" */
 import { api } from './core/api.js';
 import { $, fmtShort, html, raw, root } from './core/dom.js';
 import { navigate } from './core/router.js';
@@ -28,12 +28,12 @@ export async function invitePage(token) {
   }
   const summary = html`<div class="invite__card">
       <div class="invite__k">${isCreate ? '새 워크스페이스' : '워크스페이스'}</div><div class="invite__v"><b>${String(inv.workspace_name || '').replace(/ Workspace$/, ' 워크스페이스')}</b></div>
-      <div class="invite__k">${isCreate ? '역할' : '초대 역할'}</div><div class="invite__v">${isCreate ? '관리자 (워크스페이스 소유자)' : inv.role_label}</div>
+      <div class="invite__k">${isCreate ? '역할' : '초대 역할'}</div><div class="invite__v">${isCreate ? '소유자 (워크스페이스 관리 · 결제)' : inv.role_label}</div>
       <div class="invite__k">초대받은 이메일</div><div class="invite__v mono">${inv.email_masked}</div>
       ${raw(inv.inviter_name ? html`<div class="invite__k">초대한 사람</div><div class="invite__v">${inv.inviter_name}</div>` : '')}
       <div class="invite__k">유효기간</div><div class="invite__v">${fmtShort(inv.expires_at)} 까지</div></div>`;
   const title = isCreate ? `${wn(inv.workspace_name)} 생성 초대` : `${wn(inv.workspace_name)} 초대`;
-  const lead = isCreate ? html`RELAI에서 <b>${wn(inv.workspace_name)}</b>를 생성하고 관리자가 됩니다. 초대받은 이메일 계정으로 계속해 주세요.` : html`<b>${inv.inviter_name || '팀'}</b>님이 <b>${wn(inv.workspace_name)}</b>에 ${inv.role_label}로 초대했습니다. 초대받은 이메일 계정으로 계속해 주세요.`;
+  const lead = isCreate ? html`RELAI에서 <b>${wn(inv.workspace_name)}</b>를 생성하고 소유자가 됩니다. 초대받은 이메일 계정으로 계속해 주세요.` : html`<b>${inv.inviter_name || '팀'}</b>님이 <b>${wn(inv.workspace_name)}</b>에 ${inv.role_label}로 초대했습니다. 초대받은 이메일 계정으로 계속해 주세요.`;
   if (!inv.me.logged_in) {
     frame(html`<h1>${title}</h1><p class="sub">${raw(lead)}</p>${raw(summary)}
       <div class="invite__cta">
@@ -53,7 +53,7 @@ export async function invitePage(token) {
     return;
   }
   frame(html`<h1>${title}</h1><p class="sub">${raw(lead)}</p>${raw(summary)}
-    <div class="notice notice--invite"><b>${state.user.name}</b> (${state.user.email}) 계정으로 수락합니다. ${raw(isCreate ? html`수락하면 <b>${wn(inv.workspace_name)}</b>가 생성되고 관리자로 설정됩니다.` : html`수락하면 <b>${wn(inv.workspace_name)}</b>에 ${inv.role_label}로 참여합니다.`)}</div>
+    <div class="notice notice--invite"><b>${state.user.name}</b> (${state.user.email}) 계정으로 수락합니다. ${raw(isCreate ? html`수락하면 <b>${wn(inv.workspace_name)}</b>가 생성되고 소유자로 설정됩니다.` : html`수락하면 <b>${wn(inv.workspace_name)}</b>에 ${inv.role_label}로 참여합니다.`)}</div>
     <div class="form-err" id="ierr" role="alert" hidden></div>
     <div class="invite__cta"><button class="btn btn--primary btn--lg btn--block" id="accept">초대 수락</button><a class="btn btn--ghost btn--lg btn--block" href="/app" data-link>나중에</a></div>`);
   $('#accept').onclick = async () => {

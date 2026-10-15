@@ -117,31 +117,83 @@ export async function settingsPage(main = $('#main')) {
         ${raw(can ? html`<div class="actions" style="margin-top:10px">${raw(c && c.status !== 'DISABLED' ? html`<button class="btn btn--secondary btn--sm" id="jira-reconnect" ${pv.configured ? '' : 'disabled'}>재연결</button><button class="btn btn--ghost btn--sm is-danger" id="jira-disconnect">연결 해제</button>` : html`<button class="btn btn--secondary btn--sm" id="jira-connect" ${pv.configured ? '' : 'disabled'}>Jira 연결</button>`)}</div>` : '<p class="hint">연결 설정은 워크스페이스 소유자·관리자만 할 수 있습니다.</p>')}
       </div></div></div></div>`;
   };
-  const draw = (members) => {
-    resetMembers();
-    main.innerHTML = html`<div class="page page--narrow page--guide"><div class="page__head"><div><h1>설정</h1>${raw(pcLine())}</div></div>
+  // Redesign R3 §5.7 (desktop): four tabs — 내 정보 · 팀원 · 요금제 · 연동; each with a title, purpose line and one primary.
+  // The phone keeps the single long page below (view mode).
+  const TABS = [['me', '내 정보', '내 계정과 워크스페이스 정보를 관리합니다.'], ['team', '팀원', '함께 일할 팀원과 초대 현황을 한곳에서 관리합니다.'], ['plan', '요금제', '플랜, 사용량, AI 크레딧을 확인하고 결제합니다.'], ['integrations', '연동', '외부 도구를 연결해 프로젝트와 동기화합니다.']];
+  const tabOf = () => { const t = qp0().get('tab'); if (TABS.some(([k]) => k === t)) return t; if (location.hash === '#billing' || qp0().get('checkout')) return 'plan'; if (qp0().get('jira')) return 'integrations'; return 'me'; };
+  let tab = tabOf();
+  const daysLeft = (d) => Math.max(0, Math.ceil((new Date(d) - Date.now()) / 86400000));
+  /** Members and invitations in one table — invites are rows with `초대 대기 · N일 남음` and 다시 보내기 / 취소. */
+  const teamTable = (members) => html`<div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0" id="teamtbl"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>상태</th><th>참여 · 만료</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
+      <tbody>${raw(members.map((m) => html`<tr data-mem="${m.id}">
+        <td>${m.name}${raw(m.id === me ? ' <small class="dim">(나)</small>' : '')}</td><td class="dim">${m.email}</td>
+        <td>${raw(perm.member_manage ? html`<select class="select select--sm" data-role="${m.id}" aria-label="${m.name} 역할">${raw(Object.entries(ROLE).map(([k, l]) => html`<option value="${k}" ${m.role === k ? 'selected' : ''} ${k === 'OWNER' && !perm.owner_grant ? 'disabled' : ''}>${l}</option>`).join(''))}</select>` : ROLE[m.role])}</td>
+        <td><span class="chip chip--done">참여 중</span></td><td class="dim">${fmtShort(m.created_at)} 참여</td>
+        ${raw(perm.member_manage ? html`<td style="white-space:nowrap"><button class="link linkbtn" data-remove="${m.id}" style="width:auto;color:#B42318">제거</button></td>` : '')}</tr>`).join(''))}
+      ${raw(invites.map((i) => html`<tr data-inv="${i.id}" class="is-invite">
+        <td class="dim">가입 전 <small>· ${i.invited_by_name || '-'} 초대</small></td><td class="mono">${i.email}</td><td>${ROLE[i.role] || i.role}</td>
+        <td>${raw(i.status === 'PENDING' ? html`<span class="chip chip--hold">초대 대기 · ${daysLeft(i.expires_at)}일 남음</span>` : inviteStatusChip(i.status))}${raw(i.last_email_status ? ` ${emailStatusChip(i.last_email_status)}` : '')}${raw(i.last_email_status === 'FAILED' ? html` <small class="dim">${i.last_email_error || ''}</small>` : '')}</td>
+        <td class="dim">${fmtShort(i.expires_at)} 만료</td>
+        <td style="white-space:nowrap">${raw(i.role === 'ADMIN' && workspace.role !== 'OWNER' ? '' : html`<button class="link linkbtn" data-resend="${i.id}" style="width:auto">다시 보내기</button> `)}${raw(i.status === 'PENDING' ? html`<button class="link linkbtn" data-revoke="${i.id}" style="width:auto;color:#B42318">취소</button>` : '')}</td></tr>`).join(''))}</tbody></table></div>`;
+  const tabHead = (title, purpose, primary = '') => html`<div class="stab-head"><div><h2>${title}</h2><p class="stab-head__p">${purpose}</p></div>${raw(primary)}</div>`;
+  const deskBody = (members) => {
+    const [, label, purpose] = TABS.find(([k]) => k === tab);
+    if (tab === 'team') return html`${raw(tabHead(label, purpose, perm.member_manage ? html`<button class="btn btn--primary btn--sm" id="invite-btn" data-tour-id="invite-members"${raw(unverified() ? html` disabled title="${VERIFY_HINT}"` : '')}>+ 팀원 초대</button>` : ''))}
+      ${raw(perm.member_manage && unverified() ? html`<p>${raw(verifyHint('invite-verify'))}</p>` : '')}
+      <div class="panel"><div class="panel__h"><span>팀원 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em>${raw(perm.member_manage ? html` <small class="dim" style="font-weight:400;margin-left:6px">초대 대기 ${invites.filter((i) => i.status === 'PENDING').length}건</small>` : '')}</span></div>
+      ${raw(teamTable(members))}
+      ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="이미 가입한 사용자 이메일" required style="flex:1;max-width:480px"><select class="select select--sm" name="role" aria-label="역할"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">바로 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '<p class="hint" style="padding:0 20px 14px">팀원 초대·역할 변경은 워크스페이스 소유자·관리자만 할 수 있습니다.</p>')}</div>`;
+    if (tab === 'plan') return html`${raw(tabHead(label, purpose))}${raw(billingCard())}${raw(creditsCard())}`;
+    if (tab === 'integrations') return html`${raw(tabHead(label, purpose))}${raw(jiraCard() || '<p class="dim">연결할 수 있는 도구가 없습니다.</p>')}`;
+    const ownerWs = workspace.role === 'OWNER';
+    return html`${raw(tabHead(label, purpose))}
     <div class="panel" id="profile"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
-      <dt>이름</dt><dd><form id="mef" class="inline-form"><input class="input input--sm" name="name" value="${state.user.name}" maxlength="50" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form></dd>
+      <dt>이름</dt><dd><form id="mef" class="inline-form"><input class="input input--sm" name="name" value="${state.user.name}" maxlength="50" style="max-width:280px"> <button class="btn btn--primary btn--sm">저장</button></form></dd>
       <dt>이메일</dt><dd>${state.user.email}</dd>
       <dt>약관 · 정책</dt><dd><a class="link" href="/terms" target="_blank" rel="noopener">이용약관</a> · <a class="link" href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a></dd>
       ${raw(account ? html`<dt>로그인 방법</dt><dd>${account.login_methods.map((m) => (m.provider === 'GOOGLE' ? 'Google' : '비밀번호')).join(' · ') || '-'}</dd>` : '')}</dl>
       ${raw(account ? html`<div class="actions" style="margin-top:14px">${raw(account.has_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 변경</button>'
-        : account.can_set_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 설정</button>' : '<small class="dim">이메일 인증 후 비밀번호를 설정할 수 있습니다.</small>')}
-        <span class="panel__sp"></span><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}</div></div>
+        : account.can_set_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 설정</button>' : '<small class="dim">이메일 인증 후 비밀번호를 설정할 수 있습니다.</small>')}</div>` : '')}</div></div>
     <div class="panel" style="margin-top:20px" data-tour-id="workspace-settings"><div class="panel__h">워크스페이스</div><div class="panel__b"><dl class="info">
       <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
-      <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
-      ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>' : '')}</div></div>
-    ${raw(billingCard())}${raw(creditsCard())}
-    <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
-      <div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
-      <tbody>${raw(members.map((m) => html`<tr>
-        <td>${m.name}${raw(m.id === me ? ' <small class="dim">(나)</small>' : '')}</td><td class="dim">${m.email}</td>
-        <td>${raw(perm.member_manage ? html`<select class="select select--sm" data-role="${m.id}">${raw(Object.entries(ROLE).map(([k, l]) => html`<option value="${k}" ${m.role === k ? 'selected' : ''} ${k === 'OWNER' && !perm.owner_grant ? 'disabled' : ''}>${l}</option>`).join(''))}</select>` : ROLE[m.role])}</td>
-        <td class="dim">${fmtShort(m.created_at)}</td>
-        ${raw(perm.member_manage ? html`<td><button class="link linkbtn" data-remove="${m.id}" style="width:auto;color:#B42318">제거</button></td>` : '')}</tr>`).join(''))}</tbody></table></div>
-      ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
-    </div>${raw(inviteTable())}${raw(isPhone() ? '' : jiraCard())}${raw(isPhone() ? '<button type="button" class="btn btn--secondary phone-logout" data-logout data-phone-ok>로그아웃</button>' : '')}</div>`;
+      <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl></div></div>
+    ${raw(account || ownerWs ? html`<details class="danger-zone" id="danger"><summary>위험 구역 <small class="dim">계정 삭제${ownerWs ? ' · 워크스페이스 삭제' : ''}</small></summary><div class="danger-zone__b">
+      ${raw(account ? html`<div class="danger-zone__row"><div><b>계정 삭제</b><p class="hint">계정 정보가 즉시 삭제되고 복구할 수 없습니다.</p></div><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}
+      ${raw(ownerWs ? html`<div class="danger-zone__row"><div><b>워크스페이스 삭제</b><p class="hint">모든 프로젝트와 데이터에 접근할 수 없게 되고 30일 후 파기됩니다.</p></div><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>` : '')}
+    </div></details>` : '')}`;
+  };
+  const draw = (members) => {
+    resetMembers();
+    if (!isPhone()) {
+      main.innerHTML = html`<div class="page page--narrow page--guide page--settings"><div class="page__head"><div><h1>설정</h1></div></div>
+      <nav class="stabs stabs--settings" aria-label="설정 메뉴">${raw(TABS.map(([k, l]) => html`<a class="stabs__i ${k === tab ? 'is-active' : ''}" href="/app/settings?tab=${k}" data-set-tab="${k}" ${raw(k === tab ? 'aria-current="page"' : '')}>${l}</a>`).join(''))}</nav>
+      <section class="stab-body" data-tab="${tab}">${raw(deskBody(members))}</section></div>`;
+      main.querySelectorAll('[data-set-tab]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tab = a.dataset.setTab; history.replaceState(null, '', `/app/settings?tab=${tab}`); draw(members); });
+    } else {
+      main.innerHTML = html`<div class="page page--narrow page--guide"><div class="page__head"><div><h1>설정</h1>${raw(pcLine())}</div></div>
+      <div class="panel" id="profile"><div class="panel__h">프로필</div><div class="panel__b"><dl class="info">
+        <dt>이름</dt><dd><form id="mef" class="inline-form"><input class="input input--sm" name="name" value="${state.user.name}" maxlength="50" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form></dd>
+        <dt>이메일</dt><dd>${state.user.email}</dd>
+        <dt>약관 · 정책</dt><dd><a class="link" href="/terms" target="_blank" rel="noopener">이용약관</a> · <a class="link" href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a></dd>
+        ${raw(account ? html`<dt>로그인 방법</dt><dd>${account.login_methods.map((m) => (m.provider === 'GOOGLE' ? 'Google' : '비밀번호')).join(' · ') || '-'}</dd>` : '')}</dl>
+        ${raw(account ? html`<div class="actions" style="margin-top:14px">${raw(account.has_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 변경</button>'
+          : account.can_set_password ? '<button class="btn btn--secondary btn--sm" id="pw-change">비밀번호 설정</button>' : '<small class="dim">이메일 인증 후 비밀번호를 설정할 수 있습니다.</small>')}
+          <span class="panel__sp"></span><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}</div></div>
+      <div class="panel" style="margin-top:20px" data-tour-id="workspace-settings"><div class="panel__h">워크스페이스</div><div class="panel__b"><dl class="info">
+        <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
+        <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
+        ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>' : '')}</div></div>
+      ${raw(billingCard())}${raw(creditsCard())}
+      <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
+        <div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
+        <tbody>${raw(members.map((m) => html`<tr>
+          <td>${m.name}${raw(m.id === me ? ' <small class="dim">(나)</small>' : '')}</td><td class="dim">${m.email}</td>
+          <td>${raw(perm.member_manage ? html`<select class="select select--sm" data-role="${m.id}">${raw(Object.entries(ROLE).map(([k, l]) => html`<option value="${k}" ${m.role === k ? 'selected' : ''} ${k === 'OWNER' && !perm.owner_grant ? 'disabled' : ''}>${l}</option>`).join(''))}</select>` : ROLE[m.role])}</td>
+          <td class="dim">${fmtShort(m.created_at)}</td>
+          ${raw(perm.member_manage ? html`<td><button class="link linkbtn" data-remove="${m.id}" style="width:auto;color:#B42318">제거</button></td>` : '')}</tr>`).join(''))}</tbody></table></div>
+        ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
+      </div>${raw(inviteTable())}${raw(isPhone() ? '' : jiraCard())}${raw(isPhone() ? '<button type="button" class="btn btn--secondary phone-logout" data-logout data-phone-ok>로그아웃</button>' : '')}</div>`;
+    }
     members0 = members; bindBuy();
     const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 Free 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });

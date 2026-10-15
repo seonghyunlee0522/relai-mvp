@@ -19,7 +19,7 @@ import { createWorkspaceForOwner, maskEmail, normEmail } from './accounts.js';
 export class InviteError extends Error { constructor(status, code, message, extra = {}) { super(message); this.status = status; this.code = code; this.extra = extra; } }
 export const INVITE_TYPES = ['WORKSPACE_CREATE', 'WORKSPACE_MEMBER'];
 export const INVITE_STATUSES = ['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED'];
-const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Admin', MEMBER: 'Member' };
+const ROLE_LABEL = { OWNER: '소유자', ADMIN: '관리자', MEMBER: '멤버' };   // R3: Korean labels (invite page + mail)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const hashToken = (token, env = process.env) => sha256(`invite:${env.SESSION_SECRET || ''}:${token}`);
