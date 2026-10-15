@@ -2,6 +2,7 @@
  * The header carries the minimum: project name · status · (work screens only) compact current-phase badge · (right) Activity · 보고서 · ⋯ · Help.
  * On What’s Next the phase is shown by the Lifecycle stepper and the RELAI Guide right below, so the header does not repeat it.
  * Navigation is the LNB (lnb.js); activity states come from the server payload (g.phases[].steps[].state). */
+import { sampleChip } from './samples.js';
 import { api, wsApi } from '../core/api.js';
 import { html, no2, raw } from '../core/dom.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
@@ -19,7 +20,7 @@ import { md } from '../shared/kst-date.js';
 import { approvalGateDialog, APPROVAL_GATES, gateStep, bypassNote } from './initiation.js';
 
 /** Status pill. Phase 7 US-2: a closed project reads `✓ 완료 · 10/30` (ok family) — never the same shape as 보관됨. */
-export const statusPill = (p) => (p.status === 'COMPLETED' && p.closed_on
+export const statusPill = (p) => sampleChip(p) + (p.status === 'COMPLETED' && p.closed_on
   ? html`<span class="chip chip--done wsh__done" data-closed-pill>✓ 완료 · ${md(String(p.closed_on).slice(0, 10))}</span>`
   : html`<span class="chip ${STATUS_CHIP[p.status] || ''}">${STATUS[p.status]}</span>`);
 

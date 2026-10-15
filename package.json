@@ -11,6 +11,7 @@
     "dev": "node --env-file-if-exists=.env --watch server/index.js",
     "test": "node --test --test-force-exit \"server/test/*.test.js\"",
     "migrate:sqlite": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-postgres.js",
+    "samples:build": "node --env-file-if-exists=.env scripts/build-sample-snapshot.mjs",
     "db:validate": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-postgres.js --validate"
   },
   "dependencies": {

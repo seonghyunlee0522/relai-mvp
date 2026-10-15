@@ -61,12 +61,13 @@ import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
 import { PLANS } from './plans.js';
 import { mountCreditRoutes } from './billing/credit-routes.js';
+import * as SMP from './samples/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
 const PROJECT_COLS = `id, workspace_id, name, description, client_name, project_scale, status,
   planned_start_date, planned_end_date, current_phase, created_by, created_at, updated_at,
-  project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration, closed_on, warranty_end_on`;
+  project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration, closed_on, warranty_end_on, sample_key`;
 
 export function createApp(db, { secureCookies = process.env.NODE_ENV === 'production', sessionSecret = process.env.SESSION_SECRET || '', billingProvider = providerFromEnv() } = {}) {
   const app = express();
@@ -209,14 +210,14 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       if (invite.email !== normEmail(email)) return fail(res, 403, 'invite_email_mismatch', '초대받은 이메일로만 가입할 수 있습니다.', { fields: { email: `초대받은 이메일(${I.publicView(invite).email_masked})로 가입해 주세요.` } });
     }
     const password_hash = await hashPassword(password);
-    let userId; let accepted = null;
+    let userId; let workspaceId = null; let accepted = null;
     try {
       await tx(db, async (db) => {
         if (invite) {
           userId = await createUser(db, { email, name, passwordHash: password_hash, emailVerifiedAt: new Date().toISOString() });   // the invite link arrived by e-mail
           const user = { id: userId, email, status: 'ACTIVE' };
           accepted = await I.acceptInvite(db, invite, user);
-        } else ({ userId } = await createDirectSignupUser(db, { email, name, passwordHash: password_hash }));
+        } else ({ userId, workspaceId } = await createDirectSignupUser(db, { email, name, passwordHash: password_hash }));
         await recordConsent(db, userId, consent);
         await writeAudit(db, { adminUserId: userId, action: 'USER_CREATED', targetType: 'USER', targetId: userId, metadata: { email, method: 'PASSWORD', invitation_id: invite ? invite.id : null }, actorKind: 'USER' });
       });
@@ -226,6 +227,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       throw e;
     }
     await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [userId]);
+    await SMP.addSamplesAfterSignup(db, { workspaceId, userId, userName: name });   // 샘플 프로젝트 3건 (own workspace only, never invites)
     await recordLogin(db, { userId, method: 'SIGNUP', req });
     await startSession(res, userId);
     // Direct signup: the address is unproven until the link is clicked (invite signups are verified above). A failed send is
@@ -302,7 +304,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         VALUES (?,?,?,?,?,?, 'ACTIVE', ?,?, 'INITIATION', ?, ?,?,?,?,?,?)`, [id, req.params.wid, p.name, p.description, p.client_name, p.project_scale, p.planned_start_date, p.planned_end_date, req.user.id,
         p.project_type, p.data_migration, p.deployment_environment, p.delivery_model, p.has_existing_system, p.has_external_integration]));
       await ensurePhases(db, await getProject(req.params.wid, id, db), { createdBy: req.user.id });
-      if (Number((await db.get(`SELECT COUNT(*) n FROM projects WHERE workspace_id = ?`, [req.params.wid])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: id, kind: 'project' });
+      if (Number((await db.get(`SELECT COUNT(*) n FROM projects WHERE workspace_id = ? AND sample_key IS NULL`, [req.params.wid])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: id, kind: 'project' });
     }));
     res.status(201).json({ project: (await getProject(req.params.wid, id)) });
   }));
@@ -605,7 +607,22 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     });
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
   }));
-  // No DELETE route by design (Phase 1: archive only).
+  // Real projects have no DELETE route by design (Phase 1: archive only). 샘플 프로젝트 are the exception: deleted for good.
+  app.delete(`${base}/:pid`, manage, wrap(async (req, res) => {
+    const existing = await getProject(req.params.wid, req.params.pid);
+    if (!existing) return fail(res, 404, 'not_found', '프로젝트를 찾을 수 없습니다.');
+    if (!existing.sample_key) return fail(res, 409, 'not_sample', '샘플 프로젝트만 삭제할 수 있습니다. 실제 프로젝트는 보관하세요.');
+    res.json({ deleted: await SMP.deleteSampleProjects(db, req.params.wid, req.params.pid) });
+  }));
+  /* 샘플 프로젝트: 추가 (missing ones only — the demo account and users who deleted them) · 모두 삭제 */
+  app.post('/api/workspaces/:wid/samples', manage, wrap(async (req, res) => {
+    const created = await SMP.addSampleProjects(db, { workspaceId: req.params.wid, userId: req.user.id, userName: req.user.name });
+    if (!created.length) return fail(res, 409, 'samples_exist', '샘플 프로젝트가 이미 모두 있습니다.');
+    res.status(201).json({ projects: created });
+  }));
+  app.delete('/api/workspaces/:wid/samples', manage, wrap(async (req, res) => {
+    res.json({ deleted: await SMP.deleteSampleProjects(db, req.params.wid) });
+  }));
 
 
   /* ---------- workspace: settings & members (role-enforced) ---------- */

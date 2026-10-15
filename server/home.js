@@ -125,7 +125,7 @@ export async function homeCard(db, row, { today } = {}) {
   const nextDate = upcoming[0] || null;   // "다음 확인" = the nearest milestone-type date, never an arbitrary task start
   const g = ctx.guidance;
   const card = {
-    id: project.id, name: project.name, client_name: project.client_name, status: project.status,
+    id: project.id, name: project.name, client_name: project.client_name, status: project.status, sample_key: project.sample_key || null,
     planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date,
     current_phase: project.current_phase, current_phase_name: project.current_phase_name, current_phase_sequence: project.current_phase_sequence,
     guidance: g ? { rule: g.rule, kind: guidanceKind(g), title: g.title, description: g.description, primary_action: g.primary_action, secondary_action: g.secondary_action, warnings: g.warnings } : null,
@@ -154,9 +154,9 @@ export async function workspaceHome(db, rows, { ensure = null, today = todayStr(
   let i = 0;
   const worker = async () => { while (i < live.length) { const k = i++; const row = ensure ? await ensure(live[k]) : live[k]; cards[k] = await homeCard(db, row, { today }); } };
   await Promise.all(Array.from({ length: Math.min(concurrency, live.length) }, worker));
-  cards.sort(comparePriority);
+  cards.sort((a, b) => Number(Boolean(a.sample_key)) - Number(Boolean(b.sample_key)) || comparePriority(a, b));   // 샘플 프로젝트 after real work
   const counts = {}; for (const c of cards) counts[c.priority] = (counts[c.priority] || 0) + 1;
   // Phase 7 US-2: 완료된 프로젝트 = name · 완료일 · 완료보고서 link (no progress, no 다음 할 일)
   const reports = completed.length ? new Map((await db.all(`SELECT project_id, id FROM weekly_reports WHERE report_type = 'COMPLETION' AND project_id IN (${completed.map(() => '?').join(',')})`, completed.map((r) => r.id))).map((r) => [r.project_id, r.id])) : new Map();
-  return { projects: cards, completed: completed.map(({ id, name, client_name, status, current_phase_name, current_phase_sequence, planned_end_date, closed_on }) => ({ id, name, client_name, status, current_phase_name, current_phase_sequence, planned_end_date, closed_on: closed_on || null, completion_report_id: reports.get(id) || null })), counts, today };
+  return { projects: cards, completed: completed.map(({ id, name, client_name, status, current_phase_name, current_phase_sequence, planned_end_date, closed_on, sample_key }) => ({ id, name, client_name, status, sample_key: sample_key || null, current_phase_name, current_phase_sequence, planned_end_date, closed_on: closed_on || null, completion_report_id: reports.get(id) || null })), counts, today };
 }

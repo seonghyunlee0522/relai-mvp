@@ -4,6 +4,7 @@
 import { api, wsApi } from '../core/api.js';
 import { $, html, no2, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
+import { state } from '../core/state.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { periodDialog } from './dashboard.js';
 import { openJiraProjectSettings } from '../shared/jira.js';
@@ -17,7 +18,7 @@ const fmtAt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${
 export const headerActions = (p) => {
   const ro = p.status === 'ARCHIVED';
   const ops = p.current_phase === 'OPERATIONS' || p.status === 'COMPLETED';   // Phase 7: 완료보고서 is made in 07
-  return html`<span class="wsh__act" data-pid="${p.id}" data-ro="${ro ? '1' : ''}" data-name="${p.name}" data-ops="${ops ? '1' : ''}" data-is-closed="${p.status === 'COMPLETED' ? '1' : ''}">
+  return html`<span class="wsh__act" data-pid="${p.id}" data-sample="${p.sample_key ? '1' : ''}" data-ro="${ro ? '1' : ''}" data-name="${p.name}" data-ops="${ops ? '1' : ''}" data-is-closed="${p.status === 'COMPLETED' ? '1' : ''}">
     <button type="button" class="btn btn--ghost btn--sm" data-act="activity" title="댓글·상태·담당자·일정·단계 변경 이력">활동 기록</button>
     <span class="menuwrap"><button type="button" class="btn btn--ghost btn--sm" data-act="reports" aria-haspopup="menu" aria-expanded="false">보고서 ▾</button></span>
     <span class="menuwrap"><button type="button" class="btn btn--ghost btn--sm wsh__more" data-act="more" aria-haspopup="menu" aria-expanded="false" aria-label="더보기" title="더보기">⋯</button></span>
@@ -28,11 +29,11 @@ export const headerActions = (p) => {
 export const headerMore = (p) => {
   const ro = p.status === 'ARCHIVED';
   const ops = p.current_phase === 'OPERATIONS' || p.status === 'COMPLETED';
-  return html`<span class="phead__act" data-pid="${p.id}" data-ro="${ro ? '1' : ''}" data-name="${p.name}" data-ops="${ops ? '1' : ''}" data-is-closed="${p.status === 'COMPLETED' ? '1' : ''}">
+  return html`<span class="phead__act" data-pid="${p.id}" data-sample="${p.sample_key ? '1' : ''}" data-ro="${ro ? '1' : ''}" data-name="${p.name}" data-ops="${ops ? '1' : ''}" data-is-closed="${p.status === 'COMPLETED' ? '1' : ''}">
     <span class="menuwrap"><button type="button" class="btn btn--secondary btn--sm btn--icon phead__more" data-act="more" aria-haspopup="menu" aria-expanded="false" aria-label="더보기 메뉴" title="더보기">⋯</button></span></span>`;
 };
 
-const ctx = (el) => { const h = el.closest('.wsh__act, .phead__act'); return h ? { pid: h.dataset.pid, ro: h.dataset.ro === '1', name: h.dataset.name, ops: h.dataset.ops === '1', closed: h.dataset.isClosed === '1' } : null; };
+const ctx = (el) => { const h = el.closest('.wsh__act, .phead__act'); return h ? { pid: h.dataset.pid, ro: h.dataset.ro === '1', name: h.dataset.name, ops: h.dataset.ops === '1', closed: h.dataset.isClosed === '1', sample: h.dataset.sample === '1' } : null; };
 const closeMenus = () => { document.querySelectorAll('.amenu').forEach((m) => m.remove()); document.querySelectorAll('[data-act][aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false')); };
 
 function openMenu(btn, inner) {
@@ -70,7 +71,10 @@ function moreMenu(btn, c) {
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
     <button type="button" role="menuitem" data-more="jira">Jira 연동 설정</button>
     ${raw(c.closed && !c.ro ? '<hr><button type="button" role="menuitem" data-more="reopen">종료 취소</button>' : '')}
-    ${raw(c.ro ? '<hr><button type="button" role="menuitem" data-more="unarchive">보관 해제</button>' : '<hr><button type="button" role="menuitem" class="is-danger" data-more="archive">프로젝트 보관</button>')}`);
+    ${raw(c.sample ? (state.workspace && state.workspace.role !== 'MEMBER' ? '<hr><button type="button" role="menuitem" class="is-danger" data-more="sample-delete">샘플 프로젝트 삭제</button>' : '')
+      : c.ro ? '<hr><button type="button" role="menuitem" data-more="unarchive">보관 해제</button>' : '<hr><button type="button" role="menuitem" class="is-danger" data-more="archive">프로젝트 보관</button>')}`);
+  const sd = $('[data-more="sample-delete"]', m);   // 샘플 프로젝트: deleted for good (real projects are only archived)
+  if (sd) sd.onclick = async () => { closeMenus(); const { deleteSample } = await import('./samples.js'); if (await deleteSample(c.pid, c.name)) navigate('/app'); };
   const rb = $('[data-more="reopen"]', m);   // Phase 7 US-2
   if (rb) rb.onclick = async () => { closeMenus(); const { reopenProject } = await import('./closing.js'); if (await reopenProject(c.pid)) navigate(`/app/projects/${c.pid}`, { replace: true }); };
   const ub = $('[data-more="unarchive"]', m);   // GAP-006

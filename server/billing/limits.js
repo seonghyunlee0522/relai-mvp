@@ -17,11 +17,11 @@ export const limitsEnforced = () => process.env.PLAN_LIMITS !== 'off';
 
 /** Same definitions as usage.js (active projects, non-archived requirements/WBS, weekly reports this calendar month). */
 const COUNT_SQL = {
-  projects: `SELECT COUNT(*) AS n FROM projects WHERE workspace_id = ? AND status != 'ARCHIVED'`,
+  projects: `SELECT COUNT(*) AS n FROM projects WHERE workspace_id = ? AND status != 'ARCHIVED' AND sample_key IS NULL`,
   members: `SELECT COUNT(*) AS n FROM workspace_members WHERE workspace_id = ?`,
-  requirements: `SELECT COUNT(*) AS n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ? AND r.archived_at IS NULL`,
-  wbs: `SELECT COUNT(*) AS n FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = ? AND i.archived_at IS NULL`,
-  weekly_reports: `SELECT COUNT(*) AS n FROM weekly_reports wr JOIN projects p ON p.id = wr.project_id WHERE p.workspace_id = ? AND wr.created_at >= date_trunc('month', now())`,
+  requirements: `SELECT COUNT(*) AS n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ? AND p.sample_key IS NULL AND r.archived_at IS NULL`,
+  wbs: `SELECT COUNT(*) AS n FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = ? AND p.sample_key IS NULL AND i.archived_at IS NULL`,
+  weekly_reports: `SELECT COUNT(*) AS n FROM weekly_reports wr JOIN projects p ON p.id = wr.project_id WHERE p.workspace_id = ? AND p.sample_key IS NULL AND wr.created_at >= date_trunc('month', now())`,
 };
 
 /** 402 Payment Required: the workspace's plan does not allow another row of `dimension`. Rendered by app.js's error handler. */
