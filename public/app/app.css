@@ -2924,7 +2924,8 @@ html.is-phone .gtable--wbs tbody tr td.ttl{flex:1 0 calc(100% - 56px)}
 html.is-phone .summary--inline,html.is-phone .kpis--line,html.is-phone .rhead .summary{flex-wrap:wrap;overflow:visible;max-width:100%}
 html.is-phone .pcdl{margin:0 0 12px;font-size:14px;color:var(--text-2)}
 html.is-phone .pcdl .linkbtn{width:auto;display:inline-flex;align-items:center;min-height:44px;padding:0 4px;font-size:14px}
-html.is-phone .np__purpose,html.is-phone .np__acts:empty{display:none}
+html.is-phone .np__purpose,html.is-phone .np__acts:empty,html.is-phone .np__d{display:none}
+html.is-phone .rg__warn{white-space:normal;margin-left:0;max-width:100%}
 html.is-phone .np__row{grid-template-columns:minmax(0,1fr) auto}
 html.is-phone .doc__actions{display:flex;width:100%;gap:8px}
 html.is-phone .doc__actions [data-dl]{flex:1 1 0;min-height:44px}
@@ -2933,6 +2934,7 @@ html.is-phone .doc table{display:block;overflow-x:auto;max-width:100%}
 html.is-phone .cmt,html.is-phone .qa{display:none}
 html.is-phone .rofield{display:inline;font-size:14px;color:var(--navy);overflow-wrap:anywhere}
 html.is-phone .rofield--long{display:block;white-space:pre-wrap}
+html.is-phone .rofrozen{display:none!important}
 html.is-phone .pv__row{grid-template-columns:24px minmax(0,1fr) auto;column-gap:8px}
 html.is-phone .pv__purpose,html.is-phone .pv__cta,html.is-phone .pv__terms{display:none}
 html.is-phone .pv__m{min-width:0}

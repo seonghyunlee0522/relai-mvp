@@ -26,7 +26,7 @@ AI_PROVIDER=anthropic      # anthropic | openai | fake
 ANTHROPIC_API_KEY= / OPENAI_API_KEY=
 AI_MODEL=                  # 기본 claude-sonnet-4-5 / gpt-4o-mini
 AI_REQUEST_TIMEOUT_MS=25000  AI_DAILY_LIMIT=300  AI_USER_MINUTE_LIMIT=10  AI_MAX_INPUT_CHARS=20000
-AI_INITIAL_TRIAL_CREDITS=100 # 운영: Account 최초 생성 시 1회 PROMOTION 지급("신규 Workspace AI 시작 Credit"). 0이면 미지급
+AI_INITIAL_TRIAL_CREDITS=500 # 운영: Account 최초 생성 시 1회 PROMOTION 지급("신규 Workspace AI 시작 크레딧", 기본 500). 0이면 미지급
 DEV_INITIAL_AI_CREDITS=      # 개발/테스트 전용. >0이면 PLAN_GRANT로 지급되고 Trial은 지급되지 않는다(중복 금지)
 AI_CREDIT_COST_<FEATURE>=    # 기능별 비용 override (기본 10 / 15 / 8 / 3)
 AI_FAKE_AUTOREPLY=1          # fake provider가 프롬프트 안의 ID만으로 데모 응답 생성 (키 없이 UI 확인용)

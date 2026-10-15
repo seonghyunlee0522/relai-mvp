@@ -95,7 +95,7 @@ export async function reserveRun(db, { wid, projectId, userId, feature, provider
     const acc = await lockAccount(t, wid);
     const reserved = await openReservations(t, wid);
     const available = acc.balance - reserved;
-    if (cost > 0 && available < cost) throw new CreditError('AI_CREDIT_INSUFFICIENT', 'AI Credit이 부족합니다.', { balance: Math.max(0, available), required: cost, feature });
+    if (cost > 0 && available < cost) throw new CreditError('AI_CREDIT_INSUFFICIENT', 'AI 크레딧이 부족합니다.', { balance: Math.max(0, available), required: cost, feature });
     const id = randomUUID();
     await t.run(`INSERT INTO ai_runs (id, workspace_id, project_id, user_id, feature, provider, model, status, input_summary, credit_cost, credit_status)
       VALUES (?,?,?,?,?,?,?,'PENDING',?,?,?)`, [id, wid, projectId, userId, feature, provider, model, inputSummary, cost, cost > 0 ? 'RESERVED' : 'NONE']);

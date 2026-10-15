@@ -59,10 +59,18 @@ export function aiDialog({ title, subtitle = '', feature, status, size = 'lg' })
   document.body.append(el);
   return {
     el, body: $('.aid__b', el), foot: $('.aid__f', el), close,
+    /** After a charged run: the header credit line shows the new balance (it was the balance when the dialog opened). */
+    setBalance(bal) { if (typeof bal !== 'number' || !status?.credits) return; const hr = $('.aid__hr', el); const old = $('.ai-credit', hr); if (!old) return; old.outerHTML = creditLine({ ...status, credits: { ...status.credits, available: bal } }, feature); },
     busy(on, label = 'AI가 분석하는 중입니다…') { busy = on; el.classList.toggle('is-busy', on); let o = $('.aid__busy', el); if (on) { if (!o) { o = document.createElement('div'); o.className = 'aid__busy'; $('.dialog', el).append(o); } o.innerHTML = html`<span class="spin"></span><span>${label}</span>`; } else if (o) o.remove(); },
   };
 }
 
+/** " · 30 크레딧 (₩300) 사용 · 잔액 4,230" after a run; also refreshes the dialog's header balance. */
+export const runLine = (run, d) => {
+  if (!run) return '';
+  d?.setBalance?.(run.balance);
+  return html`<small class="dim"> · ${fmt(run.credit_cost)} 크레딧 (₩${fmt(run.credit_cost * 10)}) 사용 · 잔액 ${fmt(run.balance)}</small>`;
+};
 /** Standard "no result" / warnings blocks. */
 export const warningsHtml = (w) => (w && w.length ? html`<ul class="aid__warn">${raw(w.map((x) => html`<li>${x}</li>`).join(''))}</ul>` : '');
 export const aiNotice = (st) => html`<p class="aid__notice">${st?.notice || '현재 프로젝트의 요구사항, WBS, 이슈 데이터를 참고합니다.'}</p>`;

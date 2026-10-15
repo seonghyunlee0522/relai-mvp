@@ -5,7 +5,7 @@ import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { toast } from '../shared/dialogs.js';
 import { REQ_PRIORITY, REQ_SCOPE, REQ_TYPE } from '../shared/constants.js';
-import { aiDialog, aiNotice, aiStatus, canRun, confChip, reportError, warningsHtml } from '../shared/ai.js';
+import { aiDialog, runLine, aiNotice, aiStatus, canRun, confChip, reportError, warningsHtml } from '../shared/ai.js';
 
 const opt = (map, cur) => Object.entries(map).map(([v, l]) => html`<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('');
 
@@ -31,7 +31,7 @@ export async function openExtractDialog({ pid, onDone }) {
   };
   const drawResult = (r) => {
     const n = candidates.length;
-    d.body.innerHTML = html`<div class="aid__sum"><b>요구사항 후보 ${n}건</b>${raw(r.run ? html`<small class="dim"> · ${r.run.credit_cost} 크레딧 (₩${(r.run.credit_cost * 10).toLocaleString('ko-KR')}) 사용 · 잔액 ${r.run.balance}</small>` : '')}<span class="aid__sp"></span>
+    d.body.innerHTML = html`<div class="aid__sum"><b>요구사항 후보 ${n}건</b>${raw(runLine(r.run, d))}<span class="aid__sp"></span>
         <label class="toggle"><input type="checkbox" id="ai-all" checked> 전체 선택</label></div>
       ${raw(warningsHtml(r.warnings))}
       ${raw(n ? html`<ol class="aic">${raw(candidates.map((c, i) => html`<li class="aic__i ${c._sel ? 'is-sel' : ''}" data-i="${i}">
