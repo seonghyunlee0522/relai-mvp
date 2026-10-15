@@ -16,7 +16,6 @@ import { bindDtabs, dtabs } from '../shared/detail.js';
 import { download } from '../core/ui.js';
 import { openImport } from '../shared/importer.js';
 import { performerOptions, performerBody } from '../shared/owner-picker.js';
-import { term } from '../project/initiation.js';
 import { todayKst, md } from '../shared/kst-date.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 import { carryIndex, carryTag, carryLine } from '../project/golive.js';
@@ -88,7 +87,7 @@ export async function testsPage(id) {
         : T === 'acceptance' ? html`<div class="summary summary--inline">
           <div><b>${ac.total}</b><span>전체 <small>(작성 중 ${ac.draft})</small></span></div><div><b>${ac.requested}</b><span>검수 요청</span></div>
           <div><b>${ac.accepted}</b><span>승인</span></div><div class="${ac.rework || ac.rejected ? 'is-warn' : ''}"><b>${ac.rework + ac.rejected}</b><span>보완 필요 / 반려</span></div>
-          ${raw(Number(ac.scope_target) ? html`<div data-acc-scope><b>${ac.scope_accepted}/${ac.scope_target}</b><span>범위 내 요구사항 승인</span></div>` : '')}<span class="dim" style="align-self:center">${raw(term('acceptance'))}</span></div>`
+          ${raw(Number(ac.scope_target) ? html`<div data-acc-scope><b>${ac.scope_accepted}/${ac.scope_target}</b><span>범위 내 요구사항 승인</span></div>` : '')}<span class="dim" style="align-self:center"></span></div>`
         : '')}</div>
       ${raw(T === 'coverage' || (T === 'cases' && !rows.length && !hasFilter) ? '' : html`<div class="rtool">
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
@@ -108,7 +107,7 @@ export async function testsPage(id) {
           : rows.length ? (T === 'cases' ? caseTable() : accTable())
           : hasFilter ? emptyFiltered(T === 'cases' ? '테스트' : '검수')
           : T === 'cases' ? emptyCases()
-          : emptyState({ title: raw(html`검수 대상 요구사항과 테스트를 묶어 고객에게 검수(인수 테스트${raw(term('uat'))})를 요청하세요.`), cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }))}</div>
+          : emptyState({ title: raw(html`검수 대상 요구사항과 테스트를 묶어 고객에게 검수(인수 테스트)를 요청하세요.`), cta: archived ? null : { id: 'add2', label: '첫 검수 만들기' } }))}</div>
         <aside class="drawer ${sel && apv ? 'drawer--cr drawer--side' : desk && sel && !creating ? 'drawer--lg' : 'drawer--cr'}" id="drawer" ${sel || creating ? '' : 'hidden'} ${raw(sel && apv ? 'data-mode="approval"' : '')}>${raw(creating ? (isAcc() ? createAcc() : createTest()) : sel && apv && isAcc() ? drawerAccApproval() : sel ? (isAcc() ? detailAcc() : detailTest()) : '')}</aside>
       </div></div>`;
     bind(); bindCoach(main);
@@ -146,7 +145,7 @@ export async function testsPage(id) {
     if (!cov.length) return html`<div class="empty"><h2>범위 내 요구사항이 없습니다.</h2><p>요구사항의 범위를 '범위 내'로 정하면 여기에 테스트 연결률이 표시됩니다.</p><a class="btn btn--secondary" href="/app/projects/${p.id}/requirements" data-link>요구사항 관리</a></div>`;
     const k = Number(ts.in_scope_untested) || 0; const un = Number(ts.in_scope_unconfirmed) || 0;
     const head = html`<div class="covhead"><span class="covhead__n" data-cov-sum>검증 대상 ${ts.verify_target}건 중 <b>${ts.target_tested}</b>건 테스트 있음${raw(ts.excluded ? html` · 제외 ${ts.excluded}건` : '')}${raw(k ? html` · <span class="is-warn">없음 ${k}건</span>` : '')}</span>
-      <span class="dim">테스트 연결률 ${ts.verify_coverage === null || ts.verify_coverage === undefined ? '-' : ts.verify_coverage + '%'} ${raw(term('coverage'))}</span><span class="covhead__sp"></span>
+      <span class="dim">테스트 연결률 ${ts.verify_coverage === null || ts.verify_coverage === undefined ? '-' : ts.verify_coverage + '%'}</span><span class="covhead__sp"></span>
       ${raw(k && !archived ? '<button class="btn btn--primary btn--sm" id="gen">요구사항별 테스트 만들기</button>' : '')}</div>
       ${raw(un ? html`<p class="covwarn" data-cov-warn><i class="st st--warn" aria-hidden="true">!</i>확정되지 않은 범위 내 요구사항 ${un}건 — 확정하면 테스트 대상에 들어갑니다 <a class="link" href="/app/projects/${p.id}/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD" data-link>미확정 요구사항 보기</a></p>` : '')}`;
     const cell = (r) => {
@@ -296,7 +295,7 @@ export async function testsPage(id) {
   const closeApproval = () => { apv = null; apvMode = null; draw(); };
   const drawerAccApproval = () => {
     const x = sel; const c = x.scope_card || {}; const record = apvMode === 'record';
-    return html`<div class="wd__h"><div class="wd__ht"><b>검수 고객 승인 ${raw(term('acceptance'))}</b><small>${record ? '고객이 누가·언제·어떻게 승인했는지 기록합니다. 상태는 바뀌지 않습니다.' : '고객이 누가·언제·어떻게 승인했는지 기록합니다. 저장하면 이 검수가 승인됩니다.'}</small></div><button class="wd__ib" id="apv-close" aria-label="닫기">×</button></div>
+    return html`<div class="wd__h"><div class="wd__ht"><b>검수 고객 승인</b><small>${record ? '고객이 누가·언제·어떻게 승인했는지 기록합니다. 상태는 바뀌지 않습니다.' : '고객이 누가·언제·어떻게 승인했는지 기록합니다. 저장하면 이 검수가 승인됩니다.'}</small></div><button class="wd__ib" id="apv-close" aria-label="닫기">×</button></div>
       <div class="drawer__b apv" data-approval-drawer>
         <div class="apv__what accard"><div class="apv__wh"><b>검수받을 내용</b></div>
           <p class="crapv__t"><span class="mono">${x.display_id}</span> ${x.title}</p>

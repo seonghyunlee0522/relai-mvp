@@ -28,6 +28,5 @@ export const ob = {
     const o = this.peek(); if (o && o.guides_seen && !o.guides_seen.includes(key)) o.guides_seen.push(key);
     try { await api('POST', `/api/guides/${key}/seen`, {}); } catch { /* best effort */ }
   },
-  async resetGuides() { const o = this.peek(); if (o) o.guides_seen = []; try { await api('POST', '/api/guides/reset', {}); } catch { /* best effort */ } },
   invalidate() { state.onboarding = null; },
 };

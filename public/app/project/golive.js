@@ -9,7 +9,6 @@ import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { todayKst, md } from '../shared/kst-date.js';
-import { term } from './initiation.js';
 
 const HREF = { ISSUE: (p, id) => `/app/projects/${p}/issues?sel=${id}`, TEST: (p, id) => `/app/projects/${p}/tests?sel=${id}`, CR: (p, id) => `/app/projects/${p}/changes?sel=${id}`, ACCEPTANCE: (p, id) => `/app/projects/${p}/tests?tab=acceptance&sel=${id}` };
 const LABEL = { ISSUE: '이슈', TEST: '테스트', CR: '변경 요청', ACCEPTANCE: '검수' };
@@ -52,7 +51,7 @@ export function goLiveDialog(pid) {
         <p class="gl__d">오픈 뒤에도 처리할 문제는 운영 이관으로 넘기면 07에서 이어서 볼 수 있습니다.</p>
         <div class="gl__b">
           <div class="field"><label for="gl-date">오픈일 <span class="req">*</span></label><input class="input input--sm gl__date" type="date" id="gl-date" value="${date}" max="${today}" required><div class="err" data-gl-err="date"></div></div>
-          ${raw(items.length ? html`<h4 class="gl__h">오픈 전에 정할 항목 ${items.length}건 <small class="dim">처리하러 가기 또는 운영 이관 ${raw(term('carryover'))}</small></h4><ol class="gl__list">${raw(items.map(row).join(''))}</ol>` : '')}
+          ${raw(items.length ? html`<h4 class="gl__h">오픈 전에 정할 항목 ${items.length}건 <small class="dim">처리하러 가기 또는 운영 이관</small></h4><ol class="gl__list">${raw(items.map(row).join(''))}</ol>` : '')}
           ${raw(d.checklist_open ? html`<p class="gl__warn"><i class="st st--warn" aria-hidden="true">!</i>06 체크리스트에 완료되지 않은 항목 ${d.checklist_open}건이 남아 있습니다.</p>` : '')}
           <div class="err" data-gl-err="form"></div>
         </div>

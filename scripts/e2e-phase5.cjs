@@ -119,7 +119,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   const redNone = await page.$$eval(`tr[data-req="${R[2].id}"] .chip, tr[data-req="${R[2].id}"] .res`, (els) => els.map((e) => e.className).filter((c) => /fail|crit|warn|danger|hold/.test(c)));
   const warnColor = await page.$eval('[data-cov-sum] .is-warn', (e) => getComputedStyle(e).color).catch(() => '');
   check('디자인: 커버리지 \'없음\' 행에 빨강·주황 배지 없음, 요약 \'없음 14\'에만 경고색', redNone.length === 0 && Boolean(warnColor), JSON.stringify(redNone) + warnColor);
-  check('US-7 ? 툴팁: 커버리지 ("범위 내 요구사항 중 테스트가 연결된 비율")', (await page.$('.term[data-tip="범위 내 요구사항 중 테스트가 연결된 비율"]')) !== null);
+  check('US-7 no ? 툴팁 on 커버리지 (fb-app: 용어 설명 removed)', (await page.$('.term')) === null);
   const tabs = await page.$$eval('[data-tab]', (els) => els.map((e) => e.textContent.trim()));
   check('US-7 탭: 테스트 케이스 / 검수 (06에서 진행) / 테스트 연결률', /^테스트 케이스/.test(tabs[0]) && /^검수/.test(tabs[1]) && /06에서 진행/.test(tabs[1]) && /^테스트 연결률/.test(tabs[2]), JSON.stringify(tabs));
 
@@ -254,7 +254,7 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   await shot('09-whats-next-done.png');
   // 검수 탭 UAT 툴팁
   await page.goto(`${A.url}/tests?tab=acceptance`); await page.waitForSelector('main .empty');
-  check('US-7 ? 툴팁: UAT ("고객 현업이 직접 확인하는 인수 테스트") + 검수 탭 "06에서 진행"', (await page.$('.term[data-tip="고객 현업이 직접 확인하는 인수 테스트"]')) !== null && /06에서 진행/.test(await page.textContent('[data-tab="acceptance"]')));
+  check('US-7 no ? 툴팁 on UAT (fb-app) + 검수 탭 "06에서 진행"', (await page.$('.term')) === null && /06에서 진행/.test(await page.textContent('[data-tab="acceptance"]')));
 
   /* ---------- migration 36 shape: a project already past 05 without tests ---------- */
   const B = await mkProject('지난 프로젝트');

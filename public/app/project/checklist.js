@@ -123,7 +123,7 @@ export async function checklistPage(id) {
           <button type="submit" class="btn btn--secondary btn--sm">+ 추가</button></form>`)}
         <div class="clk__memo"><label for="clkMemo">업무 메모</label>
           <textarea id="clkMemo" class="input" rows="3" maxlength="4000" placeholder="결정 사항, 참고 링크, 미결 사항 등을 기록합니다." ${ro ? 'disabled' : ''}>${a.note || ''}</textarea>
-          ${raw(ro ? '' : '<button type="button" class="link linkbtn" data-memo>메모 저장</button>')}</div>
+          ${raw(ro ? '' : '<button type="button" class="btn btn--secondary btn--sm" data-memo>메모 저장</button>')}</div>
       </section>
       <p class="clk__back"><a class="link" href="/app/projects/${id}${ph.is_current ? '' : `?phase=${ph.phase_key}`}" data-link>← 지금 할 일에서 ${ph.name} 업무 보기</a></p>
     </div>`;

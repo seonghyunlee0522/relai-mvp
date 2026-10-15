@@ -71,7 +71,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   const emptyTxt = await page.textContent('.wempty');
   check('US-2 empty copy (R3b: one sentence): 15건 + 직접 추가 · Excel로 가져오기 · AI 초안', /확정한 요구사항 15건으로 기본 작업 목록을 만들어 드립니다\./.test(emptyTxt) && /직접 추가/.test(emptyTxt) && /Excel로 가져오기/.test(emptyTxt) && /AI 초안/.test(emptyTxt));
   const terms0 = await page.$$eval('main .term', (els) => els.map((e) => e.getAttribute('aria-label')));
-  check('US-2 term: 뼈대 (?) next to the button', terms0.some((x) => x.startsWith('WBS 뼈대: 요구사항과 꼭 필요한 시험·오픈 작업을 넣은 기본 작업 목록')), JSON.stringify(terms0));
+  check('US-2 no (?) glossary tooltip next to the button (fb-app: 용어 설명 removed (founder))', terms0.length === 0, JSON.stringify(terms0));
   await shot('02-wbs-empty.png');
   // 직접 추가 opens one input inside the empty state; Esc closes it — still no 총 N건
   await page.click('#add2'); await page.waitForSelector('.wempty [data-ghost]');
@@ -117,7 +117,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(`${A.url}/wbs`); await page.waitForSelector('main table');
   check('US-2 skeleton button gone once the WBS has items', !(await page.$('#skel')));
   const terms1 = await page.$$eval('main .term', (els) => els.map((e) => e.getAttribute('aria-label')));
-  check('US-6 terms: WBS · 간트 · 마일스톤', ['WBS: 프로젝트에서 해야 할 일을 잘게 나눈 작업 목록', '간트:', '마일스톤: 고객과 공유할 주요 시점. 01 주요 일정을 가져올 수 있습니다'].every((t) => terms1.some((x) => x.startsWith(t))), JSON.stringify(terms1));
+  check('US-6 no (?) glossary tooltips on WBS (fb-app: 용어 설명 removed (founder))', terms1.length === 0, JSON.stringify(terms1));
 
   /* ---------- US-1 owner picker ---------- */
   const design = tasks.find((t) => t.title === '화면 설계');
@@ -127,7 +127,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
     && JSON.stringify(groups[1][1]) === JSON.stringify(['김피엠 · PM', '최민석 · PL/아키텍트', '박협력 · 개발']), JSON.stringify(groups));
   check('US-1 no 1-stakeholder hint when the team is registered', !(await page.$('#drawer .whint')));
   await page.click('[data-dtab="dep"]');
-  check('US-6 term: 선행관계', /^선행관계: 앞 작업이 끝나야 시작할 수 있는 관계/.test(await page.getAttribute('#drawer [data-pane="dep"] .term', 'aria-label').catch(() => '')));
+  check('US-6 no (?) 선행관계 tooltip (fb-app: 용어 설명 removed (founder))', !(await page.$('#drawer [data-pane="dep"] .term')));
   await page.click('[data-dtab="info"]');
   await page.selectOption('#drawer [data-field="owner"]', 's:sh-pl'); await page.waitForTimeout(700);
   let row = await page.textContent(`main tr[data-id="${design.id}"]`);

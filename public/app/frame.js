@@ -50,7 +50,7 @@ const MENUS = {
   me(btn) {
     const u = state.user;
     openDmenu(btn, html`<div class="dmenu__who"><b>${u.name}</b><small>${u.email}</small></div>
-      <a role="menuitem" href="/app/settings" data-link>내 정보</a>
+      <a role="menuitem" href="/app/settings" data-link>설정</a>
       ${raw(u.system_role === 'SYSTEM_ADMIN' ? '<a role="menuitem" href="/admin" data-link>Admin Console</a>' : '')}
       <hr><button type="button" role="menuitem" data-logout>로그아웃</button>`, { align: 'right' });
   },
@@ -65,13 +65,12 @@ const MENUS = {
 };
 
 /* ---------- top bar ---------- */
-/** Right side of the top bar: 이메일 인증 pill (only while unverified) · ? · ⚙ · avatar. Rebuilt on every shell() call. */
+/** Right side of the top bar: 이메일 인증 pill (only while unverified) · ? · avatar. The avatar menu is the one way to 설정 (fb-app: the ⚙ icon and 내 정보 went to the same page). Rebuilt on every shell() call. */
 export function topbarRight() {
   const u = state.user;
   const pill = u && u.email_verified === false ? html`<button type="button" class="vpill" id="verify-pill" title="인증 전에는 팀원 초대와 결제를 할 수 없습니다 · 눌러서 인증 메일 다시 받기">이메일 인증 필요</button>` : '';
   return html`${raw(pill)}${raw(helpButton())}
-    <a class="dtop__ic" href="/app/settings" data-link title="설정" aria-label="설정" data-tour-id="nav-settings">${raw(SV('<circle cx="10" cy="10" r="2.5"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/>'))}</a>
-    <span class="dmenuwrap"><button type="button" class="dtop__me" data-dmenu="me" aria-haspopup="menu" aria-expanded="false" aria-label="내 계정 메뉴" title="${u.name}">${[...u.name][0]}</button></span>`;
+    <span class="dmenuwrap"><button type="button" class="dtop__me" data-dmenu="me" aria-haspopup="menu" aria-expanded="false" aria-label="내 계정 메뉴 (설정)" title="${u.name} · 설정" data-tour-id="nav-settings">${[...u.name][0]}</button></span>`;
 }
 export function mountTopbar() {
   wireMenus();

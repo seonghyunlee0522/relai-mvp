@@ -227,7 +227,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   const dPrim = await primaries(page, '[data-golive-dialog]');
   check('US-3 primary 1개 · 미결정이면 오픈 완료 비활성', dPrim.length === 1 && dPrim[0] === '오픈 완료' && (await page.isDisabled('[data-gl-ok]')));
   check('US-3 체크리스트 미완료 = 경고 한 줄', /06 체크리스트에 완료되지 않은 항목 \d+건/.test(await page.textContent('[data-golive-dialog]')));
-  check('US-8 ? 운영 이관 용어', await page.$eval('[data-golive-dialog] .term', (e) => /오픈 뒤 운영 단계에서 처리하기로 넘긴 문제/.test(e.dataset.tip)).catch(() => false));
+  check('US-8 no ? 운영 이관 용어 tooltip (fb-app: 용어 설명 removed)', !(await page.$('[data-golive-dialog] .term')));
   await page.click(`[data-carry-on="ISSUE:${issue.id}"]`);
   await page.fill(`[data-note="ISSUE:${issue.id}"]`, '운영팀 1차 대응, 11월 패치에 포함');
   check('US-3 하나만 결정 → "2건 중 1건 결정", 여전히 비활성', /2건 중 1건 결정/.test(await page.textContent('[data-gl-stat]')) && (await page.isDisabled('[data-gl-ok]')));
@@ -282,10 +282,10 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
   check('US-3 미완료 0건 → 목록 없이 오픈일만, 바로 켜짐', (await page.$$('[data-golive-dialog] .gl__row')).length === 0 && !(await page.isDisabled('[data-gl-ok]')));
   await shot('d-09-golive-nothing-open.png');
   await page.click('[data-gl-cancel]');
-  await page.goto(`${B.url}/tests?tab=acceptance`); await page.waitForSelector('.stabs__i.is-active[data-stab="acceptance"]');   /* R1: 시험 › 검수 section tab */ await page.waitForSelector('main .term[data-tip*="검수확인서"]').catch(() => {});
+  await page.goto(`${B.url}/tests?tab=acceptance`); await page.waitForSelector('.stabs__i.is-active[data-stab="acceptance"]');   /* R1: 시험 › 검수 section tab */ await page.waitForTimeout(300);
   const enAcc = enOf(await textOf('main'));
   check('US-8 검수 탭 영어 없음', !enAcc, enAcc);
-  check('US-8 ? 검수 용어', await page.$eval('main .term[data-tip*="검수확인서"]', (e) => Boolean(e.offsetParent)).catch(() => false));
+  check('US-8 no ? 검수 용어 tooltip (fb-app: 용어 설명 removed)', !(await page.$('main .term')));
   await page.goto(`${B.url}/checklist?activity=GO_LIVE`); await page.waitForSelector('.clk__card');
   const enCl = enOf(await textOf('main'));
   check('US-8 오픈 체크리스트 영어 없음 + 탭 "오픈"', !enCl && (await page.$$eval('.clk__tab', (t) => t.map((x) => x.textContent))).some((x) => /오픈$/.test(x.trim())), enCl);

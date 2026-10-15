@@ -26,7 +26,6 @@ import { choiceDialog, confirmDialog, pickerDialog, toast, toastAction, withDela
 import { planShiftText } from '../shared/kst-date.js';
 import * as OP from '../shared/owner-picker.js';
 import { aiStatus } from '../shared/ai.js';
-import { term } from '../project/initiation.js';
 import { openWbsPlanner } from '../ai/wbs-planner.js';
 import { bindJiraPane, execChip, jiraPaneHtml } from '../shared/jira.js';
 
@@ -308,7 +307,7 @@ export async function wbsPage(id) {
   const kpiHtml = () => {
     const late = items.filter(isOverdue).length;
     return html`<button type="button" class="kchip" data-kf=""><b>${summary.total}</b>전체 항목</button>
-      <span class="kchip"><b>${summary.in_progress}</b>진행 중</span><span class="kchip"><b>${summary.completed}</b>완료</span><span class="kchip"><b>${summary.milestones}</b>마일스톤 ${raw(term('wbs_milestone'))}</span>
+      <span class="kchip"><b>${summary.in_progress}</b>진행 중</span><span class="kchip"><b>${summary.completed}</b>완료</span><span class="kchip"><b>${summary.milestones}</b>마일스톤</span>
       <button type="button" class="kchip ${late ? 'is-crit' : ''}" data-kf="overdue"><b>${late}</b>지연 작업</button>`;
   };
   const paintKpi = () => { const k = $('#kstrip'); if (k) k.innerHTML = kpiHtml(); };
@@ -320,7 +319,7 @@ export async function wbsPage(id) {
     const bodyText = conf ? `확정한 요구사항 ${conf}건으로 기본 작업 목록을 만들어 드립니다.` : '기본 작업 목록을 먼저 만들고 구현 작업은 요구사항이 확정되면 연결할 수 있습니다.';
     // R3b: one sentence + one button (the list's sentence is the helpful one; '아직 작업이 없습니다' is implied)
     return html`<div class="wempty" data-tour-id="wbs-empty"><span class="wempty__ic" aria-hidden="true">▤</span><h2>${v === 'gantt' ? lead : bodyText}</h2>
-      ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="skel">WBS 뼈대 만들기</button> ${raw(term('skeleton'))}</div>
+      ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="skel">WBS 뼈대 만들기</button></div>
         ${raw(ghost ? html`<div class="wempty__add"><input class="input" data-ghost maxlength="200" placeholder="${ghost.item_type === 'MILESTONE' ? '마일스톤 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off" aria-label="첫 작업 이름"></div>` : '')}
         <p class="wempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button> · ${raw(ai.enabled ? '<button type="button" class="link linkbtn" id="ai-wbs2">AI 초안</button>' : '<span class="dim" title="AI 기능이 설정되지 않았습니다.">AI 초안(사용 불가)</span>')}</p>`)}</div>`;
   };
@@ -364,7 +363,7 @@ export async function wbsPage(id) {
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 WBS 내보내기 (Excel)', 'data-xl="export"'))}`],
       [archived ? '' : 'AI', archived ? '' : ai.enabled ? tmItem('AI로 초안 만들기', 'id="ai-wbs" title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs"', aiPrice(ai, 'WBS_GENERATION')) : tmItem('AI로 초안 만들기', 'id="ai-wbs" disabled', 'AI 기능이 설정되지 않았습니다')],
     ], { label: '일정 메뉴 더보기' });
-    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<span class="wterms">${raw(term('wbs'))}${raw(term('gantt'))}${raw(term('wbs_milestone'))}</span><input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
   };
 
   const draw = () => {
@@ -388,7 +387,7 @@ export async function wbsPage(id) {
       ${raw(items.length && desk ? deskTool(v, q, f) : '')}
       ${raw(items.length && ownerMode && desk && !archived ? html`<div class="ownbar" data-owner-bar><b>담당자 지정</b><span>담당자가 없는 작업을 미리 선택했습니다. 아래에서 담당자를 고르고 적용하세요. 체크박스로 선택을 바꿀 수 있습니다.</span></div>` : '')}
       ${raw(items.length && !desk ? html`<div class="rtool">
-        <div class="seg" role="tablist"><button class="${v === 'list' ? 'is-on' : ''}" data-view="list" role="tab">WBS</button><button class="${v === 'gantt' ? 'is-on' : ''}" data-view="gantt" role="tab">간트</button></div><span class="wterms">${raw(term('wbs'))}${raw(term('gantt'))}</span>
+        <div class="seg" role="tablist"><button class="${v === 'list' ? 'is-on' : ''}" data-view="list" role="tab">WBS</button><button class="${v === 'gantt' ? 'is-on' : ''}" data-view="gantt" role="tab">간트</button></div>
         ${raw(v === 'gantt' ? '<span class="gtools"><button class="btn btn--secondary btn--sm" id="gfit">전체 일정</button><button class="btn btn--secondary btn--sm" id="gtoday">오늘</button></span>' : '')}
         <input class="input input--sm" id="q" type="search" placeholder="WBS명, 번호 검색" value="${q.get('q') || ''}" style="max-width:200px">
         ${raw(phone ? '' : quickSel)}
@@ -640,7 +639,7 @@ export async function wbsPage(id) {
 
   /** Drawer: the shift line with the 최초 계획일 tooltip + the latest delay reason. */
   const shiftNote = (it) => { const t = planShiftText(it.original_planned_end_date, endOf(it)); if (!t) return '';
-    return html`<p class="wshift wshift--d" data-shift-note>${t} ${raw(term('original_plan'))}${raw(it.delay_note ? html`<br><span>최근 사유: ${it.delay_note.note}</span>` : '')}</p>`; };
+    return html`<p class="wshift wshift--d" data-shift-note>${t}${raw(it.delay_note ? html`<br><span>최근 사유: ${it.delay_note.note}</span>` : '')}</p>`; };
   const drawDetail = () => keepUi(() => {
     const it = sel; if (!it) return;
     const d = $('#drawer'); const readOnly = roRow(it); const t = it.item_type;
@@ -707,7 +706,7 @@ export async function wbsPage(id) {
             ${raw(it.raid.risks.map((x) => html`<li><a class="raidrow" href="/app/projects/${p.id}/issues?tab=risks&sel=${x.id}" data-link><span class="mono">${x.display_id}</span><span class="crit__in" style="padding:6px 4px">${x.title}</span>${raw(sevBadge(x.risk_level))}<span class="chip ${RISK_STATUS_CHIP[x.status] || ''}">${RISK_STATUS[x.status]}</span></a></li>`).join(''))}</ol>` : '')}
         </section>
         <section data-pane="dep" ${dtab === 'dep' ? '' : 'hidden'}>
-          <h4 class="dh">선행 작업 ${raw(term('dependency'))} <em>${it.predecessors.length}</em></h4>
+          <h4 class="dh">선행 작업 <em>${it.predecessors.length}</em></h4>
           <ol class="crit">${raw(it.predecessors.map((pp) => html`<li><span class="mono wcode">${pp.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${pp.title}</span><small class="dim">선행 완료 후 시작</small>
             ${raw(readOnly ? '' : html`<span class="crit__act" style="opacity:1"><button data-dep-del="${pp.id}" title="삭제">×</button></span>`)}</li>`).join(''))}</ol>
           ${raw(readOnly ? (it.predecessors.length ? '' : '<p class="hint">선행 작업이 없습니다.</p>') : html`<div class="crit-add"><input class="input input--sm" id="dep-q" placeholder="선행 작업 검색 (번호 또는 이름)" style="flex:1" list="dep-list"><datalist id="dep-list">${raw(predCandidates.map((x) => html`<option value="${x.wbs_code} ${x.title}">`).join(''))}</datalist><button class="btn btn--secondary btn--sm" id="dep-add">추가</button></div><div class="err" id="dep-err"></div><p class="hint">순환 관계(A→B→A)는 저장되지 않습니다.</p>`)}

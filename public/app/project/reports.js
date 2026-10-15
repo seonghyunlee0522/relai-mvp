@@ -11,14 +11,13 @@ import { periodDialog } from './dashboard.js';
 import { projectHead } from './guide.js';
 import { weekKst } from '../shared/kst-date.js';
 import { openCompletion } from './closing.js';
-import { term } from './initiation.js';
 
 /** `완료보고서` button: 07 (or a closed project, or one already made) only — hidden before that so it is not clicked mid-project (Jim P2-5); opens the existing one if there is one. */
 const completionBtn = (p, items) => {
   const has = items.find((r) => r.report_type === 'COMPLETION');
   const ok = p.current_phase === 'OPERATIONS' || p.status === 'COMPLETED';
   if (!ok && !has) return '';
-  return html`<button type="button" class="btn btn--secondary btn--sm" id="rp-done">${has ? '완료보고서 보기' : '완료보고서 생성'}</button>${raw(term('completion_report'))}`;
+  return html`<button type="button" class="btn btn--secondary btn--sm" id="rp-done">${has ? '완료보고서 보기' : '완료보고서 생성'}</button>`;
 };
 
 const RS = { DRAFT: ['초안', 'chip--muted'], FINAL: ['확정', 'chip--done'] };

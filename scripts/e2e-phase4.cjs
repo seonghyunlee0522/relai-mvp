@@ -141,7 +141,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   /* ---------- US-1 Drawer + 이력 ---------- */
   await page.goto(`${A.url}/wbs?ctx=monitor&sel=${t1.id}`); await page.waitForSelector('[data-shift-note]');
   const note = await page.textContent('[data-shift-note]');
-  check('US-1 Drawer: shift line + 최근 사유 + 최초 계획일 (?) term', note.includes(`계획 ${md(d(7))} → ${md(d(17))} (+10일)`) && /최근 사유: 외부 API 일정 변경/.test(note) && (await page.$('[data-shift-note] .term[aria-label^="최초 계획일:"]')) !== null, note.replace(/\s+/g, ' '));
+  check('US-1 Drawer: shift line + 최근 사유, no (?) term (fb-app: 용어 설명 removed)', note.includes(`계획 ${md(d(7))} → ${md(d(17))} (+10일)`) && /최근 사유: 외부 API 일정 변경/.test(note) && (await page.$('[data-shift-note] .term')) === null, note.replace(/\s+/g, ' '));
   await page.click('[data-dtab="hist"], [data-tab-key="hist"], .dtabs [data-k="hist"]').catch(() => {});
   const histTxt = await page.evaluate(() => (document.querySelector('[data-pane="hist"]') || {}).textContent || '');
   check('US-1 이력 shows the reason', /사유: 고객 계정 발급 지연 → 버퍼 3일 사용/.test(histTxt) && /사유: 외부 API 일정 변경/.test(histTxt));
@@ -276,7 +276,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   await page.goto(`${A.url}/changes`); await page.waitForSelector('tr[data-row]');
   const crTxt = await mainText();
   check('US-7 CR screen: no English UI words', !EN.test(crTxt), (crTxt.match(EN) || [])[0] || '');
-  check('US-7 (?) 변경 요청 term on the CR screen', (await page.$('main .term[aria-label^="변경 요청: 확정한 범위·일정·비용을 바꾸자는 요청. 고객 승인 후 반영합니다"]')) !== null);
+  check('US-7 no (?) 변경 요청 term on the CR screen (fb-app: 용어 설명 removed)', (await page.$('main .term')) === null);
   await page.goto(`${A.url}/changes?sel=${cr3x.id}`); await page.waitForSelector('#cr-people', { state: 'attached' });
   const reqAuto = await page.$$eval('#cr-people option', (els) => els.map((o) => o.value));
   check('US-6 CR 요청자: 이해관계자 이름 자동완성 (datalist)', ['김피엠', '박협력', '이고객', '이수진'].every((n) => reqAuto.includes(n)), JSON.stringify(reqAuto));
