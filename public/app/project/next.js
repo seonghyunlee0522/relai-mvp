@@ -155,7 +155,7 @@ const phaseMetric = (g, pid) => {
   const cur = g.current_phase; const u = (s) => `/app/projects/${pid}${s}`;
   const r = g.requirements || {}; const w = g.wbs || {}; const t = g.tests || {}; const a = g.acceptances || {};
   switch (cur && cur.phase_key) {
-    case 'REQUIREMENTS': return tile('요구사항 확정', `${nn(r.confirmed)} / ${nn(r.total)}`, { href: u('/requirements'), key: 'metric' });
+    case 'REQUIREMENTS': return tile('요구사항 확정', nn(r.in_scope) ? `${nn(r.in_scope_confirmed)} / ${nn(r.in_scope)}` : `${nn(r.confirmed)} / ${nn(r.total)}`, { href: u('/requirements'), key: 'metric', sub: nn(r.in_scope) ? '범위 내' : '' });   // v1 P2-2: same in-scope count as the activity row
     case 'ANALYSIS_DESIGN': case 'DEVELOPMENT': return tile('WBS 진척률', nn(w.tasks) ? `${nn(w.progress)}%` : '작업 없음', { href: u('/wbs'), key: 'metric', sub: nn(w.tasks) ? `작업 ${nn(w.tasks)}건` : '' });
     case 'TESTING': return tile('테스트 통과', `${nn(t.last_pass)} / ${nn(t.total)}`, { href: u('/tests'), key: 'metric' });
     case 'TRANSITION_GO_LIVE': return tile('검수 승인', `${nn(a.accepted)} / ${nn(a.total)}`, { href: u('/tests?tab=acceptance'), key: 'metric' });

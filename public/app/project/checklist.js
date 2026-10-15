@@ -108,7 +108,7 @@ export async function checklistPage(id) {
         ${raw(dec ? (items.length ? html`<table class="clk__tbl" data-decisions><thead><tr><th class="clk__w-due">결정일</th><th>결정 내용</th><th class="clk__w-owner">결정자</th><th>메모</th><th class="clk__x"></th></tr></thead>
           <tbody>${raw(items.map((it) => itemRow(it, true)).join(''))}</tbody></table>` : '<div class="clk__empty"><b>아직 기록된 의사결정이 없습니다.</b><p>프로젝트 방향에 영향을 준 결정을 결정일, 결정 내용, 결정자와 함께 남겨 두세요. 1건 이상 기록하면 이 업무가 완료로 표시됩니다.</p></div>')
           : items.length ? html`<table class="clk__tbl"><thead><tr><th class="clk__ck" aria-label="완료"></th><th>항목</th><th class="clk__w-owner">담당</th><th class="clk__w-due">기한</th><th>메모</th><th class="clk__x"></th></tr></thead>
-          <tbody>${raw(items.map(itemRow).join(''))}</tbody></table>`
+          <tbody>${raw(items.map((it) => itemRow(it)).join(''))}</tbody></table>`
           : html`<div class="clk__empty"><b>아직 체크리스트 항목이 없습니다.</b><p>항목을 추가하면 담당과 기한을 정하고 진행 상황을 기록할 수 있습니다. ${a.go_live ? "오픈은 '완료 처리'에서 오픈일과 남은 항목을 정해 기록합니다." : a.handover ? "운영 인수는 '인수 완료 처리'에서 인수자와 인수일을 정해 기록합니다." : '모든 항목을 완료하면 이 업무가 완료로 표시됩니다.'}</p>
             ${raw(ro ? '' : '<button type="button" class="btn btn--secondary btn--sm" data-defaults>기본 항목으로 시작</button>')}</div>`)}
         ${raw(ro ? '' : dec ? html`<form class="clk__add" data-add data-dec autocomplete="off">

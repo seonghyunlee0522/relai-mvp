@@ -27,6 +27,11 @@ export const snapshot = () => (cached ||= JSON.parse(readFileSync(resolve(here, 
 export const samplesEnabled = () => process.env.SAMPLE_PROJECTS !== 'false';
 export const SAMPLE_KEYS = () => snapshot().cases.map((c) => c.key);
 export const SAMPLE_BADGE = '샘플';
+/** v1 P2-1: who-did-it columns of the replayed history. The build owner is not the new user, so these are copied as NULL and
+ *  the feeds show SAMPLE_ACTOR for them (dashboard.js); comments get author_label = SAMPLE_ACTOR. Assignment columns
+ *  (owner_user_id, performer_user_id) and the NOT NULL created_by keep the user so the samples stay workable. */
+const ACTOR_COLS = new Set(['changed_by', 'completed_by', 'done_by', 'executed_by', 'reviewed_by', 'updated_by']);
+export const SAMPLE_ACTOR = '샘플';
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 const ISO_DAY = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
@@ -83,7 +88,12 @@ export async function addSampleProjects(db, { workspaceId, userId, userName, key
       if (!rows.length) continue;
       const idc = t.columns.indexOf('id'); if (idc >= 0) for (const r of rows) keptIds.add(r[idc]);
       const cols = [...t.columns]; const sk = t.name === 'projects' ? cols.indexOf('sample_key') : -1;
-      const out = rows.map((r) => r.map((v, i) => (i === sk ? keyOf.get(r[t.columns.indexOf('id')]) : value(v, t.types[i]))));
+      let out = rows.map((r) => r.map((v, i) => (i === sk ? keyOf.get(r[t.columns.indexOf('id')]) : v === snap.owner.id && ACTOR_COLS.has(cols[i]) ? null : value(v, t.types[i]))));
+      if (t.name === 'comments') {   // created_by is NOT NULL: the comment keeps the user as owner but shows SAMPLE_ACTOR (migration 44)
+        const al = cols.indexOf('author_label');
+        out = al >= 0 ? out.map((r) => r.map((v, i) => (i === al ? SAMPLE_ACTOR : v))) : out.map((r) => [...r, SAMPLE_ACTOR]);
+        if (al < 0) cols.push('author_label');
+      }
       if (t.name === 'projects') for (const r of out) created.push({ id: r[cols.indexOf('id')], name: r[cols.indexOf('name')], sample_key: r[sk] });
       const per = Math.max(1, Math.floor(30000 / cols.length));
       for (let i = 0; i < out.length; i += per) {

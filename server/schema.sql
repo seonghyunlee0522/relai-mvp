@@ -1349,3 +1349,6 @@ ALTER TABLE auth_oauth_states ADD COLUMN IF NOT EXISTS consent boolean NOT NULL 
  * 'early' · 'mid' · 'done' = which sample. Samples are never counted as usage (plan limits, admin metrics, activation). */
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS sample_key TEXT;
 CREATE INDEX IF NOT EXISTS idx_projects_sample ON projects(workspace_id) WHERE sample_key IS NOT NULL;
+/* v1 P2-1 (migration 44): a comment shown under a label instead of its author's name. Sample projects copy their example comments
+ * with author_label '샘플' (created_by stays NOT NULL = the user who received the samples); NULL = show the author as usual. */
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS author_label TEXT;
