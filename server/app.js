@@ -62,6 +62,7 @@ import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
 import { PLANS } from './plans.js';
 import { mountCreditRoutes } from './billing/credit-routes.js';
 import * as SMP from './samples/index.js';
+import { analyticsMiddleware, mountAnalyticsRoutes, track, trackStage, isBot } from './analytics.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SESSION_DAYS = 30;
@@ -156,6 +157,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     next();
   }));
   app.use('/api', (req, res, next) => (req.suspendedUser ? fail(res, 403, 'account_suspended', '정지된 계정입니다. 운영자에게 문의해 주세요.') : next()));
+  /* First-party analytics (server/analytics.js): active day + feature use on workspace writes. Never blocks or fails a request. */
+  app.use(wrap(analyticsMiddleware(db)));
 
   const requireAuth = (req, res, next) =>
     req.user ? next() : fail(res, 401, 'unauthenticated', '로그인이 필요합니다.');
@@ -233,6 +236,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     // Direct signup: the address is unproven until the link is clicked (invite signups are verified above). A failed send is
     // recorded in email_deliveries and the user can resend from the app banner — signup itself still succeeds.
     if (!invite) await sendVerificationEmail(db, { id: userId, email: normEmail(email), name });
+    await track(db, 'signup', { userId, workspaceId });
+    if (invite) await track(db, 'email_verified', { userId });   // the invite link arrived by e-mail
     res.status(201).json({ user: { id: userId, email, name, system_role: 'NONE', email_verified: Boolean(invite) }, workspaces: await q.memberships.all(userId), accepted: accepted ? { type: accepted.type, workspace_id: accepted.workspaceId } : null });
   }));
 
@@ -268,6 +273,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- admin console API (operator role only; see admin-routes.js) ---------- */
   mountAdminRoutes(app, db, { requireAuth, wrap, fail });
+  mountAnalyticsRoutes(app, db, { requireAuth, wrap });
 
   /* ---------- projects (always workspace-scoped) ---------- */
   const base = '/api/workspaces/:wid/projects';
@@ -346,6 +352,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(`${base}/:pid`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
+    if (project.sample_key) await track(db, 'sample_opened', { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id });
     res.json((await guideResponse(project)));
   }));
   /** Phase 9 entry point: all metrics + attention + upcoming dates in one call (computed, never stored). */
@@ -522,7 +529,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const r = (await tx(db, async (db) => { const o = await transitionTo(db, project, req.params.phid, req.user.id, reason, { gateMet }); if (!o.error) await syncMilestones(db, project, req.user.id); return o; }));
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '단계를 찾을 수 없습니다.');
     if (r.error === 'already_current') return fail(res, 409, 'already_current', '이미 현재 단계입니다.');
-    res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
+    const moved = await getProject(req.params.wid, req.params.pid);
+    await trackStage(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id, phaseKey: moved.current_phase, sample: Boolean(project.sample_key) });
+    res.json((await guideResponse(moved)));
   }));
 
   /* ---------- 프로젝트 정의 (structured INITIATION input; completion = INITIATION step status) ---------- */
@@ -1374,7 +1383,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   let appShell = null;
   const sendApp = (req, res) => { appShell ||= readFileSync(resolve(pub, 'app/index.html'), 'utf8'); res.type('html').send(appShell.replace('<!--SHARE_META-->', shareMeta(req, { path: ['/login', '/signup'].includes(req.path) ? req.path : '/' }))); };
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
-  mountLegal(app, { pub, plans: PLANS });   // /, /terms, /privacy, /pricing (B9)
+  // Landing visit: anonymous count only (no user, no IP); signed-in users and bots are not counted.
+  const onLanding = (req) => (req.method === 'GET' && !req.user && !isBot(req.get('user-agent')) ? track(db, 'landing_visit') : null);
+  mountLegal(app, { pub, plans: PLANS, onLanding });   // /, /terms, /privacy, /pricing (B9)
   app.get(['/login', '/signup'], (req, res) => {
     if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect('/app');
     sendApp(req, res);

@@ -19,6 +19,7 @@
  *              must mount `requireVerifiedEmail` (exported here) in front of checkout / subscription changes.
  * Google sign-ups and invitation sign-ups are verified at creation (the provider or the invite e-mail proved the address).
  */
+import { track } from '../analytics.js';
 import { randomUUID } from 'node:crypto';
 import { newToken, sha256, hashPassword, rateLimiter } from '../security.js';
 import { emailConfig } from '../email/config.js';
@@ -127,9 +128,10 @@ export function mountAccountSecurityRoutes({ app, db, wrap, fail, requireAuth, m
       await db.run('UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = ?', [user.id]);
       await db.run(`UPDATE user_identities SET email_verified = true WHERE user_id = ? AND provider = 'PASSWORD'`, [user.id]);
       await writeAudit(db, { adminUserId: user.id, action: 'EMAIL_VERIFIED', targetType: 'USER', targetId: user.id, metadata: {}, actorKind: 'USER' });
-      return true;
+      return user.id;
     });
     if (!ok) return tokenInvalid(res);
+    await track(db, 'email_verified', { userId: ok });
     res.json({ ok: true, email_verified: true });
   }));
 

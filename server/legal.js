@@ -222,7 +222,7 @@ export function privacyMarkdown(L = LEGAL) {
 | 구성원 초대 | 필수: 초대받는 사람의 이메일 주소. 선택: 이름 | 초대한 회원이 입력 |
 | 유료 결제·크레딧 충전 | 결제 승인 정보(결제일시, 금액, 주문번호, 거래 식별자, 영수증 주소), 크레딧 충전·환불 내역, 카드사명과 카드번호 끝 4자리, NicePay가 발급한 정기결제 식별값(빌링키, 암호화 저장). 정기결제 카드 등록 시 입력하는 카드번호·유효기간·생년월일(또는 사업자등록번호)·비밀번호 앞 2자리는 회사가 저장하지 않고 암호화하여 NicePay로만 전달합니다. 세금계산서 발행 요청 시: 상호, 사업자등록번호, 대표자명, 담당자 이메일 | 결제 화면, NicePay 결제창 |
 | 외부 서비스 연동(선택) | Jira 계정 표시명, 계정 식별자, 사이트 주소, 접근 토큰(암호화 저장) | 연동 시 Atlassian으로부터 제공 |
-| 자동 수집 | 로그인 기록(접속 일시, IP 주소, 브라우저 정보), 서비스 이용 기록(작업 이력, AI 기능 사용 기록: 기능, 실행한 회원, 프로젝트, 차감 크레딧), 세션 쿠키, 서버 접속 로그, 이메일 발송 기록 | 서비스 이용 과정 |
+| 자동 수집 | 로그인 기록(접속 일시, IP 주소, 브라우저 정보), 서비스 이용 기록(작업 이력, AI 기능 사용 기록: 기능, 실행한 회원, 프로젝트, 차감 크레딧), 서비스 이용 통계(사용한 화면·기능, 접속 일자 — 회원·워크스페이스·프로젝트 식별자만 기록), 세션 쿠키, 서버 접속 로그, 이메일 발송 기록 | 서비스 이용 과정 |
 | 랜딩 페이지 광고 측정 | 쿠키, 광고 식별자, 방문 기록 | Google 광고 태그(gtag) |
 
 **고객이 입력하는 데이터의 개인정보.** 고객은 프로젝트 정의(이해관계자의 이름, 조직, 부서, 역할), 요구사항, 이슈, 주간보고 등에 제3자의 개인정보를 입력할 수 있습니다. 이 정보에 대해서는 고객이 개인정보처리자이고, 회사는 고객의 위탁을 받아 처리하는 수탁자입니다(제5조 제3항). 회사는 주민등록번호 등 고유식별정보와 민감정보를 수집하지 않으며, 이용자는 이를 서비스에 입력해서는 안 됩니다.
@@ -233,6 +233,7 @@ export function privacyMarkdown(L = LEGAL) {
 3. 요금 결제와 정산: 유료 요금제 결제, 정기결제, 크레딧 충전·차감·잔액 알림과 사용 내역 제공, 환불, 세금계산서 발행
 4. 고객 지원: 문의 처리, 분쟁 조정을 위한 기록 보존
 5. 서비스 개선과 마케팅(랜딩 페이지 광고 측정): 광고 효과 측정, 이용 통계 분석(개인을 식별할 수 없는 형태)
+6. 서비스 개선을 위한 이용 분석: 가입·기능 사용·재방문 통계. 회사가 직접 운영하는 데이터베이스에서만 분석하며, 외부 분석 도구로 보내거나 별도 쿠키를 쓰지 않습니다.
 
 ## 제3조 (개인정보의 보유와 이용 기간)
 1. 회사는 회원 탈퇴 시 또는 처리 목적이 달성된 때 지체 없이 개인정보를 파기합니다. 다만 다음의 경우에는 명시한 기간 동안 보관합니다.
@@ -376,7 +377,7 @@ ${legalFooterHtml(L)}
 }
 
 /** Mounts /terms, /privacy, /pricing and the landing page (with the footer filled in). Call before express.static. */
-export function mountLegal(app, { pub, plans }) {
+export function mountLegal(app, { pub, plans, onLanding = null }) {
   const cache = {};
   const page = (kind) => (cache[kind] ||= legalPage(kind, { plans }));
   for (const kind of Object.keys(PAGES)) {
@@ -384,7 +385,8 @@ export function mountLegal(app, { pub, plans }) {
   }
   app.get('/pricing', (req, res) => res.redirect(302, '/#pricing'));
   let landing = null;
-  app.get(['/', '/index.html'], (req, res) => {
+  app.get(['/', '/index.html'], async (req, res) => {
+    if (onLanding) await onLanding(req);
     landing ||= readFileSync(resolve(pub, 'index.html'), 'utf8').replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
     res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req)));
   });

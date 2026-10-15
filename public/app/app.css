@@ -3384,3 +3384,12 @@ html.is-phone .kpi__s{white-space:normal;overflow:visible;text-overflow:clip}
 .sbanner .btn{flex:none}
 .page__acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media (max-width:640px){.sbanner{flex-direction:column;align-items:flex-start;padding:10px 12px}}
+
+/* 사용 분석 (/admin/funnel) */
+.afunnel--wide .afunnel__r{grid-template-columns:minmax(150px,220px) 1fr 56px 56px 64px}
+.afunnel__h{font-size:var(--fs-xs);color:var(--text-3);border-bottom:1px solid var(--border-soft)}.afunnel__h b,.afunnel__h small{font-weight:600}
+.afunnel__r.is-drop{background:var(--danger-bg);border-radius:var(--r-sm);margin:0 -6px;padding:5px 6px}.afunnel__r.is-drop .afunnel__b i{background:var(--danger-fg)}
+.afunnel__r .achip{margin-left:6px;font-style:normal}
+#firstuse{min-width:0}.afunnel__r.is-side>span:first-child{color:var(--text-2);padding-left:10px}.asec__note{margin:0;padding:8px 14px 12px}
+.atool--range{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.atool--range .input{width:auto}
+@media (max-width:767px){.afunnel--wide .afunnel__r{grid-template-columns:1fr 44px 44px 52px}.afunnel--wide .afunnel__b{display:none}}

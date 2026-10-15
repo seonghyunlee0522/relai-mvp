@@ -193,6 +193,7 @@ export const migrations = [
     await db.run('DROP INDEX IF EXISTS uq_iel_external_live');   // replaced by uq_iel_external_live_wbs (schema.sql)
   } },
   { version: 44, name: 'v1 fixes: comments.author_label (schema.sql) — sample comments show 샘플, not the user who received the samples', up() {} },
+  { version: 46, name: 'Product analytics: analytics_events (+ once-per-user milestone index) and analytics_active_days — first-party, ids only (schema.sql)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

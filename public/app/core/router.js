@@ -19,6 +19,13 @@ document.addEventListener('click', (e) => {
   navigate(a.getAttribute('href'));
 });
 window.addEventListener('popstate', render);
+/* First-party screen view (server/analytics.js): the path only — ids are normalised server-side. Never awaited, never shown. */
+let lastScreen = '';
+function screenView(path) {
+  if (!path.startsWith('/app') || path === lastScreen) return;
+  lastScreen = path;
+  try { fetch('/api/analytics/screen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), credentials: 'same-origin', keepalive: true }).catch(() => {}); } catch { /* ignore */ }
+}
 export let routes = [];
 export let shellFn = null; let authFn = null; let inviteFn = null; let accountFns = {};
 export function registerRoutes(list, { shell, auth, invite = null, account = {} }) { routes = list; shellFn = shell; authFn = auth; inviteFn = invite; accountFns = account; }
@@ -43,7 +50,7 @@ export async function render() {
   if (pcOnly) return shellFn('/app/pc-only', (main) => { main.innerHTML = `<div class="page"><div class="empty pconly" data-pc-only><h2>${pcOnly}</h2><a class="link" href="/app" data-link>홈으로</a></div></div>`; }, token);
   for (const [re, fn] of routes) {
     const m = path.match(re);
-    if (m) return shellFn(path, () => fn(...m.slice(1)), token);
+    if (m) { screenView(path); return shellFn(path, () => fn(...m.slice(1)), token); }
   }
   navigate('/app', { replace: true });
 }

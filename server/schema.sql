@@ -1352,3 +1352,26 @@ CREATE INDEX IF NOT EXISTS idx_projects_sample ON projects(workspace_id) WHERE s
 /* v1 P2-1 (migration 44): a comment shown under a label instead of its author's name. Sample projects copy their example comments
  * with author_label '샘플' (created_by stays NOT NULL = the user who received the samples); NULL = show the author as usual. */
 ALTER TABLE comments ADD COLUMN IF NOT EXISTS author_label TEXT;
+/* Product analytics (migration 46, server/analytics.js): first-party only. Ids and a short key — no names, e-mails or IPs.
+ * name: landing_visit (anonymous) | signup | email_verified | sample_opened | project_created | stage_reached (key '01'…'07') | first_requirement |
+ * first_wbs | first_issue | first_report | first_invite | jira_connected | project_closed (once per user) | feature (key = method + route) | screen (key = app path). */
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id bigserial PRIMARY KEY,
+  name TEXT NOT NULL,
+  key TEXT,
+  user_id TEXT,
+  workspace_id TEXT,
+  project_id TEXT,
+  sample boolean NOT NULL DEFAULT false,          -- event inside a sample project → left out of metrics
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_name_at ON analytics_events(name, created_at);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id, name);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_analytics_once ON analytics_events(user_id, name, COALESCE(key, ''))
+  WHERE user_id IS NOT NULL AND name NOT IN ('feature', 'screen', 'landing_visit');
+-- One row per user per KST day with any signed-in request (D1 / D7 / D30 return visits, DAU / WAU / MAU).
+CREATE TABLE IF NOT EXISTS analytics_active_days (
+  user_id TEXT NOT NULL,
+  day date NOT NULL,
+  PRIMARY KEY (user_id, day)
+);

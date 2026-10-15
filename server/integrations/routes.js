@@ -19,6 +19,7 @@
  *   Webhook (no session):  POST /api/integrations/jira/webhook/:cid/:secret
  *   Admin (operator):      GET /api/admin/integrations
  */
+import { track } from '../analytics.js';
 import express from 'express';
 import { requireAction } from '../authz.js';
 import * as S from './service.js';
@@ -47,8 +48,11 @@ export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth
     const { code, state, error } = req.query || {};
     const back = (q) => res.redirect(`/app/settings?${new URLSearchParams(q).toString()}`);
     if (error) return back({ jira: 'error', reason: String(error).slice(0, 80) });   // never echo codes/tokens
-    try { const r = await S.finishOAuth(db, { state: String(state || ''), code: String(code || ''), userId: req.user.id }); return back({ jira: 'ok', ws: r.workspace_id }); }
+    let r;
+    try { r = await S.finishOAuth(db, { state: String(state || ''), code: String(code || ''), userId: req.user.id }); }
     catch (e) { console.warn('[jira] oauth callback failed:', e.code || e.message); return back({ jira: 'error', reason: e.code || 'oauth_error' }); }
+    await track(db, 'jira_connected', { userId: req.user.id, workspaceId: r.workspace_id });
+    return back({ jira: 'ok', ws: r.workspace_id });
   }));
 
   const P = `${base}/:pid/integrations/jira`;
