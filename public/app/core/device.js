@@ -13,11 +13,52 @@ flag();
 /** `render` = the router's render(); called when the width crosses the breakpoint. Auth / account / invite pages look the same
  * in both modes, so they are left alone (a re-render would wipe what was typed into /signup, e.g. on rotating a phone). */
 export function onDeviceChange(render) {
-  PHONE_MQ.addEventListener('change', () => {
+  PHONE_MQ.addEventListener('change', async () => {
     flag();
-    if (!isPhone()) thawFields();
-    if (/^\/(app|admin)(\/|$)/.test(location.pathname)) render();
+    if (isPhone()) saveDrafts(); else thawFields();
+    if (!/^\/(app|admin)(\/|$)/.test(location.pathname)) return;
+    await render();
+    if (!isPhone()) restoreDrafts();
   });
+}
+
+/* Drafts across the crossing (Q21-1): a page re-render rebuilds a drawer it reopens from the URL (요구사항 ?new=1) with empty
+ * fields. Going to a phone saves what is typed in every open dialog / drawer form; back on a PC, after the re-render, the same
+ * fields (same container, same id / name / data-field) get it back. Kept only for the same URL; a field the user already changed is left alone. */
+const OPEN = '.drawer:not([hidden]), .wdrawer:not([hidden]), .scrim, [role=dialog]';
+let drafts = null;
+const fieldKey = (el) => el.id ? '#' + el.id : el.name ? `[name="${el.name}"]` : el.dataset.field ? `[data-field="${el.dataset.field}"]` : null;
+const boxKey = (box) => box.id ? '#' + box.id : box.className.split(/\s+/).filter((c) => /^(drawer|wdrawer|scrim|dialog)(--|$)/.test(c)).join('.');
+const fieldsOf = (box) => [...box.querySelectorAll('input, select, textarea')].filter((el) => !['hidden', 'file', 'search', 'password', 'button', 'submit'].includes(el.type) && fieldKey(el));
+const valueOf = (el) => (el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value);
+const isDefault = (el) => (el.type === 'checkbox' || el.type === 'radio' ? el.checked === el.defaultChecked
+  : el.tagName === 'SELECT' ? [...el.options].every((o) => o.selected === o.defaultSelected) : el.value === el.defaultValue);
+export function saveDrafts() {
+  const out = [];
+  for (const box of document.querySelectorAll(OPEN)) {
+    if (box.parentElement?.closest(OPEN)) continue;   // nested [role=dialog] inside a scrim: the outer box covers it
+    const vals = fieldsOf(box).filter((el) => !isDefault(el)).map((el) => [fieldKey(el), valueOf(el)]);
+    if (vals.length) out.push({ box: boxKey(box), vals });
+  }
+  drafts = out.length ? { url: location.pathname + location.search, out } : null;
+}
+export function restoreDrafts(tries = 8) {
+  if (!drafts) return;
+  if (drafts.url !== location.pathname + location.search) { drafts = null; return; }
+  let left = 0;
+  for (const d of drafts.out) {
+    const box = [...document.querySelectorAll(OPEN)].find((b) => boxKey(b) === d.box);
+    d.vals = d.vals.filter(([k, v]) => {
+      const el = box && box.querySelector(k);
+      if (!el) { left++; return true; }   // the page may still be loading the form
+      if (isDefault(el)) {
+        if (el.type === 'checkbox' || el.type === 'radio') el.checked = v; else el.value = v;
+        el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return false;
+    });
+  }
+  if (left && tries > 0) setTimeout(() => restoreDrafts(tries - 1), 150); else drafts = null;
 }
 
 /* Backstop for A10 (no input / select / textarea in a phone detail): any form field the pages render inside #main or a sheet

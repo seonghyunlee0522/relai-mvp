@@ -347,3 +347,28 @@ test('AC9: operator refund — 2,000 unused purchased credits → ₩18,000 part
   assert.equal(rq.status, 200); assert.deepEqual((await mails(db, 'AI_CREDIT_REFUND_REQUEST')).map((m) => m.recipient), ['support@relai.test']);
   env.server.close();
 });
+
+test('Q21-2: AI off server-side → pack checkout 409 ai_disabled with no order; summary says ai_enabled:false; dashboard, ledger, CSV stay; AI back on → checkout 201', async () => {
+  const env = await boot(); const { db } = env;
+  const A = await owner(env);
+  for (const off of [{ AI_ENABLED: 'false' }, { AI_PROVIDER: '' }]) {
+    const keep = { AI_ENABLED: process.env.AI_ENABLED, AI_PROVIDER: process.env.AI_PROVIDER };
+    Object.assign(process.env, off);
+    try {
+      assert.equal((await A.c('GET', `${A.purl}/ai/status`)).json.enabled, false);
+      const co = await A.c('POST', `${A.cr}/checkout`, { pack: 'P10' });
+      assert.equal(co.status, 409); assert.equal(co.json.error.code, 'ai_disabled');
+      assert.match(JSON.stringify(co.json), /AI 기능 준비 중에는 크레딧을 충전할 수 없습니다\./);
+      assert.equal((await db.get(`SELECT count(*)::int AS n FROM billing_orders WHERE workspace_id = ? AND kind = 'CREDIT_PACK'`, [A.w])).n, 0);
+      const s = (await A.c('GET', `${A.cr}/summary`)).json.credits;
+      assert.equal(s.ai_enabled, false); assert.equal(s.balance, 500); assert.equal(s.packs.length, 3);
+      assert.equal((await A.c('GET', `${A.cr}/ledger`)).status, 200);
+      assert.equal((await A.c('GET', `${A.cr}/ledger.csv`)).status, 200);
+      assert.equal((await A.c('POST', `${A.cr}/refund-request`, { note: 'x' })).status, 409);   // nothing_refundable — refund path unchanged
+    } finally { Object.assign(process.env, keep); }
+  }
+  assert.equal((await A.c('GET', `${A.cr}/summary`)).json.credits.ai_enabled, true);
+  const { res } = await buy(env, A, 'P10');
+  assert.equal(res.status, 200); assert.equal(await balance(db, A.w), 1500);
+  env.server.close();
+});

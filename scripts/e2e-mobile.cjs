@@ -233,6 +233,29 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   const back = await mp.evaluate(() => ({ same: window.__noReload === 1, phone: document.documentElement.classList.contains('is-phone'), pc: document.querySelectorAll('.pcline').length }));
   check('A14 1024 → 375: phone again without reload', back.same && back.phone && back.pc === 1, JSON.stringify(back));
 
+  /* ---------- A18 desktop 1440 → 700 → 1440: an open 새 요구사항 drawer keeps what was typed (Q21-1) ---------- */
+  {
+    const dp = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'ko-KR', storageState: state })).newPage();
+    dp.on('pageerror', (e) => log('PAGEERROR(1440)', e.message));
+    await dp.goto(`${BASE}${A.url}/requirements`); await settle(dp);
+    await dp.click('#add'); await dp.waitForSelector('#c-title');
+    await dp.fill('#c-title', 'A18 리사이즈 제목'); await dp.fill('#c-desc', 'A18 설명 본문'); await dp.selectOption('select[name=scope]', 'OUT_OF_SCOPE'); await dp.fill('input[name=requester_name]', '김OO');
+    const vals = () => dp.evaluate(() => { const v = (s) => { const e = document.querySelector(s); return e && e.getBoundingClientRect().height > 0 ? e.value : null; }; return { title: v('#c-title'), desc: v('#c-desc'), scope: v('select[name=scope]'), req: v('input[name=requester_name]') }; });
+    await dp.setViewportSize({ width: 700, height: 900 }); await dp.waitForTimeout(1000);
+    const mid = await dp.evaluate(() => document.documentElement.classList.contains('is-phone'));
+    await dp.setViewportSize({ width: 1440, height: 900 }); await dp.waitForTimeout(1500);
+    const got = await vals();
+    check('A18 1440 → 700 → 1440: 새 요구사항 drawer keeps 제목, 설명, 범위, 요청자', mid && got.title === 'A18 리사이즈 제목' && got.desc === 'A18 설명 본문' && got.scope === 'OUT_OF_SCOPE' && got.req === '김OO', JSON.stringify({ mid, got }));
+    await dp.click('#cf [type=submit]:not([data-more])'); await dp.waitForTimeout(1200);
+    const saved = (await api('GET', `${A.P}/requirements?q=${encodeURIComponent('A18 리사이즈')}`)).json;
+    const row = (saved?.requirements || saved?.items || []).find((r) => r.title === 'A18 리사이즈 제목');
+    check('A18 the restored draft saves as typed (설명 + 범위)', Boolean(row) && row.description === 'A18 설명 본문' && row.scope === 'OUT_OF_SCOPE', JSON.stringify(row || saved).slice(0, 200));
+    await dp.goto(`${BASE}${A.url}/requirements`); await settle(dp); await dp.click('#add'); await dp.waitForSelector('#c-title');
+    await dp.setViewportSize({ width: 700, height: 900 }); await dp.waitForTimeout(800); await dp.setViewportSize({ width: 1440, height: 900 }); await dp.waitForTimeout(1200);
+    check('A18 an untouched drawer comes back empty (nothing carried over)', (await vals()).title === '', JSON.stringify(await vals()));
+    await dp.context().close();
+  }
+
   /* ---------- A6 downloads (Chromium 375) ---------- */
   const DL = [
     ['사업수행계획서 PDF', `${A.url}/charter`, async (pg) => { await pg.click('.pmenu summary'); await pg.click('[data-plan="pdf"]'); }, /사업수행계획서.*\.pdf$/],
