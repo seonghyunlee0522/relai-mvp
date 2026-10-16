@@ -42,7 +42,8 @@ const KEYS = { early: 'A-early', mid: 'B-mid', done: 'C-done' };
   check('Home 1440: 3 cards, each with the 샘플 badge', home.cards === 3 && home.badges === 3, JSON.stringify(home));
   check('Home: 샘플 banner with 삭제 button', /샘플 프로젝트 3개/.test(home.banner) && Boolean(await page.$('[data-sample-banner] [data-samples-delete]')), home.banner);
   check('Home: the one blue button is + 새 프로젝트 (no sample card is blue)', home.blueCards === 0 && /btn--primary/.test(home.newBtn), JSON.stringify(home));
-  check('Home summary speaks about real projects, not samples', /직접 만든 프로젝트가 없습니다/.test(home.sum), home.sum);
+  // UI/UX P1-3: while RELAI 시작하기 is shown it is the one notice block (summary line hidden); otherwise the summary speaks about real projects
+  check('Home summary speaks about real projects, not samples', /직접 만든 프로젝트가 없습니다/.test(home.sum) || (!home.sum && Boolean(await page.$('.obcl [data-sample-banner]'))), home.sum);
   await page.screenshot({ path: `${SHOTS}/home-1440.png`, fullPage: true });
 
   /* ---------- open each sample ---------- */

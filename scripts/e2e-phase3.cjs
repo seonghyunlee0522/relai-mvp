@@ -196,7 +196,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(`${B.url}/wbs`); await page.waitForSelector('.wsuggest');
   check('US-4 WBS screen: inline suggestion (not a banner)', /착수 때 정한 주요 일정 3건을 마일스톤으로 가져올까요\?/.test(await page.textContent('.wsuggest')));
   await page.goto(`${B.url}/wbs?sel=${bt.id}`); await page.waitForSelector('#drawer [data-field="owner"]');
-  check('US-1 only the PM registered → hint + 이해관계자 추가 link', /팀원을 01 착수 › 관계자에 추가하면 계정 없이 담당자로 지정할 수 있습니다\./.test(await page.textContent('#drawer .whint')) && /definition\?activity=STAKEHOLDERS/.test(await page.getAttribute('#drawer .whint a', 'href')));
+  check('US-1 only the PM registered → hint + 이해관계자 추가 link', /팀원을 01 착수 › 관계자에 추가하면 계정 없이 담당자로 지정할 수 있습니다\./.test(await page.textContent('#drawer .whint')) && /definition\/stakeholders/.test(await page.getAttribute('#drawer .whint a', 'href')));
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(`${B.url}/wbs?sel=${bt.id}`); await page.waitForSelector('#drawer:not([hidden]) .drawer__x'); await page.waitForTimeout(300);
   check('375px: read-only detail (no owner picker, no input), one PC line, no sideways scroll', !(await page.$('#drawer [data-field="owner"]:visible')) && (await page.$$eval('#drawer input, #drawer select, #drawer textarea', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).length)) === 0

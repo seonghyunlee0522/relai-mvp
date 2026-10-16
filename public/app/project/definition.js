@@ -8,8 +8,13 @@
  *                                       ↷ 이 업무 건너뛰기 (non-REQUIRED only, with confirmation) · 업무 다시 시작 → on a skipped one.
  *
  * No nested drawers: Excel upload for 이해관계자 is a modal on top of the drawer. Completion is the INITIATION step status
- * (server/definition.js), so What's Next, the LNB badge and the phase gate all read the same source. */
+ * (server/definition.js), so What's Next, the LNB badge and the phase gate all read the same source.
+ *
+ * Tabs = real screens (UI/UX P1-1): /definition is the 개요 tab (the process view above); /definition/<slug> shows one task's
+ * content (sectionView, read blocks shared with 프로젝트 개요) + [수정] → the same drawer. Changing tab = a new address (pushState);
+ * opening/closing the drawer only rewrites `?activity=` (replaceState), so 뒤로 가기 = the previous tab. */
 import { api, wsApi } from '../core/api.js';
+import { navigate } from '../core/router.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { $, no2, fmtShort, html, raw } from '../core/dom.js';
 import { download, fileToBase64 } from '../core/ui.js';
@@ -21,6 +26,8 @@ import { traitFields, traitGrid, wireTraitFields } from '../shared/trait-fields.
 import { josa } from '../shared/josa.js';
 import { planMenu, bindPlanMenu, isMeasurable, noApprovalLine } from './initiation.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
+import { DEFINITION_SLUG, DEFINITION_TABS, definitionHref } from '../shared/lifecycle.js';
+import { charterParts } from './charter.js';
 
 const ORG_TYPE = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 착수보고/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 운영위원회 승인']];
@@ -62,12 +69,21 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 const rowState = (s) => (s.status === 'COMPLETED' ? (s.changed_after_completion ? 'review' : 'done') : s.status === 'SKIPPED' ? 'skip' : s.has_data ? 'prog' : 'todo');
 const STATE_LABEL = { done: '완료', skip: '건너뜀', review: '확인 필요', prog: '진행 중', todo: '미시작' };
 const STATE_ICON = { done: '✓', skip: '—', review: '!', prog: '●', todo: '○' };
+const TAB_LABEL = { '': '개요', goals: '목표·범위', stakeholders: '관계자', milestones: '상위 일정', operations: '운영 방식', kickoff: '착수보고회', approval: '착수 승인' };
+const IMPORTANCE = { REQUIRED: '필수', RECOMMENDED: '권장' };
+const isOpenWork = (s) => s && s.status !== 'COMPLETED' && s.status !== 'SKIPPED';
 
-export async function definitionPage(id) {
+export async function definitionPage(id, slug = '') {
   const main = $('#main');
-  let [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`))]);
+  const qp = new URLSearchParams(location.search);
+  // old address /definition?activity=KEY(&field=F) (server guidance, bookmarks) → the task's own tab, same drawer + field flash
+  if (!slug && DEFINITION_SLUG[qp.get('activity')]) { slug = DEFINITION_SLUG[qp.get('activity')]; history.replaceState(null, '', `${location.pathname.replace(/\/$/, '')}/${slug}${location.search}`); }
+  slug = slug || '';
+  const tabKeys = (DEFINITION_TABS.find(([x]) => x === slug) || ['', []])[1];
+  let c = null;   // 프로젝트 개요 data (GET …/charter): the read blocks of a task tab
+  let [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`)), slug ? api('GET', wsApi(`/${id}/charter`)).then((r) => { c = r.charter; }) : null]);
   const p = g.project; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
-  document.title = `01 착수 · 프로젝트 정의 — ${p.name} — RELAI`;
+  document.title = `${slug ? `${TAB_LABEL[slug]} · ` : '01 착수 · '}프로젝트 정의 — ${p.name} — RELAI`;
   const u = `/app/projects/${p.id}`;
   const fresh = () => {   // definition + 프로젝트 기본 특성 (stored on the project)
     const x = { ...clone(m.definition), ...clone(m.project_traits) };
@@ -82,7 +98,9 @@ export async function definitionPage(id) {
   let d = fresh();            // working copy of the open activity's values (kept across drawer ⇄ full screen)
   let dirty = false;
   let open = null;                         // { key, full }
-  const qp = new URLSearchParams(location.search); if (qp.get('activity') && SECTION_FIELDS[qp.get('activity')]) open = { key: qp.get('activity'), full: false };
+  const asked = qp.get('activity');
+  if (!isPhone() && asked && (slug ? tabKeys.includes(asked) : asked === 'PROFILE')) open = { key: asked, full: false };
+  else if (slug && !ro) { const k = tabKeys.find((x) => isOpenWork(sec(x))); if (k) open = { key: k, full: false }; }   // an unfinished task opens its drawer; a finished one shows its content
 
   const phase = () => (g.phases || []).find((x) => x.phase_key === 'INITIATION');
   const currentKey = () => { const c = m.sections.find((s) => s.status !== 'COMPLETED' && s.status !== 'SKIPPED'); return c ? c.key : null; };
@@ -99,7 +117,7 @@ export async function definitionPage(id) {
       ? html`<div class="pv__now"><div><span class="pv__k">현재 해야 할 일</span><b>${josa(review.title, '을')} 다시 확인하세요.</b><p>${review.reapproval ? '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.' : '완료 처리 후 내용이 수정되었습니다. 확인 후 다시 완료 처리합니다.'}</p></div><button type="button" class="btn btn--primary" data-open="${review.key}">다시 확인 →</button></div>`
       : curSec ? html`<div class="pv__now"><div><span class="pv__k">현재 해야 할 일</span><b>${curSec.title}</b><p>${PURPOSE[cur] || curSec.description}</p></div><button type="button" class="btn btn--primary" data-open="${cur}">${curSec.has_data ? '계속 작성 →' : CTA_LABEL[cur]}</button></div>`
       : html`<div class="pv__now pv__now--done"><div><span class="pv__k">착수 단계</span><b>착수 단계의 필요한 업무가 정리되었습니다.</b><p>${isCurrentPhase && nx ? `아래에서 다음 단계 ${no2(nx.sequence)} ${josa(nx.name, '으로')} 진행할 수 있습니다.` : '내용은 각 업무를 선택해 다시 볼 수 있습니다.'}</p></div></div>`;
-    const rows = m.sections.map((s) => {
+    const rows = m.sections.map((s) => {   // a row = its tab (a link), the CTA = its tab with the drawer open
       const st = rowState(s); const isCur = s.key === cur;
       const cta = ro ? '' : isCur ? html`<button type="button" class="link linkbtn pv__go" data-open="${s.key}">${s.has_data ? '계속 작성 →' : '입력하기 →'}</button>` : st === 'review' ? html`<button type="button" class="link linkbtn pv__go" data-open="${s.key}">다시 확인 →</button>` : st === 'prog' ? html`<button type="button" class="link linkbtn pv__go" data-open="${s.key}">계속 작성 →</button>` : '';
       return html`<li class="pv__row is-${st} ${isCur ? 'is-cur' : ''}" data-row="${s.key}" tabindex="0" role="button" aria-label="${s.title} 열기">
@@ -122,9 +140,50 @@ export async function definitionPage(id) {
         ${raw(traitGrid(m.project_traits))}
       </div>
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 정의는 조회만 할 수 있습니다.</div>' : ro ? pcLine() : nowRow)}
+      <p class="pv__charter">입력한 내용을 한 장으로 → <a class="link" href="${u}/charter" data-link data-charter-link>프로젝트 개요 보기</a></p>
       <ol class="pv__list">${raw(rows)}</ol>
       ${raw(foot)}
     </section>`;
+  };
+
+  /* ---------- Task tab: what has been entered for this tab's task(s) (P1-1) ---------- */
+  const tabIdx = DEFINITION_TABS.findIndex(([x]) => x === slug);
+  const tabHref = (x) => (x ? `${u}/definition/${x}` : `${u}/definition`);
+  /** The task after `key` in work order: same tab → its drawer; another tab → that tab; after 착수 승인 → 개요. */
+  const nextTask = (key) => {
+    const flat = DEFINITION_TABS.flatMap(([x, keys]) => keys.map((k) => [x, k])); const i = flat.findIndex(([, k]) => k === key);
+    const nx = flat[i + 1]; if (!nx) return { label: '개요로', href: tabHref('') };
+    return nx[0] === slug ? { label: `다음 업무: ${sec(nx[1]).title}`, key: nx[1] } : { label: `다음 업무: ${TAB_LABEL[nx[0]]}`, href: tabHref(nx[0]) };
+  };
+  const sectionBodyView = (key) => {
+    const s = sec(key);
+    if (s.status === 'SKIPPED') return '<p class="defsec__skip">이번 프로젝트에서는 수행하지 않는 것으로 기록되어 있습니다.</p>';
+    const P = charterParts(c, { ro, def: (a, f) => definitionHref(p.id, a, f) });
+    switch (key) {
+      case 'GOALS': return P.goals.inner;
+      case 'SCOPE': return P.scope.inner + P.acr.inner;
+      case 'STAKEHOLDERS': return html`<div class="chx__blk">${raw(P.shTable)}</div>`;
+      case 'MILESTONES': return P.time.inner;
+      case 'OPERATIONS': return P.ops.inner + P.governance;
+      case 'KICKOFF': return P.kickInner;
+      case 'APPROVAL': return P.approvalInner;
+      default: return '';
+    }
+  };
+  const sectionView = () => {
+    const blocks = tabKeys.map((key) => {
+      const s = sec(key); const st = rowState(s);
+      const edit = ro ? '' : html`<button type="button" class="btn btn--secondary btn--sm" data-edit="${key}">${st === 'todo' ? '입력하기' : st === 'prog' ? '계속 작성' : st === 'review' ? '다시 확인' : st === 'skip' ? '열기' : '수정'}</button>`;
+      return html`<section class="defsec" data-defsec="${key}" aria-labelledby="ds-${key}">
+        <header class="defsec__h"><h2 id="ds-${key}">${s.title}</h2><span class="defsec__st is-${st}"><i class="st st--${st === 'review' ? 'warn' : st}" aria-hidden="true">${STATE_ICON[st]}</i>${STATE_LABEL[st]}${IMPORTANCE[s.importance] ? ` · ${IMPORTANCE[s.importance]}` : ' · 선택'}</span><span class="pv__sp"></span>${raw(edit)}</header>
+        <p class="defsec__d">${PURPOSE[key] || s.description}</p>
+        <div class="defsec__b chx">${raw(sectionBodyView(key))}</div></section>`;
+    }).join('');
+    const prev = DEFINITION_TABS[tabIdx - 1]; const nx = DEFINITION_TABS[tabIdx + 1];
+    const done = tabKeys.every((k) => !isOpenWork(sec(k)));
+    const pager = html`<nav class="defsec__pg" aria-label="업무 이동">${raw(prev ? html`<a class="link" href="${tabHref(prev[0])}" data-link data-defnav>← ${TAB_LABEL[prev[0]]}</a>` : '<span></span>')}
+      ${raw(nx ? html`<a class="${done && !ro ? 'btn btn--primary btn--sm' : 'link'}" href="${tabHref(nx[0])}" data-link data-defnav>다음 업무: ${TAB_LABEL[nx[0]]} →</a>` : html`<a class="${done && !ro ? 'btn btn--primary btn--sm' : 'link'}" href="${tabHref('')}" data-link data-defnav>개요로 →</a>`)}</nav>`;
+    return html`<div class="defsecs">${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 정의는 조회만 할 수 있습니다.</div>' : ro ? pcLine() : '')}${raw(blocks)}${raw(pager)}</div>`;
   };
 
   /* ---------- Work Screen (drawer / full screen) ---------- */
@@ -240,24 +299,29 @@ export async function definitionPage(id) {
       <span class="wd__btns"><span class="wd__stat" id="wd-stat">${dirty ? '저장되지 않은 변경' : ''}</span>
         <button type="button" class="btn btn--secondary btn--sm" data-wact="save">임시저장</button>
         ${raw(completed ? (st === 'review' ? '<button type="button" class="btn btn--primary btn--sm" data-wact="confirm">다시 확인 완료</button>' : '') + '<button type="button" class="btn btn--ghost btn--sm" data-wact="reopen">완료 취소</button>' : '<button type="button" class="btn btn--primary btn--sm" data-wact="complete">완료 처리</button>')}</span></div>`;
+    const nt = slug ? nextTask(s.key) : null;   // P1-1: move on without going back to the list
+    const next = !nt ? '' : nt.key ? html`<div class="wd__next"><button type="button" class="link linkbtn" data-wnext="${nt.key}">${nt.label} →</button></div>`
+      : html`<div class="wd__next"><a class="link" href="${nt.href}" data-link data-defnav>${nt.label} →</a></div>`;
     return html`<aside class="wdrawer ${open.full ? 'wdrawer--full' : ''} ${WIDE.has(open.key) ? 'wdrawer--wide' : ''}" id="wdrawer" role="dialog" aria-labelledby="wdT">
       <div class="wd__h"><div class="wd__ht"><b id="wdT">${s.title}</b><small>${PURPOSE[s.key] || s.description}</small></div>
         <button type="button" class="wd__ib" id="wd-full" title="${open.full ? '축소' : '확대'}" aria-label="${open.full ? '축소' : '확대'}">${open.full ? '⤡' : '⤢'}</button><button type="button" class="wd__ib" id="wd-close" aria-label="닫기">×</button></div>
       <div class="wd__b">${raw(body)}</div>
-      ${raw(foot)}
+      ${raw(foot)}${raw(next)}
     </aside>`;
   };
 
-  const draw = () => {
+  const draw = () => {   // same tab → the page keeps its scroll position while the drawer opens / closes
+    const y = window.scrollY;
     main.innerHTML = html`<div class="page page--wide page--flow page--guide defp ${open ? 'has-wd' : ''}">
-      ${raw(projectHead(p, g, { tab: open && ['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL'].includes(open.key) ? open.key.toLowerCase() : 'definition', title: '프로젝트 정의' }))}
-      ${raw(processView())}
+      ${raw(projectHead(p, g, { tab: slug === 'goals' ? 'goals-scope' : slug || 'definition', title: slug ? TAB_LABEL[slug] : '프로젝트 정의' }))}
+      ${raw(slug ? sectionView() : processView())}
       ${raw(drawer())}
     </div>`;
+    window.scrollTo(0, y);
     bind();
   };
   const drawDrawer = () => { const el = $('#wdrawer'); if (!el) return draw(); const y = el.querySelector('.wd__b')?.scrollTop || 0; el.outerHTML = drawer(); const nb = $('#wdrawer .wd__b'); if (nb) nb.scrollTop = y; bindDrawer(); };
-  const refreshView = () => { const pv = main.querySelector('.pv'); if (pv) pv.outerHTML = processView(); bindView(); };
+  const refreshView = () => { const pv = main.querySelector(slug ? '.defsecs' : '.pv'); if (pv) pv.outerHTML = slug ? sectionView() : processView(); bindView(); };
 
   /* ---------- working copy ---------- */
   const collect = () => {
@@ -286,12 +350,19 @@ export async function definitionPage(id) {
     return body;
   };
   const markDirty = () => { dirty = true; const st = $('#wd-stat'); if (st) st.textContent = '저장되지 않은 변경'; const as = $('#apv-stat'); if (as && open && open.key === 'APPROVAL') { collect(); as.textContent = approvalStatusText(d.approval || {}); } };
-  const reload = async () => { [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`))]); };
+  const loadCharter = async () => { if (slug) c = (await api('GET', wsApi(`/${id}/charter`))).charter; };
+  const reload = async () => { [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`)), loadCharter()]); };
   const err = (e) => { const msg = e.fields ? Object.values(e.fields)[0] : e.message; toast(msg); const st = $('#wd-stat'); if (st) st.textContent = msg; };
 
   const discardOk = async () => !dirty || confirmDialog({ title: '저장되지 않은 변경이 있습니다.', body: '임시저장하지 않은 내용은 사라집니다. 그대로 닫을까요?', confirm: '닫기' });
   const openActivity = async (key, { full = false } = {}) => { if (open && open.key === key) return; if (!(await discardOk())) return; d = fresh(); dirty = false; open = { key, full }; setUrl(); draw(); const first = $('#wdrawer .wd__form input, #wdrawer .wd__form textarea, #wdrawer .wd__form select'); if (first) first.focus({ preventScroll: true }); };
   const closeDrawer = async () => { if (!(await discardOk())) return; open = null; dirty = false; setUrl(); draw(); };
+  /** Another tab = another screen: a new history entry. `withDrawer` adds ?activity= so that task's drawer opens there. */
+  const goTask = async (key, { withDrawer = false } = {}) => {
+    if (key === 'PROFILE' || (DEFINITION_SLUG[key] || '') === slug) { if (!ro) openActivity(key); return; }
+    if (!(await discardOk())) return; dirty = false;
+    navigate(withDrawer || isOpenWork(sec(key)) ? `${tabHref(DEFINITION_SLUG[key])}?activity=${key}` : tabHref(DEFINITION_SLUG[key]));
+  };
 
   /* ---------- actions ---------- */
   const save = async () => {
@@ -311,7 +382,7 @@ export async function definitionPage(id) {
     const body = ['complete', 'confirm'].includes(action) ? sectionBody(key) : {};   // 완료 처리 = 저장 + 검증 + COMPLETED, one click
     try {
       const r = await api('POST', wsApi(`/${id}/definition/sections/${key}/${action}`), body);
-      g = r.guide; delete r.guide; m = r; dirty = false;
+      g = r.guide; delete r.guide; m = r; dirty = false; await loadCharter().catch(() => {});
       if (action === 'complete' || action === 'confirm' || action === 'skip') { open = null; setUrl(); draw(); toast(action === 'skip' ? '이 업무를 건너뛰었습니다.' : '완료 처리했습니다.'); }
       else { d = fresh(); draw(); toast(action === 'resume' ? '업무를 다시 시작합니다.' : '완료를 취소했습니다.'); }
     } catch (e) { err(e); }
@@ -361,8 +432,21 @@ export async function definitionPage(id) {
 
   /* ---------- bindings ---------- */
   const bindView = () => {
-    main.querySelectorAll('[data-open]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); openActivity(b.dataset.open); });
-    main.querySelectorAll('.pv__row').forEach((row) => { row.onclick = () => openActivity(row.dataset.row); row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openActivity(row.dataset.row); } }; });
+    main.querySelectorAll('[data-open]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); goTask(b.dataset.open, { withDrawer: true }); });
+    main.querySelectorAll('.pv__row').forEach((row) => { row.onclick = () => goTask(row.dataset.row); row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goTask(row.dataset.row); } }; });
+    main.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openActivity(b.dataset.edit));
+    // an empty block's "입력 →" on a task tab opens this tab's drawer at that field (no new screen)
+    main.querySelectorAll('.defsec a.chx__cta').forEach((a) => a.onclick = async (e) => {
+      const q = new URL(a.href).searchParams; const key = q.get('activity') || a.closest('[data-defsec]').dataset.defsec;
+      if (!tabKeys.includes(key)) return;
+      e.preventDefault(); e.stopPropagation(); await openActivity(key); if (open && open.key === key && q.get('field')) focusField(q.get('field'));
+    });
+    // leaving the tab with unsaved drawer input asks first (tabs, ← / 다음 업무 →)
+    main.querySelectorAll('.stabs a[data-link], [data-defnav]').forEach((a) => a.onclick = async (e) => {
+      if (!dirty) return;
+      e.preventDefault(); e.stopPropagation();
+      if (await discardOk()) { dirty = false; navigate(a.getAttribute('href')); }
+    });
     bindPlanMenu(main.querySelector('.pv') || main, p.id);
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { await reload(); draw(); } };
     for (const sel of ['#next-phase', '#next-phase2']) { const b = $(sel); if (b) b.onclick = move; }
@@ -372,6 +456,8 @@ export async function definitionPage(id) {
     $('#wd-close').onclick = closeDrawer;
     $('#wd-full').onclick = () => { open.full = !open.full; el.classList.toggle('wdrawer--full', open.full); $('#wd-full').textContent = open.full ? '⤡' : '⤢'; $('#wd-full').title = open.full ? '축소' : '확대'; };   // same DOM → typed values survive
     el.querySelectorAll('[data-wact]').forEach((b) => b.onclick = () => (b.dataset.wact === 'save' ? save() : act(b.dataset.wact)));
+    el.querySelectorAll('[data-wnext]').forEach((b) => b.onclick = () => openActivity(b.dataset.wnext));
+    el.querySelectorAll('[data-defnav]').forEach((a) => a.onclick = async (e) => { if (!dirty) return; e.preventDefault(); e.stopPropagation(); if (await discardOk()) { dirty = false; navigate(a.getAttribute('href')); } });
     el.oninput = () => markDirty(); el.onchange = () => markDirty();
     wireTraitFields(el);
     el.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => { collect(); d[b.dataset.add].push({ id: uid(), text: '' }); markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll(`[data-item="${b.dataset.add}"]`)].pop(); if (last) last.focus(); });

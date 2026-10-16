@@ -1,7 +1,7 @@
 /* Overview › Project Charter — read-only view of the project's reference information.
  *
  *   Source of truth   착수 › 프로젝트 정의 (+ 프로젝트 정보: 이름·설명·고객사·기간). Nothing here is editable; every gap has a CTA
- *                     that deep-links to the exact input (definition?activity=KEY&field=FIELD → drawer opens and focuses it).
+ *                     that deep-links to the exact input (definition/<tab>?activity=KEY&field=FIELD → drawer opens and focuses it).
  *   AI                GET …/charter returns the same object server/charter.js turns into the [PROJECT CHARTER] block of every
  *                     AI request, so "AI 활용" below describes what is really sent.
  *   Not here          execution status, KPI, Health (that is 프로젝트 현황). No percentage of elapsed time.
@@ -11,8 +11,11 @@ import { isPhone, pcLine } from '../core/device.js';
 import { $, html, raw, todayLocal, fmtDate } from '../core/dom.js';
 import { projectHead } from './guide.js';
 import { planMenu, bindPlanMenu } from './initiation.js';
+import { definitionHref } from '../shared/lifecycle.js';
 
 const SPARK = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg>';
+/** One name for this page everywhere (UI/UX P1-2): 프로젝트 개요. 사업수행계획서 is only the downloaded document's name. */
+export const CHARTER_PURPOSE = '목표·범위·일정을 한 장에서 봅니다. 사업수행계획서로 내려받을 수 있습니다.';
 const CAT_ORDER = ['CLIENT', 'OWN', 'PARTNER', 'OTHER'];
 const DAY = 86400000;
 const dnum = (s) => Date.parse(`${s}T00:00:00Z`);
@@ -24,64 +27,17 @@ const body = (text) => {
   return lines.length === 1 ? html`<p class="chx__p">${lines[0]}</p>` : html`<ul class="chx__ul">${raw(lines.map((l) => html`<li>${l}</li>`).join(''))}</ul>`;
 };
 
-export async function charterPage(id) {
-  const main = $('#main');
-  const [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/charter`))]);
-  const p = g.project; const c = r.charter; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
-  document.title = `프로젝트 개요 — ${p.name} — RELAI`;
-  const u = `/app/projects/${p.id}`;
-  const def = (activity, field) => `${u}/definition?activity=${activity}${field ? `&field=${field}` : ''}`;
-  const info = (field) => `${u}/edit?focus=${field}`;
-
+/** The read blocks of one Charter, shared by 프로젝트 개요 (below) and the 계획 › 프로젝트 정의 task tabs (definition.js sectionView).
+ * `def(activity, field)` = where an empty block's "입력 →" link goes; `ro` hides those links (phone / archived). */
+export function charterParts(c, { ro, def }) {
   /* ---------- building blocks ---------- */
   const cta = (href, label) => (ro ? '' : html`<a class="link chx__cta" href="${href}" data-link>${label}</a>`);
   /** Empty state: what is missing · why it helps · where to enter it. */
   const empty = (title, why, href, label) => html`<div class="chx__empty"><b>${title}</b><p>${why}</p>${raw(cta(href, label))}</div>`;
-  const aiNote = (text) => html`<p class="chx__ai"><span class="chx__aik">✦ AI 활용</span>${text}</p>`;
   const block = (label, text, emptyArgs) => html`<div class="chx__blk"><h3 class="chx__lbl">${label}</h3>${raw(text ? body(text) : empty(...emptyArgs))}</div>`;
-  const section = (no, key, title, ai, inner) => html`<section class="chx__sec" id="ch-${key}" aria-labelledby="ch-${key}-t">
-    <header class="chx__sh"><span class="chx__no mono">${no}</span><h2 id="ch-${key}-t">${title}</h2></header>
-    ${raw(aiNote(ai))}${raw(inner)}</section>`;
-
-  /* ---------- AI Project Context (always on top, compact) ---------- */
-  /** Every Charter item once: section · label · filled? · where to enter it. Drives the fill count, the outline and the "보완" list. */
-  const ITEMS = [
-    ['profile', '프로젝트 설명', c.profile.description, info('description')], ['profile', '프로젝트 유형', c.profile.project_type, def('PROFILE', 'project_type')],
-    ['goals', '프로젝트 목표', c.goals, def('GOALS', 'goal')], ['goals', '성공 기준', c.successCriteria, def('GOALS', 'success_criteria')],
-    ['scope', '수행 범위', c.scope.inScope, def('SCOPE', 'scope_in')], ['scope', '제외 범위', c.scope.outOfScope, def('SCOPE', 'scope_out')], ['scope', '주요 산출물', c.deliverables, def('SCOPE', 'deliverables')],
-    ['stakeholders', '관계자', c.stakeholders.length, def('STAKEHOLDERS')], ['stakeholders', '의사결정 / 승인 체계', c.governance, def('OPERATIONS', 'decisions')],
-    ['timeline', '주요 마일스톤', c.timeline.milestones.length, def('MILESTONES', 'key_dates')],
-    ['conditions', '가정사항', c.assumptions, def('SCOPE', 'assumptions')], ['conditions', '제약사항', c.constraints, def('SCOPE', 'constraints')], ['conditions', '초기 리스크', c.risks, def('SCOPE', 'initial_risks')],
-    ['operating', '커뮤니케이션', c.operatingModel.communication, def('OPERATIONS', 'meetings')], ['operating', '변경관리 방식', c.operatingModel.changeManagement, def('OPERATIONS', 'change_management')], ['operating', '검수 / 완료 기준', c.operatingModel.acceptance, def('OPERATIONS', 'acceptance')],
-  ].map(([sec, label, v, href]) => ({ sec, label, ok: Boolean(v), href }));
-  const nFilled = ITEMS.filter((x) => x.ok).length;
-  const hero = html`<section class="chai" aria-labelledby="chaiT">
-    <span class="chai__mark">${raw(SPARK)}</span>
-    <div class="chai__b">
-      <div class="chai__k" id="chaiT">RELAI AI 프로젝트 맥락</div>
-      <p class="chai__lead">RELAI AI는 프로젝트 개요를 기준으로 이 프로젝트를 이해합니다.</p>
-      <p class="chai__d">프로젝트의 목표, 범위, 성공 기준, 일정, 관계자와 수행 조건을 바탕으로 요구사항을 검토하고, WBS를 구성하며, 변경 영향을 분석하고 다음 작업을 제안합니다.</p>
-      <p class="chai__em">정보를 구체적으로 입력할수록 AI가 프로젝트 상황을 더 정확하게 판단할 수 있습니다.</p>
-    </div>
-    ${raw(ro ? '' : html`<div class="chai__side"><a class="btn btn--secondary btn--sm" href="${u}/definition" data-link>프로젝트 정의에서 정보 보완 →</a></div>`)}
-  </section>`;
-
-  /* ---------- 1. Project Profile ---------- */
-  const pf = c.profile;
   const kv = (k, v, fallback = null) => html`<div class="chx__kv"><dt>${k}</dt><dd>${raw(v ? html`${v}` : fallback || '<span class="chx__none">미입력</span>')}</dd></div>`;
-  const profile = section('1', 'profile', '기본 정보', '프로젝트의 배경, 유형, 수행 기간을 바탕으로 프로젝트 전체 맥락을 이해합니다.', html`
-    <h3 class="chx__name">${pf.name}</h3>
-    ${raw(pf.description ? html`<div class="chx__blk chx__blk--lead">${raw(body(pf.description))}</div>`
-      : empty('프로젝트 설명이 아직 작성되지 않았습니다.', '프로젝트의 배경과 목적을 구체적으로 작성하면 AI가 요구사항과 WBS를 더 정확하게 해석할 수 있습니다.', info('description'), '프로젝트 설명 입력 →'))}
-    <dl class="chx__kvs">
-      ${raw(kv('고객사', pf.client))}
-      ${raw(kv('수행사', pf.performer))}
-      ${raw(kv('시작일', pf.start_date ? fmtDate(pf.start_date) : ''))}
-      ${raw(kv('종료일', pf.end_date ? fmtDate(pf.end_date) : ''))}
-    </dl>
-    <div class="chx__blk"><h3 class="chx__lbl">프로젝트 기본 특성${raw(ro ? '' : html` <a class="link chx__cta chx__cta--in" href="${def('PROFILE')}" data-link>수정 →</a>`)}</h3>
-      <dl class="chx__kvs chx__kvs--traits">${raw((pf.traits || []).map((t) => html`<div class="chx__kv"><dt>${t.label}</dt><dd>${raw(t.value && t.value !== 'TBD' ? html`${t.value_label}`
-        : t.field === 'project_type' && pf.project_type ? html`${pf.project_type}` : html`<span class="chx__none">${t.value_label}</span>`)}</dd></div>`).join(''))}</dl></div>`);
+  /** A section = numbered header + AI note + inner; 프로젝트 개요 wraps it, a 프로젝트 정의 tab shows only `inner`. */
+  const section = (no, key, title, ai, inner) => ({ no, key, title, ai, inner });
 
   /* ---------- 2. Goals & Success Criteria ---------- */
   const goals = section('2', 'goals', '목표 · 성공 기준', '요구사항과 WBS가 프로젝트 목표 및 성공 기준에 기여하는지 판단합니다.', html`
@@ -101,9 +57,10 @@ export async function charterPage(id) {
   const shTable = sh.length ? html`<div class="chx__tblw"><table class="chx__tbl"><thead><tr><th>이름</th><th>소속</th><th>구분</th><th>역할</th><th>주요 책임</th></tr></thead><tbody>
       ${raw(sh.map((s) => html`<tr><td class="chx__nm">${s.name}</td><td>${[s.org, s.department].filter(Boolean).join(' · ') || '-'}</td><td><span class="chx__cat chx__cat--${s.category.toLowerCase()}">${s.category_label}</span></td><td>${s.role || '-'}</td><td>${s.responsibility || '-'}</td></tr>`).join(''))}</tbody></table></div>`
     : empty('관계자가 아직 등록되지 않았습니다.', '고객사·당사·협력사의 담당자와 역할을 등록하면 AI가 업무 담당자와 의사결정 상대를 이해할 수 있습니다.', def('STAKEHOLDERS'), '관계자 입력 →');
+  const governance = block('의사결정 / 승인 체계', c.governance, ['의사결정 / 승인 체계가 정의되지 않았습니다.', '범위·일정 변경을 누가 어떤 절차로 승인하는지 작성하면 AI가 변경 요청의 다음 절차를 정확하게 안내할 수 있습니다.', def('OPERATIONS', 'decisions'), '의사결정 체계 입력 →']);
   const stake = section('4', 'stakeholders', raw(html`관계자 및 의사결정 구조`), '프로젝트 참여자, 업무 담당자 및 의사결정 구조를 이해하는 데 활용합니다.', html`
     <div class="chx__blk"><h3 class="chx__lbl">관계자${raw(sh.length ? html` <small>${sh.length}명</small>` : '')}</h3>${raw(shTable)}</div>
-    ${raw(block('의사결정 / 승인 체계', c.governance, ['의사결정 / 승인 체계가 정의되지 않았습니다.', '범위·일정 변경을 누가 어떤 절차로 승인하는지 작성하면 AI가 변경 요청의 다음 절차를 정확하게 안내할 수 있습니다.', def('OPERATIONS', 'decisions'), '의사결정 체계 입력 →']))}`);
+    ${raw(governance)}`);
 
   /* ---------- 5. Timeline & Milestones ---------- */
   const tl = c.timeline; const today = todayLocal();
@@ -167,8 +124,68 @@ export async function charterPage(id) {
       : empty(k.datetime ? `착수보고회 예정 · ${fmtDT(k.datetime)}` : '착수보고회가 아직 열리지 않았습니다.', '착수보고회에서 목표·범위·일정을 고객과 함께 확인하고, 결과를 기록하면 여기에 표시됩니다.', def('KICKOFF'), '착수보고회 준비 →'))}</div>`;
   const gate = a || (k && !k.skipped) ? section('8', 'approval', raw(html`착수보고회 · 승인`), '승인된 목표·범위·일정을 기준으로 이후 변경 요청과 검수를 판단합니다.', html`${raw(kickInner)}${raw(approvalInner)}`) : '';
 
+  return { empty, block, kv, goals, scope, stake, shTable, governance, time, acr, ops, gate, kickInner, approvalInner };
+}
+
+export async function charterPage(id) {
+  const main = $('#main');
+  const [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/charter`))]);
+  const p = g.project; const c = r.charter; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
+  document.title = `프로젝트 개요 — ${p.name} — RELAI`;
+  const u = `/app/projects/${p.id}`;
+  const def = (activity, field) => definitionHref(p.id, activity, field);
+  const info = (field) => `${u}/edit?focus=${field}`;
+
+  const parts = charterParts(c, { ro, def });
+  const { empty, kv } = parts;
+  const aiNote = (text) => html`<p class="chx__ai"><span class="chx__aik">✦ AI 활용</span>${text}</p>`;
+  const section = (no, key, title, ai, inner) => html`<section class="chx__sec" id="ch-${key}" aria-labelledby="ch-${key}-t">
+    <header class="chx__sh"><span class="chx__no mono">${no}</span><h2 id="ch-${key}-t">${title}</h2></header>
+    ${raw(aiNote(ai))}${raw(inner)}</section>`;
+  const S = (x) => (x ? section(x.no, x.key, x.title, x.ai, x.inner) : '');
+  const tl = c.timeline; const today = todayLocal(); const a = c.approval;
+
+  /* ---------- AI Project Context (always on top, compact) ---------- */
+  /** Every Charter item once: section · label · filled? · where to enter it. Drives the fill count, the outline and the "보완" list. */
+  const ITEMS = [
+    ['profile', '프로젝트 설명', c.profile.description, info('description')], ['profile', '프로젝트 유형', c.profile.project_type, def('PROFILE', 'project_type')],
+    ['goals', '프로젝트 목표', c.goals, def('GOALS', 'goal')], ['goals', '성공 기준', c.successCriteria, def('GOALS', 'success_criteria')],
+    ['scope', '수행 범위', c.scope.inScope, def('SCOPE', 'scope_in')], ['scope', '제외 범위', c.scope.outOfScope, def('SCOPE', 'scope_out')], ['scope', '주요 산출물', c.deliverables, def('SCOPE', 'deliverables')],
+    ['stakeholders', '관계자', c.stakeholders.length, def('STAKEHOLDERS')], ['stakeholders', '의사결정 / 승인 체계', c.governance, def('OPERATIONS', 'decisions')],
+    ['timeline', '주요 마일스톤', c.timeline.milestones.length, def('MILESTONES', 'key_dates')],
+    ['conditions', '가정사항', c.assumptions, def('SCOPE', 'assumptions')], ['conditions', '제약사항', c.constraints, def('SCOPE', 'constraints')], ['conditions', '초기 리스크', c.risks, def('SCOPE', 'initial_risks')],
+    ['operating', '커뮤니케이션', c.operatingModel.communication, def('OPERATIONS', 'meetings')], ['operating', '변경관리 방식', c.operatingModel.changeManagement, def('OPERATIONS', 'change_management')], ['operating', '검수 / 완료 기준', c.operatingModel.acceptance, def('OPERATIONS', 'acceptance')],
+  ].map(([sec, label, v, href]) => ({ sec, label, ok: Boolean(v), href }));
+  const nFilled = ITEMS.filter((x) => x.ok).length;
+  const hero = html`<section class="chai" aria-labelledby="chaiT">
+    <span class="chai__mark">${raw(SPARK)}</span>
+    <div class="chai__b">
+      <div class="chai__k" id="chaiT">RELAI AI 프로젝트 맥락</div>
+      <p class="chai__lead">RELAI AI는 프로젝트 개요를 기준으로 이 프로젝트를 이해합니다.</p>
+      <p class="chai__d">프로젝트의 목표, 범위, 성공 기준, 일정, 관계자와 수행 조건을 바탕으로 요구사항을 검토하고, WBS를 구성하며, 변경 영향을 분석하고 다음 작업을 제안합니다.</p>
+      <p class="chai__em">정보를 구체적으로 입력할수록 AI가 프로젝트 상황을 더 정확하게 판단할 수 있습니다.</p>
+    </div>
+    ${raw(ro ? '' : html`<div class="chai__side"><a class="btn btn--secondary btn--sm" href="${u}/definition" data-link>프로젝트 정의에서 정보 보완 →</a></div>`)}
+  </section>`;
+
+  /* ---------- 1. Project Profile ---------- */
+  const pf = c.profile;
+  const profile = section('1', 'profile', '기본 정보', '프로젝트의 배경, 유형, 수행 기간을 바탕으로 프로젝트 전체 맥락을 이해합니다.', html`
+    <h3 class="chx__name">${pf.name}</h3>
+    ${raw(pf.description ? html`<div class="chx__blk chx__blk--lead">${raw(body(pf.description))}</div>`
+      : empty('프로젝트 설명이 아직 작성되지 않았습니다.', '프로젝트의 배경과 목적을 구체적으로 작성하면 AI가 요구사항과 WBS를 더 정확하게 해석할 수 있습니다.', info('description'), '프로젝트 설명 입력 →'))}
+    <dl class="chx__kvs">
+      ${raw(kv('고객사', pf.client))}
+      ${raw(kv('수행사', pf.performer))}
+      ${raw(kv('시작일', pf.start_date ? fmtDate(pf.start_date) : ''))}
+      ${raw(kv('종료일', pf.end_date ? fmtDate(pf.end_date) : ''))}
+    </dl>
+    <div class="chx__blk"><h3 class="chx__lbl">프로젝트 기본 특성${raw(ro ? '' : html` <a class="link chx__cta chx__cta--in" href="${def('PROFILE')}" data-link>수정 →</a>`)}</h3>
+      <dl class="chx__kvs chx__kvs--traits">${raw((pf.traits || []).map((t) => html`<div class="chx__kv"><dt>${t.label}</dt><dd>${raw(t.value && t.value !== 'TBD' ? html`${t.value_label}`
+        : t.field === 'project_type' && pf.project_type ? html`${pf.project_type}` : html`<span class="chx__none">${t.value_label}</span>`)}</dd></div>`).join(''))}</dl></div>`);
+
   /* ---------- right rail: outline (scroll-spy) · next milestone · what to complete · fill status ---------- */
-  const SECTIONS = [['profile', '기본 정보'], ['goals', '목표 · 성공 기준'], ['scope', '범위 · 산출물'], ['stakeholders', '관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(gate ? [['approval', '착수보고회 · 승인']] : [])];
+  const SECTIONS = [['profile', '기본 정보'], ['goals', '목표 · 성공 기준'], ['scope', '범위 · 산출물'], ['stakeholders', '관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(parts.gate ? [['approval', '착수보고회 · 승인']] : [])];
   const missing = ITEMS.filter((x) => !x.ok);
   const nextMs = tl.milestones.find((m) => m.date && m.date >= today);
   const dday = nextMs ? Math.round((dnum(nextMs.date) - dnum(today)) / DAY) : null;
@@ -191,12 +208,12 @@ export async function charterPage(id) {
   </aside>`;
 
   main.innerHTML = html`<div class="page page--wide page--flow chp">
-    ${raw(projectHead(p, g, { tab: 'overview-charter', title: isPhone() ? '프로젝트 개요' : '사업수행계획서' }))}
+    ${raw(projectHead(p, g, { tab: 'overview-charter', title: '프로젝트 개요' }))}
     <div class="chl"><div class="chx">
-      <div class="chx__head"><div class="chx__ht"><h1>프로젝트 개요</h1><p>프로젝트의 목표와 범위, 일정 및 수행 기준을 한 곳에서 확인합니다.</p></div>${raw(planMenu())}</div>
+      <div class="chx__head"><div class="chx__ht"><h1>프로젝트 개요</h1><p>${CHARTER_PURPOSE}</p></div>${raw(planMenu())}</div>
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 개요는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(hero)}
-      ${raw(profile)}${raw(goals)}${raw(scope)}${raw(stake)}${raw(time)}${raw(acr)}${raw(ops)}${raw(gate)}
+      ${raw(profile)}${raw(S(parts.goals))}${raw(S(parts.scope))}${raw(S(parts.stake))}${raw(S(parts.time))}${raw(S(parts.acr))}${raw(S(parts.ops))}${raw(S(parts.gate))}
       <p class="chx__src">이 화면은 조회 전용입니다. 모든 내용은 <a class="link" href="${u}/definition" data-link>01 착수 › 프로젝트 정의</a>${raw(ro ? '' : html`와 <a class="link" href="${u}/edit" data-link>프로젝트 정보</a>`)}에서 관리됩니다.</p>
     </div>${raw(rail)}</div>
   </div>`;

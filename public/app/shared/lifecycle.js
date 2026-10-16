@@ -24,6 +24,20 @@ const q = (qs, k, v) => (v === undefined ? qs.has(k) : qs.get(k) === v);
 /** 분류·우선순위 tab: `?view=classify` (all requirements, Jim B3) or the 미지정 filter that 지금 할 일 links to. */
 export const isClassify = (qs) => q(qs, 'view', 'classify') || qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED';
 const isPath = (path, pid, suffix) => path === P(pid, suffix) || path === `${P(pid, suffix)}/`;
+/** 계획 › 프로젝트 정의: one tab (= one address) per 01 착수 task (UI/UX P1-1). 목표 and 범위 share the `goals` tab; the profile
+ * (프로젝트 기본 특성) lives on the 개요 tab. Old links (`/definition?activity=KEY&field=F`, still sent by the server) are rewritten by
+ * definition.js to `definitionHref(pid, KEY, F)`. */
+export const DEFINITION_SLUG = { GOALS: 'goals', SCOPE: 'goals', STAKEHOLDERS: 'stakeholders', MILESTONES: 'milestones', OPERATIONS: 'operations', KICKOFF: 'kickoff', APPROVAL: 'approval' };
+/** Tab order (개요 = ''); each slug's tasks in the order they are worked. */
+export const DEFINITION_TABS = [['', []], ['goals', ['GOALS', 'SCOPE']], ['stakeholders', ['STAKEHOLDERS']], ['milestones', ['MILESTONES']], ['operations', ['OPERATIONS']], ['kickoff', ['KICKOFF']], ['approval', ['APPROVAL']]];
+/** Address of a task's tab; `activity` in the query = the task whose work panel is open (two tasks share the goals tab). */
+export const definitionHref = (pid, key = null, field = null) => {
+  const slug = key && DEFINITION_SLUG[key];
+  const qs = new URLSearchParams();
+  if (key && (key === 'PROFILE' || key === 'SCOPE' || field)) qs.set('activity', key);
+  if (field) qs.set('field', field);
+  return `${P(pid, `/definition${slug ? `/${slug}` : ''}`)}${qs.toString() ? `?${qs}` : ''}`;
+};
 /** 06/07 activity without its own work screen → its checklist (public/app/project/checklist.js). */
 const CL = (pid, key, label, activity) => ({ key, label, href: P(pid, `/checklist?activity=${activity}`), match: (path, qs) => isPath(path, pid, '/checklist') && q(qs, 'activity', activity) });
 
@@ -43,12 +57,13 @@ export const HOME_ITEMS = (pid) => [
 /** Work screens per lifecycle phase. `enabled:false` = defined in the IA, no screen yet → not rendered. */
 export const PHASE_ITEMS = {
   INITIATION: (pid) => [
-    { key: 'definition', label: '프로젝트 정의', href: P(pid, '/definition'), match: (path, qs) => isPath(path, pid, '/definition') && !['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL'].includes(qs.get('activity')) },
-    { key: 'stakeholders', label: '관계자 / 조직', href: P(pid, '/definition?activity=STAKEHOLDERS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'STAKEHOLDERS') },
-    { key: 'milestones', label: '상위 일정 / 마일스톤', href: P(pid, '/definition?activity=MILESTONES'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'MILESTONES') },
-    { key: 'operations', label: '프로젝트 운영 방식', href: P(pid, '/definition?activity=OPERATIONS'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'OPERATIONS') },
-    { key: 'kickoff', label: '착수보고회', href: P(pid, '/definition?activity=KICKOFF'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'KICKOFF') },
-    { key: 'approval', label: '착수 결과 승인', href: P(pid, '/definition?activity=APPROVAL'), match: (path, qs) => isPath(path, pid, '/definition') && q(qs, 'activity', 'APPROVAL') },
+    { key: 'definition', label: '프로젝트 정의', href: P(pid, '/definition'), match: (path) => isPath(path, pid, '/definition') },
+    { key: 'goals-scope', label: '목표 · 범위', href: definitionHref(pid, 'GOALS'), match: (path) => isPath(path, pid, '/definition/goals') },
+    { key: 'stakeholders', label: '관계자 / 조직', href: definitionHref(pid, 'STAKEHOLDERS'), match: (path) => isPath(path, pid, '/definition/stakeholders') },
+    { key: 'milestones', label: '상위 일정 / 마일스톤', href: definitionHref(pid, 'MILESTONES'), match: (path) => isPath(path, pid, '/definition/milestones') },
+    { key: 'operations', label: '프로젝트 운영 방식', href: definitionHref(pid, 'OPERATIONS'), match: (path) => isPath(path, pid, '/definition/operations') },
+    { key: 'kickoff', label: '착수보고회', href: definitionHref(pid, 'KICKOFF'), match: (path) => isPath(path, pid, '/definition/kickoff') },
+    { key: 'approval', label: '착수 결과 승인', href: definitionHref(pid, 'APPROVAL'), match: (path) => isPath(path, pid, '/definition/approval') },
   ],
   REQUIREMENTS: (pid) => [
     { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') && !isClassify(qs) },
@@ -109,12 +124,13 @@ const T = (key, label, href, purpose, phase = null) => ({ key, label, href, purp
 export const DOORS = (pid) => [
   { key: 'next', label: '지금 할 일', href: P(pid), purpose: '현재 단계에서 할 업무와 다음 단계를 안내합니다.', tabs: [] },
   { key: 'plan', label: '계획', href: P(pid, '/definition'), tabs: [
-    T('definition', '프로젝트 정의', P(pid, '/definition'), '프로젝트의 목표·범위·기간을 정해 출발 기준을 맞춥니다.', 'INITIATION'),
-    T('stakeholders', '관계자', P(pid, '/definition?activity=STAKEHOLDERS'), '고객사와 수행사의 역할과 담당자를 정리합니다.', 'INITIATION'),
-    T('milestones', '상위 일정', P(pid, '/definition?activity=MILESTONES'), '오픈일 같은 주요 일정과 마일스톤을 정합니다.', 'INITIATION'),
-    T('operations', '운영 방식', P(pid, '/definition?activity=OPERATIONS'), '보고 주기·회의·의사결정 방식을 정합니다.', 'INITIATION'),
-    T('kickoff', '착수보고회', P(pid, '/definition?activity=KICKOFF'), '착수보고회 일정과 결과를 기록합니다.', 'INITIATION'),
-    T('approval', '착수 승인', P(pid, '/definition?activity=APPROVAL'), '착수 결과에 대한 고객 승인을 기록합니다.', 'INITIATION'),
+    T('definition', '개요', P(pid, '/definition'), '프로젝트의 목표·범위·기간을 정해 출발 기준을 맞춥니다.', 'INITIATION'),
+    T('goals-scope', '목표·범위', definitionHref(pid, 'GOALS'), '프로젝트 목표와 성공 기준, 하는 일과 하지 않는 일을 정합니다.', 'INITIATION'),
+    T('stakeholders', '관계자', definitionHref(pid, 'STAKEHOLDERS'), '고객사와 수행사의 역할과 담당자를 정리합니다.', 'INITIATION'),
+    T('milestones', '상위 일정', definitionHref(pid, 'MILESTONES'), '오픈일 같은 주요 일정과 마일스톤을 정합니다.', 'INITIATION'),
+    T('operations', '운영 방식', definitionHref(pid, 'OPERATIONS'), '보고 주기·회의·의사결정 방식을 정합니다.', 'INITIATION'),
+    T('kickoff', '착수보고회', definitionHref(pid, 'KICKOFF'), '착수보고회 일정과 결과를 기록합니다.', 'INITIATION'),
+    T('approval', '착수 승인', definitionHref(pid, 'APPROVAL'), '착수 결과에 대한 고객 승인을 기록합니다.', 'INITIATION'),
   ] },
   { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), tabs: [
     T('requirements', '목록', P(pid, '/requirements'), '고객이 원하는 기능과 조건을 모으고 확정합니다.', 'REQUIREMENTS'),
@@ -152,7 +168,10 @@ export function doorOf(pid, path, qs, hint = null) {
   const sub = path.slice(P(pid).length).replace(/\/$/, '');
   const pick = (door, tab = null) => ({ door, tab });
   if (sub === '' || sub === '/checklist' || sub.startsWith('/phases')) return pick('next');
-  if (sub === '/definition') { const a = qs.get('activity'); const m = { STAKEHOLDERS: 'stakeholders', MILESTONES: 'milestones', OPERATIONS: 'operations', KICKOFF: 'kickoff', APPROVAL: 'approval' }; return pick('plan', m[a] || 'definition'); }
+  if (sub === '/definition' || sub.startsWith('/definition/')) {   // the tab is the path's slug (old ?activity= links are rewritten by definition.js)
+    const slug = sub.slice('/definition/'.length) || (DEFINITION_SLUG[qs.get('activity')] || '');
+    return pick('plan', slug === 'goals' ? 'goals-scope' : DEFINITION_TABS.some(([s]) => s && s === slug) ? slug : 'definition');
+  }
   if (sub === '/requirements') {
     if (q(qs, 'view', 'trace')) return q(qs, 'scope', 'IN_SCOPE') ? pick('schedule', 'wbs-trace') : pick('requirements', 'req-trace');
     return isClassify(qs) ? pick('requirements', 'req-classify') : pick('requirements', 'requirements');

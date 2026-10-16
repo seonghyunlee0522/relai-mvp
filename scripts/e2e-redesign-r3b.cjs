@@ -112,7 +112,7 @@ const ALLOW = ['RELAI', 'PDF', 'Word', 'Excel', 'Jira', 'AI', 'WBS', 'Ctrl', 'En
 
   /* ---------- 4. no English UI words on Home, 지금 할 일, all 7 doors and 설정 ---------- */
   if (run('lint')) {
-    const pages = ['/app', U, `${U}/definition`, ...['STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL'].map((a) => `${U}/definition?activity=${a}`),
+    const pages = ['/app', U, `${U}/definition`, ...['goals', 'stakeholders', 'milestones', 'operations', 'kickoff', 'approval'].map((a) => `${U}/definition/${a}`),
       `${U}/requirements`, `${U}/requirements?type=UNSPECIFIED`, `${U}/requirements?view=trace`, `${U}/wbs`, `${U}/wbs?view=gantt`, `${U}/wbs?phase=DEVELOPMENT`,
       `${U}/tests?tab=coverage`, `${U}/tests`, `${U}/tests?last_result=FAIL`, `${U}/tests?tab=acceptance`, `${U}/issues`, `${U}/issues?tab=risks`, `${U}/changes`,
       `${U}/reports`, `${U}/charter`, `${U}/overview`, UE, `${UE}/requirements`, `${UE}/wbs`, `${UE}/tests`, `${UE}/issues`, `${UE}/changes`, `${UE}/reports`,
@@ -134,7 +134,7 @@ const ALLOW = ['RELAI', 'PDF', 'Word', 'Excel', 'Jira', 'AI', 'WBS', 'Ctrl', 'En
   if (run('terms')) {
     // fb-app: the founder removed 용어 설명 — no "?" tooltip on any page; the plain words (WBS · 마일스톤 …) stay
     const left = {};
-    for (const u of [U, `${U}/requirements`, `${U}/requirements?sel=${R[1].id}`, `${U}/wbs`, `${U}/wbs?view=gantt`, `${U}/definition?activity=MILESTONES`, `${U}/reports`, `${U}/changes?sel=${C[0].id}`]) {
+    for (const u of [U, `${U}/requirements`, `${U}/requirements?sel=${R[1].id}`, `${U}/wbs`, `${U}/wbs?view=gantt`, `${U}/definition/milestones`, `${U}/reports`, `${U}/changes?sel=${C[0].id}`]) {
       await page.goto(`${BASE}${u}`); await settle(); await page.waitForTimeout(300);
       const n = await page.$$eval('.term', (els) => els.length);
       if (n) left[u.replace(P.id, 'P')] = n;

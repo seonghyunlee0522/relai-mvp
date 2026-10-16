@@ -122,12 +122,14 @@ export function pageInfo(p, g, { tab = null, title = '', badges = null } = {}) {
   const d = DOORS(p.id).find((x) => x.key === door); const t = d.tabs.find((x) => x.key === tkey) || null;
   const curKey = g.current_phase ? g.current_phase.phase_key : null;
   const info = { door: d, tab: t, title: t ? t.label : d.label, purpose: t ? t.purpose : d.purpose, phase: t ? t.phase || curKey : null, crumb: null, badges: badges || {} };
-  const TITLES = { requirements: '요구사항', 'req-classify': '요구사항 분류·우선순위', 'req-trace': '요구사항 추적', wbs: '일정 (WBS)', gantt: '간트 차트', 'wbs-trace': '요구사항–작업 연결', 'test-plan': '테스트 연결률', acceptance: '검수 / 인수 승인', docs: title || '공식 문서', health: '프로젝트 건강도' };
+  const TITLES = { definition: '프로젝트 정의', requirements: '요구사항', 'req-classify': '요구사항 분류·우선순위', 'req-trace': '요구사항 추적', wbs: '일정 (WBS)', gantt: '간트 차트', 'wbs-trace': '요구사항–작업 연결', 'test-plan': '테스트 연결률', acceptance: '검수 / 인수 승인', docs: title || '공식 문서', health: '프로젝트 건강도' };
   if (t && TITLES[t.key]) info.title = TITLES[t.key];
   if (/\/checklist\/?$/.test(path)) {
     const a = checklistActivity(p.id, qs); const ph = a && (g.phases || []).find((x) => x.phase_key === a.phase);
     info.title = a ? a.label : title || '체크리스트'; info.purpose = '이 업무의 체크리스트를 확인하고 완료 처리합니다.'; info.phase = a ? a.phase : curKey;
     info.crumb = [{ label: '지금 할 일', href: `/app/projects/${p.id}` }, ...(ph ? [{ label: `${no2(ph.sequence)} ${ph.name}`, href: `/app/projects/${p.id}?phase=${ph.phase_key}` }] : [])];
+  } else if (/\/charter\/?$/.test(path)) {
+    info.purpose = '목표·범위·일정을 한 장에서 봅니다. 사업수행계획서로 내려받을 수 있습니다.';   // = charter.js CHARTER_PURPOSE (P1-2)
   } else if (/\/reports\/[\w-]+\/?$/.test(path)) {
     info.title = title || '보고서'; info.purpose = '보고서 내용을 확인하고 편집·확정한 뒤 내려받습니다.';
   }
@@ -141,10 +143,13 @@ const sectionTabs = (info) => {
     ? html`<button type="button" class="stabs__i" data-stab-action="${t.action}">${t.label}</button>`
     : html`<a class="stabs__i ${info.tab && info.tab.key === t.key ? 'is-active' : ''}" href="${t.href}" data-link data-stab="${t.key}" ${raw(info.tab && info.tab.key === t.key ? 'aria-current="page"' : '')}>${t.label}${raw(info.badges[t.key] || '')}</a>`)).join(''))}</nav>`;
 };
-/** Phase chip next to the title — links to that phase's list on 지금 할 일. */
+/** Phase chip next to the title — links to that phase's list on 지금 할 일. The current phase = blue chip with its name; any other
+ * phase = grey chip '03 분석·설계 업무', so it never reads as "the project is in 03" (UI/UX P1-4). */
 const phaseChip = (p, g, key) => {
   const ph = key && (g.phases || []).find((x) => x.phase_key === key); if (!ph) return '';
-  return html`<a class="pchip" href="/app/projects/${p.id}${ph.is_current ? '' : `?phase=${ph.phase_key}`}" data-link data-phase-chip="${ph.phase_key}" title="${ph.is_current ? '현재 단계' : '이 화면이 속한 단계'} · 지금 할 일에서 보기">${no2(ph.sequence)} ${ph.name}</a>`;
+  if (ph.is_current) return html`<a class="pchip" href="/app/projects/${p.id}" data-link data-phase-chip="${ph.phase_key}" title="현재 단계 · 지금 할 일에서 보기">${no2(ph.sequence)} ${ph.name}</a>`;
+  const cur = g.current_phase;
+  return html`<a class="pchip pchip--other" href="/app/projects/${p.id}?phase=${ph.phase_key}" data-link data-phase-chip="${ph.phase_key}" title="이 화면이 속한 단계${cur ? ` (현재 단계: ${no2(cur.sequence)} ${cur.name})` : ''}">${no2(ph.sequence)} ${ph.name} 업무</a>`;
 };
 /** The desktop page header. `actions` = the ⋯ menu group (project actions) + optional secondaries, already rendered. */
 export function pageHeader(p, g, info, actions) {

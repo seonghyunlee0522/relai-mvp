@@ -1869,6 +1869,9 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .obcl__list li a{color:var(--blue-deep);font-weight:600}
 .obcl__hint{font-size:var(--fs-sm);color:var(--text-3);margin:10px 0 0}
 .obcl--compact{padding:12px 16px;margin-bottom:14px}.obcl--compact .obcl__h{margin-bottom:6px}
+.obcl__row{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap}.obcl__row>.obcl__list{flex:1 1 auto}
+.obcl__smp{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:var(--fs-sm);color:var(--text-2)}.obcl__smp .btn{flex:none}   /* Home: sample line inside 시작하기 (P1-3) */
+.hsum__smp{color:var(--text-2)}.hsum__smp .btn{margin-left:10px;vertical-align:middle}
 /* hero (project-0 home) */
 .hero{background:#fff;border:1px solid var(--border);border-radius:var(--r-xl);padding:36px 32px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:center;margin-bottom:18px}
 .hero__t h2{font-size:var(--fs-2xl);margin-bottom:10px}.hero__t p{color:var(--text-2);line-height:1.65;margin-bottom:20px;max-width:46ch}
@@ -2147,6 +2150,15 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .xlm .imp__tbl{max-height:46vh;overflow:auto;margin:8px 0 12px}.xlm__tbl table{font-size:var(--fs-sm)}.xlm__tbl tr.is-err td{background:var(--danger-bg)}.xlm__err{color:var(--danger-fg);font-size:var(--fs-xs)}
 .xlm .drop{border:1px dashed var(--border);border-radius:var(--r-lg);padding:28px 16px;text-align:center;cursor:pointer;color:var(--text-2);font-size:var(--fs-sm);margin:8px 0 14px}.xlm .drop.is-over{border-color:var(--blue);background:var(--bg-tint)}
 .defp.has-wd{padding-right:0}
+/* 프로젝트 정의 task tabs (UI/UX P1-1): one card per task — title · state · [수정], then what has been entered (프로젝트 개요 blocks) */
+.defsec{background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 18px 16px;margin-bottom:var(--gap-block,16px)}
+.defsec__h{display:flex;align-items:center;gap:10px}.defsec__h h2{font-size:var(--fs-lg);margin:0;font-weight:700}
+.defsec__st{display:inline-flex;align-items:center;gap:5px;font-size:var(--fs-xs);color:var(--text-3);font-weight:600}
+.defsec__d{margin:4px 0 0;font-size:var(--fs-sm);color:var(--text-3)}
+.defsec__b>.chx__blk:first-child{margin-top:12px}.defsec__skip{margin:12px 0 0;color:var(--text-2);font-size:var(--fs-sm)}
+.defsec__pg{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px}
+.pv__charter{margin:10px 0 8px;font-size:var(--fs-sm);color:var(--text-3)}
+.wd__next{display:flex;justify-content:flex-end;padding:0 18px 10px;background:#fff}.wd__next .linkbtn{width:auto}
 /* ---------- Workspace Home: project status cards (home.js) — ERP density, 2 columns on desktop ---------- */
 .hgrid__sec{margin-top:4px}
 .hgrid__h{display:flex;align-items:baseline;gap:14px;margin:0 0 10px}.hgrid__h h2{font-size:var(--fs-md);color:var(--navy);margin:0}
@@ -3061,6 +3073,7 @@ html:not(.is-phone) .main,html:not(.is-phone) .appfoot{background:var(--bg-page)
 .phead__title{font-size:var(--fs-xl);font-weight:800;color:var(--navy);letter-spacing:-.02em;line-height:1.3}
 .pchip{font-size:var(--fs-xs);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);border-radius:var(--r);padding:2px 8px;white-space:nowrap}
 .pchip:hover{background:var(--bg-tint)}
+.pchip--other{color:var(--text-2);background:var(--border-soft)}.pchip--other:hover{background:var(--border)}   /* a phase that is not the current one (P1-4) */
 .phead__purpose{margin-top:3px;color:var(--text-2);font-size:var(--fs-md)}
 .phead__r{display:flex;align-items:center;gap:8px;flex:none}
 .phead__act{display:inline-flex}
@@ -3077,7 +3090,7 @@ html:not(.is-phone) .seg:has(>[data-view="gantt"]),html:not(.is-phone) .seg:has(
 /* counts / tags the hidden 시험 toggle used to carry now ride on the section tabs */
 .stabs__n{margin-left:6px;padding:0 6px;border-radius:999px;background:var(--border-soft);color:var(--text-2);font-size:var(--fs-xs);font-style:normal;font-weight:600;line-height:18px}
 .stabs__i.is-active .stabs__n{background:var(--blue-soft);color:var(--blue-deep)}
-/* 공식 문서 (사업수행계획서): the page header carries the title — the body's own 프로젝트 헌장 heading stays on the phone only */
+/* 공식 문서 (사업수행계획서): the page header carries the title — the body's own 프로젝트 개요 heading stays on the phone only */
 html:not(.is-phone) .chx__head>.chx__ht{display:none}
 html:not(.is-phone) .chx__head{justify-content:flex-end}
 /* wide layout (desktop ≥ 768px; the prototype bhsn-client fills the width beside the rail): work pages (home, 프로젝트, reports…)

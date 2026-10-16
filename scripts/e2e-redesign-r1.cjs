@@ -136,10 +136,10 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.goto(`${BASE}${U}/edit`); await page.waitForSelector('#f', { timeout: 8000 }).catch(() => {}); await page.waitForTimeout(250);
   const ed = await frame();
   check('Q22-3 /edit shows the project rail with the 계획 door', ed.rail.length === 7 && ed.active.join() === 'plan', JSON.stringify(ed));
-  // ---- Jim L1: 보고서 › 공식 문서 says 사업수행계획서 once (the body's 프로젝트 헌장 heading stays on the phone)
+  // ---- Jim L1 → UI/UX P1-2: 보고서 › 공식 문서 says 프로젝트 개요 once (the body's own heading stays on the phone)
   await page.goto(`${BASE}${U}/charter`); await settle();
   const doc = await page.evaluate(() => ({ title: document.querySelector('.phead__title').textContent.trim(), h: [...document.querySelectorAll('#main h1')].filter((e) => e.getClientRects().length).map((e) => e.textContent.trim()) }));
-  check('L1 공식 문서 title = 사업수행계획서, shown once (no 프로젝트 개요 heading on desktop)', doc.title === '사업수행계획서' && doc.h.length === 1, JSON.stringify(doc));
+  check('L1 공식 문서 title = 프로젝트 개요, shown once on desktop', doc.title === '프로젝트 개요' && doc.h.length === 1, JSON.stringify(doc));
 
   await page.click('[data-stab-action="activity"]'); await page.waitForSelector('.actpanel', { timeout: 4000 }).catch(() => {});
   check('보고서 › 활동 기록 tab opens the activity panel', Boolean(await page.$('.actpanel')));

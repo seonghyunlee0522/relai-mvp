@@ -89,7 +89,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.screenshot({ path: `${SHOTS}/01-whats-next-kickoff.png` });
 
   // 3. kickoff screen (prefilled from milestone)
-  await page.goto(`${BASE}/app/projects/${p.id}/definition?activity=KICKOFF`); await page.waitForSelector('#wdrawer [data-kf="datetime"]');
+  await page.goto(`${BASE}/app/projects/${p.id}/definition/kickoff?activity=KICKOFF`); await page.waitForSelector('#wdrawer [data-kf="datetime"]');
   const dtv = await page.inputValue('[data-kf="datetime"]');
   check('kickoff date prefilled from 착수보고회 milestone', dtv.startsWith('2026-10-08'), dtv);
   await page.check('[data-katt="s1"]'); await page.check('[data-katt="s2"]'); await page.check('[data-katt="s3"]');
@@ -100,16 +100,17 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.click('[data-kladd="decisions"]'); await page.fill('[data-kl="decisions"] li:last-child [data-klf="text"]', '주간 정례회의 매주 월 10시 확정');
   await page.click('[data-kladd="followups"]'); await page.fill('[data-kl="followups"] li:last-child .kl__text', '회의록 송부'); await page.fill('[data-kl="followups"] li:last-child .kl__owner', '김피엠');
   await page.click('[data-wact="complete"]'); await page.waitForTimeout(800);
+  await page.goto(`${BASE}/app/projects/${p.id}/definition`); await page.waitForSelector('[data-row="KICKOFF"]');   // the row list lives on the 개요 tab (UI/UX P1-1)
   const krow = await page.textContent('[data-row="KICKOFF"]');
   check('kickoff completed with 후속 조치 1건 남음', /완료/.test(krow) && /후속 조치 1건 남음/.test(krow), krow.replace(/\s+/g, ' ').slice(0, 120));
 
   // 4. success-criteria hint + stakeholder 주요 책임 + milestone after-end warning
-  await page.goto(`${BASE}/app/projects/${p.id}/definition?activity=GOALS`); await page.waitForSelector('[data-schint]');
+  await page.goto(`${BASE}/app/projects/${p.id}/definition/goals?activity=GOALS`); await page.waitForSelector('[data-schint]');
   const hints = await page.$$eval('[data-schint]', (els) => els.map((e) => e.textContent.trim()));
   check('success-criteria hint only on 사용자 만족도 향상', Boolean(hints[0]) && !hints[1], JSON.stringify(hints));
-  await page.goto(`${BASE}/app/projects/${p.id}/definition?activity=STAKEHOLDERS`); await page.waitForSelector('[data-shf="area"]');
+  await page.goto(`${BASE}/app/projects/${p.id}/definition/stakeholders?activity=STAKEHOLDERS`); await page.waitForSelector('[data-shf="area"]');
   check('stakeholders 주요 책임 column', (await page.inputValue('tr[data-sh="s1"] [data-shf="area"]')) === '요구사항 최종 승인');
-  await page.goto(`${BASE}/app/projects/${p.id}/definition?activity=MILESTONES`); await page.waitForSelector('[data-kd]');
+  await page.goto(`${BASE}/app/projects/${p.id}/definition/milestones?activity=MILESTONES`); await page.waitForSelector('[data-kd]');
   const warn = await page.$$eval('[data-kdwarn]', (els) => els.map((e) => e.textContent));
   check('milestone after end-date warning', warn.length === 1 && /종료일\(02\/28\) 이후입니다/.test(warn[0]), JSON.stringify(warn));
   await page.screenshot({ path: `${SHOTS}/03-milestone-warning.png` });
@@ -135,8 +136,8 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.click('[data-v="cancel"]');
   // path B: the guide/Home "단계 시작" link (…?move=next → moveToPhase on load)
   await gatePath('?move=next (Guide / Home 단계 시작 링크)', async () => { await page.goto(`${BASE}/app/projects/${p.id}?move=next`); });
-  await page.click('[data-v="record"]'); await page.waitForURL(/activity=APPROVAL/, { timeout: 5000 }).catch(() => {});
-  check('승인 기록하러 가기 → APPROVAL work screen', /definition\?activity=APPROVAL/.test(page.url()), page.url());
+  await page.click('[data-v="record"]'); await page.waitForURL(/definition\/approval/, { timeout: 5000 }).catch(() => {});
+  check('승인 기록하러 가기 → APPROVAL work screen', /definition\/approval/.test(page.url()), page.url());
   // only these 2 paths leave 01: the 02 list has no "이 단계를 현재 단계로 변경" link
   await page.goto(`${BASE}/app/projects/${p.id}?phase=REQUIREMENTS`); await page.waitForSelector('.np__list');
   check('no 이 단계를 현재 단계로 변경 link', !(await page.$('[data-set-phase]')) && !/현재 단계로 변경/.test(await page.textContent('main')));
@@ -180,7 +181,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await dl2.saveAs(`${SHOTS}/plan.docx`); check('Word downloaded', fs.statSync(`${SHOTS}/plan.docx`).size > 3000, dl2.suggestedFilename());
 
   // 7. approval record screen (back in 01) + re-approval
-  await page.goto(`${BASE}/app/projects/${p.id}/definition?activity=APPROVAL`); await page.waitForSelector('[data-af="approver_id"]');
+  await page.goto(`${BASE}/app/projects/${p.id}/definition/approval?activity=APPROVAL`); await page.waitForSelector('[data-af="approver_id"]');
   check('01 screen shows 착수 승인 기록 없음? (has bypass → hidden)', !(await page.$('.np__noapv')));
   await page.selectOption('[data-af="approver_id"]', 's2');
   await page.fill('[data-af="date"]', '2026-10-09');
@@ -188,7 +189,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.fill('[data-af="evidence"]', "2026-10-09 박상무 회신 메일 '사업수행계획서 v1.0 승인'");
   await page.screenshot({ path: `${SHOTS}/07-approval-screen.png` });
   await page.click('[data-wact="complete"]'); await page.waitForTimeout(800);
-  check('approval completed', /완료/.test(await page.textContent('[data-row="APPROVAL"]')));
+  check('approval completed', /완료/.test(await page.textContent('[data-defsec="APPROVAL"] .defsec__st')));
   const b2 = await lc01();
   check('approval recorded: 01 ✓, no badge', /is-done/.test(b2.lnbCls) && b2.mark === '✓' && !b2.badge, JSON.stringify(b2));
   check('approval recorded: stepper 01 ✓', /is-done/.test(b2.stCls) && b2.stIcon === '✓' && !b2.stBadge, JSON.stringify(b2));

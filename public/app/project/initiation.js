@@ -7,6 +7,7 @@ import { wsApi } from '../core/api.js';
 import { download } from '../core/ui.js';
 import { toast } from '../shared/dialogs.js';
 import { state } from '../core/state.js';
+import { definitionHref } from '../shared/lifecycle.js';
 
 export const planUrl = (pid, fmt) => wsApi(`/${pid}/charter/export?format=${fmt}`);
 export const planMenu = (label = '사업수행계획서 내려받기') => html`<details class="pmenu"><summary class="btn btn--secondary btn--sm">${label} ▾</summary>
@@ -36,7 +37,7 @@ export { isMeasurable } from '../shared/criteria.js';
  * or to leave a reason. 01→02 (착수 결과 승인, Phase 1 US-2) and 02→03 (요구사항 기준선 승인, Phase 2 US-1) share the dialog.
  */
 export const APPROVAL_GATES = {
-  INITIATION: { step: 'APPROVAL', record: (pid) => `/app/projects/${pid}/definition?activity=APPROVAL`,
+  INITIATION: { step: 'APPROVAL', record: (pid) => definitionHref(pid, 'APPROVAL'),
     title: '고객 승인 없이 요구사항 단계로 넘어가려 합니다',
     body: '착수 결과(목표·범위·일정)를 고객이나 스폰서가 승인하지 않은 채 진행하면, 이후 요구사항과 검수 기준을 두고 다툼이 생기기 쉽습니다. 가능하면 사업수행계획서를 보내 승인을 먼저 받으세요.' },
   REQUIREMENTS: { step: 'BASELINE_APPROVAL', record: (pid) => `/app/projects/${pid}/requirements?approval=1`,

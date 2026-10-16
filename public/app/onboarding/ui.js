@@ -27,12 +27,13 @@ export async function maybeWelcome() {
 }
 
 /* ---------- Checklist "RELAI 시작하기" (OWNER/ADMIN; hidden once complete or dismissed) ---------- */
-export function checklistCard(o, { compact = false } = {}) {
+/** `aside` = extra HTML on the steps row (Home puts the sample-project line + [샘플 프로젝트 삭제] there — one notice block, UI/UX P1-3). */
+export function checklistCard(o, { compact = false, aside = '' } = {}) {
   const c = o && o.checklist; if (!c || !c.visible) return '';
   return html`<section class="obcl ${compact ? 'obcl--compact' : ''}" aria-labelledby="obclT" data-tour-id="checklist">
     <div class="obcl__h"><b id="obclT">RELAI 시작하기</b><span class="obcl__n">${c.done} / ${c.total}</span><span class="pbar"><i style="width:${Math.round((c.done / c.total) * 100)}%"></i></span>
       <button type="button" class="link linkbtn obcl__x" data-obcl="dismiss" title="체크리스트 숨기기">숨기기</button></div>
-    <ol class="obcl__list">${raw(c.steps.map((s) => html`<li class="${s.done ? 'is-done' : ''}"><i>${s.done ? '✓' : '○'}</i>${raw(s.done ? html`<span>${s.label}</span>` : html`<a href="${s.href}" data-link>${s.label}</a>`)}</li>`).join(''))}</ol>
+    <div class="obcl__row"><ol class="obcl__list">${raw(c.steps.map((s) => html`<li class="${s.done ? 'is-done' : ''}"><i>${s.done ? '✓' : '○'}</i>${raw(s.done ? html`<span>${s.label}</span>` : html`<a href="${s.href}" data-link>${s.label}</a>`)}</li>`).join(''))}</ol>${raw(aside)}</div>
     ${raw(compact ? '' : '<p class="obcl__hint">프로젝트 진행률과는 다른, 처음 설정을 위한 체크리스트입니다. 모두 완료되면 자동으로 사라집니다.</p>')}</section>`;
 }
 export function bindChecklist(root) {

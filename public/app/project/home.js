@@ -180,14 +180,20 @@ export async function homePage(main = $('#main')) {
   const real = live.filter((c) => !isSample(c)); const samples = [...live, ...done].filter(isSample).length;
   const realDone = done.filter((c) => !isSample(c)).length;   // v1 P2-3: a closed project of one's own still counts as one's own
   const blue = (c) => (c === real[0] ? 0 : 1);
-  const sampleBanner = samples ? html`<div class="sbanner" data-sample-banner><p><b>샘플 프로젝트 ${samples}개</b>가 들어 있습니다. 단계가 다른 샘플을 열어 RELAI가 단계마다 무엇을 안내하는지 살펴보세요. 샘플은 사용량에 포함되지 않습니다.</p>${raw(canManage() && !isPhone() ? '<button type="button" class="btn btn--ghost btn--sm" data-samples-delete>샘플 프로젝트 삭제</button>' : '')}</div>` : '';   // Redesign R2 dashboard on desktop; the phone keeps today's cards
+  // UI/UX P1-3 — desktop shows ONE notice block above the cards: the RELAI 시작하기 card carries the sample line + [샘플 프로젝트 삭제];
+  // once that card is hidden (or done) the summary line takes them. The phone keeps its sample strip (no 시작하기 card there).
+  const delBtn = canManage() && !isPhone() ? '<button type="button" class="btn btn--ghost btn--sm" data-samples-delete>샘플 프로젝트 삭제</button>' : '';
+  const startCard = any && desk ? checklistCard(o, { compact: true, aside: samples ? html`<div class="obcl__smp" data-sample-banner><span><b>샘플 프로젝트 ${samples}개</b>로 단계별 안내를 먼저 둘러보세요. 사용량에 포함되지 않습니다.</span>${raw(delBtn)}</div>` : '' }) : '';
+  const sampleBanner = samples && !desk ? html`<div class="sbanner" data-sample-banner><p><b>샘플 프로젝트 ${samples}개</b>가 들어 있습니다. 단계가 다른 샘플을 열어 RELAI가 단계마다 무엇을 안내하는지 살펴보세요. 샘플은 사용량에 포함되지 않습니다.</p>${raw(delBtn)}</div>` : '';
+  const sampleTail = samples && !startCard ? html`<span class="hsum__smp" data-sample-banner> 샘플 프로젝트 ${samples}개는 사용량에 포함되지 않습니다.${raw(delBtn)}</span>` : '';
+  const sumText = real.length ? homeSummary(real) : realDone ? html`<b>진행 중인 직접 만든 프로젝트가 없습니다.</b> 완료된 프로젝트 ${realDone}개는 아래에 있습니다. <b>+ 새 프로젝트</b>로 다음 프로젝트를 시작하세요.` : startCard ? '' : '<b>아직 직접 만든 프로젝트가 없습니다.</b> 샘플 프로젝트를 둘러본 뒤 <b>+ 새 프로젝트</b>로 실제 프로젝트를 시작하세요.';
   main.innerHTML = html`<div class="page page--guide home">
     <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${raw(desk && live.length ? html`진행 중인 프로젝트 ${live.length}개 · ` : '')}${wsName(state.workspace.name)}<span id="home-credits"></span></p>${raw(any ? pcLine() : '')}</div>
       ${raw(any && canManage() && !isPhone() ? `<a class="btn ${real.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
     ${raw(sampleBanner)}
-    ${raw(any && !isPhone() ? checklistCard(o, { compact: true }) : '')}
+    ${raw(startCard)}
     ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
-    ${raw(live.length && desk ? html`<p class="hsum" data-home-summary>${raw(real.length ? homeSummary(real) : realDone ? html`<b>진행 중인 직접 만든 프로젝트가 없습니다.</b> 완료된 프로젝트 ${realDone}개는 아래에 있습니다. <b>+ 새 프로젝트</b>로 다음 프로젝트를 시작하세요.` : '<b>아직 직접 만든 프로젝트가 없습니다.</b> 샘플 프로젝트를 둘러본 뒤 <b>+ 새 프로젝트</b>로 실제 프로젝트를 시작하세요.')}</p>
+    ${raw(live.length && desk ? html`${raw(sumText || sampleTail ? html`<p class="hsum" data-home-summary>${raw(sumText)}${raw(sampleTail)}</p>` : '')}
         <div class="hdash"><section class="hgrid__sec" aria-labelledby="hgT"><h2 id="hgT" class="sr-only">프로젝트 현황</h2><div class="hgrid">${raw(live.map((c) => dCard(c, blue(c))).join(''))}</div></section>${raw(homeSide(live))}</div>`
       : live.length ? html`${raw(phoneTiles(live))}<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
         <div class="hgrid">${raw(live.map((c) => card(c, blue(c))).join(''))}</div></section>${raw(phoneUpcoming(live))}`
@@ -196,6 +202,8 @@ export async function homePage(main = $('#main')) {
     ${raw(done.length ? html`<details class="hdone"><summary>완료된 프로젝트 <b>${done.length}</b>개</summary><div class="hdone__l">${raw(done.map(completedRow).join(''))}</div></details>` : '')}
   </div>`;
   bindChecklist(main);
+  const hide = main.querySelector('[data-obcl="dismiss"]');   // hidden 시작하기 → the summary line takes over the sample notice
+  if (hide && samples) hide.onclick = async () => { hide.closest('.obcl').remove(); await ob.update('CHECKLIST', 'skip'); homePage(main); };
   const sd = main.querySelector('[data-samples-delete]'); if (sd) sd.onclick = async () => { if (await deleteAllSamples()) homePage(main); };
   // AI credits at a glance (AI-credits-only billing): balance + early access, linked to 설정 › AI 크레딧. Never blocks Home.
   api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
