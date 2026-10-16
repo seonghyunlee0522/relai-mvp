@@ -1,6 +1,8 @@
 // UI/UX P1 batch (hive research/relai-uiux-audit.md §c) — P1-1 프로젝트 정의 tabs are real screens (/definition/<slug>),
 // P1-2 one name '프로젝트 개요', P1-3 one notice block above the Home cards, P1-4 grey '<phase> 업무' chip off the current phase,
 // plus the PC probe (1280 · 1440 · 1920: no horizontal scroll, no stray fixed element over the content, no page errors).
+// P1b (Jim's review P2 1–3): Back / rail links ask before dropping unsaved drawer input, the active tab adds no history entry,
+// Home with one's own project keeps one notice block (first card ≤ 260px).
 // Not part of `npm test` (needs a running server + Playwright). Needs SAMPLE_PROJECTS on (default) and DATABASE_URL for psql:
 //   BASE=http://127.0.0.1:3158 SHOTS=/tmp/uiux-p1 DATABASE_URL=postgres://… node scripts/e2e-uiux-p1.cjs
 const fs = require('fs');
@@ -132,6 +134,56 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.click('#wdrawer [data-wact="skip"]'); await page.waitForSelector('.scrim [data-v="1"]'); await page.click('.scrim [data-v="1"]'); await page.waitForTimeout(1000);
   check('AC6 건너뛰기 (confirm) → 건너뜀', /건너뜀/.test(await page.textContent('[data-defsec="KICKOFF"] .defsec__st')) && !(await st()).drawer);
 
+  /* ---------- P1b-2: the active tab adds no history entry ---------- */
+  await page.goto(`${BASE}${V}`); await loaded('.pv');
+  await page.click('.stabs__i:text-is("관계자")'); await loaded('.defsec'); await page.waitForTimeout(300);
+  const h0 = await page.evaluate(() => history.length); const a0 = here();
+  await page.click('.stabs__i:text-is("관계자")'); await page.waitForTimeout(400);
+  check('P1b-2 clicking the active tab: same address, no new history entry', await page.evaluate(() => history.length) === h0 && here() === a0, `${h0} → ${await page.evaluate(() => history.length)} ${here()}`);
+  if (await page.$('#wdrawer')) { await page.click('#wd-close'); await page.waitForTimeout(300); }
+  await page.goBack(); await loaded('.pv');
+  check('P1b-2 one Back from the tab = 개요', here() === V, here());
+
+  /* ---------- P1b-1: browser Back and rail links ask before dropping unsaved drawer input ---------- */
+  const typeIn = async (v) => { const f = page.locator('#wdrawer .wd__form textarea:visible, #wdrawer .wd__form input[type="text"]:visible').first(); await f.fill(v); return f; };
+  await page.click('.stabs__i:text-is("운영 방식")'); await loaded('.defsec'); await page.waitForSelector('#wdrawer .wd__form');
+  const opsAt = here(); let fld = await typeIn('주간 보고 금요일 10시');
+  await page.evaluate(() => history.back()); await page.waitForTimeout(500);
+  let dl = await page.$('.scrim .dialog');
+  check('P1b-1 Back with unsaved input asks first, address stays', Boolean(dl) && here() === opsAt, `${Boolean(dl)} ${here()}`);
+  if (dl) { await page.click('.scrim [data-v="0"]'); await page.waitForTimeout(300); }
+  check('P1b-1 cancel = stay, typed input kept', here() === opsAt && (await fld.inputValue()) === '주간 보고 금요일 10시' && Boolean(await page.$('#wdrawer')), `${here()} ${await fld.inputValue().catch(() => '?')}`);
+  await page.evaluate(() => history.back()); await page.waitForSelector('.scrim [data-v="1"]'); await page.click('.scrim [data-v="1"]'); await loaded('.pv');
+  check('P1b-1 confirm = leave to the entry Back was heading for (개요)', here() === V, here());
+  await page.goForward(); await loaded('.defsec');
+  check('P1b-1 Forward after leaving = the 운영 방식 tab again', new URL(page.url()).pathname === `${V}/operations`, here());
+  await page.waitForSelector('#wdrawer .wd__form'); const opsAt2 = here(); fld = await typeIn('월간 운영위원회');
+  await page.click('.rail__i:not(.is-active)'); await page.waitForTimeout(500);
+  dl = await page.$('.scrim .dialog');
+  check('P1b-1 rail link with unsaved input asks first', Boolean(dl) && here() === opsAt2, `${Boolean(dl)} ${here()}`);
+  if (dl) { await page.click('.scrim [data-v="0"]'); await page.waitForTimeout(300); }
+  check('P1b-1 rail link cancel = stay, typed input kept', here() === opsAt2 && (await fld.inputValue()) === '월간 운영위원회', here());
+  await page.click('a.logo, a.dtop__logo'); await page.waitForTimeout(500);
+  dl = await page.$('.scrim .dialog');
+  check('P1b-1 topbar link with unsaved input asks first', Boolean(dl) && here() === opsAt2, `${Boolean(dl)} ${here()}`);
+  if (dl) { await page.click('.scrim [data-v="1"]'); await loaded(); }
+  check('P1b-1 topbar link confirm = leave (홈)', here() === '/app', here());
+  await page.goto(`${BASE}${V}/operations`); await loaded('.defsec'); await page.waitForSelector('#wdrawer');
+  await page.click('.rail__i:not(.is-active)'); await page.waitForTimeout(500);
+  check('P1b-1 no unsaved input → rail link leaves without asking', !(await page.$('.scrim .dialog')) && !here().startsWith(`${V}/operations`), here());
+
+  /* ---------- P1b-3: Home with one's own project — one notice block, first card ≤ 260px ---------- */
+  await page.goto(`${BASE}/app`); await loaded('.hgrid .hc');
+  const homeNotes = () => page.evaluate(() => {
+    const first = document.querySelector('.hgrid .hc'); const top = first.getBoundingClientRect().top;
+    const notes = [...document.querySelectorAll('.sbanner, .obcl, .hsum, .notice')].filter((e) => e.offsetParent && e.getBoundingClientRect().top < top);
+    return { top: Math.round(top), notes: notes.map((e) => e.className), sum: document.querySelector('[data-home-summary]')?.textContent || '' };
+  });
+  const ho = await homeNotes();
+  check('P1b-3 Home 1440 with own project: exactly one notice block above the cards', ho.notes.length === 1 && /obcl/.test(ho.notes[0]), JSON.stringify(ho));
+  check('P1b-3 Home 1440 with own project: first project card top ≤ 260px', ho.top <= 260, String(ho.top));
+  await page.screenshot({ path: `${SHOTS}/p1b-home-own.png` });
+
   /* ---------- AC5: old links ---------- */
   await page.goto(`${BASE}${V}?activity=STAKEHOLDERS`); await loaded('.defsec'); await page.waitForSelector('#wdrawer');
   x = await st();
@@ -159,6 +211,16 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   const m3 = await mp.evaluate(() => ({ t: document.querySelector('.wsh__title')?.textContent, h: document.querySelector('.chx__head h1')?.textContent, title: document.title }));
   check('P1-2 phone 프로젝트 개요 titles', m3.t === '프로젝트 개요' && m3.h === '프로젝트 개요' && /^프로젝트 개요/.test(m3.title), JSON.stringify(m3));
   await mctx.close();
+
+  /* ---------- P1b-3: after 숨기기 the summary line (오늘 할 일) comes back as the one block ---------- */
+  await page.goto(`${BASE}/app`); await loaded('.hgrid .hc');
+  await page.click('[data-obcl="dismiss"]'); await page.waitForSelector('[data-home-summary]', { timeout: 8000 }).catch(() => {}); await page.waitForTimeout(400);
+  const ho2 = await page.evaluate(() => {
+    const first = document.querySelector('.hgrid .hc'); const top = first.getBoundingClientRect().top;
+    const notes = [...document.querySelectorAll('.sbanner, .obcl, .hsum, .notice')].filter((e) => e.offsetParent && e.getBoundingClientRect().top < top);
+    return { top: Math.round(top), notes: notes.map((e) => e.className), sum: document.querySelector('[data-home-summary]')?.textContent || '' };
+  });
+  check('P1b-3 after 숨기기: one block = the summary line (오늘 할 일 + sample notice)', ho2.notes.length === 1 && /hsum/.test(ho2.notes[0]) && /오늘 할 일/.test(ho2.sum) && /샘플 프로젝트 3개/.test(ho2.sum) && ho2.top <= 260, JSON.stringify(ho2));
 
   /* ---------- PC probe: 1280 · 1440 · 1920 ---------- */
   const E = `/app/projects/${by.early.id}`; const M = `/app/projects/${by.mid.id}`;

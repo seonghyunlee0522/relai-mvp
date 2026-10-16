@@ -14,7 +14,7 @@
  * content (sectionView, read blocks shared with 프로젝트 개요) + [수정] → the same drawer. Changing tab = a new address (pushState);
  * opening/closing the drawer only rewrites `?activity=` (replaceState), so 뒤로 가기 = the previous tab. */
 import { api, wsApi } from '../core/api.js';
-import { navigate } from '../core/router.js';
+import { navigate, navToken, isCurrent, setLeaveGuard } from '../core/router.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { $, no2, fmtShort, html, raw } from '../core/dom.js';
 import { download, fileToBase64 } from '../core/ui.js';
@@ -75,6 +75,7 @@ const isOpenWork = (s) => s && s.status !== 'COMPLETED' && s.status !== 'SKIPPED
 
 export async function definitionPage(id, slug = '') {
   const main = $('#main');
+  const token = navToken();
   const qp = new URLSearchParams(location.search);
   // old address /definition?activity=KEY(&field=F) (server guidance, bookmarks) → the task's own tab, same drawer + field flash
   if (!slug && DEFINITION_SLUG[qp.get('activity')]) { slug = DEFINITION_SLUG[qp.get('activity')]; history.replaceState(null, '', `${location.pathname.replace(/\/$/, '')}/${slug}${location.search}`); }
@@ -104,7 +105,8 @@ export async function definitionPage(id, slug = '') {
 
   const phase = () => (g.phases || []).find((x) => x.phase_key === 'INITIATION');
   const currentKey = () => { const c = m.sections.find((s) => s.status !== 'COMPLETED' && s.status !== 'SKIPPED'); return c ? c.key : null; };
-  const setUrl = () => { const q = new URLSearchParams(location.search); if (open) q.set('activity', open.key); else q.delete('activity'); if (!open || open.key !== qp.get('activity')) q.delete('field'); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
+  const setUrl = () => { const q = new URLSearchParams(location.search); if (open) q.set('activity', open.key); else q.delete('activity'); if (!open || open.key !== qp.get('activity')) q.delete('field'); here = `${location.pathname}${q.toString() ? '?' + q : ''}`; history.replaceState(null, '', here); };
+  let here = location.pathname + location.search;
 
   /* ---------- Main Process View ---------- */
   const processView = () => {
@@ -356,6 +358,8 @@ export async function definitionPage(id, slug = '') {
 
   const discardOk = async () => !dirty || confirmDialog({ title: '저장되지 않은 변경이 있습니다.', body: '임시저장하지 않은 내용은 사라집니다. 그대로 닫을까요?', confirm: '닫기' });
   const openActivity = async (key, { full = false } = {}) => { if (open && open.key === key) return; if (!(await discardOk())) return; d = fresh(); dirty = false; open = { key, full }; setUrl(); draw(); const first = $('#wdrawer .wd__form input, #wdrawer .wd__form textarea, #wdrawer .wd__form select'); if (first) first.focus({ preventScroll: true }); };
+  // browser Back/Forward and the rail/topbar links ask the same question while the drawer holds unsaved input
+  if (isCurrent(token)) setLeaveGuard({ dirty: () => dirty, ask: async () => { if (!(await discardOk())) return false; dirty = false; return true; }, href: () => here });
   const closeDrawer = async () => { if (!(await discardOk())) return; open = null; dirty = false; setUrl(); draw(); };
   /** Another tab = another screen: a new history entry. `withDrawer` adds ?activity= so that task's drawer opens there. */
   const goTask = async (key, { withDrawer = false } = {}) => {
@@ -443,6 +447,8 @@ export async function definitionPage(id, slug = '') {
     });
     // leaving the tab with unsaved drawer input asks first (tabs, ← / 다음 업무 →)
     main.querySelectorAll('.stabs a[data-link], [data-defnav]').forEach((a) => a.onclick = async (e) => {
+      // the tab already on screen: no new history entry (one Back = the previous tab)
+      if (a.matches('.stabs a') && a.pathname.replace(/\/$/, '') === location.pathname.replace(/\/$/, '')) { e.preventDefault(); e.stopPropagation(); return; }
       if (!dirty) return;
       e.preventDefault(); e.stopPropagation();
       if (await discardOk()) { dirty = false; navigate(a.getAttribute('href')); }

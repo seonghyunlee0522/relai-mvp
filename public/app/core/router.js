@@ -15,13 +15,25 @@ export function navigate(path, { replace = false } = {}) {
   history[replace ? 'replaceState' : 'pushState'](null, '', path);
   render();
 }
-document.addEventListener('click', (e) => {
+/* Leave guard: a page holding unsaved input registers { dirty(), ask(), href() } (프로젝트 정의 drawer). In-app links and the
+ * browser Back/Forward then ask first; render() drops the guard, so it only lives while that page is on screen. */
+let leaveGuard = null;
+export function setLeaveGuard(g) { leaveGuard = g; }
+document.addEventListener('click', async (e) => {
   const a = e.target.closest('a[data-link]');
   if (!a || e.metaKey || e.ctrlKey || e.shiftKey || a.target) return;
   e.preventDefault();
+  if (leaveGuard && leaveGuard.dirty() && !(await leaveGuard.ask())) return;
   navigate(a.getAttribute('href'));
 });
-window.addEventListener('popstate', render);
+/* Back/Forward with unsaved input: put the page's address back at once (pushState right after the entry the browser moved to),
+ * then ask. Cancel = stay, nothing lost. Leave = history.back() lands on the entry the user was heading for. */
+window.addEventListener('popstate', async () => {
+  const g = leaveGuard;
+  if (!g || !g.dirty()) return render();
+  history.pushState(null, '', g.href());
+  if (await g.ask()) { leaveGuard = null; history.back(); }
+});
 /* First-party screen view (server/analytics.js): the path only — ids are normalised server-side. Never awaited, never shown. */
 let lastScreen = '';
 function screenView(path) {
@@ -34,6 +46,7 @@ export let shellFn = null; let authFn = null; let inviteFn = null; let accountFn
 export function registerRoutes(list, { shell, auth, invite = null, account = {} }) { routes = list; shellFn = shell; authFn = auth; inviteFn = invite; accountFns = account; }
 export async function render() {
   const token = ++navSeq;
+  leaveGuard = null;
   gaGuard();
   const path = location.pathname;
   if (/^\/(login|signup)\/?$/.test(path)) return authFn(path.startsWith('/signup') ? 'signup' : 'login');
