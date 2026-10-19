@@ -168,16 +168,16 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.screenshot({ path: `${SHOTS}/05b-lnb-gap.png` });
 
   // 6. Charter: approval area shows 미승인 — 사유, timeline 종료 후 zone, export menu
-  await page.goto(`${BASE}/app/projects/${p.id}/charter`); await page.waitForSelector('.chx__head');
+  await page.goto(`${BASE}/app/projects/${p.id}/charter`); await page.waitForSelector('.chx');
   check('Charter title = 프로젝트 개요 (Korean label set)', (await page.title()).startsWith('프로젝트 개요'));
   check('Charter shows 미승인 — 사유', /미승인 — 사유: 고객 PM 휴가로/.test(await page.textContent('#ch-approval')));
   check('Charter timeline 종료 후 zone', Boolean(await page.$('.chtl__after')));
   await page.screenshot({ path: `${SHOTS}/06-charter.png`, fullPage: true });
-  await page.click('.chx__head .pmenu summary');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.chx__head [data-plan="pdf"]')]);
+  await page.click('.phead__r .pmenu summary');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.phead__r [data-plan="pdf"]')]);
   const pdfPath = `${SHOTS}/plan.pdf`; await dl.saveAs(pdfPath);
   check('PDF downloaded', fs.statSync(pdfPath).size > 5000, dl.suggestedFilename());
-  const [dl2] = await Promise.all([page.waitForEvent('download'), (async () => { await page.click('.chx__head .pmenu summary'); await page.click('.chx__head [data-plan="docx"]'); })()]);
+  const [dl2] = await Promise.all([page.waitForEvent('download'), (async () => { await page.click('.phead__r .pmenu summary'); await page.click('.phead__r [data-plan="docx"]'); })()]);
   await dl2.saveAs(`${SHOTS}/plan.docx`); check('Word downloaded', fs.statSync(`${SHOTS}/plan.docx`).size > 3000, dl2.suggestedFilename());
 
   // 7. approval record screen (back in 01) + re-approval

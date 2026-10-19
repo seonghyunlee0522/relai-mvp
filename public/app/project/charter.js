@@ -218,6 +218,10 @@ export async function charterPage(id) {
     </div>${raw(rail)}</div>
   </div>`;
 
+  // layout-fit: on PC the document action sits with the page's other header actions (title row, right), like every work screen;
+  // the phone keeps it on the document head (the phone header has no action slot).
+  const hr = main.querySelector('.phead__r'); const pm = main.querySelector('.chx__head .pmenu');
+  if (!isPhone() && hr && pm) { hr.prepend(pm); main.querySelector('.chx__head').remove(); }
   bindPlanMenu(main, p.id);
   // outline: smooth-scroll without touching the URL (a hash change would re-render the SPA), highlight the section in view
   main.querySelectorAll('[data-goto]').forEach((b) => { b.onclick = () => { const el = document.getElementById(b.dataset.goto); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });

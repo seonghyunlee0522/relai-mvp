@@ -125,7 +125,7 @@ export async function authPage(mode) {
       <p class="auth__alt">${isSignup ? '이미 계정이 있나요?' : '아직 계정이 없나요?'}
         <a class="link" href="${isSignup ? `/login${inviteToken ? `?next=${encodeURIComponent(`/invite/${inviteToken}`)}` : ''}` : `/signup${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`}">${isSignup ? '로그인' : '회원가입'}</a></p>
       ${raw(valueMobile(isSignup))}
-      ${raw(legalFooterHtml())}
+      ${raw(legalFooterHtml(undefined, { compact: true }))}
     </main>
     ${raw(sidePanel(isSignup))}</div>`;
   const form = $('#f');
@@ -180,7 +180,7 @@ function gaSignUp() {
 /* ---------- account security: forgot / reset password, e-mail verification (work with or without a session) ---------- */
 const authCard = (title, sub, body) => html`<div class="auth"><main class="auth__form">
     <a class="logo" href="/">RELAI</a><h1>${title}</h1><p class="sub">${sub}</p>${raw(body)}
-    <p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p>${raw(legalFooterHtml())}</main>
+    <p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p>${raw(legalFooterHtml(undefined, { compact: true }))}</main>
   <aside class="auth__side"><blockquote><h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
     <p>RELAI가 프로젝트의 시작부터 종료까지 다음에 해야 할 일을 안내합니다.</p></blockquote></aside></div>`;
 const linkToken = () => { const t = new URLSearchParams(location.search).get('token') || ''; history.replaceState(null, '', location.pathname); return t; };   // keep the token out of history

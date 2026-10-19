@@ -3432,3 +3432,24 @@ html:not(.is-phone) .agrid2>.asec,.agrid2>.asec{margin-bottom:0}
 html:not(.is-phone) .clk__back{margin-top:var(--gap-block)}
 /* new/edit project form: the date pair uses the form's own 24px column gap, so its columns line up with the rows above */
 .pform .pdates .row2{column-gap:24px}
+
+/* ---- layout-fit (founder 2026-10-19) ----
+ * 1. Full-height list screens (WBS · 요구사항 · 이슈/리스크 · 변경 요청 · 테스트: .page--wide > .rlayout) already size themselves to the
+ *    window, but the app footer still sat under them → a 35px page scroll beside the table's own scroll. The footer steps aside there
+ *    (the old `.page--wide + .appfoot` rule never matched: the footer is a sibling of .main, not of the page). */
+html:not(.is-phone) .maincol:has(>.main>.page--wide>.rlayout)>.appfoot{display:none}
+/* 2. Phone: the column's min-height counted the 72px tab-bar padding on top of a full screen, so even an empty screen scrolled. */
+html.is-phone .maincol{box-sizing:border-box;min-height:calc(100vh - 48px);min-height:calc(100dvh - 48px)}
+html.is-phone .shell:has(>.pstrip>*) .maincol{min-height:calc(100vh - 80px);min-height:calc(100dvh - 80px)}   /* + the 32px project strip */
+/* 3. A dialog that only explains never runs past the window: it scrolls inside instead (zero specificity — every sized dialog
+ *    such as .dialog--ai or .gl keeps its own rule). */
+:where(.scrim>.dialog){max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto}
+/* 4. One look for every work screen (desktop): the same title size on workspace pages (홈 · 프로젝트 · 설정) as on project pages,
+ *    32px header/toolbar controls everywhere (list screens had 28px, guide screens 32px), 36px list rows in both table kinds. */
+html:not(.is-phone) .page__head h1{font-size:var(--fs-xl);font-weight:800;letter-spacing:-.02em;line-height:1.3}
+html:not(.is-phone) :is(.phead__r,.rtool,.rhead,.page__head) :is(.btn,.input,.select):not(.btn--xs){height:32px}
+html:not(.is-phone) .rtool :is(.btn--sm,.select--sm){font-size:var(--fs-sm)}
+html:not(.is-phone) .rtable td{height:36px}
+/* 5. 프로젝트 개요 (PC): 사업수행계획서 내려받기 moved up into the page header (charter.js), so the document starts right under the
+ *    header and the outline rail lines up with it instead of keeping the old 62px offset. */
+html:not(.is-phone) .chl:not(:has(.chx__head)) .chr{margin-top:0}

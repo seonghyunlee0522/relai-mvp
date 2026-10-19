@@ -52,12 +52,12 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
 
   /* ---------- phone 390: side panel folds under the form; full-width thumb button ---------- */
   const ph = await newPage(PHONE);
-  await ph.goto(`${BASE}/signup`); await ph.waitForSelector('.sell-m .promo-card', { timeout: 8000 }).catch(() => {});
+  await ph.goto(`${BASE}/signup`); await ph.waitForSelector('#f', { timeout: 8000 }).catch(() => {}); await ph.waitForTimeout(600);
   const pm = await ph.evaluate(() => ({ side: getComputedStyle(document.querySelector('.auth__side.sell')).display, m: getComputedStyle(document.querySelector('.sell-m')).display, cards: document.querySelectorAll('.sell-m .promo-card').length,
     over: document.documentElement.scrollWidth - window.innerWidth, btnW: document.querySelector('#f button[type=submit]').getBoundingClientRect().width }));
-  check('phone 390 signup: value block under the form with 3 cards, no horizontal scroll', pm.side === 'none' && pm.m === 'block' && pm.cards === 3 && pm.over <= 0 && pm.btnW > 300, JSON.stringify(pm));
+  check('phone 390 signup: side panel and the under-form value block folded away (layout-fit: one screen), no horizontal scroll', pm.side === 'none' && pm.m === 'none' && pm.over <= 0 && pm.btnW > 300, JSON.stringify(pm));
   await ph.screenshot({ path: `${SHOTS}/signup-390.png`, fullPage: true });
-  await ph.goto(`${BASE}/login`); await ph.waitForSelector('.sell-m .promo-card', { timeout: 8000 }).catch(() => {});
+  await ph.goto(`${BASE}/login`); await ph.waitForSelector('#f', { timeout: 8000 }).catch(() => {}); await ph.waitForTimeout(600);
   await ph.screenshot({ path: `${SHOTS}/login-390.png`, fullPage: true });
 
   /* ---------- landing pricing: server-rendered cards ---------- */

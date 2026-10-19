@@ -36,8 +36,12 @@ export function bizInfoHtml(L = LEGAL) {
 }
 
 /** Footer used on every public page (landing, pricing, login, signup, terms, privacy). Styles: .legal-foot in each page's CSS. */
-export function legalFooterHtml(L = LEGAL) {
-  return `<footer class="legal-foot"><nav class="legal-foot__links"><a href="/terms">이용약관</a><a href="/privacy"><b>개인정보처리방침</b></a><a href="/#pricing">요금 안내</a></nav>
+export function legalFooterHtml(L = LEGAL, { compact = false } = {}) {
+  const links = '<a href="/terms">이용약관</a><a href="/privacy"><b>개인정보처리방침</b></a><a href="/#pricing">요금 안내</a>';
+  // compact (login/signup/account screens, which must fit one screen): one line of links; the business lines fold under
+  // 사업자 정보 (still in the DOM; the landing — the site's first screen — keeps them open).
+  if (compact) return `<footer class="legal-foot legal-foot--compact"><nav class="legal-foot__links">${links}<details class="legal-foot__biz"><summary>사업자 정보</summary><p class="legal-biz">${bizInfoHtml(L)}</p></details><span class="legal-foot__c">© ${new Date().getFullYear()} RELAI</span></nav></footer>`;
+  return `<footer class="legal-foot"><nav class="legal-foot__links">${links}</nav>
 <p class="legal-biz">${bizInfoHtml(L)}</p><p class="legal-foot__c">© ${new Date().getFullYear()} RELAI</p></footer>`;
 }
 
