@@ -1,0 +1,674 @@
+[
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/login",
+  "over": 279,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/signup",
+  "over": 298,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/forgot-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/reset-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/reset-password?token=abc",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/verify-email?token=bad",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/invite/bad-token",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/signup?invite=bad-token",
+  "over": 314,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/login?error=google_denied",
+  "over": 279,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app",
+  "over": 368,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/settings",
+  "over": 165,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID",
+  "over": 499,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/definition",
+  "over": 453,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/charter",
+  "over": 3053,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/wbs",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/issues",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/requirements",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/changes",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/tests",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1366,
+  "vh": 768,
+  "u": "/app/projects/MID/overview",
+  "over": 832,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/login",
+  "over": 147,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/signup",
+  "over": 166,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/forgot-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/reset-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/reset-password?token=abc",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/verify-email?token=bad",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/invite/bad-token",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/signup?invite=bad-token",
+  "over": 182,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/login?error=google_denied",
+  "over": 147,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app",
+  "over": 236,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/settings",
+  "over": 33,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID",
+  "over": 367,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/definition",
+  "over": 321,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/charter",
+  "over": 2900,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/wbs",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/issues",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/requirements",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/changes",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/tests",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1440,
+  "vh": 900,
+  "u": "/app/projects/MID/overview",
+  "over": 667,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/login",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/signup",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/forgot-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/reset-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/reset-password?token=abc",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/verify-email?token=bad",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/invite/bad-token",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/signup?invite=bad-token",
+  "over": 2,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/login?error=google_denied",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app",
+  "over": 56,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/settings",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID",
+  "over": 187,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/definition",
+  "over": 141,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/charter",
+  "over": 2688,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/wbs",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/issues",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/requirements",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/changes",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/tests",
+  "over": 35,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 1920,
+  "vh": 1080,
+  "u": "/app/projects/MID/overview",
+  "over": 487,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/login",
+  "over": 604,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/signup",
+  "over": 1166,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/forgot-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/reset-password",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/reset-password?token=abc",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/verify-email?token=bad",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/invite/bad-token",
+  "over": 0,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/signup?invite=bad-token",
+  "over": 1235,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/login?error=google_denied",
+  "over": 654,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app",
+  "over": 879,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects",
+  "over": 48,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/settings",
+  "over": 277,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID",
+  "over": 80,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/definition",
+  "over": 260,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/charter",
+  "over": 4175,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/wbs",
+  "over": 2855,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/issues",
+  "over": 80,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/requirements",
+  "over": 1029,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/changes",
+  "over": 80,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/tests",
+  "over": 80,
+  "dlg": null,
+  "hs": 0
+ },
+ {
+  "vw": 390,
+  "vh": 844,
+  "u": "/app/projects/MID/overview",
+  "over": 1577,
+  "dlg": null,
+  "hs": 0
+ }
+]
