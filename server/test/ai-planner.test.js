@@ -3,7 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, setup, addMember } from './api-helpers.js';
 import { setFakeProvider, fakeCalls, createProvider, AiProviderError } from '../ai/provider.js';
-import { normalizeQuestions, normalizeCandidates, computeCoverage, knownAreasFrom, mergeEdits } from '../ai/planner.js';
+import { normalizeQuestions, normalizeCandidates, computeCoverage, knownAreasFrom, mergeEdits, placeFixItems, tidyTitle } from '../ai/planner.js';
+import { SYSTEM } from '../ai/prompts.js';
+import { plannerDefaultReq } from '../../public/app/shared/constants.js';
 
 process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '1000'; process.env.AI_MODEL = '';
 // Planner mechanics are asserted at the pre-v41 WBS price (15); the current price (50) is covered by credits-billing.test.js.
@@ -242,4 +244,66 @@ test('openai adapter regression: structured output, refusal, invalid JSON, 401, 
     globalThis.fetch = async () => resp(503, { error: { message: 'unavailable' } });
     await assert.rejects(() => p.generateStructured(req), (e) => !e.message.includes('SECRET') && !JSON.stringify(e).includes('SECRET'));
   } finally { globalThis.fetch = realFetch; }
+});
+
+test('planner (prod-test UX fixes): default requirement pick = 확정 + 작성 중, never 반려 / 범위 외', () => {
+  const pick = (status, scope = 'UNDECIDED') => plannerDefaultReq({ status, scope });
+  assert.equal(pick('CONFIRMED'), true); assert.equal(pick('DRAFT'), true, 'AI-extracted requirements start as DRAFT');
+  assert.equal(pick('REJECTED'), false); assert.equal(pick('DRAFT', 'OUT_OF_SCOPE'), false); assert.equal(pick('CONFIRMED', 'OUT_OF_SCOPE'), false);
+  assert.equal(pick('REVIEWING'), false); assert.equal(pick('ON_HOLD'), false);
+});
+
+test('planner (prod-test UX fixes): gap-fix titles are short and clean; prompt asks for placement + clean titles', () => {
+  assert.equal(tidyTitle('비기능 요구사항 요구사항 정의'), '비기능 요구사항 정의', 'the live defect title');
+  assert.equal(tidyTitle('[보완] 사용자 교육'), '사용자 교육'); assert.equal(tidyTitle('추가 - 이관 데이터 검증.'), '이관 데이터 검증');
+  assert.equal(tidyTitle('교육: 운영자 교육'), '운영자 교육', 'area label prefix dropped'); assert.equal(tidyTitle('[비기능] 성능 테스트'), '성능 테스트');
+  assert.equal(tidyTitle('SSO: 연계 테스트'), 'SSO: 연계 테스트', 'a non-area prefix is content, kept');
+  assert.ok(tidyTitle('아주 긴 제목 '.repeat(10)).length <= 40); assert.equal(tidyTitle('  '), '(제목 없음)');
+  assert.ok(SYSTEM.WBS_PLAN_FIX.includes('같은 영역(project_area)의 상위 묶음') && SYSTEM.WBS_PLAN_FIX.includes('"요구사항 요구사항" 금지'));
+});
+
+test('planner (prod-test UX fixes): gap-fix items go under the matching area node, not the top level', () => {
+  const draft = [it('AI-WBS-1', '프로젝트 관리', 'PROJECT_MANAGEMENT'), it('AI-WBS-2', '착수회의', 'PROJECT_MANAGEMENT', 'AI-WBS-1'),
+    it('AI-WBS-4', '기능 개발', 'FUNCTIONAL_DEVELOPMENT'), it('AI-WBS-10', 'REQ-001 구현', 'FUNCTIONAL_DEVELOPMENT', 'AI-WBS-4'),
+    it('AI-WBS-20', '교육', 'TRAINING'), it('AI-WBS-21', '사용자 교육', 'TRAINING', 'AI-WBS-20'),
+    it('AI-WBS-40', '테스트', 'TESTING'), it('AI-WBS-41', '통합 테스트', 'TESTING', 'AI-WBS-40'), it('AI-WBS-50', '오픈', 'STABILIZATION', null, [], { item_type: 'MILESTONE' })];
+  const fixes = [it('AI-FIX-1', '성능 테스트', 'TESTING'), it('AI-FIX-2', '교육', 'TRAINING'), it('AI-FIX-3', '운영자 교육', 'TRAINING', 'AI-FIX-2'),
+    it('AI-FIX-4', 'REQ-002 화면 구현', 'FUNCTIONAL_DEVELOPMENT'), it('AI-FIX-5', '운영 이관', 'OPERATION_HANDOVER'), it('AI-FIX-6', '기타 작업', 'OTHER'),
+    it('AI-FIX-7', '오픈 점검', 'STABILIZATION')].map((f) => ({ ...f, fix: true }));
+  const r = placeFixItems(draft.map((d) => ({ ...d })), fixes.map((f) => ({ ...f })));
+  const by = Object.fromEntries(r.items.map((i) => [i.temp_id, i]));
+  assert.equal(by['AI-FIX-1'].parent_temp_id, 'AI-WBS-40', 'testing fix under 테스트'); assert.equal(by['AI-FIX-1'].depth, 2);
+  assert.equal(by['AI-FIX-4'].parent_temp_id, 'AI-WBS-4', 'requirement fix under 기능 개발');
+  assert.equal(by['AI-FIX-2'], undefined, 'duplicate 교육 group dissolved'); assert.equal(by['AI-FIX-3'].parent_temp_id, 'AI-WBS-20', 'its child moved under the draft 교육');
+  assert.equal(by['AI-FIX-5'].parent_temp_id, null, 'no draft node for that area → stays top level'); assert.equal(by['AI-FIX-6'].parent_temp_id, null, 'OTHER never auto-placed');
+  assert.equal(by['AI-FIX-7'].parent_temp_id, null, 'never under a milestone');
+  assert.deepEqual(r.added.map((i) => i.temp_id).sort(), ['AI-FIX-1', 'AI-FIX-3', 'AI-FIX-4', 'AI-FIX-5', 'AI-FIX-6', 'AI-FIX-7']);
+  const order = r.items.map((i) => i.temp_id);
+  assert.ok(order.indexOf('AI-FIX-1') === order.indexOf('AI-WBS-41') + 1, 'listed right after its new siblings'); assert.ok(order.indexOf('AI-FIX-3') < order.indexOf('AI-WBS-40'));
+  assert.deepEqual(order.filter((t) => t.startsWith('AI-WBS')), draft.map((d) => d.temp_id), 'draft order kept');
+  assert.ok(r.warnings.some((w) => w.includes('AI-FIX-2')));
+  // depth limit: a deep draft area node is skipped when the fix subtree would exceed it
+  const deep = [it('D1', 'a', 'TESTING'), it('D2', 'b', 'OTHER', 'D1'), it('D3', 'c', 'OTHER', 'D2'), it('D4', 'd', 'OTHER', 'D3'), it('D5', 'e', 'OTHER', 'D4')];
+  const r2 = placeFixItems(deep, [{ ...it('F1', '성능 테스트', 'TESTING'), fix: true }, { ...it('F2', '부하', 'TESTING', 'F1'), fix: true }, { ...it('F3', '세부', 'TESTING', 'F2'), fix: true }, { ...it('F4', '더', 'TESTING', 'F3'), fix: true }, { ...it('F5', '더더', 'TESTING', 'F4'), fix: true }]);
+  assert.equal(r2.items.find((i) => i.temp_id === 'F1').parent_temp_id, null, 'would exceed 5 levels → top level');
+});
+
+test('planner (prod-test UX fixes): POST /fix places parentless items under the area node with tidy titles', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client, 'p-fixplace@x.com');
+  const { plan } = await toReview(A);
+  setFakeProvider(() => ({ data: { items: [it('AI-FIX-1', '[보완] 성능 테스트 테스트', 'TESTING'), it('AI-FIX-2', '교육', 'TRAINING'), it('AI-FIX-3', '교육: 사용자 교육', 'TRAINING', 'AI-FIX-2'), it('AI-FIX-4', '이관: 이관 데이터 검증', 'DATA_MIGRATION')], notes: [] } }));
+  const r = await A.c('POST', `${P(A)}/${plan.id}/fix`, {}); assert.equal(r.status, 200, JSON.stringify(r.json));
+  const items = r.json.plan.draft.items; const by = Object.fromEntries(items.map((i) => [i.temp_id, i]));
+  assert.equal(by['AI-FIX-1'].parent_temp_id, 'AI-WBS-40'); assert.equal(by['AI-FIX-1'].title, '성능 테스트'); assert.equal(by['AI-FIX-1'].depth, 2);
+  assert.equal(by['AI-FIX-4'].parent_temp_id, 'AI-WBS-20', 'under 데이터 이관'); assert.equal(by['AI-FIX-4'].title, '이관: 이관 데이터 검증', '"이관" alone is not an area label → kept');
+  assert.equal(by['AI-FIX-2'].parent_temp_id, null, 'draft has no 교육 group → new group at top level'); assert.equal(by['AI-FIX-3'].title, '사용자 교육');
+  const idx = (t) => items.findIndex((i) => i.temp_id === t);
+  assert.ok(idx('AI-FIX-1') > idx('AI-WBS-41') && idx('AI-FIX-1') < idx('AI-WBS-50'), 'shown inside the 테스트 subtree, not at the end');
+  assert.deepEqual(r.json.added, ['AI-FIX-1', 'AI-FIX-2', 'AI-FIX-3', 'AI-FIX-4'], 'added keeps the model order');
+  // commit keeps the hierarchy: the fix item becomes a child of the committed 테스트 node
+  const c = await A.c('POST', `${P(A)}/${plan.id}/commit`, {}); assert.equal(c.status, 201);
+  const wbs = (await A.c('GET', A.wbs)).json.items; const test1 = wbs.find((w) => w.title === '테스트'); const perf = wbs.find((w) => w.title === '성능 테스트');
+  assert.equal(perf.parent_id, test1.id);
+  server.close();
 });

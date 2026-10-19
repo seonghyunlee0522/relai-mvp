@@ -54,19 +54,22 @@ export function noticeDialog({ title, bodyHtml }) {
     $('[data-v="0"]', el).focus();
   });
 }
-export function confirmDialog({ title, body, bodyHtml = null, confirm, danger }) {   // bodyHtml: trusted markup built with html`` (e.g. a small preview list)
+/** Confirm dialog → true / false. With dismissable: true a backdrop click or Esc resolves null instead of false, so a
+ *  caller whose cancel button is destructive (e.g. 새로 시작 = discard) can tell "just close" apart from "chose cancel". */
+export function confirmDialog({ title, body, bodyHtml = null, confirm, danger, cancel = '취소', dismissable = false }) {   // bodyHtml: trusted markup built with html`` (e.g. a small preview list)
   return new Promise((resolve) => {
     const el = document.createElement('div');
     el.className = 'scrim';
     el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgT">
       <h3 id="dlgT">${title}</h3><div class="dialog__b">${bodyHtml ? raw(bodyHtml) : body}</div>
-      <div class="actions"><button class="btn btn--secondary" data-v="0">취소</button>
+      <div class="actions"><button class="btn btn--secondary" data-v="0">${cancel}</button>
       <button class="btn ${danger ? 'btn--danger' : 'btn--primary'}" data-v="1">${confirm}</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };
-    el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) done(b.dataset.v === '1'); else if (e.target === el) done(false); });
-    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(false); });
+    const dismiss = dismissable ? null : false;
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) done(b.dataset.v === '1'); else if (e.target === el) done(dismiss); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (dismissable) e.stopPropagation(); done(dismiss); } });
     document.body.append(el);
-    $('[data-v="0"]', el).focus();
+    $(dismissable ? '[data-v="1"]' : '[data-v="0"]', el).focus();
   });
 }
 

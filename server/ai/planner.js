@@ -370,13 +370,70 @@ export async function fixPlan(db, { plan, project, wid, userId, areas: wanted = 
     },
     postValidate: async (data) => { const r = normalizeCandidates(data.items, { reqs: ctx.reqs, existing: ctx.wbs, max: MAX_FIX_ITEMS, prefix: 'AI-FIX', reserved: plan.draft.items }); return { data: { items: r.items, notes: (data.notes || []).map((n) => str(n, 300)).filter(Boolean) }, warnings: r.warnings }; },
   });
-  const added = out.items.map((i) => ({ ...i, fix: true }));
-  const items = [...plan.draft.items, ...added].slice(0, MAX_ITEMS);
-  const warnings = [...(plan.draft.warnings || []), ...out.warnings, ...(plan.draft.items.length + added.length > MAX_ITEMS ? [`전체 후보가 ${MAX_ITEMS}개를 넘어 일부 보완 후보를 제외했습니다.`] : [])];
+  const room = Math.max(0, MAX_ITEMS - plan.draft.items.length);   // candidates come parent-first, so a cut never orphans a kept child
+  const placed = placeFixItems(plan.draft.items, out.items.slice(0, room).map((i) => ({ ...i, title: tidyTitle(i.title), fix: true })));
+  const { items, added } = placed;
+  const warnings = [...(plan.draft.warnings || []), ...out.warnings, ...placed.warnings, ...(out.items.length > room ? [`전체 후보가 ${MAX_ITEMS}개를 넘어 일부 보완 후보를 제외했습니다.`] : [])];
   const draft = { ...plan.draft, items, notes: [...(plan.draft.notes || []), ...out.notes], warnings };
   const coverage = computeCoverage({ areas, items, reqs: ctx.reqs, existing: ctx.wbs, linkBy: ctx.linkBy });
   await save(db, plan.id, { draft, coverage, areas });
   return { plan: await getPlan(db, project, plan.id), added: added.map((i) => i.temp_id), run: out.run };
+}
+
+/** Gap-fix titles: drop "[보완]" / "추가:" style markers and a leading "[영역]" / "영역:" label, collapse repeated words
+ *  ("비기능 요구사항 요구사항 정의" → "비기능 요구사항 정의"), trim trailing punctuation, keep it short. */
+const AREA_WORDS = new Set(Object.values(AREA_LABEL).flatMap((l) => [l, l.replace(/\(.*\)/, '').trim(), ...l.replace(/\(.*\)/, '').split('/').map((x) => x.trim())]).concat(['보완', '추가', '누락']));
+const isAreaLabel = (l) => AREA_WORDS.has(String(l).trim());
+export function tidyTitle(raw) {
+  let t = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < 3; i++) {
+    const before = t;
+    t = t.replace(/^[[(【]\s*(보완|추가|신규|누락|보완 후보)\s*[\])】]\s*/u, '').replace(/^(보완|추가|신규|누락)\s*[:：\-–—]\s*/u, '')
+      .replace(/^[[【]([^\]】]{1,24})[\]】]\s*/u, (m, l) => (isAreaLabel(l) ? '' : m)).replace(/^([^:：]{1,24})\s*[:：]\s*(?=\S)/u, (m, l) => (isAreaLabel(l) ? '' : m)).trim();
+    if (t === before) break;
+  }
+  const words = t.split(' '); const out = [];
+  for (const w of words) { const prev = out[out.length - 1]; if (prev && (prev === w || (prev.length >= 2 && prev.endsWith(w) && w.length >= 2))) continue; out.push(w); }
+  t = out.join(' ').replace(/[\s.,;·…]+$/u, '').trim();
+  if (t.length > 40) { const cut = t.slice(0, 40); const sp = cut.lastIndexOf(' '); t = (sp >= 20 ? cut.slice(0, sp) : cut).trim(); }
+  return t || String(raw ?? '').trim().slice(0, 40) || '(제목 없음)';
+}
+
+/** Gap-fix placement. The model often returns fix candidates without a parent; each such top-level candidate goes under the
+ *  draft's group node for the same project_area (shallowest TASK of that area, a group with children first), as long as the
+ *  depth limit allows. A new fix group that duplicates that group's title is dissolved into it. The result keeps the draft
+ *  order and puts each fix item after its siblings, so the tree reads area by area. Returns { items, added, warnings }. */
+export function placeFixItems(draft, fixes) {
+  const warnings = []; const all = [...draft, ...fixes]; const byTemp = new Map(all.map((i) => [i.temp_id, i]));
+  const kids = (id) => all.filter((x) => x.parent_temp_id === id);
+  const depthOf = (it, g = 0) => (!it || !it.parent_temp_id || g > 60 ? 1 : 1 + depthOf(byTemp.get(it.parent_temp_id), g + 1));
+  const height = (it, g = 0) => { const c = kids(it.temp_id); return g > 60 || !c.length ? 1 : 1 + Math.max(...c.map((x) => height(x, g + 1))); };
+  const groupFor = (area) => {
+    const cands = draft.filter((d) => d.project_area === area && d.item_type !== 'MILESTONE');
+    const score = (d) => depthOf(d) * 10 - (kids(d.temp_id).some((k) => !k.fix) ? 5 : 0);
+    return cands.sort((a, b) => score(a) - score(b))[0] || null;
+  };
+  const dropped = new Set();
+  for (const f of fixes) {
+    if (f.parent_temp_id || f.project_area === 'OTHER') continue;
+    const g = groupFor(f.project_area); if (!g) continue;
+    const mine = kids(f.temp_id);
+    if (mine.length && titleSimilarity(f.title, g.title) >= 1) {   // new "교육" group next to the draft's "교육" group → merge
+      for (const k of mine) k.parent_temp_id = g.temp_id;
+      dropped.add(f.temp_id); warnings.push(`${f.temp_id}: 초안의 '${g.title}'과(와) 같은 묶음이라 하위 항목을 그 아래로 합쳤습니다.`); continue;
+    }
+    if (depthOf(g) + height(f) > MAX_PLAN_DEPTH) continue;
+    f.parent_temp_id = g.temp_id;
+  }
+  for (const k of fixes) if (!dropped.has(k.temp_id) && k.parent_temp_id && depthOf(k) > MAX_PLAN_DEPTH) k.parent_temp_id = null;   // safety after merges
+  const keep = all.filter((i) => !dropped.has(i.temp_id)); const order = new Map(keep.map((i, n) => [i.temp_id, n]));
+  const childrenOf = new Map(); for (const i of keep) { const p = i.parent_temp_id && order.has(i.parent_temp_id) ? i.parent_temp_id : ''; if (!childrenOf.has(p)) childrenOf.set(p, []); childrenOf.get(p).push(i); }
+  const items = []; const seen = new Set();
+  const walk = (p, depth) => { for (const i of childrenOf.get(p) || []) { if (seen.has(i.temp_id)) continue; seen.add(i.temp_id); items.push({ ...i, depth }); walk(i.temp_id, depth + 1); } };
+  walk('', 1);
+  for (const i of keep) if (!seen.has(i.temp_id)) items.push({ ...i, depth: depthOf(i) });   // unreachable (cycle) → appended, never lost
+  const byId = new Map(items.map((i) => [i.temp_id, i]));
+  return { items, added: fixes.filter((f) => byId.has(f.temp_id)).map((f) => byId.get(f.temp_id)), warnings };   // added: in the model's order
 }
 
 /* ---------- 6. commit (idempotent, same transaction as the WBS writes) ---------- */
