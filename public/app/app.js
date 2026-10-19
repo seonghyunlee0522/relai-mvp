@@ -22,6 +22,7 @@ import { raidPage } from './raid/page.js';
 import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
 import { creditsPage } from './credits.js';
+import { sampleGuidePage } from './project/sample-guide.js';   // RELAI 가이드 · 샘플로 보기
 import './shared/upgrade.js';   // 402 plan_limit_reached → upgrade prompt (Phase 10)
 import { adminShell } from './admin/shell.js';
 import { adminDashboardPage } from './admin/dashboard.js';
@@ -38,6 +39,7 @@ import { adminInvitationsPage, adminEmailDeliveriesPage } from './admin/invitati
 registerRoutes([
   [/^\/app\/?$/, homePage],
   [/^\/app\/projects\/?$/, projectsPage],
+  [/^\/app\/guide\/?$/, sampleGuidePage],
   [/^\/app\/projects\/new\/?$/, projectFormPage],
   [/^\/app\/projects\/([\w-]+)\/?$/, nextPage],            // landing = What’s Next? (existing deep links keep working)
   [/^\/app\/projects\/([\w-]+)\/overview\/?$/, overviewPage],
