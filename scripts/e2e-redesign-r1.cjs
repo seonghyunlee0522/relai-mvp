@@ -38,7 +38,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
     const vis = (e) => e && e.offsetParent !== null && getComputedStyle(e).visibility !== 'hidden';
     const banners = [...document.querySelectorAll('.notice, .coach, .verifybar')].filter(vis);
     return {
-      rail: [...document.querySelectorAll('#rail .rail__i')].filter(vis).map((x) => x.textContent.trim()),
+      rail: [...document.querySelectorAll('#rail .rail__i:not(.rail__fb .rail__i)')].filter(vis).map((x) => x.textContent.trim()),
       active: [...document.querySelectorAll('#rail .rail__i.is-active')].map((x) => x.dataset.door),
       tab: [...document.querySelectorAll('.stabs__i.is-active')].map((x) => x.dataset.stab),
       title: (document.querySelector('.phead__title') || {}).textContent || '',
