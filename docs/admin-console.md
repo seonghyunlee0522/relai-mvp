@@ -10,7 +10,9 @@
 | 서비스 운영자 역할 | `users.system_role` | NONE / SYSTEM_ADMIN | `requireSystemAdmin` (`admin-routes.js`) |
 
 - 두 역할은 서로 다른 컬럼·Enum이며 어느 쪽도 다른 쪽에 영향을 주지 않는다. SYSTEM_ADMIN은 어떤 Workspace의 멤버도 아니며, `/api/workspaces/*`는 기존대로 404(비멤버)를 돌려준다. `requireMember`에는 운영자 로직이 없다.
-- 부여 방법은 CLI뿐: `DATABASE_URL=… node scripts/grant-system-admin.js user@email.com` (`--revoke`, `--list`). 회원가입·Admin UI 어디에서도 system_role을 바꿀 수 없다.
+- 부여 방법은 두 가지이며 회원가입·Admin UI 어디에서도 system_role을 바꿀 수 없다.
+  1. CLI: `DATABASE_URL=… node scripts/grant-system-admin.js user@example.com` (`--revoke`, `--list`).
+  2. `ADMIN_EMAILS` 환경변수 부트스트랩 (DB 스크립트 없이 첫 운영자를 만들 때): `ADMIN_EMAILS=founder@example.com,ops@example.com` — 쉼표 구분, 앞뒤 공백 제거·소문자 비교. 목록에 있는 이메일의 사용자가 로그인(비밀번호·Google)하거나 기존 세션으로 요청을 보낼 때 `system_role`이 NONE이면 SYSTEM_ADMIN으로 올리고, 같은 트랜잭션에서 `admin_audit_logs`에 `SYSTEM_ADMIN_BOOTSTRAP`(actor_kind ADMIN, 대상 = 본인, metadata `{ email, source: 'ADMIN_EMAILS' }`)을 남긴다. 승격만 한다: 목록에서 빼거나 변수를 지워도 강등되지 않으므로 권한 회수는 `grant-system-admin.js --revoke`로 한다. 변수가 없거나 비어 있으면 아무 일도 하지 않는다. 목록에 없는 이메일로는 아무것도 바뀌지 않으며, 추가 쿼리는 실제 승격 때만 실행된다 (`bootstrapSystemAdmin`, `server/admin.js`). 이메일 인증 여부는 보지 않는다 (2026-10-19 창업자 결정: 메일 발송이 보류되어 인증할 수 없음). 그러므로 목록의 주소로 먼저 가입한 사람이 운영자가 된다 — 해당 계정을 먼저 만든 뒤에 `ADMIN_EMAILS`를 설정한다.
 - 접근 제어: `/api/admin/*` — 미로그인 401, 비운영자 403(존재하지 않는 경로도 403 후 404). `/admin*` 페이지 — 미로그인은 `/login?next=` 리다이렉트, 비운영자 403 HTML. 프런트엔드의 메뉴 숨김은 편의일 뿐 통제 수단이 아니다.
 
 ## 2. 계정·Workspace 상태와 enforcement
@@ -28,6 +30,7 @@
 - **Workspaces** — 검색(이름·Owner 이메일), 상태 필터, 정렬. 상세: Owner·Members·Projects·Plan·Subscription(Billing 전엔 "미연동")·Usage 바·최근 Activity·운영자 조작. Action: 정지/해제.
 - **Usage** — Workspace별 Projects/Members/Requirements/WBS/주간보고(이번 달) 사용량과 Free 한도 대비 %, 80% 이상 주의, 90% 이상 확인 필요. 정렬: Projects/Requirements/WBS 사용률, 최근 활동.
 - **Subscriptions / Payments** — 읽기 전용. Billing 테이블이 없으면 "미연동" 안내만 표시(가짜 0 없음). 민감정보(billing key·카드번호·merchant key·생년월일·원본 TID)는 API 화이트리스트로 차단, TID는 끝 4자리만.
+- **의견** (migration 48, `server/feedback.js`) — 앱 레일 맨 아래 '의견 남기기'로 사용자가 보낸 의견. 사이드바 배지 = 새 의견 수. 필터: 상태(새 의견/검토 중/처리 완료)·종류(불편/개선 제안/오류/기타)·기간(KST 날짜, 양끝 포함), 검색: 내용·이름·이메일·페이지·메모. 상세: 보낸 사람 이름·이메일(회원 상세 링크), 워크스페이스·프로젝트, 페이지 경로, 브라우저(User-Agent), 상태 변경과 운영자 메모(저장할 때마다 `FEEDBACK_UPDATE` 감사 로그 1건, 같은 트랜잭션). 보내는 쪽: 로그인 사용자만, 내용 필수 2,000자 이내, 사용자당 시간당 10건(429), 현재 경로·워크스페이스/프로젝트 id(본인이 멤버일 때만)·사용자 id·User-Agent 자동 첨부. 의견 내용은 우리 DB에만 저장하며 외부 서비스로 보내지 않는다.
 - **Audit** — 일시·Admin·Action·Target·Summary. 필터: Action·Admin·Target Type, 검색: Target ID·이메일·Workspace명.
 - 레이아웃: "RELAI Admin" 헤더 + 운영자 사이드바(제품 네비 없음), 테이블 중심, 390px에서 조회 가능(가로 스크롤).
 
@@ -55,6 +58,9 @@ GET  /api/admin/billing
 GET  /api/admin/subscriptions?q&plan&status&page&size · GET /api/admin/subscriptions/:id
 GET  /api/admin/payments?q&status&provider&from&to&page&size · GET /api/admin/payments/:id
 GET  /api/admin/audit?q&action&admin&target_type&target_id&page&size
+POST  /api/feedback                   {category, message, page_path?, workspace_id?, project_id?}  (로그인 사용자, 시간당 10건)
+GET   /api/admin/feedback?status&category&from&to&q&page&size · GET /api/admin/feedback/summary · GET /api/admin/feedback/:id
+PATCH /api/admin/feedback/:id          {status?, admin_note?}
 ```
 오류 형식은 기존과 동일(`{error:{code,message}}`): 401 unauthenticated, 403 forbidden, 404 not_found, 400 validation_error/cannot_suspend_self, 409 already_suspended/not_suspended.
 

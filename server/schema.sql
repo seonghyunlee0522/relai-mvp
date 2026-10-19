@@ -1407,3 +1407,22 @@ SELECT v.id, v.title, v.body, v.badge, v.link_url, v.link_label, v.placements::t
 ) AS v(id, title, body, badge, link_url, link_label, placements, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version >= 47)
 ON CONFLICT (id) DO NOTHING;
+/* In-app feedback (migration 48, server/feedback.js): '의견 남기기' in the app rail, triaged in 관리자 › 의견. Additive only.
+ * category: INCONVENIENCE (불편) | SUGGESTION (개선 제안) | BUG (오류) | OTHER (기타). status: NEW | IN_REVIEW | DONE.
+ * workspace_id / project_id: where the sender was (kept only when they are a member); page_path + user_agent: auto-attached. */
+CREATE TABLE IF NOT EXISTS feedback (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  workspace_id TEXT,
+  project_id TEXT,
+  category TEXT NOT NULL CHECK (category IN ('INCONVENIENCE', 'SUGGESTION', 'BUG', 'OTHER')),
+  message TEXT NOT NULL,
+  page_path TEXT,
+  user_agent TEXT,
+  status TEXT NOT NULL DEFAULT 'NEW' CHECK (status IN ('NEW', 'IN_REVIEW', 'DONE')),
+  admin_note TEXT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status, created_at DESC);

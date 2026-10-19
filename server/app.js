@@ -40,6 +40,7 @@ import { ImportFileError } from './xlsx.js';
 import { requireAction, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
 import { mountPublicPromotionRoutes, promoBlockHtml } from './promotions.js';
+import { mountFeedbackRoutes } from './feedback.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
@@ -49,7 +50,7 @@ import { mountMaintenanceRoutes } from './maintenance.js';
 import { mountAccountRoutes, recordLogin } from './auth/account.js';
 import { createDirectSignupUser, createUser, touchIdentity, normEmail, recordConsent } from './accounts.js';
 import * as I from './invitations.js';
-import { writeAudit } from './admin.js';
+import { writeAudit, bootstrapSystemAdmin } from './admin.js';
 import { mountOnboardingRoutes } from './onboarding-routes.js';
 import { recordFirst } from './onboarding.js';
 import { guidanceContext, workspaceHome } from './home.js';
@@ -152,7 +153,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       if (row) {
         const user = await q.userById.get(row.user_id);
         if (user && user.status !== 'ACTIVE') { await q.delUserSessions.run(user.id); clearSessionCookie(res); req.suspendedUser = user; }
-        else req.user = user;
+        else { req.user = user; if (user) await bootstrapSystemAdmin(db, user); }   // ADMIN_EMAILS (promote-only, no query unless listed)
       }
       req.sessionToken = token;
     }
@@ -192,6 +193,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /** Shared post-authentication step (password login, Google callback): rotate session, stamp last login, keep the login record. */
   const afterLogin = async (req, res, user, method = 'PASSWORD') => {
     if (req.sessionToken) await q.delSession.run(tokenHash(req.sessionToken));
+    await bootstrapSystemAdmin(db, user);   // ADMIN_EMAILS: listed e-mail with system_role NONE → SYSTEM_ADMIN (never demotes)
     await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [user.id]);
     await recordLogin(db, { userId: user.id, method, req });
     await startSession(res, user.id);
@@ -277,6 +279,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountAdminRoutes(app, db, { requireAuth, wrap, fail });
   mountPublicPromotionRoutes(app, db, { wrap });   // GET /api/promotions?placement= (public; migration 47)
   mountAnalyticsRoutes(app, db, { requireAuth, wrap });
+  mountFeedbackRoutes(app, db, { requireAuth, wrap, fail });   // POST /api/feedback (의견 남기기; migration 48)
 
   /* ---------- projects (always workspace-scoped) ---------- */
   const base = '/api/workspaces/:wid/projects';

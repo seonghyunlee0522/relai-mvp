@@ -11,6 +11,7 @@ import { verifyBanner, wireVerifyBanner } from './auth.js';
 import { isPhone } from './core/device.js';
 import { mountGlobalRail, mountProjectRail, mountTopbar, setTopProject } from './frame.js';
 import { doorOf } from './shared/lifecycle.js';
+import { wireFeedback } from './feedback.js';
 
 export const icon = {
   home: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9.5 10 3l7 6.5V17H12v-5H8v5H3z" stroke-linejoin="round"/></svg>',
@@ -30,6 +31,7 @@ const toggleNav = () => { const s = $('#side'); if (!s) return; const open = !s.
 let wired = false;
 function wireOnce() {
   if (wired) return; wired = true;
+  wireFeedback();
   document.addEventListener('click', (e) => { if (e.target.closest('[data-ws-menu]')) toggleNav(); });
   document.addEventListener('click', (e) => { if (e.target.closest('[data-tab-more]')) { e.preventDefault(); toggleNav(); } });
   document.addEventListener('click', async (e) => { if (!e.target.closest('[data-logout]')) return; try { await api('POST', '/api/auth/logout', {}); } finally { state.user = null; location.href = '/login'; } });

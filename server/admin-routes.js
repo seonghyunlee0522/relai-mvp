@@ -12,6 +12,7 @@ import { adminIntegrations } from './integrations/routes.js';
 import { mountAdminInvitationRoutes } from './auth/routes.js';
 import { funnelReport, funnelCsv } from './analytics.js';
 import { mountAdminPromotionRoutes } from './promotions.js';
+import { mountAdminFeedbackRoutes } from './feedback.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -70,6 +71,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* Promotions (migration 47): marketing offers shown on signup/login/landing/credits/home — display only. */
   mountAdminPromotionRoutes(app, db, { guard, wrap, fail });
+
+  /* In-app feedback (migration 48): 의견 남기기 → 관리자 › 의견. */
+  mountAdminFeedbackRoutes(app, db, { guard, wrap, fail });
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 

@@ -32,6 +32,7 @@ import { adminSubscriptionsPage, adminSubscriptionPage, adminPaymentsPage, admin
 import { adminUsagePage } from './admin/usage.js';
 import { adminFunnelPage } from './admin/funnel.js';
 import { adminPromotionsPage } from './admin/promotions.js';
+import { adminFeedbackPage, adminFeedbackDetailPage } from './admin/feedback.js';
 import { adminAuditPage } from './admin/audit.js';
 import { adminIntegrationsPage } from './admin/integrations.js';
 import { adminInvitationsPage, adminEmailDeliveriesPage } from './admin/invitations.js';
@@ -70,6 +71,8 @@ registerRoutes([
   [/^\/admin\/usage\/?$/, adminUsagePage],
   [/^\/admin\/funnel\/?$/, adminFunnelPage],
   [/^\/admin\/promotions\/?$/, adminPromotionsPage],
+  [/^\/admin\/feedback\/?$/, adminFeedbackPage],
+  [/^\/admin\/feedback\/([\w-]+)\/?$/, adminFeedbackDetailPage],
   [/^\/admin\/invitations\/?$/, adminInvitationsPage],
   [/^\/admin\/email-deliveries\/?$/, adminEmailDeliveriesPage],
   [/^\/admin\/integrations\/?$/, adminIntegrationsPage],
