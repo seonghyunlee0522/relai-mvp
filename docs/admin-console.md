@@ -10,7 +10,9 @@
 | 서비스 운영자 역할 | `users.system_role` | NONE / SYSTEM_ADMIN | `requireSystemAdmin` (`admin-routes.js`) |
 
 - 두 역할은 서로 다른 컬럼·Enum이며 어느 쪽도 다른 쪽에 영향을 주지 않는다. SYSTEM_ADMIN은 어떤 Workspace의 멤버도 아니며, `/api/workspaces/*`는 기존대로 404(비멤버)를 돌려준다. `requireMember`에는 운영자 로직이 없다.
-- 부여 방법은 CLI뿐: `DATABASE_URL=… node scripts/grant-system-admin.js user@email.com` (`--revoke`, `--list`). 회원가입·Admin UI 어디에서도 system_role을 바꿀 수 없다.
+- 부여 방법은 두 가지이며 회원가입·Admin UI 어디에서도 system_role을 바꿀 수 없다.
+  1. CLI: `DATABASE_URL=… node scripts/grant-system-admin.js user@example.com` (`--revoke`, `--list`).
+  2. `ADMIN_EMAILS` 환경변수 부트스트랩 (DB 스크립트 없이 첫 운영자를 만들 때): `ADMIN_EMAILS=founder@example.com,ops@example.com` — 쉼표 구분, 앞뒤 공백 제거·소문자 비교. 목록에 있는 이메일의 사용자가 로그인(비밀번호·Google)하거나 기존 세션으로 요청을 보낼 때 `system_role`이 NONE이면 SYSTEM_ADMIN으로 올리고, 같은 트랜잭션에서 `admin_audit_logs`에 `SYSTEM_ADMIN_BOOTSTRAP`(actor_kind ADMIN, 대상 = 본인, metadata `{ email, source: 'ADMIN_EMAILS' }`)을 남긴다. 승격만 한다: 목록에서 빼거나 변수를 지워도 강등되지 않으므로 권한 회수는 `grant-system-admin.js --revoke`로 한다. 변수가 없거나 비어 있으면 아무 일도 하지 않는다. 목록에 없는 이메일로는 아무것도 바뀌지 않으며, 추가 쿼리는 실제 승격 때만 실행된다 (`bootstrapSystemAdmin`, `server/admin.js`). 이메일 인증(`email_verified_at`)을 마친 계정만 승격된다 — 미인증 상태로 목록의 주소를 선점한 가입자는 아무 권한도 얻지 못한다. 미인증 계정은 앱 배너에서 인증 메일을 다시 받아 인증한 뒤 다음 요청에서 승격된다.
 - 접근 제어: `/api/admin/*` — 미로그인 401, 비운영자 403(존재하지 않는 경로도 403 후 404). `/admin*` 페이지 — 미로그인은 `/login?next=` 리다이렉트, 비운영자 403 HTML. 프런트엔드의 메뉴 숨김은 편의일 뿐 통제 수단이 아니다.
 
 ## 2. 계정·Workspace 상태와 enforcement
