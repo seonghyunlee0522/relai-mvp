@@ -80,7 +80,7 @@ export function phaseIntro(phaseKey, phaseName) {
   return html`<div class="coach coach--phase" role="note" data-coach="${key}"><div class="coach__i">${phaseName ? phaseName[0] : '!'}</div><div class="coach__b"><b>${phaseName} 단계에서 하는 일</b><p>${p.what}</p><small>필요한 결과: ${p.outputs.join(' · ')}</small></div><button type="button" class="coach__x" data-coach-close="${key}" aria-label="닫기">×</button></div>`;
 }
 
-/* ---------- Help menu (global): RELAI 가이드 다시 보기 · 문의하기 (fb-app: 현재 화면 도움말 and 기능 안내 다시 보기 removed) ---------- */
+/* ---------- Help menu (global): RELAI 가이드 다시 보기 · 샘플로 보는 RELAI 가이드 (/app/guide) · 문의하기 (fb-app: 현재 화면 도움말 and 기능 안내 다시 보기 removed) ---------- */
 export function helpButton() { return html`<button type="button" class="helpbtn" aria-haspopup="menu" aria-expanded="false" title="도움말" data-tour-id="help">?</button>`; }
 export function wireHelp(root = document) {
   root.querySelectorAll('.helpbtn').forEach((b) => {
@@ -91,7 +91,7 @@ export function wireHelp(root = document) {
 function openMenu(btn) {
   const o = ob.peek(); const support = (o && o.support_email) || '';
   const m = document.createElement('div'); m.id = 'helpmenu'; m.className = 'helpmenu'; m.setAttribute('role', 'menu');
-  m.innerHTML = html`<button type="button" role="menuitem" data-h="tour">RELAI 가이드 다시 보기</button>${raw(support ? html`<a role="menuitem" href="mailto:${support}">문의하기</a>` : '')}`;
+  m.innerHTML = html`<button type="button" role="menuitem" data-h="tour">RELAI 가이드 다시 보기</button><a role="menuitem" href="/app/guide" data-link data-h-guide>샘플로 보는 RELAI 가이드</a>${raw(support ? html`<a role="menuitem" href="mailto:${support}">문의하기</a>` : '')}`;
   const r = btn.getBoundingClientRect(); m.style.cssText = `position:fixed;left:${Math.min(r.left, window.innerWidth - 240)}px;top:${r.bottom + 6 > window.innerHeight - 160 ? r.top - 150 : r.bottom + 6}px`;
   document.body.append(m); btn.setAttribute('aria-expanded', 'true');
   const close = () => { m.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', close); };

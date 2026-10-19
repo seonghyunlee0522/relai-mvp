@@ -183,9 +183,9 @@ export async function homePage(main = $('#main')) {
   // UI/UX P1-3 — desktop shows ONE notice block above the cards: the RELAI 시작하기 card carries the sample line + [샘플 프로젝트 삭제];
   // once that card is hidden (or done) the summary line takes them. The phone keeps its sample strip (no 시작하기 card there).
   const delBtn = canManage() && !isPhone() ? '<button type="button" class="btn btn--ghost btn--sm" data-samples-delete>샘플 프로젝트 삭제</button>' : '';
-  const startCard = any && desk ? checklistCard(o, { compact: true, aside: samples ? html`<div class="obcl__smp" data-sample-banner><span><b>샘플 프로젝트 ${samples}개</b>로 단계별 안내를 먼저 둘러보세요. 사용량에 포함되지 않습니다.</span>${raw(delBtn)}</div>` : '' }) : '';
-  const sampleBanner = samples && !desk ? html`<div class="sbanner" data-sample-banner><p><b>샘플 프로젝트 ${samples}개</b>가 들어 있습니다. 단계가 다른 샘플을 열어 RELAI가 단계마다 무엇을 안내하는지 살펴보세요. 샘플은 사용량에 포함되지 않습니다.</p>${raw(delBtn)}</div>` : '';
-  const sampleTail = samples && !startCard ? html`<span class="hsum__smp" data-sample-banner> 샘플 프로젝트 ${samples}개는 사용량에 포함되지 않습니다.${raw(delBtn)}</span>` : '';
+  const startCard = any && desk ? checklistCard(o, { compact: true, aside: samples ? html`<div class="obcl__smp" data-sample-banner><span><b>샘플 프로젝트 ${samples}개</b>로 단계별 안내를 먼저 둘러보세요. 사용량에 포함되지 않습니다. <a class="link" href="/app/guide" data-link data-sample-guide-link>샘플로 보는 가이드</a></span>${raw(delBtn)}</div>` : '' }) : '';
+  const sampleBanner = samples && !desk ? html`<div class="sbanner" data-sample-banner><p><b>샘플 프로젝트 ${samples}개</b>가 들어 있습니다. 단계가 다른 샘플을 열어 RELAI가 단계마다 무엇을 안내하는지 살펴보세요. 샘플은 사용량에 포함되지 않습니다. <a class="link" href="/app/guide" data-link data-sample-guide-link>샘플로 보는 가이드</a></p>${raw(delBtn)}</div>` : '';
+  const sampleTail = samples && !startCard ? html`<span class="hsum__smp" data-sample-banner> 샘플 프로젝트 ${samples}개는 사용량에 포함되지 않습니다. <a class="link" href="/app/guide" data-link data-sample-guide-link>샘플로 보는 가이드</a>${raw(delBtn)}</span>` : '';
   // while the 시작하기 card shows, it is the one notice: its 다음 할 일 already says what '오늘 할 일 n건' would (P1b)
   const sumText = real.length ? (startCard ? '' : homeSummary(real)) : realDone ? html`<b>진행 중인 직접 만든 프로젝트가 없습니다.</b> 완료된 프로젝트 ${realDone}개는 아래에 있습니다. <b>+ 새 프로젝트</b>로 다음 프로젝트를 시작하세요.` : startCard ? '' : '<b>아직 직접 만든 프로젝트가 없습니다.</b> 샘플 프로젝트를 둘러본 뒤 <b>+ 새 프로젝트</b>로 실제 프로젝트를 시작하세요.';
   main.innerHTML = html`<div class="page page--guide home">
