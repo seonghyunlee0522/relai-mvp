@@ -1,0 +1,41 @@
+/* 의견 남기기 (public/app/feedback.js) + 관리자 › 의견 (public/app/admin/feedback.js). Kept out of app.css on purpose. */
+
+/* rail: the entry sits at the bottom of the desktop rail */
+html:not(.is-phone) .rail:has(.rail__fb){display:flex;flex-direction:column}
+.rail__fb{margin-top:auto;padding:6px 6px 10px;border-top:1px solid var(--border-soft)}
+.rail__fb .rail__i{width:100%;border:0;background:none;cursor:pointer;font:inherit;font-size:var(--fs-xs)}
+
+/* modal */
+.fbdlg{max-width:480px}
+.fbdlg__lead{margin-bottom:14px!important;font-size:var(--fs-sm)}
+.fbdlg__cats{border:0;padding:0;margin:0 0 14px;display:flex;flex-wrap:wrap;gap:6px}
+.fbdlg__cats legend{font-size:var(--fs-sm);font-weight:600;margin-bottom:6px;padding:0}
+.fbdlg__cat{position:relative;cursor:pointer}
+.fbdlg__cat input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.fbdlg__cat span{display:inline-flex;align-items:center;height:32px;padding:0 14px;border:1px solid var(--border-strong);border-radius:999px;font-size:var(--fs-sm);font-weight:600;color:var(--text-2);background:#fff}
+.fbdlg__cat input:checked+span{background:var(--bg-tint);border-color:var(--blue);color:var(--blue-deep)}
+.fbdlg__cat input:focus-visible+span{outline:2px solid var(--blue);outline-offset:2px}
+.fbdlg__cats .err{flex-basis:100%}
+.fbdlg__msg{width:100%;min-height:128px}
+.fbdlg__meta{display:flex;align-items:flex-start;gap:8px;margin-top:4px}
+.fbdlg__meta .err{flex:1;margin:0}
+.fbdlg__count{margin-left:auto;font-size:var(--fs-xs);color:var(--text-3);white-space:nowrap}
+.fbdlg .form-err{margin:0 0 12px}
+.fbdlg .actions{margin-top:16px;display:flex;gap:8px}
+
+/* admin: sidebar badge, list excerpt, detail */
+.anav__badge{display:inline-block;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:#e5484d;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;vertical-align:1px}
+.afb__ex{display:block;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.afb__msg{white-space:pre-wrap;word-break:break-word;line-height:1.6;padding:14px 16px;margin:0}
+.afb__ua{font-size:var(--fs-xs);color:var(--text-3);word-break:break-all}
+.afb__grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.afb__f{padding:12px 14px 14px}
+.afb__f .field{margin-bottom:12px}
+.afb__f .actions{display:flex;justify-content:flex-end}
+.afb__f textarea{width:100%;min-height:120px}
+@media (max-width:900px){.afb__grid{grid-template-columns:1fr}}
+.afb__log{margin:0;padding:10px 14px 12px 32px;font-size:var(--fs-sm);color:var(--text-2);line-height:1.7}
+
+/* phone: 설정 › 의견 남기기 (full width, above 로그아웃) */
+html.is-phone .phone-feedback{width:100%;margin-top:20px;min-height:44px}
+html.is-phone .phone-feedback+.phone-logout{margin-top:10px}

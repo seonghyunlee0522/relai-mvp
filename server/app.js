@@ -40,6 +40,7 @@ import { ImportFileError } from './xlsx.js';
 import { requireAction, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
 import { mountPublicPromotionRoutes, promoBlockHtml } from './promotions.js';
+import { mountFeedbackRoutes } from './feedback.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
@@ -278,6 +279,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountAdminRoutes(app, db, { requireAuth, wrap, fail });
   mountPublicPromotionRoutes(app, db, { wrap });   // GET /api/promotions?placement= (public; migration 47)
   mountAnalyticsRoutes(app, db, { requireAuth, wrap });
+  mountFeedbackRoutes(app, db, { requireAuth, wrap, fail });   // POST /api/feedback (의견 남기기; migration 48)
 
   /* ---------- projects (always workspace-scoped) ---------- */
   const base = '/api/workspaces/:wid/projects';

@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { isPhone, PHONE_MSG } from './device.js';
 
 /** Writes a phone may still send (spec §2): sign-in/out and account mail, invitations, onboarding tips and guide hints. */
-const PHONE_WRITE_OK = [/^\/api\/auth\//, /^\/api\/invitations\//, /\/onboarding\//, /^\/api\/guides\//];
+const PHONE_WRITE_OK = [/^\/api\/auth\//, /^\/api\/invitations\//, /\/onboarding\//, /^\/api\/guides\//, /^\/api\/feedback$/];   // 의견 남기기 works in view mode too
 /** Phone = view mode: one toast, however many callers catch and re-toast the same error. */
 function phoneReadOnly() {
   if (!document.querySelector('.toast--ro')) { const t = document.createElement('div'); t.className = 'toast toast--ro'; t.setAttribute('role', 'status'); t.textContent = PHONE_MSG; document.body.append(t); setTimeout(() => t.remove(), 2600); }

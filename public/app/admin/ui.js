@@ -17,8 +17,8 @@ const TONE = { RECONNECT_REQUIRED: 'warn', ERROR: 'bad', DISABLED: 'muted', PART
   REGISTERED: 'muted', WORKSPACE_CREATED: 'warn', PROJECT_CREATED: 'act', ACTIVE_USER: 'ok', ok: 'ok', warn: 'warn', attention: 'bad', act: 'act', muted: 'muted', bad: 'bad' };
 const LABEL = { RECONNECT_REQUIRED: '재연결 필요', ERROR: '오류', DISABLED: '해제됨', PARTIAL: '부분 실패', SUCCESS: '성공', RUNNING: '실행 중', ACTIVE: '정상', SUSPENDED: '정지', DEACTIVATED: '탈퇴', CLOSED: '종료', SYSTEM_ADMIN: '시스템 관리자', NONE: '-', REGISTERED: '가입', WORKSPACE_CREATED: '워크스페이스 생성', PROJECT_CREATED: '프로젝트 생성', ACTIVE_USER: '활성 사용자', ok: '정상', warn: '주의', attention: '확인 필요' };
 export const chip = (v, label) => html`<span class="achip achip--${TONE[v] || 'muted'}">${label ?? LABEL[v] ?? v ?? '-'}</span>`;
-export const ACTIONS = { PROMOTION_CREATE: '프로모션 추가', PROMOTION_UPDATE: '프로모션 수정', PROMOTION_DELETE: '프로모션 삭제', SUSPEND_USER: '사용자 정지', REACTIVATE_USER: '사용자 정지 해제', SUSPEND_WORKSPACE: '워크스페이스 정지', REACTIVATE_WORKSPACE: '워크스페이스 정지 해제', GRANT_AI_CREDITS: 'AI 크레딧 지급', ADJUST_AI_CREDITS: 'AI 크레딧 조정', CREDIT_REFUND: 'AI 크레딧 환불', REFUND_PAYMENT: '결제 환불' };
-export const TARGET = { PROMOTION: '프로모션', USER: '사용자', WORKSPACE: '워크스페이스', SUBSCRIPTION: '구독', PAYMENT: '결제' };
+export const ACTIONS = { FEEDBACK_UPDATE: '의견 처리', PROMOTION_CREATE: '프로모션 추가', PROMOTION_UPDATE: '프로모션 수정', PROMOTION_DELETE: '프로모션 삭제', SUSPEND_USER: '사용자 정지', REACTIVATE_USER: '사용자 정지 해제', SUSPEND_WORKSPACE: '워크스페이스 정지', REACTIVATE_WORKSPACE: '워크스페이스 정지 해제', GRANT_AI_CREDITS: 'AI 크레딧 지급', ADJUST_AI_CREDITS: 'AI 크레딧 조정', CREDIT_REFUND: 'AI 크레딧 환불', REFUND_PAYMENT: '결제 환불' };
+export const TARGET = { FEEDBACK: '의견', PROMOTION: '프로모션', USER: '사용자', WORKSPACE: '워크스페이스', SUBSCRIPTION: '구독', PAYMENT: '결제' };
 
 /* ---- query string state (list pages keep filters in the URL so reloads and back navigation keep them) ---- */
 export const qs = () => Object.fromEntries(new URLSearchParams(location.search));

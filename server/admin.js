@@ -18,7 +18,7 @@ import { GRANTS_PLAN_SQL } from './billing/subscriptions.js';
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
 export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
 export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
-export const AUDIT_ACTIONS = ['PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS',
+export const AUDIT_ACTIONS = ['FEEDBACK_UPDATE', 'PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS',
   'PLATFORM_INVITE_CREATED', 'PLATFORM_INVITE_RESENT', 'PLATFORM_INVITE_REVOKED', 'PLATFORM_INVITE_ACCEPTED', 'WORKSPACE_INVITE_CREATED', 'WORKSPACE_INVITE_RESENT', 'WORKSPACE_INVITE_REVOKED', 'WORKSPACE_INVITE_ACCEPTED',
   'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'SYSTEM_ADMIN_BOOTSTRAP', 'WORKSPACE_CREATED_FROM_INVITE',
   'ONBOARDING_STARTED', 'ONBOARDING_SKIPPED', 'ONBOARDING_COMPLETED', 'FIRST_PROJECT_CREATED', 'FIRST_REQUIREMENT_CREATED', 'FIRST_WBS_CREATED'];
@@ -178,6 +178,7 @@ const SUMMARY = {
   ONBOARDING_STARTED: (m) => `온보딩 시작 (${m.key || ''}${m.replay ? ', 다시 보기' : ''})`, ONBOARDING_SKIPPED: (m) => `온보딩 건너뜀 (${m.key || ''})`, ONBOARDING_COMPLETED: (m) => `온보딩 완료 (${m.key || ''})`,
   FIRST_PROJECT_CREATED: () => '첫 프로젝트 생성', FIRST_REQUIREMENT_CREATED: () => '첫 요구사항 등록', FIRST_WBS_CREATED: () => '첫 WBS 작업 등록',
   SYSTEM_ADMIN_BOOTSTRAP: (m) => `ADMIN_EMAILS로 운영자 권한 부여 ${m.email || ''}`,
+  FEEDBACK_UPDATE: (m) => { const L = { NEW: '새 의견', IN_REVIEW: '검토 중', DONE: '처리 완료' }; const parts = [...(m.from_status !== m.status ? [`상태 ${L[m.from_status] || m.from_status} → ${L[m.status] || m.status}`] : []), ...(m.note_changed ? ['메모 수정'] : [])]; return `의견 ${parts.join(' · ')}`; },
   WORKSPACE_CREATED_FROM_INVITE: (m) => `초대로 워크스페이스 '${m.name || ''}' 생성`,
 };
 export const auditSummary = (a) => (SUMMARY[a.action] ? SUMMARY[a.action](a.metadata || {}) : a.action);
@@ -191,7 +192,7 @@ export async function listAudit(db, q = {}) {
   const where = []; const params = [];
   const action = oneOf(q.action, AUDIT_ACTIONS); if (action) { where.push('a.action = ?'); params.push(action); }
   if (q.admin) { where.push('(a.admin_user_id = ? OR adm.email ILIKE ?)'); params.push(String(q.admin), like(q.admin)); }
-  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT', 'PROMOTION']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
+  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT', 'PROMOTION', 'FEEDBACK']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
   // Operator actions by default; account/invitation events raised by regular users (Phase 13) are a separate view (actor_kind=USER) or `all`.
   const ak = q.actor_kind === 'all' ? '' : oneOf(q.actor_kind, ['ADMIN', 'USER']) || 'ADMIN';
   if (ak && !q.target_id) { where.push('a.actor_kind = ?'); params.push(ak); }
@@ -211,12 +212,13 @@ export const parseAdminEmails = (raw) => new Set(String(raw || '').split(',').ma
 /**
  * Promote `user` to SYSTEM_ADMIN when their e-mail is listed in ADMIN_EMAILS and their role is NONE. Promote only:
  * never demotes (removing an address from the list leaves the role alone; use scripts/grant-system-admin.js --revoke).
- * Requires a verified e-mail (email_verified_at), so an unverified signup that squats a listed address gets nothing.
+ * No e-mail verification check (founder 2026-10-19: e-mail sending is on hold, so nobody can verify). Risk: whoever signs
+ * up first with a listed address becomes operator — set ADMIN_EMAILS only after the listed accounts exist.
  * Cheap enough for every authenticated request: no query unless a promotion actually happens. Returns true on promotion
  * and mutates user.system_role so the current request already sees the new role.
  */
 export async function bootstrapSystemAdmin(db, user, raw = process.env.ADMIN_EMAILS) {
-  if (!user || (user.system_role || 'NONE') !== 'NONE' || !user.email || !user.email_verified_at) return false;
+  if (!user || (user.system_role || 'NONE') !== 'NONE' || !user.email) return false;
   const list = parseAdminEmails(raw);
   if (!list.size || !list.has(String(user.email).trim().toLowerCase())) return false;
   const promoted = await tx(db, async (db) => {

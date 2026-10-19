@@ -1,4 +1,4 @@
-/* ADMIN_EMAILS bootstrap: a listed e-mail becomes SYSTEM_ADMIN on login / session load; unset env changes nothing; never demotes. */
+/* ADMIN_EMAILS bootstrap: a listed e-mail becomes SYSTEM_ADMIN on login / session load (verified or not); unset env changes nothing; never demotes. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot } from './api-helpers.js';
@@ -76,15 +76,16 @@ test('an existing session is promoted on its next request (session load), no re-
   server.close();
 });
 
-test('unverified e-mail is not promoted until it is verified', async () => {
+test('an unverified e-mail is promoted too (founder 2026-10-19: e-mail sending is on hold, so nobody can verify)', async () => {
   const { db, server, client } = await boot();
   const u = await withEnv(undefined, () => signup(client, 'founder@example.com'));
+  assert.equal((await db.get('SELECT email_verified_at FROM users WHERE id = ?', [u.uid])).email_verified_at, null);
   await withEnv('founder@example.com', async () => {
-    assert.equal((await u.c('POST', '/api/auth/login', { email: u.email, password: 'passw0rd!' })).json.user.system_role, 'NONE');
-    assert.equal(await role(db, u.uid), 'NONE');
-    await verify(db, u.uid);
-    assert.equal((await u.c('GET', '/api/me')).json.user.system_role, 'SYSTEM_ADMIN');
+    assert.equal((await u.c('POST', '/api/auth/login', { email: u.email, password: 'passw0rd!' })).json.user.system_role, 'SYSTEM_ADMIN');
+    assert.equal(await role(db, u.uid), 'SYSTEM_ADMIN');
+    assert.equal((await u.c('GET', '/api/admin/dashboard')).status, 200);
   });
+  assert.equal(await bootstrapSystemAdmin(db, { id: 'x', email: 'founder@example.com', system_role: 'NONE', email_verified_at: null }, ''), false);   // still needs the list
   server.close();
 });
 
