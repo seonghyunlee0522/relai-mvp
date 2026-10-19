@@ -16,6 +16,7 @@ import { addWbsHistory } from '../wbs-history.js';
 import { runAiFeature, AiError } from './service.js';
 import { SYSTEM, dataBlock, inputBlock, neutralize } from './prompts.js';
 import { extractionContext, wbsGenerationContext, changeImpactContext, assistantContext } from './context.js';
+import { humanizeCodes } from './labels.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const uniq = (a) => [...new Set(a)];
@@ -281,7 +282,7 @@ export async function askProject(db, { project, wid, userId, question, history =
         if (seen.has(code)) continue; seen.add(code); refs.push(ref);
       }
       if (unknown.length) warnings.push(`근거를 확인할 수 없는 항목은 제외했습니다: ${uniq(unknown).slice(0, 8).join(', ')}`);
-      return { data: { answer: data.answer, references: refs, intents: ctx.intents }, warnings };
+      return { data: { answer: humanizeCodes(data.answer), references: refs, intents: ctx.intents }, warnings };   // prod 2026-10-19: answers echoed [DRAFT/UNDECIDED/HIGH]
     },
   });
 }

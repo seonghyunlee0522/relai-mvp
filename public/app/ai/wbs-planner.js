@@ -27,7 +27,7 @@ export async function openWbsPlanner({ pid, onDone }) {
   /* ---------- resume ---------- */
   if (list.active) {
     const a = list.active;
-    const resume = await confirmDialog({ title: '진행 중인 AI WBS 초안이 있습니다', body: `${a.status === 'REVIEW' ? '검토 단계' : '질문 단계'}에서 멈춘 초안(${new Date(a.created_at).toLocaleString('ko-KR')})이 있습니다. 이어서 진행할까요? "새로 시작"을 선택하면 기존 초안은 취소됩니다.`, confirm: '이어서 진행' });
+    const resume = await confirmDialog({ title: '진행 중인 AI WBS 초안이 있습니다', body: `${a.status === 'REVIEW' ? '검토 단계' : '질문 단계'}에서 멈춘 초안(${new Date(a.created_at).toLocaleString('ko-KR')})이 있습니다. 이어서 진행할까요? "새로 시작"을 선택하면 기존 초안은 취소됩니다.`, confirm: '이어서 진행', cancel: '새로 시작' });
     if (resume) { plan = a; if (plan.status === 'REVIEW') { loadItems(); step = 4; } else step = 2; }
     else { try { await api('POST', `${base}/${a.id}/cancel`, {}); } catch { /* ignore */ } }
   }

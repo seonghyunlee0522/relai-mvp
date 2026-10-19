@@ -213,9 +213,10 @@ test('assistant: intent routing picks context, references are validated against 
   assert.ok(call.system.includes('읽기 전용'));
   assert.equal(r.json.run.credit_cost, 3);
   // scope question loads requirements and flags unlinked ones; entity id in the question adds its detail block
-  setFakeProvider(() => ({ data: { answer: 'REQ-001이 WBS에 연결되어 있지 않습니다.', references: [{ type: 'REQUIREMENT', display_id: 'REQ-001' }], warnings: [] } }));
+  setFakeProvider(() => ({ data: { answer: 'REQ-001 [DRAFT/UNDECIDED/HIGH]이 WBS에 연결되어 있지 않습니다.', references: [{ type: 'REQUIREMENT', display_id: 'REQ-001' }], warnings: [] } }));
   const r2 = await A.c('POST', `${A.purl}/ai/ask`, { question: 'REQ-001 요구사항은 WBS에 연결됐어?' });
-  assert.equal(r2.status, 200); assert.ok(fakeCalls()[0].user.includes('(WBS 미연결)')); assert.ok(fakeCalls()[0].user.includes('## REQ-001 상세'));
+  assert.equal(r2.status, 200); assert.equal(r2.json.answer, 'REQ-001 [작성 중/미결정/높음]이 WBS에 연결되어 있지 않습니다.');   // codes echoed by the model are shown as UI labels
+  assert.ok(fakeCalls()[0].user.includes('(WBS 미연결)')); assert.ok(fakeCalls()[0].user.includes('## REQ-001 상세'));
   assert.equal(r2.json.references[0].href, `requirements?sel=${r2.json.references[0].id}`);
   assert.equal((await A.c('POST', `${A.purl}/ai/ask`, { question: '' })).status, 400);
   server.close();
