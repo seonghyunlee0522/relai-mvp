@@ -6,6 +6,8 @@ import { suspendUser, listAudit } from '../admin.js';
 import { shapeUsage } from '../usage.js';
 import { resetBillingCache, maskTid } from '../billing-admin.js';
 
+process.env.EARLY_ACCESS_CUTOFF = '2000-01-01T00:00:00Z';   // these cases check FREE limits on fresh workspaces: no early access (admin-fix.test.js covers EARLY)
+
 const grant = (db, uid) => db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [uid]);
 /** Signs up a service operator (system_role granted straight in the DB, exactly like scripts/grant-system-admin.js). */
 async function operator(db, client, email = 'ops@relai.io') {
@@ -181,7 +183,7 @@ test('usage: aggregation + limit %, tiers (warn ≥80, attention ≥90), sorts; 
   assert.equal(u.items.find((x) => x.workspace_id === Bw).tier, 'ok');
   assert.deepEqual(u.plans.FREE.limits, { projects: 1, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 });
   for (const s of ['requirements', 'wbs', 'activity']) assert.equal((await ops.c('GET', `/api/admin/usage?sort=${s}`)).status, 200);
-  assert.equal((await ops.c('GET', '/api/admin/usage?sort=bogus')).json.sort, 'projects');
+  assert.equal((await ops.c('GET', '/api/admin/usage?sort=bogus')).json.sort, 'ai');
   // tier thresholds on the shaping function (80 % is not reachable with the small member limit in an integration flow)
   assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 40, wbs: 0, weekly_reports: 0 }).tier, 'warn');
   assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 45, wbs: 0, weekly_reports: 0 }).tier, 'attention');

@@ -25,6 +25,13 @@ export const GRANTS_PLAN_SQL = `(
   OR (s.status = 'PAST_DUE' AND s.grace_period_end > now()))`;
 
 /**
+ * SQL expression (workspace alias `w`): the plan key the workspace is on right now — the same rule as effectivePlan().
+ * Use it in every list/detail query instead of COALESCE(subscription plan, 'FREE'), which skips early access.
+ */
+export const EFFECTIVE_PLAN_SQL = `COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}),
+    CASE WHEN w.early_access_until IS NOT NULL AND w.early_access_until > now() THEN 'EARLY' END, '${DEFAULT_PLAN}')`;
+
+/**
  * The plan a workspace is on right now: a granting subscription's plan (an existing TEAM keeps working until its period ends),
  * else EARLY while workspaces.early_access_until > now(), else FREE. Time is compared in SQL (never the client clock).
  */

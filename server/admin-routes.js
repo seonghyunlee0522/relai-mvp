@@ -40,7 +40,7 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   app.get('/api/admin/usage', guard, wrap(async (req, res) => {
     const { page, size } = A.paging(req.query);
-    const sort = USAGE_SORTS.includes(req.query.sort) ? req.query.sort : 'projects';
+    const sort = USAGE_SORTS.includes(req.query.sort) ? req.query.sort : 'ai';
     res.json({ ...(await allWorkspacesUsage(db, { sort, page, size, q: String(req.query.q || '').trim() })), page, size, sort, plans: PLANS });
   }));
 

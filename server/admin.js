@@ -13,12 +13,12 @@ import { ValidationError } from './validate.js';
 import { DEFAULT_PLAN, PLANS } from './plans.js';
 import { workspaceUsage, workspacesNearLimit } from './usage.js';
 import { billingDashboard, workspaceSubscription } from './billing-admin.js';
-import { GRANTS_PLAN_SQL } from './billing/subscriptions.js';
+import { EFFECTIVE_PLAN_SQL } from './billing/subscriptions.js';
 
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
 export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
 export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
-export const AUDIT_ACTIONS = ['FEEDBACK_UPDATE', 'PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS',
+export const AUDIT_ACTIONS = ['FEEDBACK_UPDATE', 'PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS', 'CREDIT_REFUND', 'REFUND_PAYMENT',
   'PLATFORM_INVITE_CREATED', 'PLATFORM_INVITE_RESENT', 'PLATFORM_INVITE_REVOKED', 'PLATFORM_INVITE_ACCEPTED', 'WORKSPACE_INVITE_CREATED', 'WORKSPACE_INVITE_RESENT', 'WORKSPACE_INVITE_REVOKED', 'WORKSPACE_INVITE_ACCEPTED',
   'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'SYSTEM_ADMIN_BOOTSTRAP', 'WORKSPACE_CREATED_FROM_INVITE',
   'ONBOARDING_STARTED', 'ONBOARDING_SKIPPED', 'ONBOARDING_COMPLETED', 'FIRST_PROJECT_CREATED', 'FIRST_REQUIREMENT_CREATED', 'FIRST_WBS_CREATED'];
@@ -75,7 +75,7 @@ export async function getUser(db, id) {
   const workspaces = await db.all(`SELECT w.id, w.name, w.status, m.role, m.created_at AS joined_at,
       (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status != 'ARCHIVED') AS project_count,
       (SELECT COUNT(*) FROM workspace_members o WHERE o.workspace_id = w.id AND o.role = 'OWNER') AS owner_count,
-      COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key
+      ${EFFECTIVE_PLAN_SQL} AS plan_key
     FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? ORDER BY m.created_at`, [id]);
   // Basic activity only: logins and project create/archive events (dates + workspace, no project content/names).
   const activity = await db.all(`SELECT 'PROJECT_CREATED' AS type, p.created_at AS at, w.name AS workspace_name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.sample_key IS NULL AND p.created_by = ?
@@ -109,7 +109,7 @@ const WS_COLS = `w.id, w.name, w.status, w.created_at, w.suspended_at,
     COALESCE((SELECT MAX(x.updated_at) FROM wbs_items x JOIN projects p ON p.id = x.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
     COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
     COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at,
-  COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}') AS plan_key`;
+  ${EFFECTIVE_PLAN_SQL} AS plan_key`;
 // "Owner" column = the earliest OWNER member (the creator unless ownership was transferred); the LATERAL join keeps it one query.
 const WS_FROM = `FROM workspaces w LEFT JOIN LATERAL (SELECT u.id, u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id
   WHERE m.workspace_id = w.id AND m.role = 'OWNER' ORDER BY m.created_at, u.email LIMIT 1) o ON true`;
