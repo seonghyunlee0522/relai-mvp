@@ -107,6 +107,19 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
     const plan = (await feature('AI WBS Planner 질문 (무과금)', 0, PLANNER_SCHEMAS.wbs_planning_questions, () => c('POST', `${PP}/ai/wbs-plans`, { all: true }), 201)).plan;
     await feature('AI WBS Planner 초안', 50, PLANNER_SCHEMAS.project_wbs_draft, () => c('POST', `${PP}/ai/wbs-plans/${plan.id}/generate`, {}));
 
+    // 보완 (gap-fix): parentless candidates with clumsy titles → placed under the matching area node, titles tidied (prod-test defect 3)
+    const drafted = (await c('GET', `${PP}/ai/wbs-plans/${plan.id}`)).json?.plan;
+    const reqItem = drafted?.draft?.items.find((i) => (i.related_requirement_ids || []).length);
+    await c('POST', `${PP}/ai/wbs-plans/${plan.id}/coverage`, { items: [{ temp_id: reqItem.temp_id, selected: false }] });   // leaves one requirement uncovered → fix allowed
+    const fixItem = (temp_id, title, project_area, related = []) => ({ temp_id, parent_temp_id: null, item_type: 'TASK', title, description: '', project_area, planned_duration_days: null, related_requirement_ids: related });
+    mock.transform = (name, data) => (name === 'wbs_plan_fix' ? { items: [fixItem('AI-FIX-1', '[보완] 성능 테스트 테스트', 'TESTING'), fixItem('AI-FIX-2', '기능 구현: 결제 요구사항 요구사항 구현', 'FUNCTIONAL_DEVELOPMENT', reqItem.related_requirement_ids)], notes: [] } : data);
+    const fx = await c('POST', `${PP}/ai/wbs-plans/${plan.id}/fix`, {}); mock.transform = null;
+    const fItems = fx.json?.plan?.draft?.items || []; const fBy = Object.fromEntries(fItems.map((i) => [i.temp_id, i])); const titleOf = (t) => fBy[t]?.title;
+    check('AI WBS Planner 보완: 200, free', fx.status === 200 && fx.json?.run?.credit_cost === 0, JSON.stringify(fx.json?.error || ''));
+    check('AI WBS Planner 보완: testing item under 테스트, clean title "성능 테스트"', titleOf(fBy['AI-FIX-1']?.parent_temp_id) === '테스트' && titleOf('AI-FIX-1') === '성능 테스트', JSON.stringify(fBy['AI-FIX-1']));
+    check('AI WBS Planner 보완: requirement item under 기능 개발, clean title', titleOf(fBy['AI-FIX-2']?.parent_temp_id) === '기능 개발' && titleOf('AI-FIX-2') === '결제 요구사항 구현', JSON.stringify(fBy['AI-FIX-2']));
+    check('AI WBS Planner 보완: no fix item at top level', fItems.filter((i) => i.fix && !i.parent_temp_id).length === 0);
+
     for (const [label, script, code, http] of [['429 (twice)', ['429', '429'], 'AI_PROVIDER_ERROR', 502], ['timeout', ['hang'], 'AI_TIMEOUT', 504], ['invalid JSON (twice)', ['invalid_json', 'invalid_json'], 'AI_INVALID_OUTPUT', 502]]) {
       const before = await bal(); mock.script = [...script];
       const r = await c('POST', `${PP}/ai/ask`, { question: '실패 확인' });
@@ -140,6 +153,36 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
       await page.waitForFunction(() => /크레딧은 차감되지 않았습니다/.test(document.body.textContent), null, { timeout: 10000 }).catch(() => null);
       check('UI ask failure: Korean message + "크레딧은 차감되지 않았습니다"', /잠시 후 다시 시도해 주세요\.? ?크레딧은 차감되지 않았습니다/.test(await page.textContent('body')));
       await shot(page, 'on-ask-429.png'); mock.script = [];
+      // WBS Planner resume dialog (prod-test defect 2): backdrop / Esc only close; discarding needs 새로 시작 + a confirm
+      const activeId = async () => (await c('GET', `${PP}/ai/wbs-plans`)).json?.active?.id || null;
+      const openPlanner = async () => { await go(`/app/projects/${P.id}/wbs`, '#ai-wbs, #ai-wbs2'); await page.evaluate(() => document.querySelector('#ai-wbs, #ai-wbs2').click()); await page.waitForSelector('#dlgT', { timeout: 8000 }).catch(() => null); };
+      const dlgTitle = () => page.textContent('#dlgT').catch(() => '');
+      await openPlanner();
+      check('UI planner: resume dialog shown for the active plan', /진행 중인 AI WBS 초안/.test(await dlgTitle()));
+      await shot(page, 'on-planner-resume.png');
+      await page.mouse.click(5, 5); await sleep(400);
+      check('UI planner: backdrop click closes the dialog and the planner', !(await page.$('#dlgT')) && !(await page.$('.dialog--ai-xl')));
+      check('UI planner: backdrop click keeps the paid plan', (await activeId()) === plan.id);
+      await openPlanner(); await page.keyboard.press('Escape'); await sleep(400);
+      check('UI planner: Esc keeps the plan too', !(await page.$('#dlgT')) && (await activeId()) === plan.id);
+      // default pick: 확정 + 작성 중 (AI-extracted), not 반려 / 범위 외 (prod-test defect 1)
+      for (const [title, status, scope] of [['AI 추출 요구사항', 'DRAFT', 'UNDECIDED'], ['반려된 요구사항', 'REJECTED', 'UNDECIDED'], ['범위 외 요구사항', 'DRAFT', 'OUT_OF_SCOPE']]) await c('POST', `${PP}/requirements`, { title, status, scope });
+      await openPlanner();
+      await page.click('.dialog [data-v="0"]'); await page.waitForFunction(() => /새로 시작할까요/.test(document.querySelector('#dlgT')?.textContent || ''), null, { timeout: 5000 }).catch(() => null);
+      check('UI planner: 새로 시작 asks for a second confirm', /기존 초안을 취소하고 새로 시작할까요/.test(await dlgTitle()));
+      await shot(page, 'on-planner-discard-confirm.png');
+      await page.click('.dialog [data-v="0"]'); await sleep(300);
+      check('UI planner: 돌아가기 returns to the resume dialog, plan kept', /진행 중인 AI WBS 초안/.test(await dlgTitle()) && (await activeId()) === plan.id);
+      await page.click('.dialog [data-v="0"]'); await page.waitForFunction(() => /새로 시작할까요/.test(document.querySelector('#dlgT')?.textContent || ''), null, { timeout: 5000 }).catch(() => null);
+      await page.click('.dialog [data-v="1"]'); await page.waitForSelector('#wp-count', { timeout: 8000 }).catch(() => null);
+      check('UI planner: confirmed 새로 시작 cancels the plan', (await activeId()) === null);
+      const pickState = await page.$$eval('#wp-list .pick', (ps) => ps.map((p) => [p.querySelector('.pick__t').textContent, p.querySelector('input').checked]));
+      const on = Object.fromEntries(pickState);
+      check('UI planner: CONFIRMED + DRAFT pre-selected, REJECTED / OUT_OF_SCOPE not', on['로그인'] && on['AI 추출 요구사항'] && !on['반려된 요구사항'] && !on['범위 외 요구사항'], JSON.stringify(pickState));
+      check('UI planner: selection count shown ("4 / 6건 선택")', /4 \/ 6건 선택/.test(await page.textContent('#wp-count').catch(() => '')) && /요구사항 4건을 기본으로 선택/.test(await page.textContent('#wp-default').catch(() => '')));
+      await page.click('#wp-list .pick:has-text("반려된 요구사항") input'); await sleep(150);
+      check('UI planner: count follows the selection', /5 \/ 6건 선택/.test(await page.textContent('#wp-count').catch(() => '')));
+      await shot(page, 'on-planner-pick.png');
       await page.goto(srv.base + '/app/settings/credits'); await page.waitForSelector('#cr-summary', { timeout: 8000 }).catch(() => null);
       check('UI AI 크레딧: no "AI 기능 준비 중" notice', !(await page.$('[data-ai-off]'))); await shot(page, 'on-credits.png');
     });

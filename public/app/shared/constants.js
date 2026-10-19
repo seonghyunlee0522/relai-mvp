@@ -28,6 +28,8 @@ export const REQ_TYPE = { UNSPECIFIED: '미지정', FUNCTIONAL: '기능', NON_FU
 export const REQ_PRIORITY = { UNSPECIFIED: '미지정', HIGH: '높음', MEDIUM: '보통', LOW: '낮음' };
 export const REQ_SCOPE = { UNDECIDED: '미결정', IN_SCOPE: '범위 내', OUT_OF_SCOPE: '범위 외' };
 export const REQ_STATUS = { DRAFT: '작성 중', REVIEWING: '검토 중', CONFIRMED: '확정', ON_HOLD: '보류', REJECTED: '반려' };
+/** AI WBS Planner default selection: 확정 + 작성 중 (AI-extracted requirements start as DRAFT), never 반려 or 범위 외. Archived ones are filtered before. */
+export const plannerDefaultReq = (r) => (r.status === 'CONFIRMED' || r.status === 'DRAFT') && r.scope !== 'OUT_OF_SCOPE';
 export const REQ_STATUS_CHIP = { CONFIRMED: 'chip--done', REVIEWING: 'chip--active', ON_HOLD: 'chip--hold', REJECTED: 'chip--muted' };
 export const REQ_SCOPE_CHIP = { IN_SCOPE: 'chip--done', OUT_OF_SCOPE: 'chip--muted', UNDECIDED: 'chip--hold' };
 export const REQ_FIELD_LABEL = { title: '제목', description: '설명', type: '유형', priority: '우선순위', scope: '범위', status: '상태', owner_user_id: '담당자', requester: '요청자' };
