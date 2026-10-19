@@ -1,7 +1,8 @@
 // Layout fit (founder 2026-10-19): login, signup and every guidance screen (account pages, invitation landing, empty list
 // screens, the first-run guide, explain-only dialogs) fit ONE screen — no vertical page scroll — at 1366×768, 1440×900,
 // 1920×1080 and 390×844. Work screens may scroll, but share one look on PC: 20px page title, 32px header/toolbar controls,
-// 36px list rows, no stray footer scroll under the full-height lists, 사업수행계획서 내려받기 in the 프로젝트 개요 header.
+// 36px list rows, no stray footer scroll under the full-height lists, 사업수행계획서 내려받기 in the 프로젝트 개요 header,
+// one phase-chip wording ('04 구현', never '03 분석·설계 업무') and the 이슈 · 리스크 tab counts on every tab of that group (batch5 P2-2/3).
 // Not part of `npm test` (needs a running server with samples on — SAMPLE_PROJECTS unset — and Playwright):
 //   BASE=http://127.0.0.1:3171 SHOTS=/tmp/layout-fit DATABASE_URL=postgres://… SESSION_SECRET=<server's> node scripts/e2e-layout-fit.cjs
 // Run it once more with Google sign-in configured (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI, GOOGLE_PROVIDER=fake): the Google
@@ -96,12 +97,18 @@ const PHONE = (w) => w < 768;
         looks.push({ t: t || 'home', ...(await ap.evaluate(() => { const ti = document.querySelector('.phead__title'); const cs = getComputedStyle(ti); const x = Math.round(ti.getBoundingClientRect().left);
           const ctl = [...document.querySelectorAll('.phead__r .btn, .rtool .btn:not(.btn--xs), .rtool .input, .rtool .select')].filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().height));
           const rows = [...document.querySelectorAll('.rtable tbody tr, .gtable tbody tr')].filter((e) => e.offsetParent).slice(0, 3).map((e) => Math.round(e.getBoundingClientRect().height));
-          return { fs: cs.fontSize, fw: cs.fontWeight, x, ctl: [...new Set(ctl)], rows: [...new Set(rows)], v: document.scrollingElement.scrollHeight - innerHeight, list: Boolean(document.querySelector('.page--wide>.rlayout')) }; })) });
+          const chip = document.querySelector('.phead .pchip'); const n = (k) => document.querySelector(`.stabs [data-stab="${k}"] .stabs__n`)?.textContent || '';
+          return { fs: cs.fontSize, fw: cs.fontWeight, x, ctl: [...new Set(ctl)], rows: [...new Set(rows)], v: document.scrollingElement.scrollHeight - innerHeight, list: Boolean(document.querySelector('.page--wide>.rlayout')),
+            chip: chip ? chip.textContent.trim() : '', badges: `${n('raid')}/${n('risks')}` }; })) });
       }
       const x0 = looks[0].x;
       check(`${tag} work screens: title 20px/800 at the same left edge`, looks.every((l) => l.fs === '20px' && l.fw === '800' && Math.abs(l.x - x0) <= 1), JSON.stringify(looks.map((l) => [l.t, l.fs, l.fw, l.x])));
       check(`${tag} work screens: header + toolbar controls are 32px`, looks.every((l) => l.ctl.every((h) => h === 32)), JSON.stringify(looks.map((l) => [l.t, l.ctl])));
       check(`${tag} list screens: rows 36px (both table kinds)`, looks.filter((l) => ['wbs', 'issues', 'requirements'].includes(l.t)).every((l) => l.rows.length && l.rows.every((h) => h === 36)), JSON.stringify(looks.map((l) => [l.t, l.rows])));
+      const chips = looks.filter((l) => l.chip);
+      check(`${tag} P2-2 phase chips: one wording "NN 단계명" (no 업무 suffix) on every work screen`, chips.length >= 4 && chips.every((l) => /^\d{2} [^\s].*$/.test(l.chip) && !/업무$/.test(l.chip)), JSON.stringify(chips.map((l) => [l.t, l.chip])));
+      const iss = looks.find((l) => l.t === 'issues'); const chg = looks.find((l) => l.t === 'changes');
+      check(`${tag} P2-3 변경 요청 tab keeps the 이슈 · 리스크 counts shown on 이슈`, iss.badges !== '/' && chg.badges === iss.badges, JSON.stringify({ issues: iss.badges, changes: chg.badges }));
       check(`${tag} full-height lists: the table scrolls, the page does not (no footer strip)`, looks.filter((l) => l.list).every((l) => l.v <= 0), JSON.stringify(looks.filter((l) => l.list).map((l) => [l.t, l.v])));
       await ap.goto(`${BASE}/app/projects/${mid.id}/charter`); await settle(ap, '.chx');
       const ch = await ap.evaluate(() => ({ inHead: Boolean(document.querySelector('.phead__r .pmenu [data-plan="pdf"]')), oldRow: Boolean(document.querySelector('.chx__head')) }));

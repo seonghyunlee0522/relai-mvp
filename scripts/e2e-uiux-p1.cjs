@@ -51,7 +51,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   /* ---------- P1-4: phase chip ---------- */
   await page.goto(`${BASE}/app/projects/${by.mid.id}/wbs`); await loaded('.phead .pchip');
   const c1 = await page.evaluate(() => { const c = document.querySelector('.phead .pchip'); return { cls: c.className, text: c.textContent.trim(), title: c.title, bg: getComputedStyle(c).backgroundColor }; });
-  check('P1-4 새솔유통(04) WBS: grey chip "03 분석·설계 업무"', /pchip--other/.test(c1.cls) && c1.text === '03 분석·설계 업무' && /현재 단계: 04 구현/.test(c1.title), JSON.stringify(c1));
+  check('P1-4 새솔유통(04) WBS: grey chip "03 분석·설계" (batch5 P2-2: no 업무 suffix)', /pchip--other/.test(c1.cls) && c1.text === '03 분석·설계' && /현재 단계: 04 구현/.test(c1.title), JSON.stringify(c1));
   await page.screenshot({ path: `${SHOTS}/p14-wbs-other-phase.png` });
   await page.goto(`${BASE}/app/projects/${by.early.id}/requirements`); await loaded('.phead .pchip');
   const c2 = await page.evaluate(() => { const c = document.querySelector('.phead .pchip'); return { cls: c.className, text: c.textContent.trim(), bg: getComputedStyle(c).backgroundColor }; });

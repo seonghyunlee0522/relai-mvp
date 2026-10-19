@@ -363,7 +363,7 @@ export async function wbsPage(id) {
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 WBS 내보내기 (Excel)', 'data-xl="export"'))}`],
       [archived ? '' : 'AI', archived ? '' : ai.enabled ? tmItem('AI로 초안 만들기', 'id="ai-wbs" title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs"', aiPrice(ai, 'WBS_GENERATION')) : tmItem('AI로 초안 만들기', 'id="ai-wbs" disabled', 'AI 기능이 설정되지 않았습니다')],
     ], { label: '일정 메뉴 더보기' });
-    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-wbs-pc" data-ai-pc title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다">AI로 초안 만들기</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
   };
 
   const draw = () => {
@@ -538,7 +538,7 @@ export async function wbsPage(id) {
 
   const bind = () => {
     const gEl = main.querySelector('#grid'); if (gEl) gEl.addEventListener('pointerdown', (e) => { wantDates = Boolean(e.target.closest('[data-period-empty]')); }, true);
-    for (const idb of ['ai-wbs', 'ai-wbs2']) { const aw = $(`#${idb}`); if (aw) aw.onclick = () => openWbsPlanner({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
+    for (const idb of ['ai-wbs', 'ai-wbs2', 'ai-wbs-pc']) { const aw = $(`#${idb}`); if (aw) aw.onclick = () => openWbsPlanner({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
     main.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { setParam('view', b.dataset.view === 'gantt' ? 'gantt' : ''); if (b.dataset.view === 'gantt') gx.mode = 'fit'; ghost = null; syncRows(); draw(); });
     const gf = $('#gfit'); if (gf) gf.onclick = () => { gx.mode = 'fit'; placeGantt(); };
     const gt = $('#gtoday'); if (gt) gt.onclick = () => { gx.mode = 'today'; placeGantt(); };

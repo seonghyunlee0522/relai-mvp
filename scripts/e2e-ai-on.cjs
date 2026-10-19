@@ -5,6 +5,8 @@
 // credits released; strict json_schema with gpt-4o-mini and a per-feature token cap on every call.
 // Browser part (skipped with a note when Playwright cannot be loaded): every AI entry point is shown with AI on and hidden or
 // disabled with AI off; a failed ask shows the Korean message. Not part of `npm test`.
+// batch5: on a PC (≥ 1024px) the 요구사항 / WBS toolbars show 'AI로 요구사항 추출' / 'AI로 초안 만들기' left of the primary button
+// (narrower: ⋯ only; AI off: none), and a 반영 완료 change request offers no 'AI 영향 분석'.
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
@@ -120,8 +122,34 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
     check('AI 크레딧 dashboard: ai_enabled true, 160 used this month', sum?.ai_enabled === true && sum?.this_month?.used === 160, JSON.stringify({ ai: sum?.ai_enabled, used: sum?.this_month?.used }));
     check('server log has no prompt text or key', !/실패 확인|이번 주 확인할 일은|sk-mock-not-real/.test(srv.log()));
 
+    await c('POST', `${PP}/wbs`, { title: '로그인 개발', planned_start_date: '2026-11-02', planned_end_date: '2026-11-13' });   // the WBS toolbar only shows with items
+    const done = (await c('POST', `${PP}/changes`, { title: '알림 문구 변경' })).json.change;
+    for (const body of [{ action: 'submit' }, { action: 'approve', customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-10-02', method: 'EMAIL', evidence: '회신 메일' } }, { action: 'implement' }]) await c('POST', `${PP}/changes/${done.id}/transition`, body);
+    check('seed: a 반영 완료 change request', (await c('GET', `${PP}/changes/${done.id}`)).json.change.status === 'IMPLEMENTED');
+
     await browser(srv.base, c.cookie(), async (page) => {
       const go = async (p, sel) => { await page.goto(srv.base + p); await page.waitForSelector(sel, { state: 'attached', timeout: 10000 }).catch(() => null); };
+      /* batch5 P1-1: the visible AI entry on the PC toolbar, left of the primary button; still in ⋯; hidden below 1024px */
+      const pcAi = (btn) => page.evaluate((b) => { const a = document.querySelector(b); const add = document.querySelector('[data-rtool-r2] #add'); const vis = (e) => Boolean(e && e.offsetParent && e.getBoundingClientRect().width);
+        return { shown: vis(a), left: vis(a) && vis(add) && a.getBoundingClientRect().right <= add.getBoundingClientRect().left && a.closest('[data-rtool-r2]') === add.closest('[data-rtool-r2]'), secondary: Boolean(a && /btn--secondary/.test(a.className)), text: a ? a.textContent.trim() : '' }; }, btn);
+      for (const [path, btn, menuId, label] of [['requirements', '#ai-extract-pc', '#ai-extract', 'AI로 요구사항 추출'], ['wbs', '#ai-wbs-pc', '#ai-wbs', 'AI로 초안 만들기']]) {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await go(`/app/projects/${P.id}/${path}`, btn);
+        const r = await pcAi(btn);
+        check(`P1-1 1440 ${path}: '${label}' visible as a secondary button left of the primary`, r.shown && r.left && r.secondary && r.text === label, JSON.stringify(r));
+        check(`P1-1 1440 ${path}: still offered in ⋯`, Boolean(await page.$(`.tmenu ${menuId}`)));
+        if (path === 'requirements') await shot(page, 'on-requirements-pc-ai.png'); else await shot(page, 'on-wbs-pc-ai.png');
+        const before = mock.calls.length; await page.click(btn); await page.waitForSelector('.scrim .dialog, .aidlg, [role=dialog]', { timeout: 5000 }).catch(() => null);
+        check(`P1-1 ${path}: the toolbar button opens the AI dialog (no AI call yet)`, Boolean(await page.$('.scrim .dialog, .aidlg, [role=dialog]')) && mock.calls.length === before);
+        await page.keyboard.press('Escape'); await sleep(300);
+        await page.setViewportSize({ width: 1023, height: 800 }); await sleep(300);
+        check(`P1-1 1023 ${path}: toolbar button hidden (⋯ only)`, !(await pcAi(btn)).shown && Boolean(await page.$(`.tmenu ${menuId}`)));
+        await page.setViewportSize({ width: 390, height: 844 }); await sleep(800);
+        check(`P1-1 390 ${path}: no toolbar AI button on the phone`, !(await pcAi(btn)).shown);
+      }
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await go(`/app/projects/${P.id}/changes?sel=${done.id}`, '.drawer .dh'); await sleep(500);
+      check('P2-1 변경: 반영 완료 CR offers no AI 영향 분석', !(await page.$('#ai-impact')) && /반영 완료/.test(await page.textContent('#drawer').catch(() => '')));
       await go(`/app/projects/${P.id}/requirements`, '#ai-extract');
       check('UI 요구사항: AI로 요구사항 추출 shown', await page.$('#ai-extract')); await shot(page, 'on-requirements.png');
       await go(`/app/projects/${P.id}/wbs`, '#ai-wbs, #ai-wbs2');
@@ -154,11 +182,13 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
     check('AI off: status enabled false, no provider/model', st.enabled === false && st.provider === null && st.model === null);
     const r = await c('POST', `${PP}/ai/ask`, { question: '안녕' });
     check('AI off: ask 503 AI_DISABLED in Korean, provider never called', r.status === 503 && r.json?.error?.code === 'AI_DISABLED' && HANGUL.test(r.json.error.message) && mock.calls.length === 0);
+    await c('POST', `${PP}/wbs`, { title: '로그인 개발', planned_start_date: '2026-11-02', planned_end_date: '2026-11-13' });
     await browser(srv.base, c.cookie(), async (page) => {
       await page.goto(`${srv.base}/app/projects/${P.id}/requirements`); await page.waitForSelector('#main .page__head, #main h1', { timeout: 10000 }).catch(() => null); await sleep(800);
-      check('AI off UI 요구사항: no AI 추출 entry', !(await page.$('#ai-extract')) && !(await page.$('#ai-extract2')));
+      check('AI off UI 요구사항: no AI 추출 entry', !(await page.$('#ai-extract')) && !(await page.$('#ai-extract2')) && !(await page.$('#ai-extract-pc')));
       check('AI off UI header: RELAI에게 물어보기 hidden', await page.$$eval('[data-ai-ask]', (bs) => bs.every((b) => b.hidden)));
       await page.goto(`${srv.base}/app/projects/${P.id}/wbs`); await page.waitForSelector('#main .wempty, #main .page__head', { timeout: 10000 }).catch(() => null); await sleep(800);
+      check('AI off UI WBS (with items): no PC toolbar AI button', !(await page.$('#ai-wbs-pc')));
       check('AI off UI WBS: no usable AI button (disabled or "사용 불가")', await page.$$eval('#ai-wbs, #ai-wbs2', (bs) => bs.every((b) => b.disabled)) && /사용 불가|AI 기능이 설정되지 않았습니다/.test(await page.innerHTML('#main')));
       await page.goto(`${srv.base}/app/projects/${P.id}/changes?sel=${cr.id}`); await sleep(1500);
       check('AI off UI 변경: no AI 영향 분석', !(await page.$('#ai-impact'))); await shot(page, 'off-changes.png');

@@ -202,7 +202,7 @@ export async function requirementsPage(id) {
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 목록 내보내기 (Excel)', 'data-xl="export"'))}${raw(tmItem('요구사항 정의서 PDF', 'data-reqdoc="pdf"'))}${raw(tmItem('요구사항 정의서 Word', 'data-reqdoc="docx"'))}`],
       [ai.enabled && !archived ? 'AI' : '', ai.enabled && !archived ? tmItem('AI로 요구사항 추출', 'id="ai-extract" title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)"', aiPrice(ai, 'REQUIREMENT_EXTRACTION')) : ''],
     ], { label: '요구사항 메뉴 더보기' });
-    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(statusSeg(curSt))}<input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}" aria-label="요구사항 검색"><span class="rtool__sp"></span>${raw(menu)}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}</div>`;
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(statusSeg(curSt))}<input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}" aria-label="요구사항 검색"><span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-extract-pc" data-ai-pc title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}</div>`;
   };
 
   const draw = () => {
@@ -262,7 +262,7 @@ export async function requirementsPage(id) {
     bindFilterClears(main, { setParam, keys: ['q', ...filterKeys, 'archived'], reload: async () => { await load(); draw(); } });
     const cx = $('#ctx-off'); if (cx) cx.onclick = () => { ctxCr = null; setParam('cr', ''); draw(); };
     for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; apvOpen = false; setParam('approval', ''); setParam('sel', ''); setParam('new', '1'); showDrawer(); drawCreate(); }; }
-    for (const ida of ['ai-extract', 'ai-extract2']) { const ax = $('#' + ida); if (ax) ax.onclick = () => openExtractDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
+    for (const ida of ['ai-extract', 'ai-extract2', 'ai-extract-pc']) { const ax = $('#' + ida); if (ax) ax.onclick = () => openExtractDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
     const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = () => openImport({ kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } });
     bindCoach(main);
     if (params().get('import') === '1' && !archived) { setParam('import', ''); openImport({ kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } }); }

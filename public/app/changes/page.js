@@ -1,7 +1,7 @@
 import { api, wsApi } from '../core/api.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { $, fmtDays, fmtKRW, fmtMD, fmtShort, html, raw, todayLocal } from '../core/dom.js';
-import { projectHead } from '../project/guide.js';
+import { projectHead, raidBadges } from '../project/guide.js';
 import { CR_PRIORITY, CR_STATUS, CR_STATUS_CHIP, IMPACT_TYPE, RELATION_TYPE, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE } from '../shared/constants.js';
 import { confirmDialog, pickerDialog, promptDialog, showErrors, toast } from '../shared/dialogs.js';
 import { aiStatus } from '../shared/ai.js';
@@ -47,7 +47,7 @@ export async function changesPage(id) {
     const q = params();
     const hasFilter = ['q', ...filterKeys, 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: 'changes', title: '변경 요청' }))}
+      ${raw(projectHead(p, g, { tab: 'changes', title: '변경 요청', badges: raidBadges(g.issues, g.risks) }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(coachMark('CHANGE_REQUEST_INTRO'))}
       <div class="summary summary--inline" style="margin-bottom:8px">
@@ -239,7 +239,7 @@ export async function changesPage(id) {
       <div class="dgrid">${raw(fld('우선순위', html`<select class="select select--sm" data-field="priority" ${dis}>${raw(opt(CR_PRIORITY, c.priority))}</select>`))}${raw(reqF)}</div>
       ${raw(moreFields(restF, moreOpen))}
       <div class="dsave" id="dsave"></div>
-      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·리스크를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
+      <h4 class="dh">영향 요약${raw(ai.enabled && !ro && !['IMPLEMENTED', 'REJECTED'].includes(c.status) ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·리스크를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
       ${raw(impactSummary(c))}
       <div class="dgrid">${raw(fld('일정 영향 (일)', html`<input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${dis}>`))}
         ${raw(fld('추가 공수 (MD)', html`<input class="input input--sm" type="number" min="0" step="0.5" data-field="effort_impact_md" value="${c.effort_impact_md ?? ''}" placeholder="0" ${dis}>`))}
@@ -261,7 +261,7 @@ export async function changesPage(id) {
       </div>
       <div class="dsave" id="dsave"></div>
 
-      <h4 class="dh">영향 요약${raw(ai.enabled && !ro ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·리스크를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
+      <h4 class="dh">영향 요약${raw(ai.enabled && !ro && !['IMPLEMENTED', 'REJECTED'].includes(c.status) ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-impact" style="margin-left:auto" title="연결 관계·테스트·리스크를 바탕으로 영향 후보 분석">AI 영향 분석</button>' : '')}</h4>
       ${raw(impactSummary(c))}
       <div class="dgrid dgrid--3">
         <div class="dfield"><span>일정 영향 (일)</span><div><input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>

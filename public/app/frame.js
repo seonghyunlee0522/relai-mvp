@@ -145,12 +145,13 @@ const sectionTabs = (info) => {
     : html`<a class="stabs__i ${info.tab && info.tab.key === t.key ? 'is-active' : ''}" href="${t.href}" data-link data-stab="${t.key}" ${raw(info.tab && info.tab.key === t.key ? 'aria-current="page"' : '')}>${t.label}${raw(info.badges[t.key] || '')}</a>`)).join(''))}</nav>`;
 };
 /** Phase chip next to the title — links to that phase's list on 지금 할 일. The current phase = blue chip with its name; any other
- * phase = grey chip '03 분석·설계 업무', so it never reads as "the project is in 03" (UI/UX P1-4). */
+ * phase = grey chip with the same '03 분석·설계' wording (batch5 P2-2: one format), so colour and title — not a suffix — say it is not
+ * the current phase (UI/UX P1-4). */
 const phaseChip = (p, g, key) => {
   const ph = key && (g.phases || []).find((x) => x.phase_key === key); if (!ph) return '';
   if (ph.is_current) return html`<a class="pchip" href="/app/projects/${p.id}" data-link data-phase-chip="${ph.phase_key}" title="현재 단계 · 지금 할 일에서 보기">${no2(ph.sequence)} ${ph.name}</a>`;
   const cur = g.current_phase;
-  return html`<a class="pchip pchip--other" href="/app/projects/${p.id}?phase=${ph.phase_key}" data-link data-phase-chip="${ph.phase_key}" title="이 화면이 속한 단계${cur ? ` (현재 단계: ${no2(cur.sequence)} ${cur.name})` : ''}">${no2(ph.sequence)} ${ph.name} 업무</a>`;
+  return html`<a class="pchip pchip--other" href="/app/projects/${p.id}?phase=${ph.phase_key}" data-link data-phase-chip="${ph.phase_key}" title="이 화면이 속한 단계${cur ? ` (현재 단계: ${no2(cur.sequence)} ${cur.name})` : ''}">${no2(ph.sequence)} ${ph.name}</a>`;
 };
 /** The desktop page header. `actions` = the ⋯ menu group (project actions) + optional secondaries, already rendered. */
 export function pageHeader(p, g, info, actions) {

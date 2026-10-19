@@ -1352,6 +1352,8 @@ a.akpi__i:hover{border-color:var(--border-blue)}
 /* ===================== AI Productivity Layer (Phase 11) — same blue B2B system; results are 초안/후보 ===================== */
 .btn--ai{border-color:var(--border-blue);color:var(--blue-deep);background:var(--bg-tint)}
 .btn--ai:hover{background:var(--blue-soft)}
+/* batch5 P1-1: the visible AI entry on the 요구사항 / WBS PC toolbar (left of the primary); narrower screens keep it in ⋯ */
+@media (max-width:1023px){.ai-pc{display:none}}
 .btn--ai::before{content:"";display:inline-block;width:8px;height:8px;border-radius:var(--r-sm);background:var(--blue);margin-right:7px;vertical-align:1px;transform:rotate(45deg)}
 .wsh__ask{white-space:nowrap}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:aispin .8s linear infinite;vertical-align:-2px}

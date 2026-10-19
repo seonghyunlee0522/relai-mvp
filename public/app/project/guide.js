@@ -24,6 +24,8 @@ export const statusPill = (p) => sampleChip(p) + (p.status === 'COMPLETED' && p.
   ? html`<span class="chip chip--done wsh__done" data-closed-pill>✓ 완료 · ${md(String(p.closed_on).slice(0, 10))}</span>`
   : html`<span class="chip ${STATUS_CHIP[p.status] || ''}">${STATUS[p.status]}</span>`);
 
+/** 이슈 · 리스크 tab counts, shown on every tab of the 이슈·변경 group (batch5 P2-3): open issues, high/critical open risks. */
+export const raidBadges = (is, rs) => ({ raid: is && is.active ? html`<em class="stabs__n">${is.active}</em>` : '', risks: rs && rs.high_or_critical ? html`<em class="stabs__n">${rs.high_or_critical}</em>` : '' });
 /**
  * Project Workspace header (sticky) — also mounts the project LNB into the shell sidebar.
  * `tab` = LNB item key to mark active (next | overview | definition | requirements | wbs | overview-wbs | tests | acceptance | changes | raid | reports …);

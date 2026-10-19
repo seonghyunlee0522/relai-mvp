@@ -2,8 +2,10 @@
  * Each worked example = what the screen looks like when it is filled in (a small static preview taken from the sample
  * content) + why it matters + a button that opens the same screen of the user's own copy of that sample.
  * The previews are static text, so the guide still reads when the samples were deleted; only the buttons need them.
+ * Figures that move with the calendar (WBS 진행률) are read from the user's own sample copy, never hard-coded (batch5 P2-4),
+ * and the closing example opens that copy's 완료보고서 itself rather than the report list.
  * Styles: sample-guide.css, every rule under .sg (loaded once from here; app.css is not touched). */
-import { api } from '../core/api.js';
+import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 
@@ -63,8 +65,8 @@ const SAMPLES = [
           <small>고객 승인: 강민서 PM 회신 메일 (공수 4MD 추가 승인)</small></div>`,
         why: '기준선이 정해진 뒤의 추가·변경은 말로 받지 않고 변경 요청으로 남깁니다. 일정과 공수 영향을 먼저 적고 고객 승인을 받으면, 일정이 늘어난 이유가 기록으로 남아 완료보고서까지 이어집니다.' },
       { id: 'weekly', phase: '매주', title: '주간보고 — 쌓인 데이터로 자동 작성', path: '/reports',
-        preview: () => html`<div class="sg-doc"><b>새솔유통 물류 WMS 고도화 주간보고</b>
-          <ol>${li(['프로젝트 현황 — 단계 구현 · 상태 위험 (리스크 심각 1건) · WBS 진행률 46%', '금주 완료 — ISS-001 PDA 화면 깨짐 해결', '진행 중 — PDA 화면 개발 85% · 웨이브 피킹 개발 60%', '이슈·리스크 — ISS-002 택배사 API 지연 · RSK-001 데이터 품질', '확인 및 의사결정 필요사항 — RSK-001, RSK-002', '차주 계획 — 종료 예정 작업, 이슈 기한, 리스크 검토일'])}</ol></div>`,
+        preview: (live) => html`<div class="sg-doc"><b>새솔유통 물류 WMS 고도화 주간보고</b>
+          <ol>${li([`프로젝트 현황 — 단계 구현 · 상태 위험 (리스크 심각 1건)${typeof live.wbsProgress === 'number' ? ` · WBS 진행률 ${live.wbsProgress}%` : ''}`, '금주 완료 — ISS-001 PDA 화면 깨짐 해결', '진행 중 — PDA 화면 개발 85% · 웨이브 피킹 개발 60%', '이슈·리스크 — ISS-002 택배사 API 지연 · RSK-001 데이터 품질', '확인 및 의사결정 필요사항 — RSK-001, RSK-002', '차주 계획 — 종료 예정 작업, 이슈 기한, 리스크 검토일'])}</ol></div>`,
         why: 'WBS·RAID·변경 요청을 평소에 적어 두면 주간보고는 버튼 한 번으로 초안이 나옵니다. 보고서를 따로 쓰는 시간 대신, 고객이 결정해야 할 일을 한눈에 보여 주는 데 집중할 수 있습니다.' },
     ] },
   { key: 'done', mark: 'C', label: '종료 직전', name: '한결건설 사내 그룹웨어 구축', where: '07 운영 · 종료만 남음',
@@ -75,7 +77,7 @@ const SAMPLES = [
           <p>요구사항마다 만든 테스트를 통과한 뒤 검수를 요청했고, 고객 PM이 확인했습니다.</p>
           <small>고객 승인: 검수 확인서 서명본 (이서연 PM)</small></div>`,
         why: '검수는 착수 때 적은 성공 기준과 확정한 요구사항을 기준으로 받습니다. 서명이나 메일로 근거를 남겨 두면 "끝났다"를 객관적으로 보여 줄 수 있고, 잔금·종료 협의가 쉬워집니다.' },
-      { id: 'closing', phase: '07 운영', title: '운영 인계와 완료보고서 — 교훈까지 남기고 종료', path: '/reports',
+      { id: 'closing', phase: '07 운영', title: '운영 인계와 완료보고서 — 교훈까지 남기고 종료', path: '/reports', livePath: (live) => (live.completionId ? `/reports/${live.completionId}` : ''),
         preview: () => html`<dl class="sg-kv">
           <dt>운영 인계</dt><dd>운영 담당(정보시스템팀)에게 인계 완료</dd>
           <dt>잘한 점</dt><dd>요구사항 확정 승인을 일찍 받아 범위 논쟁이 적었다 · 이관 리허설 2회로 오픈 당일 문제가 없었다</dd>
@@ -90,6 +92,16 @@ const sampleIds = async () => {
   catch { return {}; }
 };
 
+/** What the previews and buttons read from the user's sample copies: B's WBS 진행률 (the number Home shows) and C's 완료보고서 id. */
+const liveFacts = async (ids) => {
+  const [mid, done] = await Promise.all([
+    ids.mid ? api('GET', wsApi(`/${ids.mid}`)).catch(() => null) : null,
+    ids.done ? api('GET', wsApi(`/${ids.done}/weekly-reports`)).catch(() => null) : null]);
+  const pr = mid && mid.wbs ? Number(mid.wbs.progress) : NaN;
+  const cr = done && (done.items || []).find((r) => r.report_type === 'COMPLETION');
+  return { wbsProgress: Number.isFinite(pr) ? Math.round(pr) : null, completionId: cr ? cr.id : null };
+};
+
 const openBtn = (pid, path, label = '샘플에서 보기 →') => (pid
   ? html`<a class="btn btn--secondary btn--sm" href="/app/projects/${pid}${path}" data-link data-sg-open>${label}</a>`
   : '');
@@ -98,6 +110,7 @@ export async function sampleGuidePage(main = $('#main')) {
   document.title = 'RELAI 가이드 — RELAI';
   loadCss();
   const ids = await sampleIds();
+  const live = await liveFacts(ids);
   const missing = SAMPLES.some((s) => !ids[s.key]);
   const manage = state.workspace && state.workspace.role !== 'MEMBER';
   let n = 0;
@@ -112,8 +125,8 @@ export async function sampleGuidePage(main = $('#main')) {
         <span class="sg-s__open">${raw(openBtn(ids[s.key], '', '샘플 열기'))}</span></header>
       ${raw(s.moments.map((m) => html`<article class="sg-ex" data-sg-ex="${m.id}">
         <div class="sg-ex__h"><span class="sg-ex__n">${String(++n)}</span><div><small>${m.phase}</small><h3>${m.title}</h3></div></div>
-        <div class="sg-ex__b"><div class="sg-pv" aria-label="채워진 예시">${raw(m.preview())}</div>
-          <div class="sg-why"><b>왜 중요한가</b><p>${m.why}</p>${raw(openBtn(ids[s.key], m.path))}</div></div>
+        <div class="sg-ex__b"><div class="sg-pv" aria-label="채워진 예시">${raw(m.preview(live))}</div>
+          <div class="sg-why"><b>왜 중요한가</b><p>${m.why}</p>${raw(openBtn(ids[s.key], (m.livePath && m.livePath(live)) || m.path))}</div></div>
       </article>`).join(''))}
     </section>`).join(''))}
     <p class="sg-end">내 프로젝트에서는 <a class="link" href="/app" data-link>홈</a>의 지금 할 일이 이 순서대로 하나씩 안내합니다.</p>

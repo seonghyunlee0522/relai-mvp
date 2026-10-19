@@ -1,6 +1,7 @@
 // RELAI 가이드 · 샘플로 보기 (/app/guide) — signup (3 samples) → guide renders one section per sample, each worked example has
 // a filled-in preview + 왜 중요한가 + a button to the same screen of that sample → entry points (도움말 menu, Home banner) →
 // a button opens the real sample screen → 375 has no horizontal scroll → after deleting the samples the guide still reads, without buttons.
+// batch5 P2-4: the 주간보고 example's WBS 진행률 is the sample's own (= Home), and the closing example opens the 완료보고서 itself.
 // Not part of `npm test` (needs a running server with samples on — SAMPLE_PROJECTS unset — and Playwright).
 //   BASE=http://127.0.0.1:3281 SHOTS=research/relai-guide-samples DATABASE_URL=postgres://… node scripts/e2e-sample-guide.cjs
 const fs = require('fs');
@@ -37,6 +38,10 @@ const EXPECT = {
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
   const by = Object.fromEntries((await api('GET', `/api/workspaces/${w}/projects`)).json.projects.filter((p) => p.sample_key).map((p) => [p.sample_key, p.id]));
   check('3 samples present', Object.keys(by).sort().join() === 'done,early,mid', JSON.stringify(by));
+  const midWbs = Math.round(Number((await api('GET', `/api/workspaces/${w}/projects/${by.mid}`)).json.wbs.progress));
+  const completion = ((await api('GET', `/api/workspaces/${w}/projects/${by.done}/weekly-reports`)).json.items || []).find((r) => r.report_type === 'COMPLETION');
+  check('done sample has a 완료보고서', Boolean(completion));
+  if (completion) EXPECT.done.closing = `/reports/${completion.id}`;
 
   /* ---------- the guide ---------- */
   await guide();
@@ -56,6 +61,8 @@ const EXPECT = {
     for (const ex of sec.ex) check(`${sec.key}/${ex.id}: filled-in preview + 왜 중요한가 + button to ${want[ex.id]}`, ex.pv > 40 && ex.why > 40 && ex.href === `/app/projects/${by[sec.key]}${want[ex.id]}`, JSON.stringify(ex));
   }
   check('guide: keeps the terms 마일스톤 · 산출물 · WBS · 프로젝트 개요 · 프로젝트 관리 방법', ['마일스톤', '산출물', 'WBS', '프로젝트 개요', '프로젝트 관리 방법'].every((t) => v.text.includes(t)));
+  const weeklyPv = await page.textContent('[data-sg-ex="weekly"] .sg-pv');
+  check(`P2-4 주간보고 example: WBS 진행률 ${midWbs}% comes from the sample (not a fixed 46%)`, weeklyPv.includes(`WBS 진행률 ${midWbs}%`), weeklyPv);
   check('guide: no template leftovers', !/undefined|NaN|SAMPLEOWNERNAME|\[object/.test(v.text));
   check('guide: styles loaded (scoped sheet)', await page.evaluate(() => getComputedStyle(document.querySelector('.sg-ex')).borderRadius !== '0px'));
   await page.screenshot({ path: `${SHOTS}/guide-1440.png`, fullPage: true });
@@ -65,6 +72,12 @@ const EXPECT = {
   await page.click('[data-sg-ex="wbs"] [data-sg-open]');
   await page.waitForFunction(() => /웨이브 피킹 개발/.test(document.querySelector('#main')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
   check('WBS button → the mid sample WBS screen', page.url().endsWith(`/app/projects/${by.mid}/wbs`) && /웨이브 피킹 개발/.test(await page.textContent('#main')), page.url());
+  await guide();
+  await page.click('[data-sg-ex="closing"] [data-sg-open]');
+  await page.waitForFunction(() => /완료보고서/.test(document.querySelector('#main h1, #main .phead__title')?.textContent || document.querySelector('#main')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
+  check('P2-4 closing example → the done sample 완료보고서 (not the 주간보고 list)', completion && page.url().endsWith(`/app/projects/${by.done}/reports/${completion.id}`) && /완료보고서/.test(await page.textContent('#main')) && !(await page.$('.rpl__p')), page.url());
+  await page.goto(`${BASE}/app/projects/${by.mid}`); await page.waitForTimeout(1500);
+  check(`P2-4 the same ${midWbs}% shows on the sample's 지금 할 일`, (await page.textContent('#main')).includes(`${midWbs}%`));
   await guide();
   await page.click('[data-sg-ex="milestones"] [data-sg-open]'); await page.waitForTimeout(1500);
   check('마일스톤 button → the early sample 마일스톤 tab', page.url().endsWith(`/app/projects/${by.early}/definition/milestones`) && /요구사항 확정/.test(await page.textContent('#main')), page.url());
@@ -91,6 +104,7 @@ const EXPECT = {
   await api('DELETE', `/api/workspaces/${w}/samples`);
   await guide();
   const gone = await page.evaluate(() => ({ ex: document.querySelectorAll('[data-sg-ex] .sg-pv').length, btns: document.querySelectorAll('[data-sg-open]').length, note: document.querySelector('[data-sg-missing]')?.textContent || '' }));
+  check('P2-4 samples deleted: 주간보고 example drops the WBS 진행률 (no stale number)', !/WBS 진행률/.test(await page.textContent('[data-sg-ex="weekly"] .sg-pv')));
   check('samples deleted: 10 examples still shown, no open buttons, note with 설정 link', gone.ex === 10 && gone.btns === 0 && /설정에서 샘플 다시 추가/.test(gone.note), JSON.stringify(gone));
   await page.screenshot({ path: `${SHOTS}/guide-no-samples-1440.png` });
 
