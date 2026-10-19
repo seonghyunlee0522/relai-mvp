@@ -36,6 +36,18 @@ export function estimateProviderCost(model, inputTokens, outputTokens) {
   return Number(((inputTokens * p[0] + outputTokens * p[1]) / 1e6).toFixed(6));
 }
 
+/**
+ * Output-token cap per call, sized to each feature's schema so a run cannot run away (gpt-4o-mini: $0.6 per 1M output tokens,
+ * so the largest cap costs under ₩10). AI_MAX_OUTPUT_TOKENS_<FEATURE> overrides one feature; AI_MAX_OUTPUT_TOKENS, when set, is a ceiling for all.
+ * WBS_GENERATION covers the Planner's full draft (up to 100 items); Q&A answers are short.
+ */
+const MAX_OUTPUT_TOKENS = { REQUIREMENT_EXTRACTION: 4_000, WBS_GENERATION: 8_000, CHANGE_IMPACT: 2_500, PROJECT_QA: 1_500, WBS_PLAN_QUESTIONS: 3_000, WBS_PLAN_FIX: 3_000 };
+export function maxOutputTokensFor(feature) {
+  const per = Math.max(256, envInt(`AI_MAX_OUTPUT_TOKENS_${feature}`, MAX_OUTPUT_TOKENS[feature] ?? 4_000));
+  const ceiling = process.env.AI_MAX_OUTPUT_TOKENS ? Math.max(256, envInt('AI_MAX_OUTPUT_TOKENS', per)) : Infinity;
+  return Math.min(per, ceiling);
+}
+
 const DEFAULT_MODEL = { anthropic: 'claude-sonnet-4-5', openai: 'gpt-4o-mini', fake: 'fake-model' };
 
 /** Full (server-side) configuration. `enabled` is false whenever the provider has no credential. */

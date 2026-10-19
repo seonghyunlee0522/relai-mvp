@@ -24,18 +24,26 @@ async function call(url, init, timeoutMs) {
   try {
     return await fetch(url, { ...init, signal: ctl.signal });
   } catch (e) {
-    if (e.name === 'AbortError') throw new AiProviderError('AI_TIMEOUT', `AI 응답 시간이 ${Math.round(timeoutMs / 1000)}초를 초과했습니다.`, { transient: false });
-    throw new AiProviderError('AI_PROVIDER_ERROR', `AI Provider에 연결하지 못했습니다. (${short(e.message, 80)})`, { transient: true });
+    if (e.name === 'AbortError') throw new AiProviderError('AI_TIMEOUT', `AI 응답 시간이 ${Math.round(timeoutMs / 1000)}초를 넘었습니다. 잠시 후 다시 시도해 주세요.`, { transient: false });
+    const err = new AiProviderError('AI_PROVIDER_ERROR', 'AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.', { transient: true });
+    err.detail = short(e.message, 80); throw err;
   } finally { clearTimeout(timer); }
 }
+/* What the user reads for an HTTP failure: plain Korean, never the vendor's text (it can carry org ids or quota details).
+ * The vendor's short message stays on `detail`, which goes to ai_runs.error_message for operators only. */
+const httpMessage = (status) => status === 429 ? 'AI 요청이 몰려 잠시 응답하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+  : status === 401 || status === 403 ? 'AI 서비스 인증에 실패했습니다. 운영자에게 문의해 주세요.'
+    : status >= 500 ? 'AI 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.'
+      : 'AI 요청을 처리하지 못했습니다. 다시 시도해 주세요.';
 async function readJson(res) {
   const text = await res.text();
   let json = null; try { json = JSON.parse(text); } catch { /* not json */ }
   if (!res.ok) {
     const msg = json?.error?.message || json?.message || short(text, 120) || res.statusText;
-    throw new AiProviderError('AI_PROVIDER_ERROR', `AI Provider 오류 (${res.status}): ${short(msg, 160)}`, { status: res.status, transient: res.status === 429 || res.status >= 500 });
+    const e = new AiProviderError('AI_PROVIDER_ERROR', httpMessage(res.status), { status: res.status, transient: res.status === 429 || res.status >= 500 });
+    e.detail = `HTTP ${res.status}: ${short(msg, 160)}`; throw e;
   }
-  if (!json) throw new AiProviderError('AI_INVALID_OUTPUT', 'AI Provider 응답을 해석할 수 없습니다.');
+  if (!json) throw new AiProviderError('AI_INVALID_OUTPUT', 'AI 응답을 해석하지 못했습니다. 다시 시도해 주세요.');
   return json;
 }
 
@@ -58,21 +66,43 @@ function anthropicProvider({ apiKey, model, timeoutMs, maxOutputTokens }) {
 }
 
 /* ---------- OpenAI (Chat Completions, response_format json_schema strict) ---------- */
+/* Strict mode rejects some JSON-schema keywords (maxLength first of all) with a 400, so the schema sent to OpenAI drops the
+ * size keywords and the adapter applies them itself to what comes back: long strings are cut, long arrays shortened, numbers
+ * pulled into range. Types, enums, required and additionalProperties:false are kept, so the shape is still the vendor's job;
+ * the service validates the full schema afterwards either way. */
+const SIZE_KEYS = ['maxLength', 'minLength', 'maxItems', 'minItems', 'minimum', 'maximum'];
+export function openaiSchema(schema) {
+  if (Array.isArray(schema)) return schema.map(openaiSchema);
+  if (!schema || typeof schema !== 'object') return schema;
+  return Object.fromEntries(Object.entries(schema).filter(([k]) => !SIZE_KEYS.includes(k)).map(([k, v]) => [k, k === 'enum' || k === 'required' ? v : openaiSchema(v)]));
+}
+export function clampToSchema(schema, v) {
+  if (v === null || v === undefined || !schema) return v;
+  if (typeof v === 'string') return schema.maxLength && v.length > schema.maxLength ? v.slice(0, schema.maxLength) : v;
+  if (typeof v === 'number') return schema.maximum !== undefined && v > schema.maximum ? schema.maximum : schema.minimum !== undefined && v < schema.minimum ? schema.minimum : v;
+  if (Array.isArray(v)) return (schema.maxItems ? v.slice(0, schema.maxItems) : v).map((x) => clampToSchema(schema.items, x));
+  if (typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clampToSchema(schema.properties?.[k], x)]));
+  return v;
+}
+/* OPENAI_BASE_URL exists only so the local e2e can point the real adapter at a mock; anything but a loopback URL is ignored. */
+const openaiBase = () => { const u = String(process.env.OPENAI_BASE_URL || ''); return /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(u) ? u.replace(/\/$/, '') : 'https://api.openai.com/v1'; };
 function openaiProvider({ apiKey, model, timeoutMs, maxOutputTokens }) {
   return {
     name: 'openai', model,
     async generateStructured({ system, user, schema, schemaName = 'result', maxTokens = maxOutputTokens }) {
-      const res = await call('https://api.openai.com/v1/chat/completions', {
+      const res = await call(`${openaiBase()}/chat/completions`, {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({ model, max_completion_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-          response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } } }),
+          response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema: openaiSchema(schema) } } }),
       }, timeoutMs);
       const json = await readJson(res);
-      const msg = json.choices?.[0]?.message;
-      if (!msg || msg.refusal) throw new AiProviderError('AI_INVALID_OUTPUT', 'AI가 요청을 처리하지 않았습니다.');
+      const choice = json.choices?.[0]; const msg = choice?.message;
+      const usage = { input_tokens: json.usage?.prompt_tokens ?? null, output_tokens: json.usage?.completion_tokens ?? null };
+      if (!msg || msg.refusal) throw new AiProviderError('AI_INVALID_OUTPUT', 'AI가 요청을 처리하지 않았습니다. 입력을 바꿔 다시 시도해 주세요.');
+      if (choice.finish_reason === 'length') throw new AiProviderError('AI_INVALID_OUTPUT', 'AI 응답이 너무 길어 끝까지 만들지 못했습니다. 입력을 줄여 다시 시도해 주세요.');
       let data = null; try { data = JSON.parse(msg.content); } catch { /* invalid */ }
-      if (!data || typeof data !== 'object') throw new AiProviderError('AI_INVALID_OUTPUT', 'AI가 구조화된 결과를 반환하지 않았습니다.');
-      return { data, usage: { input_tokens: json.usage?.prompt_tokens ?? null, output_tokens: json.usage?.completion_tokens ?? null } };
+      if (!data || typeof data !== 'object') throw new AiProviderError('AI_INVALID_OUTPUT', 'AI 응답 형식이 올바르지 않습니다. 다시 시도해 주세요.');
+      return { data: clampToSchema(schema, data), usage };
     },
   };
 }
@@ -99,7 +129,7 @@ function fakeProvider({ model }) {
 }
 
 /** Canned-but-grounded replies for demos/E2E without an API key (AI_PROVIDER=fake AI_FAKE_AUTOREPLY=1). Uses only ids found in the prompt. */
-function autoReply({ schemaName, user }) {
+export function autoReply({ schemaName, user }) {
   const ids = (re) => [...new Set([...user.matchAll(re)].map((m) => m[1]))];
   const reqs = ids(/^- (REQ-\d{3})/gm); const wbs = ids(/^- (\d+(?:\.\d+)*) \[/gm); const tests = ids(/^- (TC-\d{3})/gm); const risks = ids(/^- (RSK-\d{3})/gm); const issues = ids(/^- (ISS-\d{3})/gm);
   if (schemaName === 'requirement_candidates') {

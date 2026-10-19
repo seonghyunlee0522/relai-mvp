@@ -4,7 +4,7 @@
  *   → feature post-validation (ids exist, enums, hierarchy) → settle (charge | release) → result for the frontend.
  * Nothing here writes project data; approval endpoints do that separately through the existing services.
  */
-import { aiConfig, estimateProviderCost, featureCreditCost, publicConfig } from './config.js';
+import { aiConfig, estimateProviderCost, featureCreditCost, maxOutputTokensFor, publicConfig } from './config.js';
 import { CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS } from '../plans.js';
 import { createProvider, AiProviderError } from './provider.js';
 import { SCHEMAS, validateSchema, trimDeep } from './schemas.js';
@@ -49,6 +49,7 @@ export async function runAiFeature(db, { wid, projectId = null, userId, feature,
   await checkLimits(db, cfg, { wid, userId });
 
   const provider = createProvider(cfg);
+  const maxTokens = maxOutputTokensFor(feature);
   const cost = featureCreditCost(feature);
   const run = await reserveRun(db, { wid, projectId, userId, feature, provider: provider.name, model: provider.model, inputSummary: String(prompt.inputSummary || '').slice(0, 300), cost })
     .catch(async (e) => { if (e instanceof CreditError) e.extra = { ...e.extra, plan: await effectivePlan(db, wid) }; throw e; });   // UI: upgrade link on FREE
@@ -57,8 +58,9 @@ export async function runAiFeature(db, { wid, projectId = null, userId, feature,
   const addUsage = (u) => { if (!u) return; if (u.input_tokens != null) { usageSum.input_tokens += u.input_tokens; usageSum.seen = true; } if (u.output_tokens != null) { usageSum.output_tokens += u.output_tokens; usageSum.seen = true; } };
   const usage = () => (usageSum.seen ? { input_tokens: usageSum.input_tokens, output_tokens: usageSum.output_tokens } : {});
 
-  const fail = async (code, message) => {
-    await settleRun(db, run.id, { success: false, usage: usage(), latencyMs: Date.now() - started, errorCode: code, errorMessage: message });
+  // `message` is what the user reads (Korean, no vendor text); `detail` (vendor status / validation path) is kept on the run for operators
+  const fail = async (code, message, detail = null) => {
+    await settleRun(db, run.id, { success: false, usage: usage(), latencyMs: Date.now() - started, errorCode: code, errorMessage: detail ? `${message} [${detail}]`.slice(0, 500) : message });
     throw new AiError(code, message, { status: STATUS_OF[code] || 502, run_id: run.id });
   };
 
@@ -69,16 +71,16 @@ export async function runAiFeature(db, { wid, projectId = null, userId, feature,
     for (let attempt = 1; attempt <= 2 && !data; attempt++) {
       let out;
       try {
-        out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, attempt });
+        out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, maxTokens, attempt });
       } catch (e) {
         if (e instanceof AiProviderError && e.transient && attempt === 1) {   // one retry for transient provider failures
           await sleep(300);
-          try { out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, attempt: 2 }); }
-          catch (e2) { return await fail(e2 instanceof AiProviderError ? e2.code : 'AI_PROVIDER_ERROR', e2.message); }
+          try { out = await provider.generateStructured({ system: prompt.system, user, schema, schemaName: prompt.schemaName || feature.toLowerCase(), schemaDescription: prompt.schemaDescription, maxTokens, attempt: 2 }); }
+          catch (e2) { return await fail(e2 instanceof AiProviderError ? e2.code : 'AI_PROVIDER_ERROR', e2.message, e2.detail); }
           attempt = 2;
         } else if (e instanceof AiProviderError && e.code === 'AI_INVALID_OUTPUT' && attempt === 1) {
           user = prompt.user + retryHint(['응답은 반드시 요구된 JSON 객체여야 합니다.']); continue;
-        } else return await fail(e instanceof AiProviderError ? e.code : 'AI_PROVIDER_ERROR', e.message);
+        } else return await fail(e instanceof AiProviderError ? e.code : 'AI_PROVIDER_ERROR', e.message, e.detail);
       }
       addUsage(out.usage);
       const candidate = trimDeep(out.data);
@@ -86,7 +88,7 @@ export async function runAiFeature(db, { wid, projectId = null, userId, feature,
       if (!errors.length) data = candidate;
       else if (attempt === 1) user = prompt.user + retryHint(errors);   // re-prompt once with the concrete validation problems
     }
-    if (!data) return await fail('AI_INVALID_OUTPUT', `AI 응답이 요구된 형식을 만족하지 않았습니다. (${errors[0] || 'schema'})`);
+    if (!data) return await fail('AI_INVALID_OUTPUT', 'AI 응답 형식이 올바르지 않아 결과를 만들지 못했습니다. 다시 시도해 주세요.', errors[0] || 'schema');
 
     let final;
     try { final = await postValidate(data); }
