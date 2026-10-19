@@ -38,7 +38,8 @@ export function aiErrorMessage(e) {
   if (code === 'AI_DISABLED') return 'AI 기능을 사용할 수 없습니다. 관리자에게 문의하세요.';
   if (code === 'AI_RATE_LIMITED') return e.message || 'AI 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'AI_INPUT_TOO_LARGE') return e.message;
-  if (['AI_TIMEOUT', 'AI_PROVIDER_ERROR', 'AI_INVALID_OUTPUT'].includes(code)) return `AI 응답을 생성하지 못했습니다. 다시 시도해 주세요. (${e.message})`;
+  // failed runs are never charged (the reservation is released server-side); the server message is already plain Korean
+  if (['AI_TIMEOUT', 'AI_PROVIDER_ERROR', 'AI_INVALID_OUTPUT', 'AI_INTERNAL_ERROR'].includes(code)) return `${e.message || 'AI 응답을 생성하지 못했습니다. 다시 시도해 주세요.'} 크레딧은 차감되지 않았습니다.`;
   return e?.message || '요청을 처리하지 못했습니다.';
 }
 /**
