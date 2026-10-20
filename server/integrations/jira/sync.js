@@ -22,6 +22,7 @@ import { logActivity, startRun, finishRun } from '../events.js';
 import { toSnapshot, isDone } from './mapper.js';
 import { wbsDescription, requirementDescription } from './adf.js';
 import { JiraApiError } from './client.js';
+import { projectReadOnly } from '../../billing/limits.js';
 
 const LIVE = `status <> 'REMOVED'`;
 const esc = (s) => String(s).replace(/["\\]/g, (c) => '\\' + c);
@@ -498,6 +499,8 @@ export async function applyIssueEvent(db, connection, { eventType, issueId, issu
   // only links of projects that are still mapped to this connection
   const mps = new Map();
   for (const l of all) if (!mps.has(l.project_id)) mps.set(l.project_id, await db.get(`SELECT m.auto_complete_leaf_wbs, m.auto_mark_requirements, c.site_url FROM integration_project_mappings m JOIN integration_connections c ON c.id = m.connection_id WHERE m.project_id = ? AND m.status = 'ACTIVE' AND m.connection_id = ?`, [l.project_id, connection.id]));
+  // a project that is read-only after a downgrade (founder policy 2026-10-21) takes no Jira writes until edit access returns
+  for (const [pid, mp] of mps) if (mp && await projectReadOnly(db, connection.workspace_id, pid)) mps.set(pid, null);
   const links = all.filter((l) => mps.get(l.project_id));
   if (!links.length) return 'ignored';
   const projects = new Map();
@@ -525,7 +528,7 @@ export async function syncAllDue(db, { olderThanMinutes = 15, limit = 50 } = {},
   const rows = await db.all(`SELECT p.*, m.id AS mapping_id FROM integration_project_mappings m JOIN integration_connections c ON c.id = m.connection_id JOIN projects p ON p.id = m.project_id
     WHERE m.status = 'ACTIVE' AND c.status = 'ACTIVE' AND p.status <> 'ARCHIVED' AND (c.last_synced_at IS NULL OR c.last_synced_at < now() - (? || ' minutes')::interval) ORDER BY c.last_synced_at NULLS FIRST LIMIT ?`, [String(olderThanMinutes), limit]);
   const out = [];
-  for (const p of rows) { try { out.push({ project_id: p.id, ...(await syncProject(db, p, { trigger: 'SCHEDULED' }, env)) }); } catch (e) { out.push({ project_id: p.id, status: 'FAILED', error_summary: e.message }); } }
+  for (const p of rows) { if (await projectReadOnly(db, p.workspace_id, p.id)) continue; try { out.push({ project_id: p.id, ...(await syncProject(db, p, { trigger: 'SCHEDULED' }, env)) }); } catch (e) { out.push({ project_id: p.id, status: 'FAILED', error_summary: e.message }); } }
   return out;
 }
 

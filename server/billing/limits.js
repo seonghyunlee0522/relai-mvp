@@ -131,3 +131,47 @@ export class OverLimitError extends Error {
     this.extra = { over_limit: { plan: state.plan, limits: state.limits, usage: state.usage, excess: { projects: state.projects, members: state.members } }, upgrade: { url: PLANS_URL } };
   }
 }
+
+/*
+ * Project read-only after a downgrade (founder policy 2026-10-21, research/relai-pricing-v3/founder-cancel-retention-2026-10-21.md;
+ * replaces the D6 "lock every active project" edit lock). When a workspace has more active projects than its plan allows
+ * (cancel → period end → FREE, payment grace over, refund, downgrade to a smaller plan), the newest projects by created_at — as
+ * many as the plan allows — stay editable and every other active project is read-only. Samples are never counted or locked;
+ * COMPLETED / ARCHIVED projects keep their own rules. The user is not asked to pick: the order is created_at DESC (id as tie-break).
+ * Nothing is stored: the state follows the effective plan, so re-subscribing / upgrading restores edit access at once, newest first,
+ * up to the new limit, and no project row is changed or deleted. Member excess does not lock editing (invites/accepts stay refused).
+ * `OVER_LIMIT_LOCK=off` turns the lock off; `PLAN_LIMITS=off` disables limits altogether.
+ */
+const NEWER_SQL = `SELECT COUNT(*) AS n FROM projects q WHERE q.workspace_id = p.workspace_id AND ${ACTIVE_PROJECT_SQL('q')}
+  AND (q.created_at > p.created_at OR (q.created_at = p.created_at AND q.id > p.id))`;
+
+/** Workspace view → { plan, limit, readOnly: Set<projectId>, editable: [projectId] } (limit null = unlimited, nothing read-only). */
+export async function projectAccess(db, workspaceId) {
+  if (!overLimitLockEnabled()) return { plan: null, limit: null, readOnly: new Set(), editable: [] };
+  const { plan, limits } = await workspaceLimits(db, workspaceId);
+  if (limits.projects === null || limits.projects === undefined) return { plan, limit: null, readOnly: new Set(), editable: [] };
+  const rows = await db.all(`SELECT p.id FROM projects p WHERE p.workspace_id = ? AND ${ACTIVE_PROJECT_SQL('p')} ORDER BY p.created_at DESC, p.id DESC`, [workspaceId]);
+  return { plan, limit: limits.projects, editable: rows.slice(0, limits.projects).map((r) => r.id), readOnly: new Set(rows.slice(limits.projects).map((r) => r.id)) };
+}
+
+/** One project → null when editable, else { plan, limit } (read-only because newer active projects already fill the plan). */
+export async function projectReadOnly(db, workspaceId, projectId) {
+  if (!overLimitLockEnabled()) return null;
+  const p = await db.get(`SELECT p.id, (${NEWER_SQL}) AS newer FROM projects p WHERE p.workspace_id = ? AND p.id = ? AND ${ACTIVE_PROJECT_SQL('p')}`, [workspaceId, projectId]);
+  if (!p) return null;
+  const { plan, limits } = await workspaceLimits(db, workspaceId);
+  if (limits.projects === null || limits.projects === undefined || Number(p.newer) < limits.projects) return null;
+  return { plan, limit: limits.projects };
+}
+
+/** User-facing policy line for a read-only project (banner, 409 message). */
+export const readOnlyNotice = ({ plan, limit }) => `${PLANS[plan]?.label || plan} 플랜에서는 가장 최근에 만든 프로젝트 ${limit}개만 편집할 수 있어 이 프로젝트는 조회 전용입니다. 데이터는 삭제되지 않고 그대로 보관되며 조회·내보내기는 계속할 수 있어요. 다시 구독하거나 플랜을 올리면 한도만큼 최근 프로젝트부터 편집 권한이 돌아와요.`;
+
+/** 409 for a write inside a project that is read-only after a downgrade. */
+export class ProjectReadOnlyError extends Error {
+  constructor(state) {
+    super(readOnlyNotice(state));
+    this.status = 409; this.code = 'project_read_only';
+    this.extra = { read_only: { plan: state.plan, limit: state.limit }, upgrade: { url: PLANS_URL } };
+  }
+}

@@ -105,6 +105,24 @@ export function renewalBlockedEmail({ workspaceName, planLabel, amount, agreed, 
   return { subject, html, text };
 }
 
+/* 구독 해지 · Free 전환 정책 (founder 2026-10-21): shared by the cancel mail, the Free-transition mail and the Billing screen copy. */
+export const FREE_POLICY = '구독이 끝나 Free 플랜이 되면 생성일이 가장 최근인 프로젝트 1개만 계속 편집할 수 있고, 나머지 프로젝트는 자동으로 조회 전용이 됩니다(편집할 프로젝트는 선택할 수 없습니다).';
+export const FREE_KEEP = '해지만으로 프로젝트 데이터는 삭제되지 않으며 모든 프로젝트를 계속 조회·내보내기할 수 있습니다. 다시 구독하거나 플랜을 올리면 요금제 한도만큼 최근 프로젝트부터 편집 권한이 돌아옵니다. 워크스페이스 삭제는 해지와 별도로 설정에서 따로 진행합니다.';
+
+/** Free 전환 안내: the plan ended (period end / grace over) → which project stays editable, which became read-only. */
+export function freeTransitionEmail({ workspaceName, planLabel, limit = 1, editable = [], readOnly = [], link, support }) {
+  const subject = `[RELAI] ${workspaceName} 워크스페이스가 Free 플랜으로 전환되었습니다`;
+  const names = (list) => list.slice(0, 10).map((p) => p.name).join(', ') + (list.length > 10 ? ` 외 ${list.length - 10}개` : '');
+  const lines = [
+    editable.length ? `계속 편집할 수 있는 프로젝트 (최근 생성 ${limit}개): ${names(editable)}` : '',
+    readOnly.length ? `조회 전용으로 바뀐 프로젝트 ${readOnly.length}개: ${names(readOnly)}` : '',
+  ].filter(Boolean);
+  const html = shell('Free 플랜으로 전환되었습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜 이용 기간이 끝나 Free 플랜으로 전환되었습니다.</p>
+    <p>${esc(FREE_POLICY)}</p>${lines.length ? `<ul>${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}<p>${esc(FREE_KEEP)}</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
+  const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜 이용 기간이 끝나 Free 플랜으로 전환되었습니다.\n${FREE_POLICY}\n${lines.map((l) => `- ${l}`).join('\n')}\n${FREE_KEEP}\n${link ? `\n열기: ${link}\n` : ''}`;
+  return { subject, html, text };
+}
+
 /** 해지 확인 (§13② 계약 내용 고지): period-end cancel, or immediate cancel with the refund lines. */
 export function cancelEmail({ workspaceName, planLabel, immediate, periodEnd, refundTotal = 0, refundLines = [], executed, retentionUntil, link, support }) {
   const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 해지 안내`;
@@ -112,7 +130,8 @@ export function cancelEmail({ workspaceName, planLabel, immediate, periodEnd, re
     ? `구독을 해지해 지금 Free 플랜이 되었습니다. ${refundTotal > 0 ? `미사용 기간 환불 ${wonKr(refundTotal)}을(를) ${executed ? '결제한 카드로 취소 처리했습니다' : '3영업일 안에 결제한 카드로 취소해 드립니다'}(위약금 없음).` : '환불할 미사용 기간이 없습니다.'}`
     : `자동 갱신을 중단했습니다. ${periodEnd ? `${kDate(periodEnd)}까지` : '결제한 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 더 이상 결제되지 않습니다.`;
   const lines = refundLines.map((l) => `<li>${esc(l.label || '결제')}: ${esc(wonKr(l.amount))} (미사용 ${esc(l.days)}/${esc(l.period_days)}일${l.kind === 'WITHDRAWAL' ? ', 청약철회' : ''})</li>`).join('');
-  const keep = `해지 후 ${retentionUntil ? `${kDate(retentionUntil)}까지` : '30일 동안'} 프로젝트 데이터를 조회하고 내보낼 수 있습니다.`;
+  void retentionUntil;   // TODO(retention-legal, research/relai-retention-legal.md): personal-data retention periods are set after the legal review — never here
+  const keep = `${FREE_POLICY} ${FREE_KEEP}`;
   const html = shell('구독 해지 안내', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜: ${esc(what)}</p>${lines ? `<ul>${lines}</ul>` : ''}<p>${esc(keep)}</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
   const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜: ${what}\n${refundLines.map((l) => `- ${l.label || '결제'}: ${wonKr(l.amount)} (미사용 ${l.days}/${l.period_days}일)`).join('\n')}\n${keep}\n${link ? `\n열기: ${link}\n` : ''}`;
   return { subject, html, text };

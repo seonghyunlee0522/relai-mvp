@@ -54,7 +54,7 @@ test('D1: no WBS cap on FREE any more — the 101st item is created', async () =
   server.close();
 });
 
-test('over-limit existing data is untouched and readable; D6: editing locked (409 over_limit) until cleanup, new projects 402', async () => {
+test('over-limit existing data is untouched and readable; older projects read-only (409 project_read_only), new projects 402', async () => {
   const { db, server, client } = await boot();
   process.env.PLAN_LIMITS = 'off';   // build a workspace that was unlimited (former early access)
   const A = await setup(client, 'pw3@x.com');
@@ -66,7 +66,7 @@ test('over-limit existing data is untouched and readable; D6: editing locked (40
   const reqs = (await A.c('GET', A.req)).json.requirements;
   assert.equal(reqs.length, 55);
   const upd = await A.c('PATCH', `${A.req}/${reqs[0].id}`, { title: '잠김' });
-  assert.equal(upd.status, 409); assert.equal(upd.json.error.code, 'over_limit');
+  assert.equal(upd.status, 409); assert.equal(upd.json.error.code, 'project_read_only');   // oldest of 4 on Free (1): read-only
   assert.equal((await A.c('POST', A.req, { title: '새 항목' })).status, 409);
   assert.equal((await A.c('POST', `${ws(A.w)}/projects`, project({ name: 'p5' }))).status, 402);
   assert.equal(Number((await db.get(`SELECT COUNT(*) AS n FROM projects WHERE workspace_id = ? AND sample_key IS NULL AND status != 'ARCHIVED'`, [A.w])).n), 4);

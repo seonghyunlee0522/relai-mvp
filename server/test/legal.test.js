@@ -78,7 +78,7 @@ test('public legal pages: /terms /privacy /pricing and the landing footer, no dr
     assert.match(terms, /이용권은 판매하지 않습니다/); assert.match(terms, /정기결제 준비 중/); assert.doesNotMatch(terms, /이용권 결제|10%를 공제|잔여 금액의 10%|월간 정상가로 다시 계산하여/);
     assert.match(terms, /일할 계산하여 환불하며, 위약금이나 수수료를 공제하지 않습니다/); assert.match(terms, /월간 정상가로 다시 계산하지 않습니다/);
     assert.match(terms, /유효기간\(충전일부터 5년\) 안에서는 사용하지 않은 유상 크레딧에 해당하는 금액 전액을 공제 없이 환불/); assert.match(terms, /무상으로 지급한 크레딧과 이미 사용한 크레딧은 환불하지 않습니다/);
-    assert.match(terms, /자동 갱신은 즉시 중단/); assert.match(terms, /구독 해지 후 최소 30일 동안 워크스페이스의 모든 프로젝트 데이터를 조회하고 내보낼 수/); assert.match(terms, /법정 청약철회권\(제12조\)을 먼저 적용/);
+    assert.match(terms, /자동 갱신은 즉시 중단/); assert.match(terms, /해지나 전환만으로 프로젝트 데이터는 삭제되지 않습니다/); assert.match(terms, /생성일이 가장 최근인 활성 프로젝트부터/); assert.match(terms, /고객이 수정할 프로젝트를 고르지 않습니다/); assert.match(terms, /법정 청약철회권\(제12조\)을 먼저 적용/);
     const privacy = (await c('GET', '/privacy', undefined, { raw: true })).buf.toString('utf8');
     for (const v of ['Vercel Inc.', '나이스페이먼츠', 'Resend', 'Neon', 'Anthropic', 'Google LLC', `개인정보 보호책임자: ${LEGAL.privacyOfficer.name}`, '결제·정기결제 동의 기록', '이메일 주소의 해시값', '부분 취소']) assert.ok(privacy.includes(v), v);
     // landing #pricing is rendered from the server catalogue (no price typed in index.html)

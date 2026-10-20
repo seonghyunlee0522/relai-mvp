@@ -125,7 +125,7 @@ export async function homeCard(db, row, { today } = {}) {
   const nextDate = upcoming[0] || null;   // "다음 확인" = the nearest milestone-type date, never an arbitrary task start
   const g = ctx.guidance;
   const card = {
-    id: project.id, name: project.name, client_name: project.client_name, status: project.status, sample_key: project.sample_key || null,
+    id: project.id, name: project.name, client_name: project.client_name, status: project.status, sample_key: project.sample_key || null, read_only: Boolean(project.read_only),
     planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date,
     current_phase: project.current_phase, current_phase_name: project.current_phase_name, current_phase_sequence: project.current_phase_sequence,
     guidance: g ? { rule: g.rule, kind: guidanceKind(g), title: g.title, description: g.description, primary_action: g.primary_action, secondary_action: g.secondary_action, warnings: g.warnings } : null,

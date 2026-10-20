@@ -61,7 +61,7 @@ import * as XL from './xlsx.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary, requirementJiraMap } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
-import { assertWithinLimit, PlanLimitError, OverLimitError, overLimit, overLimitLockEnabled, ACTIVE_PROJECT_STATUSES } from './billing/limits.js';
+import { assertWithinLimit, PlanLimitError, OverLimitError, ProjectReadOnlyError, projectReadOnly, projectAccess, readOnlyNotice, ACTIVE_PROJECT_STATUSES } from './billing/limits.js';
 import { providerFromEnv } from './billing/provider.js';
 import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
@@ -299,33 +299,41 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const base = '/api/workspaces/:wid/projects';
   const guard = [requireAuth, requireMember, requireWorkspaceActive];
   /*
-   * Pricing v3 project write guard (design.md §5, decision D6). Every write under a project (any method but GET/HEAD/OPTIONS):
+   * Pricing v3 project write guard (design.md §5; founder policy 2026-10-21). Every write under a project (any method but GET/HEAD/OPTIONS):
    *   ARCHIVED   (보관)  read-only except 보관 해제                                         → 409 archived
    *   COMPLETED  (완료)  read-only except 재개, 보관, 완료보고서                            → 409 project_completed
-   *   active, workspace OVER_LIMIT (usage > plan limits after a downgrade/expiry)   → 409 over_limit, except the cleanup
-   *              actions 보관 / 종료 (data is never deleted; members are removed on the workspace screens, not here)
+   *   active, read-only after a downgrade (more active projects than the plan allows; the newest by created_at stay
+   *              editable — billing/limits.js projectReadOnly)                           → 409 project_read_only, except 보관.
+   *              AI drafts are refused too (they spend credits on something that cannot be saved); 질문 · 미리보기 stay open.
    * Sample projects are never locked. Only members are answered here; anyone else falls through to the route's own 401/403/404.
    */
   // POSTs that only read or draft (previews, AI drafts before commit, error sheets) stay open in every state.
   const READ_ONLY_POST = [/\/preview\/?$/, /\/errors\.xlsx$/, /^\/ai\/(ask|requirements\/extract|tests\/generate|wbs\/generate)\/?$/, /^\/changes\/[^/]+\/ai\/impact\/?$/];
+  // …of those, a plan read-only project keeps only the ones that neither write nor draft.
+  const PLAN_READ_ONLY_POST = [/\/preview\/?$/, /\/errors\.xlsx$/, /^\/ai\/ask\/?$/];
   const WRITE_ALLOWED = {
     ARCHIVED: [/^\/unarchive\/?$/],
     // 하자보수: a closed project still records issues during the warranty period (Phase 7 US-2).
     COMPLETED: [/^\/reopen\/?$/, /^\/archive\/?$/, /^\/weekly-reports\/completion\/?$/, /^\/weekly-reports\/[^/]+\/?$/, /^\/issues(\/|$)/],
-    OVER_LIMIT: [/^\/archive\/?$/, /^\/close\/?$/],
+    // 보관 only: it changes no project data and keeps the project readable. 종료 is refused (a COMPLETED project accepts issue writes).
+    READ_ONLY: [/^\/archive\/?$/],
   };
   app.use(`${base}/:pid`, wrap(async (req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user) return next();
     const p = await db.get(`SELECT p.status, p.sample_key FROM projects p JOIN workspace_members m ON m.workspace_id = p.workspace_id AND m.user_id = ?
       WHERE p.workspace_id = ? AND p.id = ?`, [req.user.id, req.params.wid, req.params.pid]);
-    if (!p || p.sample_key || (req.method === 'POST' && READ_ONLY_POST.some((re) => re.test(req.path)))) return next();
+    if (!p || p.sample_key) return next();
+    const isPost = (list) => req.method === 'POST' && list.some((re) => re.test(req.path));
     const allowed = (key) => WRITE_ALLOWED[key].some((re) => re.test(req.path));
+    if (ACTIVE_PROJECT_STATUSES.includes(p.status)) {
+      if (isPost(PLAN_READ_ONLY_POST) || allowed('READ_ONLY')) return next();
+      const ro = await projectReadOnly(db, req.params.wid, req.params.pid);
+      if (ro) { const e = new ProjectReadOnlyError(ro); return fail(res, e.status, e.code, e.message, e.extra); }
+      return next();
+    }
+    if (isPost(READ_ONLY_POST)) return next();
     if (p.status === 'ARCHIVED' && !allowed('ARCHIVED')) return fail(res, 409, 'archived', '보관된 프로젝트는 수정할 수 없습니다. 보관 해제 후 편집하세요.');
     if (p.status === 'COMPLETED' && !allowed('COMPLETED')) return fail(res, 409, 'project_completed', '완료된 프로젝트는 조회만 할 수 있습니다. 재개하면 다시 편집할 수 있어요.');
-    if (ACTIVE_PROJECT_STATUSES.includes(p.status) && overLimitLockEnabled() && !allowed('OVER_LIMIT')) {
-      const state = await overLimit(db, req.params.wid);
-      if (state) { const e = new OverLimitError(state); return fail(res, e.status, e.code, e.message, e.extra); }
-    }
     next();
   }));
 
@@ -340,7 +348,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
       WHERE workspace_id = ? ${includeArchived ? '' : "AND status != 'ARCHIVED'"}
       ORDER BY created_at DESC`, [wid]);
   app.get(base, guard, wrap(async (req, res) => {
-    res.json({ projects: (await listProjects(req.params.wid, req.query.include_archived === '1')) });
+    const { readOnly } = await projectAccess(db, req.params.wid);
+    res.json({ projects: (await listProjects(req.params.wid, req.query.include_archived === '1')).map((p) => ({ ...p, read_only: readOnly.has(p.id) })) });
   }));
 
   const manage = [...guard, requireAction('project_manage')];
@@ -380,8 +389,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const guideContext = (project) => guidanceContext(db, project);
   const guideResponse = async (project, pre = null) => {
     const { stats, def, guide, guidance, goLive, handover, completionReport } = pre || (await guideContext(project));
+    // founder policy 2026-10-21: read-only after a downgrade (banner on every project screen; the write guard enforces it)
+    const ro = project.sample_key ? null : await projectReadOnly(db, project.workspace_id, project.id);
     // go_live (Phase 6 US-3): 오픈 기록 — the grey 운영 이관 tags on lists read it. Phase 7: 운영 인수 · 완료보고서 · 앞 단계 미완료 필수 (06→07 dialog)
-    return { project, ...guide, ...stats, go_live: goLive ? { ...goLive, carryovers: await CLS.carryoversView(db, project.id, goLive) } : null,
+    return { project: { ...project, read_only: Boolean(ro) }, read_only: ro ? { ...ro, message: readOnlyNotice(ro) } : null, ...guide, ...stats, go_live: goLive ? { ...goLive, carryovers: await CLS.carryoversView(db, project.id, goLive) } : null,
       handover: handover || null, completion_report: completionReport || null, prior_gaps: CLS.priorGaps(guide.phases), kpis: (await M.headlineKpis(db, project, stats)), attention: (await M.attentionItems(db, project.id)),
       definition: { progress: def.progress, needs_review: def.needs_review, initiation_gate: def.initiation_gate, scope_out: (def.definition.scope_out || []).map((x) => x.text).filter(Boolean), sections: def.sections.map(({ key, label, status, ready, missing, changed_after_completion }) => ({ key, label, status, ready, missing, changed_after_completion })) },
       guidance,   // Phase 14: rule-based "지금 해야 할 일" (guidance.js)
@@ -391,7 +402,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /** Workspace Home cards: list rows + per-project guidance / health / attention / upcoming (home.js). Registered before /:pid. */
   app.get(`${base}/home`, guard, wrap(async (req, res) => {
-    const rows = (await listProjects(req.params.wid, false));
+    const { readOnly } = await projectAccess(db, req.params.wid);
+    const rows = (await listProjects(req.params.wid, false)).map((p) => ({ ...p, read_only: readOnly.has(p.id) }));
     const ensure = async (row) => {   // older rows without phases: seed them (same as loadProject) and fill the phase columns the list query missed
       if (!(await ensurePhases(db, row, { createdBy: row.created_by }))) return row;
       const ph = (await db.get('SELECT name, sequence FROM project_phases WHERE project_id = ? AND phase_key = ?', [row.id, row.current_phase]));
@@ -1532,7 +1544,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);
     if (err instanceof AdminError) return fail(res, err.status, err.code, err.message);
-    if (err instanceof PlanLimitError || err instanceof OverLimitError) return fail(res, err.status, err.code, err.message, err.extra);
+    if (err instanceof PlanLimitError || err instanceof OverLimitError || err instanceof ProjectReadOnlyError) return fail(res, err.status, err.code, err.message, err.extra);
     if (err instanceof AiError || err instanceof CreditError) return fail(res, err.status, err.code, err.message, err.extra || {});
     const dbe = dbErrorInfo(err);
     if (dbe) { if (dbe.status >= 500) console.error('[db]', err.message); return fail(res, dbe.status, dbe.code, dbe.message); }

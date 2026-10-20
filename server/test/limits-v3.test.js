@@ -182,32 +182,34 @@ test('PRO with add-ons: limits = included + extra; plan limits from the subscrip
   server.close();
 });
 
-test('D6 over limit after expiry: nothing deleted, data readable, edits locked (409 over_limit) except archive/close; cleanup unlocks', async () => {
+test('over limit after expiry (founder policy 2026-10-21): nothing deleted, all readable, newest project editable, older ones read-only (409 project_read_only) except 보관', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'over@x.com');
   await subscribe(db, A.w, 'PRO');
   const p2 = (await A.c('POST', `${ws(A.w)}/projects`, project({ name: '둘째' }))).json.project;
   const p3 = (await A.c('POST', `${ws(A.w)}/projects`, project({ name: '셋째' }))).json.project;
   assert.equal((await A.c('POST', A.req, { title: '요구사항', description: 'x' })).status, 201);
-  // the one-time PRO period ends → FREE (1 project)
+  // the PRO period ends → FREE (1 project)
   await db.run(`UPDATE subscriptions SET current_period_end = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
   const st = await overLimit(db, A.w);
   assert.deepEqual([st.plan, st.projects, st.members], ['FREE', 2, 0]);
   assert.equal((await A.c('GET', A.req)).status, 200);   // readable
   let r = await A.c('POST', A.req, { title: '잠김', description: 'x' });
-  assert.equal(r.status, 409); assert.equal(r.json.error.code, 'over_limit'); assert.equal(r.json.error.over_limit.excess.projects, 2);
+  assert.equal(r.status, 409); assert.equal(r.json.error.code, 'project_read_only'); assert.deepEqual(r.json.error.read_only, { plan: 'FREE', limit: 1 });
   assert.equal((await A.c('PATCH', A.purl, { name: '잠김' })).status, 409);
+  assert.equal((await A.c('PATCH', `${ws(A.w)}/projects/${p3.id}`, { ...project({ name: '셋째 수정' }) })).status, 200);   // the newest stays editable
   assert.equal((await A.c('POST', `${ws(A.w)}/projects`, project({ name: '넷째' }))).status, 402);
   const b = (await A.c('GET', `${ws(A.w)}/billing`)).json.billing;
   assert.deepEqual(b.over_limit, { projects: 2, members: 0 });
-  // cleanup: archive two → back within the limit → editing works again
+  assert.deepEqual(b.read_only_projects.editable.map((x) => x.id), [p3.id]); assert.deepEqual(b.read_only_projects.read_only.map((x) => x.id), [p2.id, A.p.id]);
+  const list = (await A.c('GET', `${ws(A.w)}/projects`)).json.projects;
+  assert.deepEqual(Object.fromEntries(list.filter((x) => !x.sample_key).map((x) => [x.id, x.read_only])), { [p3.id]: false, [p2.id]: true, [A.p.id]: true });
+  // 보관 is allowed on a read-only project (no data change); 종료 is not
+  assert.equal((await A.c('POST', `${ws(A.w)}/projects/${p2.id}/close`, {})).json.error.code, 'project_read_only');
   assert.equal((await A.c('POST', `${ws(A.w)}/projects/${p2.id}/archive`, {})).status, 200);
-  assert.equal((await A.c('POST', A.req, { title: '아직 잠김', description: 'x' })).status, 409);
-  assert.equal((await A.c('POST', `${ws(A.w)}/projects/${p3.id}/archive`, {})).status, 200);
-  assert.equal((await A.c('POST', A.req, { title: '풀림', description: 'x' })).status, 201);
+  assert.equal((await A.c('POST', A.req, { title: '아직 잠김', description: 'x' })).status, 409);   // still behind the newest
   assert.equal(Number((await db.get('SELECT COUNT(*) n FROM projects WHERE workspace_id = ? AND sample_key IS NULL', [A.w])).n), 3);
-  // OVER_LIMIT_LOCK=off keeps the old behaviour (only new rows refused)
-  await db.run(`UPDATE projects SET status = 'ACTIVE' WHERE id = ?`, [p2.id]);
+  // OVER_LIMIT_LOCK=off turns the read-only lock off (only new rows refused)
   process.env.OVER_LIMIT_LOCK = 'off';
   assert.equal((await A.c('POST', A.req, { title: '잠금 끔', description: 'x' })).status, 201);
   delete process.env.OVER_LIMIT_LOCK;

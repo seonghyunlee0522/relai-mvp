@@ -5,7 +5,8 @@
  *   chargeDueRenewals    — 정기결제 only (NICEPAY_RECURRING_ENABLED): charge billing keys whose next_billing_at has come, at the
  *                          renewal target (scheduled changes applied), behind the price-increase gate; declines retried ×3.
  *   notifyPriceIncreases — 30-day 증액 고지 + consent request (§13⑥).
- *   expireEndedSubscriptions — ended plans → EXPIRED, 30-day 조회 · 내보내기 window, PLAN credits expire.
+ *   expireEndedSubscriptions — ended plans → EXPIRED, PLAN credits expire, Free 전환 안내 mail (newest project editable, the rest
+ *                          read-only — billing/limits.js projectAccess; nothing deleted).
  * Each row is claimed with a conditional UPDATE before any e-mail or charge, so overlapping runs never double-send or double-charge.
  * Provider calls run outside DB transactions.
  */
@@ -14,7 +15,8 @@ import { emailConfig } from '../email/config.js';
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { PLANS } from '../plans.js';
-import { renewalReminderEmail, paymentFailedEmail, priceIncreaseEmail, renewalBlockedEmail, cancelEmail } from '../email/templates.js';
+import { renewalReminderEmail, paymentFailedEmail, priceIncreaseEmail, renewalBlockedEmail, cancelEmail, freeTransitionEmail } from '../email/templates.js';
+import { projectAccess } from './limits.js';
 import { quote, createOrder, failOrder } from './orders.js';
 import { processWebhookEvent, transition } from './subscriptions.js';
 
@@ -173,10 +175,21 @@ export async function expireEndedSubscriptions(db, provider) {
         await expirePlanCredits(t, cur.workspace_id, { reason: '기본 크레딧 소멸 (구독 종료)', referenceId: `expired:${cur.id}:${new Date(cur.current_period_end || Date.now()).toISOString().slice(0, 10)}` });
         return true;
       });
-      if (done) expired += 1;
+      if (done) { expired += 1; await sendFreeTransitionNotice(db, s.workspace_id).catch((e) => console.error('[billing] free-transition mail failed', s.id, e.message)); }
     } catch (e) { console.error('[billing] expiry failed', s.id, e.message); }
   }
   return { due: rows.length, expired };
+}
+
+/** Free 전환 안내 mail to the owners: which project stays editable and which became read-only (founder policy 2026-10-21). */
+export async function sendFreeTransitionNotice(db, wid, env = process.env) {
+  const s = await db.get('SELECT s.plan, w.name FROM subscriptions s JOIN workspaces w ON w.id = s.workspace_id WHERE s.workspace_id = ?', [wid]);
+  if (!s) return 0;
+  const access = await projectAccess(db, wid);
+  const named = async (ids) => (ids.length ? db.all(`SELECT id, name FROM projects WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at DESC, id DESC`, ids) : []);
+  const cfg = emailConfig(env);
+  return mailOwners(db, wid, 'BILLING_FREE_TRANSITION', freeTransitionEmail({ workspaceName: s.name, planLabel: PLANS[s.plan]?.label || s.plan, limit: access.limit ?? PLANS.FREE.limits?.projects ?? 1,
+    editable: await named(access.editable), readOnly: await named([...access.readOnly]), link: billingLink(cfg), support: cfg.supportEmail }), env);
 }
 
 /** 해지 확인 mail to the owners (period-end cancel, or immediate cancel with its refund lines). */

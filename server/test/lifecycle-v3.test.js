@@ -291,7 +291,7 @@ test('cancel any time (monthly and annual): auto-renew off at once, plan to peri
   assert.equal((await t.db.get('SELECT COUNT(*)::int AS n FROM projects WHERE workspace_id = ?', [A.w])).n, 3);
   assert.equal((await A.c('GET', A.purl)).status, 200);
   const edit = await A.c('PATCH', A.purl, { name: '바꿈' });
-  assert.equal(edit.status, 409); assert.equal(edit.json.error.code, 'over_limit');
+  assert.equal(edit.status, 409); assert.equal(edit.json.error.code, 'project_read_only');   // A.p is the oldest of 3
   t.server.close();
 });
 

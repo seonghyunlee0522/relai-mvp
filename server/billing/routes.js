@@ -20,7 +20,8 @@ import { requireVerifiedEmail } from '../auth/account-security.js';
 import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE, CHECKOUT_NOT_OPEN_MESSAGE } from './provider.js';
 import { parseCard, safeEqual } from './nicepay.js';
 import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, minUsers, MAX_USERS, publicOrder, renewalAmount, quoteAddon, quoteUpgrade, loadQuoteContext } from './orders.js';
-import { countUsage, workspaceLimits, overLimit } from './limits.js';
+import { countUsage, workspaceLimits, overLimit, projectAccess } from './limits.js';
+import { FREE_POLICY, FREE_KEEP } from '../email/templates.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices, expireEndedSubscriptions, notifyPriceIncreases, sendCancelNotice } from './cron.js';
 import { disclosure, checkConsent, recordConsent } from './consent.js';
@@ -158,6 +159,10 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const addons = { extra_users: paid ? Number(row?.extra_users || 0) : 0, extra_projects: paid ? Number(row?.extra_projects || 0) : 0 };
     const counts = await countUsage(db, wid);
     const over = await overLimit(db, wid);
+    // founder policy 2026-10-21: newest projects (created_at) up to the plan's limit stay editable, the rest are read-only
+    const access = await projectAccess(db, wid);
+    const roRows = access.readOnly.size ? await db.all(`SELECT id, name FROM projects WHERE workspace_id = ? AND id IN (${[...access.readOnly].map(() => '?').join(',')}) ORDER BY created_at DESC, id DESC`, [wid, ...access.readOnly]) : [];
+    const edRows = roRows.length && access.editable.length ? await db.all(`SELECT id, name FROM projects WHERE workspace_id = ? AND id IN (${access.editable.map(() => '?').join(',')}) ORDER BY created_at DESC, id DESC`, [wid, ...access.editable]) : [];
     // T2: bucket view (ai/credits.js bucketBalances) — total = plan + promo + purchased; plan expires at plan_expires_at.
     const creditBuckets = async (w) => { const c = await bucketBalances(db, w); return { total: c.total, plan: c.plan, plan_expires_at: c.plan_expires_at, promo: c.promo, purchased: c.purchased, available: c.available }; };
     // One-time purchases can be extended at any time; a renewing (recurring) subscription cannot be bought twice.
@@ -185,7 +190,9 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
         effective_at: c.effective_at, cancel_url: `/api/workspaces/${wid}/billing/changes/${c.id}/cancel` })), credits: await creditBuckets(wid),
       // 해지: POST cancel_url (auto-renew stops, plan to period end) · POST cancel_url { refund: true } (ends now + unused days refunded; preview: refund_quote_url).
       cancel_url: paid && renews ? `/api/workspaces/${wid}/billing/cancel` : null, refund_quote_url: paid ? `/api/workspaces/${wid}/billing/refund-quote` : null,
-      catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null, price_version: row?.price_version || null,
+      catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null,
+      read_only_projects: roRows.length ? { limit: access.limit, editable: edRows, read_only: roRows } : null,
+      cancel_policy: { free: FREE_POLICY, keep: FREE_KEEP }, price_version: row?.price_version || null,
       subscription, early_access_until: early?.early_access_until || null,
       plans: planCatalogue().plans, credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits,
       provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),

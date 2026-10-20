@@ -114,11 +114,11 @@ test('webhooks: signed + idempotent; activation lifts limits; payment failure �
   const s = await db.get('SELECT status, grace_period_end FROM subscriptions WHERE workspace_id = ?', [A.w]);
   assert.equal(s.status, 'PAST_DUE'); assert.ok(new Date(s.grace_period_end) > new Date());
   assert.equal(await effectivePlan(db, A.w), 'TEAM');
-  // grace over → FREE: existing data stays; 2 active projects > 1 → editing locked until cleanup (D6)
+  // grace over → FREE: existing data stays; 2 active projects > 1 → the older one is read-only (founder policy 2026-10-21)
   await db.run(`UPDATE subscriptions SET grace_period_end = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'FREE');
   const over = await A.c('POST', A.req, { title: 'over' });
-  assert.equal(over.status, 409); assert.equal(over.json.error.code, 'over_limit');
+  assert.equal(over.status, 409); assert.equal(over.json.error.code, 'project_read_only');   // the older of 2 projects on Free
   assert.equal((await db.get(`SELECT COUNT(*) n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ?`, [A.w])).n, 51);
   // recovery payment → ACTIVE again; expiry → FREE; a late failure after expiry is recorded but ignored
   assert.equal((await deliver(provider.signedEvent('payment.succeeded', { subscription_id: `sub_${A.w}`, ...period(), payment: { amount: 49000, status: 'PAID', provider_tid: 'tid_renew_2' } }))).json.status, 'ACTIVE');

@@ -65,9 +65,9 @@ test('Billing page (live T1 shape): null buckets → total only; empty scheduled
   assert.ok(t.includes('AI 크레딧 충전은 Pro부터 할 수 있어요')); assert.ok(t.includes('요금제 살펴보기')); assert.ok(t.includes('결제 정보 없이 이용 중'));
   const member = billingHtml({ ...free, can_manage: false });
   assert.match(member, /id="bl-owner-only"/); assert.doesNotMatch(member, /id="bl-change"/);
-  // auto renewal off (cancelled; D3: no one-time passes): no 해지 button, the end date, 'Free로 전환' and the 30-day export promise
+  // auto renewal off (cancelled; D3: no one-time passes): no 해지 button, the end date, 'Free로 전환' and the read-only policy (founder 2026-10-21)
   const pass = fixture({ auto_renew: false, next_payment_at: null, next_payment_amount: null, subscription: { ...FIX.subscription, auto_renew: false } });
-  const pt = text(billingHtml(pass)); assert.ok(pt.includes('자동 결제되지 않아요')); assert.ok(pt.includes('자동 갱신이 꺼져 있어요')); assert.ok(pt.includes('30일 동안 모든 프로젝트를 조회하고 내보낼 수 있어요')); assert.doesNotMatch(pt, /이용권/); assert.doesNotMatch(billingHtml(pass), /id="bl-cancel"/);
+  const pt = text(billingHtml(pass)); assert.ok(pt.includes('자동 결제되지 않아요')); assert.ok(pt.includes('자동 갱신이 꺼져 있어요')); assert.ok(pt.includes('최근 프로젝트 1개만 편집하고 나머지는 조회 전용이 돼요')); assert.doesNotMatch(pt, /이용권/); assert.doesNotMatch(billingHtml(pass), /id="bl-cancel"/);
   // over the limit after a downgrade (D6): banner says data is kept and what to reduce
   const over = text(billingHtml(fixture({ over_limit: { projects: 2, members: 0 } })));
   assert.ok(over.includes('한도를 넘었어요 — 데이터는 그대로예요.')); assert.ok(over.includes('한도 초과: 활성 프로젝트 2개.'));
