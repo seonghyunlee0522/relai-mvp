@@ -146,8 +146,8 @@ test('workspaces: list (owner, counts, last activity, search by name/owner email
   const d = (await ops.c('GET', `/api/admin/workspaces/${A.w}`)).json;
   assert.equal(d.members.length, 2); assert.equal(d.owners[0].email, 'a@x.com'); assert.equal(d.projects.active, 1); assert.equal(d.subscription, null);
   const dims = Object.fromEntries(d.usage.dims.map((x) => [x.key, x]));
-  assert.deepEqual([dims.projects.used, dims.projects.limit, dims.members.used, dims.requirements.used, dims.wbs.used, dims.weekly_reports.used], [1, 1, 2, 1, 1, 0]);
-  assert.equal(d.usage.plan, 'FREE'); assert.equal(d.usage.tier, 'attention');
+  assert.deepEqual([dims.projects.used, dims.projects.limit, dims.members.used, dims.requirements.used, dims.wbs.used, dims.weekly_reports.used], [1, 2, 2, 1, 1, 0]);
+  assert.equal(d.usage.plan, 'FREE'); assert.equal(d.usage.tier, 'ok');   // FREE allows 2 projects since 2026-10-20
   assert.ok(!JSON.stringify(d).includes('R1'));                                  // requirement content never leaves the admin API
   assert.equal((await ops.c('GET', '/api/admin/workspaces/nope')).status, 404);
   // suspend → every /api/workspaces/:wid/* call refused for members, login still fine, data kept
@@ -175,13 +175,14 @@ test('workspaces: list (owner, counts, last activity, search by name/owner email
 test('usage: aggregation + limit %, tiers (warn ≥80, attention ≥90), sorts; dashboard KPIs, funnel, near-limit attention; billing KPIs hidden while billing is absent', async () => {
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
-  const A = await setup(client, 'a@x.com', '김가나');                           // 1 project = 100 % of FREE (limit 1) → attention
+  const A = await setup(client, 'a@x.com', '김가나');                           // 2 projects = 100 % of FREE (limit 2) → attention
+  await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));
   const Bs = await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '박나다', email: 'b@x.com', password: 'passw0rd!' });   // no project → ok
   const Bw = Bs.json.workspaces[0].id;
   const u = (await ops.c('GET', '/api/admin/usage?sort=projects')).json;
   assert.equal(u.items[0].workspace_id, A.w); assert.equal(u.items[0].tier, 'attention'); assert.equal(u.items[0].max_pct, 100);
   assert.equal(u.items.find((x) => x.workspace_id === Bw).tier, 'ok');
-  assert.deepEqual(u.plans.FREE.limits, { projects: 1, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 });
+  assert.deepEqual(u.plans.FREE.limits, { projects: 2, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 });
   for (const s of ['requirements', 'wbs', 'activity']) assert.equal((await ops.c('GET', `/api/admin/usage?sort=${s}`)).status, 200);
   assert.equal((await ops.c('GET', '/api/admin/usage?sort=bogus')).json.sort, 'ai');
   // tier thresholds on the shaping function (80 % is not reachable with the small member limit in an integration flow)
@@ -195,7 +196,7 @@ test('usage: aggregation + limit %, tiers (warn ≥80, attention ≥90), sorts; 
   assert.equal(dA.dims.find((x) => x.key === 'requirements').pct, 80); assert.equal(dA.tier, 'attention');
   // dashboard
   const d = (await ops.c('GET', '/api/admin/dashboard')).json;
-  assert.deepEqual([d.kpis.users, d.kpis.active_workspaces, d.kpis.projects, d.kpis.signups_7d, d.kpis.signups_today], [3, 3, 1, 3, 3]);
+  assert.deepEqual([d.kpis.users, d.kpis.active_workspaces, d.kpis.projects, d.kpis.signups_7d, d.kpis.signups_today], [3, 3, 2, 3, 3]);
   assert.deepEqual(d.funnel_7d, { registered: 3, workspace_created: 3, project_created: 1, paid: 0 });
   assert.deepEqual(d.attention.near_limit.map((x) => x.workspace_id), [A.w]);
   assert.equal(d.billing.implemented, true);                                                         // billing tables ship with Phase 10

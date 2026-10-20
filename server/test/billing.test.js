@@ -52,12 +52,13 @@ test('provider interface: fake implements createCheckout/handleWebhook/cancel; r
 test('FREE limits: projects / requirements / WBS / weekly reports / members answer 402 plan_limit_reached with the limit payload', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'a@x.com', '김가나');
-  // projects: 1 active
-  const p2 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));
+  // projects: 2 active (founder decision 2026-10-20) — the 3rd is refused
+  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }))).status, 201);
+  const p2 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '세 번째' }));
   assert.equal(p2.status, 402); assert.equal(p2.json.error.code, 'plan_limit_reached');
-  assert.deepEqual(p2.json.error.limit, { dimension: 'projects', label: '진행 중 프로젝트', used: 1, limit: 1, plan: 'FREE', adding: 1, allowed: 0 });
-  assert.equal(p2.json.error.upgrade.plan, 'TEAM');
-  // archive frees the slot; unarchiving the first while the second is active is refused
+  assert.deepEqual(p2.json.error.limit, { dimension: 'projects', label: '진행 중 프로젝트', used: 2, limit: 2, plan: 'FREE', adding: 1, allowed: 0 });
+  assert.equal(p2.json.error.upgrade.plan, 'TEAM'); assert.equal(p2.json.error.upgrade.url, '/app/billing/plans');
+  // archive frees a slot; unarchiving the first while two others are active is refused
   await A.c('POST', `${A.purl}/archive`, {});
   const p3 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '세 번째' })); assert.equal(p3.status, 201);
   assert.equal((await A.c('POST', `${A.purl}/unarchive`, {})).status, 402);
@@ -85,7 +86,7 @@ test('FREE limits: projects / requirements / WBS / weekly reports / members answ
   // the customer billing summary reflects all of it
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
   assert.equal(b.plan, 'FREE'); assert.equal(b.subscription, null); assert.equal(b.can_manage, true); assert.equal(b.provider_available, true);
-  assert.deepEqual(b.usage.dims.map((d) => [d.key, d.used, d.limit]), [['projects', 1, 1], ['members', 3, 3], ['requirements', 50, 50], ['wbs', 100, 100], ['weekly_reports', 8, 8]]);
+  assert.deepEqual(b.usage.dims.map((d) => [d.key, d.used, d.limit]), [['projects', 2, 2], ['members', 3, 3], ['requirements', 50, 50], ['wbs', 100, 100], ['weekly_reports', 8, 8]]);
   server.close();
 });
 

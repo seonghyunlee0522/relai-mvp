@@ -92,25 +92,25 @@ test('prices (AC3 table), packs (VAT included split) and refund maths are exact'
   assert.equal(refundQuote({ credits: 10, packs: [{ ...old, paid_at: new Date(now - 400 * DAY) }], unused: 3000, now }).allocations[0].manual, true);
 });
 
-test('AC1 + AC2: new workspace = early access 12 months (TEAM limits) + exactly one 500 starter grant; backfill + top-up are idempotent; cut-off respected', async () => {
+test('AC1 + AC2 (T5): new workspace = early_access_until stamped but FREE limits + exactly one 500 starter grant; backfill + top-up are idempotent; cut-off respected', async () => {
   const env = await boot(); const { db } = env;
   const A = await owner(env);
   const w = await db.get(`SELECT created_at, early_access_until, early_access_until = created_at + interval '12 months' AS exact FROM workspaces WHERE id = ?`, [A.w]);
   assert.equal(w.exact, true);
-  assert.equal(await effectivePlan(db, A.w), 'EARLY');
+  assert.equal(await effectivePlan(db, A.w), 'FREE');   // early access retired as an unlimited plan (2026-10-20)
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
-  assert.equal(b.plan, 'EARLY'); assert.equal(b.plan_label, '얼리 액세스'); assert.ok(b.early_access_until); assert.equal(b.checkout.can_purchase, false);   // TEAM checkout hidden
-  // no FREE limit: 2nd project, 4th member, 51st requirement
+  assert.equal(b.plan, 'FREE'); assert.equal(b.plan_label, '무료'); assert.ok(b.early_access_until); assert.equal(b.checkout.can_purchase, true);   // FREE may buy TEAM once payments are on
+  // FREE limits apply: 2nd project OK, 3rd refused; 51st requirement refused
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 201);
-  for (const [i, e] of ['m1', 'm2', 'm3'].entries()) await addMember(env.client, A, `${e}@x.com`, `멤버${i}`);
-  assert.equal((await db.get('SELECT COUNT(*) AS n FROM workspace_members WHERE workspace_id = ?', [A.w])).n, 4);
-  for (let i = 0; i < 51; i++) assert.equal((await A.c('POST', `${A.purl}/requirements`, { title: `요구사항 ${i + 1}` })).status, 201);
+  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('세 번째'))).status, 402);
+  for (let i = 0; i < 50; i++) assert.equal((await A.c('POST', `${A.purl}/requirements`, { title: `요구사항 ${i + 1}` })).status, 201);
+  assert.equal((await A.c('POST', `${A.purl}/requirements`, { title: '요구사항 51' })).status, 402);
   // AC2: exactly 500 credits, one PROMOTION row
   const led = await ledger(db, A.w);
   assert.deepEqual(led.map((l) => [l.type, Number(l.amount), l.reference_id]), [['PROMOTION', 500, 'AI_INITIAL_TRIAL_CREDITS']]);
   const s = (await A.c('GET', `${A.cr}/summary`)).json.credits;
   assert.equal(s.balance, 500); assert.equal(s.balance_krw, 5000); assert.equal(s.free_remaining, 500); assert.equal(s.purchased_remaining, 0); assert.equal(s.starter_credits, 500);
-  assert.equal(s.plan, 'EARLY');
+  assert.equal(s.plan, 'FREE');
 
   // backfill of a workspace that existed before launch: early access from the launch date; old 100 trial topped up to 500, once
   const oldW = (await db.get(`INSERT INTO workspaces (id, name, owner_id, created_at) VALUES (gen_random_uuid()::text, '예전 Workspace', ?, '2026-03-01T00:00:00Z') RETURNING id`, [A.uid])).id;
@@ -133,17 +133,17 @@ test('AC1 + AC2: new workspace = early access 12 months (TEAM limits) + exactly 
   env.server.close();
 });
 
-test('AC10 + AC12: after 12 months → FREE limits (data kept, read-only over the limit), credits still work; 30/7-day notices once each; an active TEAM keeps TEAM + monthly credits', async () => {
+test('AC10 + AC12 (T5): FREE limits whatever early_access_until says (data kept), credits still work; ending notices retired; an active TEAM keeps TEAM + monthly credits', async () => {
   const env = await boot(); const { db } = env;
   const A = await owner(env);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 201);
   // notices: 20 days left → the 30-day notice, once; 5 days left → the 7-day notice, once
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '20 days' WHERE id = ?`, [A.w]);
-  assert.equal((await sendEarlyAccessNotices(db)).d30, 1); assert.equal((await sendEarlyAccessNotices(db)).d30, 0);
+  assert.equal((await sendEarlyAccessNotices(db)).d30, 0);   // retired: early access no longer ends into FREE (it already is FREE)
+  assert.equal((await sendEarlyAccessNotices(db, { ...process.env, EARLY_ACCESS_NOTICES: 'on' })).d30, 1);   // still works when switched on
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '5 days' WHERE id = ?`, [A.w]);
-  assert.equal((await sendEarlyAccessNotices(db)).d7, 1); assert.equal((await sendEarlyAccessNotices(db)).d7, 0);
+  assert.equal((await sendEarlyAccessNotices(db, { ...process.env, EARLY_ACCESS_NOTICES: 'on' })).d7, 1); assert.equal((await sendEarlyAccessNotices(db, { ...process.env, EARLY_ACCESS_NOTICES: 'on' })).d7, 0);
   assert.deepEqual((await mails(db, 'EARLY_ACCESS_ENDING_30D')).map((m) => m.recipient), ['owner@x.com']);
-  assert.deepEqual((await mails(db, 'EARLY_ACCESS_ENDING_7D')).map((m) => m.recipient), ['owner@x.com']);
   // clock moved past the end
   await db.run(`UPDATE workspaces SET early_access_until = now() - interval '1 second' WHERE id = ?`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'FREE');
@@ -161,7 +161,7 @@ test('AC10 + AC12: after 12 months → FREE limits (data kept, read-only over th
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '200 days' WHERE id = ?`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'TEAM');   // the paid plan wins while it runs
   await db.run(`UPDATE subscriptions SET current_period_end = now() - interval '1 second' WHERE id = 'sub_t'`);
-  assert.equal(await effectivePlan(db, A.w), 'EARLY');   // then the rest of the early-access year
+  assert.equal(await effectivePlan(db, A.w), 'FREE');   // then FREE — early access no longer grants a plan
   env.server.close();
 });
 
@@ -226,7 +226,7 @@ test('AC5: OWNER buys ₩10,000 → order 9,091 + 909 → +1,000 PURCHASE with r
   assert.equal((await db.get('SELECT status FROM billing_orders WHERE id = ?', [t.order.id])).status, 'FAILED');
   assert.equal(await balance(db, A.w), 1500);
   assert.equal((await db.get('SELECT COUNT(*) AS n FROM subscriptions WHERE workspace_id = ?', [A.w])).n, 0);
-  assert.equal(await effectivePlan(db, A.w), 'EARLY');
+  assert.equal(await effectivePlan(db, A.w), 'FREE');
   // the operator's full-payment refund must not be used for packs (it would not take the credits back)
   const admin = env.client(); const sa = await admin('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'ops@x.com', password: 'passw0rd!' });
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [sa.json.user.id]);

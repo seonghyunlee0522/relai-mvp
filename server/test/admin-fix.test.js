@@ -25,19 +25,19 @@ async function adminPlans(ops, w, uid) {
   return { list: list.plan, detail: detail.workspace.plan, detail_usage: detail.usage.plan, user: user.plan, usage: usage.plan, usage_row: usage, list_label: list.plan_label };
 }
 
-test('P1-1: an early-access workspace reads EARLY in every admin query (no Free limits, not near-limit); TEAM subscription wins; expired early access is FREE', async () => {
+test('P1-1 (T5: early access retired): an early-access workspace reads FREE in every admin query with FREE limits; TEAM subscription wins; expired early access is FREE', async () => {
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
   const A = await setup(client, 'early@x.com', '얼리');                       // signed up before the cutoff → early access
-  await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));   // 2 projects: over FREE's 1, unlimited on EARLY
-  assert.equal(await effectivePlan(db, A.w), 'EARLY');
+  await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));   // 2 projects = FREE's limit
+  assert.equal(await effectivePlan(db, A.w), 'FREE');   // early_access_until in the future no longer grants a plan
 
   let p = await adminPlans(ops, A.w, A.uid);
-  assert.deepEqual([p.list, p.detail, p.detail_usage, p.user, p.usage], ['EARLY', 'EARLY', 'EARLY', 'EARLY', 'EARLY']);
-  assert.equal(p.list_label, '얼리 액세스');
-  assert.equal(p.usage_row.max_pct, null); assert.equal(p.usage_row.tier, 'ok');   // no "200% 확인 필요"
+  assert.deepEqual([p.list, p.detail, p.detail_usage, p.user, p.usage], ['FREE', 'FREE', 'FREE', 'FREE', 'FREE']);
+  assert.equal(p.list_label, '무료');
+  assert.equal(p.usage_row.max_pct, 100); assert.equal(p.usage_row.tier, 'attention');
   const dash = (await ops.c('GET', '/api/admin/dashboard')).json;
-  assert.ok(!dash.attention.near_limit.some((x) => x.workspace_id === A.w));
+  assert.ok(dash.attention.near_limit.some((x) => x.workspace_id === A.w));
 
   // a granting TEAM subscription beats early access (same order as effectivePlan)
   await db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, current_period_end) VALUES ('s-team', ?, 'TEAM', 'ACTIVE', 'fake', now() + interval '20 days')`, [A.w]);
@@ -50,7 +50,7 @@ test('P1-1: an early-access workspace reads EARLY in every admin query (no Free 
   assert.equal(await effectivePlan(db, A.w), 'FREE');
   p = await adminPlans(ops, A.w, A.uid);
   assert.deepEqual([p.list, p.detail, p.detail_usage, p.user, p.usage], ['FREE', 'FREE', 'FREE', 'FREE', 'FREE']);
-  assert.equal(p.usage_row.max_pct, 200); assert.equal(p.usage_row.tier, 'attention');
+  assert.equal(p.usage_row.max_pct, 100); assert.equal(p.usage_row.tier, 'attention');
   server.close();
 });
 
