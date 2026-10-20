@@ -147,7 +147,8 @@ test('workspace deletion: OWNER only, name + password confirmation, subscription
   const out = await purgeExpired(db); assert.equal(out.workspaces_purged, 1);
   // every workspace-scoped table is empty for it, except the billing records kept for 5 years
   const cols = await db.all(`SELECT table_name FROM information_schema.columns WHERE table_schema = current_schema() AND column_name = 'workspace_id'`);
-  const KEEP = new Set(['subscriptions', 'payments', 'billing_events']);
+  // free_credit_claims (pricing v3 T2, D7): the Free-100 claim outlives the workspace on purpose (부정이용 방지 — no second grant after re-signup)
+  const KEEP = new Set(['subscriptions', 'payments', 'billing_events', 'free_credit_claims']);
   for (const { table_name: t } of cols) if (!KEEP.has(t)) assert.equal(await n(db, `SELECT COUNT(*) n FROM ${t} WHERE workspace_id = ?`, [A.w]), 0, t);
   assert.equal(await n(db, 'SELECT COUNT(*) n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ?', [A.w]), 0);
   assert.equal(await n(db, `SELECT COUNT(*) n FROM payments WHERE id = 'pay1'`), 1);

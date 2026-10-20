@@ -112,7 +112,9 @@ test('정기결제 decline: 402, nothing stored, card data not in the log', asyn
 
 test('credit pack → order page that opens the NicePay window shows 결제 수단 신용카드, no test wording', async () => {
   const prev = [process.env.AI_ENABLED, process.env.AI_PROVIDER]; process.env.AI_ENABLED = 'true'; process.env.AI_PROVIDER = 'fake';   // packs are sold only while AI is on
-  const { c, w, done } = await boot({ recurring: false });
+  const { c, w, db, done } = await boot({ recurring: false });
+  // pricing v3 (T2): top-ups are for PRO / TEAM workspaces
+  await db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, auto_renew, current_period_start, current_period_end) VALUES (?, ?, 'PRO', 'ACTIVE', 'fake', false, now(), now() + interval '30 days')`, [`s_${w}`, w]);
   const o = await c('POST', `/api/workspaces/${w}/credits/checkout`, { pack: 'P30' });
   assert.equal(o.status, 201, o.text);
   const page = await c('GET', o.json.checkout_url);

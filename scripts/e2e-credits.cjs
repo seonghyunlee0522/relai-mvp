@@ -3,7 +3,8 @@
 // signed fake webhook (replay, tamper), dashboard filters + CSV, amber low balance, disabled AI at 0 with [크레딧 충전], operator refund,
 // member read-only view, 375px. Not part of `npm test` (needs a running server + Playwright + psql):
 //   BASE=http://127.0.0.1:3121 SHOTS=research/design/credits DATABASE_URL=postgres://… FAKE_BILLING_SECRET=… node scripts/e2e-credits.cjs
-//   server: BILLING_PROVIDER=fake AI_PROVIDER=fake AI_FAKE_AUTOREPLY=1 AI_ENABLED=true EMAIL_PROVIDER=fake SUPPORT_EMAIL=… PAYMENTS_ENABLED=true (checkout suite: with payments off it stops at the first pack) DEV_INITIAL_AI_CREDITS=500
+//   server: BILLING_PROVIDER=fake AI_PROVIDER=fake AI_FAKE_AUTOREPLY=1 AI_ENABLED=true EMAIL_PROVIDER=fake SUPPORT_EMAIL=… PAYMENTS_ENABLED=true (checkout suite: with payments off it stops at the first pack) AI_INITIAL_TRIAL_CREDITS=500
+//   pricing v3 (T2): top-ups need a PRO / TEAM plan (set here with psql) and run through the amount chips; buckets read 기본 · 무료 · 구매
 const fs = require('fs');
 const { createHmac, randomUUID } = require('crypto');
 const { execFileSync } = require('child_process');
@@ -55,7 +56,7 @@ const q = (s) => String(s).replace(/'/g, "''");
     check('AI off: dashboard + ledger still shown (잔액 500, +500 row)', /500 크레딧/.test(await text('#cr-balance')) && Boolean(await page.$('#cr-log tbody tr')));
     const co = await api('POST', `${CR}/checkout`, { pack: 'P10' });
     check('AI off: checkout 409 ai_disabled "AI 기능 준비 중에는 크레딧을 충전할 수 없습니다."', co.status === 409 && co.json?.error?.code === 'ai_disabled' && co.json.error.message === 'AI 기능 준비 중에는 크레딧을 충전할 수 없습니다.', JSON.stringify(co.json));
-    check('AI off: no CREDIT_PACK order created', sql(`SELECT count(*) FROM billing_orders WHERE workspace_id = '${q(W)}' AND kind = 'CREDIT_PACK'`) === '0');
+    check('AI off: no CREDIT_PACK order created', sql(`SELECT count(*) FROM billing_orders WHERE workspace_id = '${q(W)}' AND kind IN ('CREDIT_PACK','CREDIT_TOPUP')`) === '0');
     const csv = await page.request.fetch(`${BASE}${CR}/ledger.csv`); check('AI off: ledger CSV 200', csv.status() === 200);
     await shot('00-ai-off.png');
     await browser.close();
@@ -77,7 +78,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   check('settings: AI 크레딧 panel (잔액 500 크레딧, no ₩ — batch7 #7)', /잔액 500 크레딧/.test(await text('#ai-credits')) && !/₩/.test(await text('#ai-credits')));
   await shot('02-settings.png');
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary', { timeout: 8000 });
-  check('AC2 credits page: balance 500 (₩5,000) = 무료 500', /500 크레딧/.test(await text('#cr-balance')) && /구매 0 · 무료 500/.test(await text('#cr-summary')));
+  check('AC2 credits page: balance 500 (₩5,000) = 무료 500', /500 크레딧/.test(await text('#cr-balance')) && /무료 500 · 구매 0/.test(await text('#cr-summary')));
   check('credits page: 무료 시작 크레딧 500 크레딧 callout (no ₩)', /무료 시작 크레딧 500 크레딧/.test(await text('.cr-gift')) && !/₩/.test(await text('.cr-gift')));
   const priceTbl = await text('.cr-price');
   check('AC3 price table: 30 · 50 · 20 · 10 크레딧, no ₩', !/₩/.test(priceTbl) && ['요구사항 추출30', 'WBS 초안50', '영향 분석20', 'RELAI에게 물어보기10'].every((x) => priceTbl.replace(/\s+/g, '').includes(x.replace(/\s+/g, ''))), priceTbl.replace(/\s+/g, ' '));
@@ -111,20 +112,23 @@ const q = (s) => String(s).replace(/'/g, "''");
   const ask = await api('POST', `${PP}/ai/ask`, { question: '이번 주 할 일은?' });
   check('AC4 question charged exactly 10 (balance 460)', ask.status === 200 && ask.json.run.credit_cost === 10 && ask.json.run.balance === 460);
 
-  // AC5: buy ₩10,000 through the pack button (fake checkout) → signed paid webhook → +1,000 with receipt
-  await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('[data-pack="P10"]', { timeout: 8000 });
-  await page.click('[data-pack="P10"]'); await page.waitForURL(/checkout=fake|\/app\/settings\/credits/, { timeout: 8000 }).catch(() => {});
-  const ord = sql(`SELECT id || '|' || amount || '|' || supply_amount || '|' || vat_amount || '|' || credits FROM billing_orders WHERE workspace_id = '${q(W)}' AND kind = 'CREDIT_PACK' ORDER BY created_at DESC LIMIT 1`).split('|');
+  // AC5 (v3): FREE cannot top up → PRO period (psql), then buy ₩10,000 through the amount chips (fake checkout) → signed paid webhook → +1,000 with receipt
+  check('v3: FREE checkout 402 AI_TOPUP_PLAN_REQUIRED', (await api('POST', `${CR}/checkout`, { amount: 10000 })).status === 402);
+  sql(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, auto_renew, billing_cycle, current_period_start, current_period_end) VALUES ('s_${q(W)}', '${q(W)}', 'PRO', 'ACTIVE', 'fake', false, 'MONTHLY', now(), now() + interval '30 days')`);
+  await page.goto(BASE + '/app/settings/credits'); await page.waitForLoadState('networkidle'); await page.waitForSelector('#cr-pay', { timeout: 8000 });
+  await page.click('.cr-amt[data-amount="10000"]');
+  await page.click('#cr-pay'); await page.waitForURL(/checkout=fake|\/app\/settings\/credits/, { timeout: 8000 }).catch(() => {});
+  const ord = sql(`SELECT id || '|' || amount || '|' || supply_amount || '|' || vat_amount || '|' || credits FROM billing_orders WHERE workspace_id = '${q(W)}' AND kind = 'CREDIT_TOPUP' ORDER BY created_at DESC LIMIT 1`).split('|');
   check('AC5 order: ₩10,000 = 9,091 + 909, 1,000 credits', ord[1] === '10000' && ord[2] === '9091' && ord[3] === '909' && ord[4] === '1000', ord.join(' '));
   const paid = await hook('subscription.activated', { order_id: ord[0], payment: { amount: 10000, currency: 'KRW', status: 'PAID', provider_tid: `tid_${ord[0]}`, moid: ord[0], receipt_url: `https://npg.nicepay.co.kr/issue/IssueLoader.do?TID=tid_${ord[0]}` } });
   check('AC5 paid webhook → +1,000 credits', paid.json.credits === 1000, JSON.stringify(paid.json));
   const replay = await page.request.fetch(`${BASE}/api/billing/webhook/fake`, { method: 'POST', data: paid.body, headers: { 'Content-Type': 'application/json', 'x-fake-signature': createHmac('sha256', SECRET).update(paid.body).digest('hex') } });
   check('AC5 replayed webhook adds nothing', (await replay.json()).duplicate === true);
-  const co2 = await api('POST', `${CR}/checkout`, { pack: 'P30' });
+  const co2 = await api('POST', `${CR}/checkout`, { amount: 30000 });
   const tam = await hook('subscription.activated', { order_id: co2.json.order.id, payment: { amount: 3000, status: 'PAID', provider_tid: `tid_t_${Date.now()}` } });
   check('AC5 tampered amount refused (amount_mismatch, no credits)', tam.json.reason === 'amount_mismatch');
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary');
-  check('credits page after purchase: 1,460 크레딧 · 구매 1,000 · 무료 460 (no ₩)', /1,460 크레딧/.test(await text('#cr-balance')) && !/₩/.test(await text('#cr-summary')) && /구매 1,000 · 무료 460/.test(await text('#cr-summary')));
+  check('credits page after purchase: 1,460 크레딧 · 무료 460 · 구매 1,000 (no ₩)', /1,460 크레딧/.test(await text('#cr-balance')) && !/₩/.test(await text('#cr-summary')) && /무료 460 · 구매 1,000/.test(await text('#cr-summary')));
   const firstRow = await text('.cr-log tbody tr:first-child');
   check('AC5 ledger: 충전 ₩10,000 row with 영수증 link, +1,000', /충전 ₩10,000/.test(firstRow) && /영수증/.test(firstRow) && /\+1,000/.test(firstRow), firstRow.replace(/\s+/g, ' '));
   await shot('06-credits-after-purchase.png');
@@ -176,9 +180,9 @@ const q = (s) => String(s).replace(/'/g, "''");
   check('AC6 API: 402 AI_CREDIT_INSUFFICIENT, no ledger row', no.status === 402 && no.json.error.code === 'AI_CREDIT_INSUFFICIENT' && sql(`SELECT COUNT(*) FROM credit_ledger WHERE workspace_id = '${q(W)}'`) === rows0);
 
   // AC9: operator refund on the fake provider (pack paid 10 days ago → −10%)
-  const o3 = (await api('POST', `${CR}/checkout`, { pack: 'P30' })).json.order;
+  const o3 = (await api('POST', `${CR}/checkout`, { amount: 30000 })).json.order;
   await hook('subscription.activated', { order_id: o3.id, payment: { amount: 30000, status: 'PAID', provider_tid: `tid_${o3.id}` } });
-  sql(`UPDATE billing_orders SET paid_at = now() - interval '10 days' WHERE workspace_id = '${q(W)}' AND kind = 'CREDIT_PACK' AND status = 'PAID'`);   // both packs older than 7 days → −10%
+  sql(`UPDATE billing_orders SET paid_at = now() - interval '10 days' WHERE workspace_id = '${q(W)}' AND kind IN ('CREDIT_PACK','CREDIT_TOPUP') AND status = 'PAID'`);   // both packs older than 7 days → −10%
   const rf = await api('POST', `/api/billing/admin/workspaces/${W}/credit-refund`, { credits: 2000, reason: 'e2e 환불' });
   check('AC9 refund 2,000 → ₩18,000, one REFUND −2,000', rf.status === 200 && rf.json.amount === 18000 && sql(`SELECT string_agg(amount::text, ',') FROM credit_ledger WHERE workspace_id = '${q(W)}' AND type = 'REFUND'`) === '-2000', JSON.stringify(rf.json).slice(0, 200));
   const over = await api('POST', `/api/billing/admin/workspaces/${W}/credit-refund`, { credits: 99999, reason: 'x' });

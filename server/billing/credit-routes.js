@@ -20,7 +20,7 @@ import { FEATURE_LABEL, featureCreditCost, aiConfig } from '../ai/config.js';
 import { getBalance, bucketBalances } from '../ai/credits.js';
 import { effectivePlan } from './subscriptions.js';
 import { OrderError, publicOrder } from './orders.js';
-import { createTopupOrder, packQuote, topupEligibility, refundableCredits, refundQuoteFor, refundCredits, refundRule, TOPUP_PRESETS } from './credit-packs.js';
+import { createTopupOrder, packQuote, topupQuote, topupEligibility, refundableCredits, refundQuoteFor, refundCredits, refundRule, TOPUP_PRESETS } from './credit-packs.js';
 import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE } from './provider.js';
 
 const TZ = () => process.env.APP_TIMEZONE || 'Asia/Seoul';
@@ -45,24 +45,28 @@ async function monthUsage(db, wid, month) {
   return { month, used, krw: won(used), by_feature: by };
 }
 
+const topupOptions = () => Array.from({ length: TOPUP_MAX_KRW / TOPUP_STEP_KRW }, (_, i) => { const q = topupQuote((i + 1) * TOPUP_STEP_KRW); return { amount: q.amount, credits: q.credits, supply: q.supply_amount, vat: q.vat_amount }; });
+
 export async function creditSummary(db, wid, { role = null, provider = null } = {}) {
   const [bal, b, plan, topup] = await Promise.all([getBalance(db, wid), bucketBalances(db, wid), effectivePlan(db, wid), topupEligibility(db, wid)]);
   const { m } = await db.get(`SELECT to_char(now() AT TIME ZONE ?, 'YYYY-MM') AS m`, [TZ()]);
-  const w = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
+  const w = await db.get('SELECT early_access_until, name FROM workspaces WHERE id = ?', [wid]);
   const owner = can(role, 'billing');
   return {
     credit_price_krw: CREDIT_PRICE_KRW, balance: bal.balance, balance_krw: won(bal.balance), available: bal.available, reserved: bal.reserved,
     purchased_remaining: b.purchased, free_remaining: b.total - b.purchased,
     buckets: { plan: b.plan, plan_expires_at: b.plan_expires_at, promo: b.promo, purchased: b.purchased },
     plan_monthly_credits: PLANS[plan].credits?.monthly || 0,
-    topup: { allowed: topup.allowed, reason: topup.reason, step: TOPUP_STEP_KRW, min: TOPUP_STEP_KRW, max: TOPUP_MAX_KRW, presets: TOPUP_PRESETS, upgrade_url: PLANS_URL },
+    // Every amount the stepper may land on, priced here (the browser computes no ₩): { amount, credits, supply, vat }.
+    topup: { allowed: topup.allowed, reason: topup.reason, step: TOPUP_STEP_KRW, min: TOPUP_STEP_KRW, max: TOPUP_MAX_KRW, presets: TOPUP_PRESETS, upgrade_url: PLANS_URL,
+      options: topupOptions() },
     low_balance_threshold: LOW_BALANCE_CREDITS, low: bal.available < LOW_BALANCE_CREDITS, empty: bal.available <= 0,
     this_month: await monthUsage(db, wid, m), last_month: await monthUsage(db, wid, prevMonth(m)),
     prices: CHARGED.map((f) => ({ feature: f, label: shortLabel(f), credits: featureCreditCost(f), krw: won(featureCreditCost(f)) })),
     packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount, ...splitVat(p.amount) })),
     starter_credits: aiConfig().trialCredits, purchased_valid_years: PURCHASED_VALID_YEARS, refund_policy: { full_days: REFUND_FULL_DAYS, fee_pct: REFUND_FEE_PCT, rule: refundRule() },
     can_buy: owner, ai_enabled: aiConfig().enabled, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), sandbox: provider?.mode === 'sandbox', refundable: owner ? await refundableCredits(db, wid) : null,
-    plan, plan_label: PLANS[plan].label, early_access_until: w?.early_access_until || null,
+    plan, plan_label: PLANS[plan].label, early_access_until: w?.early_access_until || null, workspace_name: w?.name || '',
   };
 }
 

@@ -2990,6 +2990,14 @@ html.is-phone .rhead .seg{height:32px}
 .cr-log tr.is-zero td{color:var(--text-3)}
 .cr-log tbody tr,.cr-price tbody tr{cursor:default}
 .cr-krw-m{display:none}
+.cr-chips{display:flex;flex-wrap:wrap;gap:8px}
+.cr-amt{height:34px;padding:0 14px;border:1px solid var(--border);border-radius:999px;background:#fff;font:inherit;font-weight:600;color:var(--text-2);cursor:pointer;font-variant-numeric:tabular-nums}
+.cr-amt:hover{border-color:var(--blue)}.cr-amt.is-on{border-color:var(--blue);background:var(--bg-tint);color:var(--blue-deep)}
+.cr-stepper{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0}.cr-stepper b{font-size:var(--fs-lg);color:var(--navy);min-width:110px;text-align:center;font-variant-numeric:tabular-nums}
+.cr-quote{margin:4px 0 0}.cr-quote th{width:140px;text-align:left;color:var(--text-3);font-weight:600}.cr-quote tbody tr{cursor:default}
+#cr-pay{margin-top:12px}
+.cr-upsell{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0;font-weight:600;color:var(--navy)}
+@media (max-width:767px){.cr-quote th{width:auto}}
 .ai-credit.is-low{color:var(--warn-fg)}
 @media (max-width:767px){
   .cr-kpis{grid-template-columns:1fr}.cr-packs{grid-template-columns:1fr}.cr-filt{padding:10px 12px 0}.cr-filt .select{flex:1 1 40%;min-width:0;max-width:100%;text-overflow:ellipsis}.cr-total{margin:10px 12px}

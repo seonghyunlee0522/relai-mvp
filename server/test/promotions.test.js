@@ -40,7 +40,7 @@ test('admin CRUD: operator only, validated, audited, honours active + KST date w
   assert.equal((await c('GET', '/api/admin/promotions')).status, 403);
   // credit grant is untouched by promotions: the starter grant still lands
   const w = s.json.workspaces[0].id;
-  assert.equal((await c('GET', `/api/workspaces/${w}/credits/summary`)).json.credits.balance, 500);
+  assert.equal((await c('GET', `/api/workspaces/${w}/credits/summary`)).json.credits.balance, 100);   // pricing v3: Free 최초 100
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]);
   const list = await c('GET', '/api/admin/promotions');
   assert.equal(list.status, 200); assert.equal(list.json.promotions.length, 4); assert.ok(list.json.placements.credits);

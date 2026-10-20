@@ -43,7 +43,7 @@ const sumOf = (b) => b.plan + b.promo + b.purchased;
 export function splitDebit(b, n, order = SPEND_ORDER) {
   const d = { plan: 0, promo: 0, purchased: 0 };
   let left = n;
-  for (const k of order) { const take = Math.min(left, b[k]); d[k] = -take; left -= take; }
+  for (const k of order) { const take = Math.min(left, b[k]); d[k] = take ? -take : 0; left -= take; }
   return left > 0 ? null : d;
 }
 

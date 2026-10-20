@@ -67,9 +67,9 @@ test('public legal pages: /terms /privacy /pricing and the landing footer, no dr
     }
     const terms = (await c('GET', '/terms', undefined, { raw: true })).buf.toString('utf8');
     assert.match(terms, /이용약관/); assert.match(terms, /20,000원/); assert.match(terms, /2026년 10월 20일부터 시행/); assert.match(terms, /버전 2026-10-20/);
-    // b7-fix P0-1: early access retired — no 12-month / unlimited promise; the Free plan (2 projects, 500 credits once) is described
+    // b7-fix P0-1: early access retired — no 12-month / unlimited promise; the Free plan (2 projects, 100 credits once — pricing v3) is described
     assert.doesNotMatch(terms, /얼리 액세스|12개월 동안 요금 없이|Team 요금제와 같은 한도/);
-    assert.match(terms, /무료 플랜\(Free 요금제\)/); assert.match(terms, /진행 중 프로젝트 2개/); assert.match(terms, /무료 크레딧 500 크레딧을 한 번 지급/);
+    assert.match(terms, /무료 플랜\(Free 요금제\)/); assert.match(terms, /진행 중 프로젝트 2개/); assert.match(terms, /무료 크레딧 100 크레딧을 한 번 지급/);   // pricing v3: Free 최초 100
     const privacy = (await c('GET', '/privacy', undefined, { raw: true })).buf.toString('utf8');
     for (const v of ['Vercel Inc.', '나이스페이먼츠', 'Resend', 'Neon', 'Anthropic', 'Google LLC', `개인정보 보호책임자: ${LEGAL.privacyOfficer.name}`]) assert.ok(privacy.includes(v), v);
     const p = await c('GET', '/pricing'); assert.equal(p.status, 302); assert.equal(p.location, '/#pricing');
