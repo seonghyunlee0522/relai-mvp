@@ -176,6 +176,8 @@ test('scheduled downgrade TEAM → PRO and cycle change: nothing now, applied by
     const r = await A.c('POST', `${B(A)}/changes`, { kind: 'DOWNGRADE', plan: 'PRO' });
     assert.equal(r.status, 201, JSON.stringify(r.json));
     assert.equal(r.json.billing.plan, 'TEAM'); assert.equal(r.json.billing.next_payment_amount, 30000); assert.equal(r.json.billing.scheduled[0].kind, 'DOWNGRADE');
+    const sc = r.json.billing.scheduled[0];   // T4 Billing page fields
+    assert.equal(sc.to, 'PRO'); assert.equal(sc.cancel_url, `/api/workspaces/${A.w}/billing/changes/${sc.id}/cancel`); assert.equal(r.json.billing.cancel_url, `/api/workspaces/${A.w}/billing/cancel`);
     assert.equal((await A.c('POST', `${B(A)}/changes`, { kind: 'DOWNGRADE', plan: 'FREE' })).json.error.code, 'not_downgrade');
     // 월간 → 연간 raises the renewal: consent first
     const cyc = await A.c('POST', `${B(A)}/changes`, { kind: 'CYCLE', cycle: 'ANNUAL' });
@@ -194,7 +196,7 @@ test('scheduled downgrade TEAM → PRO and cycle change: nothing now, applied by
     // withdraw a scheduled change
     const r2 = await A.c('POST', `${B(A)}/changes`, { kind: 'CYCLE', cycle: 'MONTHLY' });
     assert.equal(r2.status, 201);
-    assert.equal((await A.c('DELETE', `${B(A)}/changes/${r2.json.change.id}`)).status, 200);
+    assert.equal((await A.c('POST', r2.json.billing.scheduled.find((c) => c.kind === 'CYCLE').cancel_url, {})).status, 200);
     assert.deepEqual((await A.c('GET', B(A))).json.billing.scheduled, []);
   } finally { delete process.env.PLAN_CHANGE_ENABLED; }
   t.server.close();
@@ -352,4 +354,20 @@ test('workspace isolation: a member of WS-A cannot read or change WS-B billing; 
   hidden(await A.c('POST', `${B(Bw)}/changes`, { kind: 'CYCLE', cycle: 'ANNUAL' }));
   assert.equal((await sub(t.db, Bw.w)).status, 'ACTIVE');
   t.server.close();
+});
+
+test('mig 64: unedited v2 launch promotions get v3 copy (Free 100 once, Pro 1,000 / Team 3,000 a month); edited rows stay; idempotent', async () => {
+  const db = await testDb();
+  const { migrations } = await import('../migrations.js');
+  await db.run(`UPDATE promotions SET title = '무료 플랜으로 시작', body = '프로젝트 2개까지 결제 정보 없이 바로 씁니다.' WHERE id = 'promo-early-access'`);
+  await db.run(`UPDATE promotions SET title = '이후 AI는 쓴 만큼만', body = '월 기본료 없이 쓴 만큼만 크레딧이 차감됩니다.' WHERE id = 'promo-ai-payg'`);
+  await db.run(`UPDATE promotions SET title = '가입하면 AI 크레딧 500 무료', body = '운영자가 고친 문구' WHERE id = 'promo-ai-credits'`);
+  const up = migrations.find((m) => m.version === 64).up;
+  await up(db); await up(db);
+  const row = (id) => db.get('SELECT title, body FROM promotions WHERE id = ?', [id]);
+  assert.match((await row('promo-early-access')).body, /활성 프로젝트 1개, 사용자 3명/);
+  assert.match((await row('promo-ai-payg')).body, /1,000.*3,000/);
+  assert.equal((await row('promo-ai-credits')).body, '운영자가 고친 문구');
+  const all = (await db.all('SELECT title, body FROM promotions WHERE active')).map((r) => `${r.title} ${r.body}`).join(' ');
+  assert.doesNotMatch(all, /월 기본료 없이|프로젝트 2개|크레딧 500(?! 무료)/);
 });

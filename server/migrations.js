@@ -235,7 +235,11 @@ export const migrations = [
     await backfillCreditBuckets(db);
   } },
   { version: 63, name: 'Pricing v3 T3: subscription_changes (scheduled downgrade / cycle / add-on reduction at renewal), subscription_refunds (해지 환불 · 청약철회, unused days prorated, no penalty), subscriptions ended_at / data_retention_until / last_failed_at (schema.sql, additive)', up() {} },
-  { version: 64, name: 'Pricing v3 T3: billing_consents (정기결제 · 추가 구매 · 증액 동의, disclosure hash, append-only) and price_change_notices (schema.sql, additive)', up() {} },
+  { version: 64, name: 'Pricing v3 T3: billing_consents (정기결제 · 추가 구매 · 증액 동의, disclosure hash, append-only) and price_change_notices (schema.sql, additive). Data: the seeded launch promotions still on v2 copy (프로젝트 2개, 크레딧 500, 월 기본료 없이) get v3 copy (Free 1 project · 3 users · 100 credits once, Pro 1,000 / Team 3,000 a month) — only rows an operator never edited; nothing deleted', async up(db) {
+    for (const [id, from, to] of PROMO_COPY_64) {
+      await db.run('UPDATE promotions SET title = ?, body = ?, badge = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ?', [to.title, to.body, to.badge, id, from.title, from.body]);
+    }
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
@@ -254,6 +258,18 @@ const PROMO_COPY_53 = [
     { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 500도 함께 드립니다.', badge: '무료 플랜' }],
 ];
 const PROMO_OFF_53 = [['promo-home', '얼리 액세스 {until}까지 무료'], ['promo-credits', '{until}까지 RELAI 전체 기능 무료']];
+
+/** Migration 64: [id, seeded v2 copy { title, body } (after 49/53), v3 copy] — pricing v3 (Free 100 once; Pro 1,000 / Team 3,000 a month). */
+const PROMO_COPY_64 = [
+  ['promo-early-access', { title: '무료 플랜으로 시작', body: '프로젝트 2개까지 결제 정보 없이 바로 씁니다.' },
+    { title: '무료 플랜으로 시작', body: '활성 프로젝트 1개, 사용자 3명까지 결제 정보 없이 바로 씁니다.', badge: '무료 플랜' }],
+  ['promo-ai-credits', { title: '가입하면 AI 크레딧 500 무료', body: '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.' },
+    { title: '가입하면 AI 크레딧 100 무료', body: '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다. 처음 한 번 드립니다.', badge: 'AI 크레딧' }],
+  ['promo-ai-payg', { title: '이후 AI는 쓴 만큼만', body: '월 기본료 없이 쓴 만큼만 크레딧이 차감됩니다.' },
+    { title: 'Pro · Team은 매월 AI 크레딧', body: 'Pro는 매월 1,000, Team은 매월 3,000 크레딧을 드립니다. 모자라면 충전해서 씁니다.', badge: '유료 플랜' }],
+  ['promo-login', { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 500도 함께 드립니다.' },
+    { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 100도 함께 드립니다.', badge: '무료 플랜' }],
+];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;
 

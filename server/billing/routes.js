@@ -180,7 +180,11 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
         disclosure: disclosure('PRICE_INCREASE', { plan: full.plan, cycle: full.billing_cycle || 'MONTHLY', old_amount: notice.old_amount, new_amount: notice.new_amount, effective_at: notice.effective_at }) } : null,
       refunds: subscription ? await listRefunds(db, wid) : [],
       limits, usage: { ...(await workspaceUsage(db, wid, plan)), ...counts, seats_left: limits.users === null ? null : Math.max(0, limits.users - counts.members - counts.pending_invites) },
-      addons, scheduled: changes.map((c) => ({ id: c.id, kind: c.kind, from: c.from, to: c.to, effective_at: c.effective_at })), credits: await creditBuckets(wid),
+      // to = what the screen names (plan key for DOWNGRADE, cycle key for CYCLE, null for ADDON_REDUCE); to_state = the full target fields.
+      addons, scheduled: changes.map((c) => ({ id: c.id, kind: c.kind, from: c.from, to: c.kind === 'DOWNGRADE' ? c.to.plan : c.kind === 'CYCLE' ? c.to.cycle : null, to_state: c.to,
+        effective_at: c.effective_at, cancel_url: `/api/workspaces/${wid}/billing/changes/${c.id}/cancel` })), credits: await creditBuckets(wid),
+      // 해지: POST cancel_url (auto-renew stops, plan to period end) · POST cancel_url { refund: true } (ends now + unused days refunded; preview: refund_quote_url).
+      cancel_url: paid && renews ? `/api/workspaces/${wid}/billing/cancel` : null, refund_quote_url: paid ? `/api/workspaces/${wid}/billing/refund-quote` : null,
       catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null, price_version: row?.price_version || null,
       subscription, early_access_until: early?.early_access_until || null,
       plans: planCatalogue().plans, credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits,
@@ -259,7 +263,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const out = await requestCancel(db, provider, req.params.wid);
     if (out.error === 'no_active_subscription') return fail(res, 409, out.error, '해지할 구독이 없습니다.');
     if (out.error === 'already_canceled') return fail(res, 409, out.error, '이미 해지 예약된 구독입니다.');
-    if (out.error === 'not_recurring') return fail(res, 409, out.error, '자동 결제되지 않는 이용권입니다. 이용 기간이 끝나면 Free 플랜으로 전환됩니다.');
+    if (out.error === 'not_recurring') return fail(res, 409, out.error, '자동 갱신이 이미 꺼져 있습니다. 결제한 기간이 끝나면 Free 플랜으로 전환됩니다.');
     await sendCancelNotice(db, req.params.wid, { immediate: false }).catch((e) => console.error('[billing] cancel mail failed', e.message));
     res.json({ ...(await summary(req.params.wid, req.role)), cancel: { immediate: false } });
   }));
@@ -374,10 +378,12 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
       res.status(201).json({ ...(await summary(wid, req.role)), change: out.change });
     } catch (e) { if (e instanceof OrderError) return orderFail(res, e); throw e; }
   }));
-  app.delete(`${b}/changes/:cid`, payer, wrap(async (req, res) => {
+  const withdrawChange = wrap(async (req, res) => {
     if (!(await cancelScheduledChange(db, { workspaceId: req.params.wid, changeId: req.params.cid }))) return fail(res, 404, 'not_found', '예약된 변경을 찾을 수 없습니다.');
     res.json(await summary(req.params.wid, req.role));
-  }));
+  });
+  app.delete(`${b}/changes/:cid`, payer, withdrawChange);
+  app.post(`${b}/changes/:cid/cancel`, payer, withdrawChange);   // scheduled[].cancel_url
 
   /** POST …/billing/price-consent { notice_id, agree, disclosure_hash } — 증액 동의 (§13⑥): the renewal may charge the new amount. */
   app.post(`${b}/price-consent`, payer, wrap(async (req, res) => {

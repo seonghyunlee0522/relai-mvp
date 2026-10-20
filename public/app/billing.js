@@ -139,12 +139,12 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
   if (cancel) cancel.onclick = async () => {
     const end = day(b.subscription?.current_period_end);
     if (!(await confirmDialog({ title: `${b.plan_label} 구독을 해지할까요?`, body: `${end}까지 ${b.plan_label}를 그대로 쓰고, 이후 Free로 바뀌어요. 자동 갱신은 바로 멈추고 위약금은 없어요. 남은 기간을 일할 계산해 환불받으려면 이용약관의 환불 기준에 따라 요청하세요. 데이터는 삭제되지 않고 해지 후 30일 동안 조회·내보내기를 할 수 있어요.`, confirm: '해지', danger: true }))) return;
-    try { await api('POST', `/api/workspaces/${wid}/billing/cancel`); toast('해지가 예약됐어요.'); await mountBilling(el, { wid }); } catch (e) { toast(e.message); }
+    try { await api('POST', `/api/workspaces/${wid}/billing/cancel`, {}); toast('해지가 예약됐어요.'); await mountBilling(el, { wid }); } catch (e) { toast(e.message); }
   };
   el.querySelectorAll('[data-sched-cancel]').forEach((btn) => { btn.onclick = async () => {
     const c = b.scheduled[Number(btn.dataset.schedCancel)];
     if (!(await confirmDialog({ title: '예약한 변경을 취소할까요?', body: `${CHANGE[c.kind] || c.kind} 예약을 취소하고 지금 조건을 유지해요.`, confirm: '예약 취소' }))) return;
-    try { await api('POST', c.cancel_url); toast('예약을 취소했어요.'); await mountBilling(el, { wid }); } catch (e) { toast(e.message); }
+    try { await api('POST', c.cancel_url, {}); toast('예약을 취소했어요.'); await mountBilling(el, { wid }); } catch (e) { toast(e.message); }
   }; });
 }
 
