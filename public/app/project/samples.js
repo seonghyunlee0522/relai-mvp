@@ -6,6 +6,8 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 
 export const isSample = (p) => Boolean(p && p.sample_key);
 export const sampleChip = (p) => (isSample(p) ? html`<span class="chip chip--sample" data-sample-badge title="RELAI 사용 예시로 넣어 둔 샘플 프로젝트입니다. 사용량에 포함되지 않습니다.">샘플</span>` : '');
+/** 조회 전용 (founder policy 2026-10-21): the plan allows fewer active projects than the workspace has; only the newest ones stay editable. */
+export const readOnlyChip = (p) => (p && p.read_only ? html`<span class="chip chip--ro" data-ro-badge title="요금제 한도를 넘어 조회 전용입니다. 데이터는 그대로 보관되며, 다시 구독하면 최근 프로젝트부터 편집할 수 있어요.">조회 전용</span>` : '');
 const wsUrl = (path = '') => `/api/workspaces/${state.workspace.id}${path}`;
 
 /** Deletes every sample of the workspace after a confirm. Resolves true when deleted. */

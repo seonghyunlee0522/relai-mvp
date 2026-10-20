@@ -86,7 +86,7 @@ const ORDERS = [
   check('plans: 연간 toggle → 연 288,000원', /연 288,000원/.test(await page.textContent('#plans-page [data-plan="PRO"] .pc-a')));
   await tallShot(page, 'app-plans-annual-desktop.png');
   check('plans: Pro/Team = 정기결제 준비 중, not clickable, no 선택 link, no checkout call', /정기결제 준비 중/.test(await page.textContent('#plans-page [data-plan-soon="PRO"]')) && Boolean(await page.$('#plans-page [data-plan-soon="TEAM"]')) && !(await page.$('#plans-page a[data-plan-cta="PRO"]')) && calls.length === 0);
-  check('plans FAQ: 해지 any time, 30일 조회·내보내기, 일할 환불, no 월간 정상가', /30일 동안 모든 프로젝트/.test(await page.textContent('#pl-faq')) && /일할 계산/.test(await page.textContent('#pl-faq')) && !/월간 정상가/.test(await page.textContent('#pl-faq')));
+  check('plans FAQ: 해지 any time, newest project editable / rest 조회 전용, 일할 환불, no 월간 정상가', /나머지는 조회 전용/.test(await page.textContent('#pl-faq')) && /일할 계산/.test(await page.textContent('#pl-faq')) && !/월간 정상가/.test(await page.textContent('#pl-faq')));
 
   await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing #bl-plan');
   const bt = await page.textContent('#billing');

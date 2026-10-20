@@ -1812,6 +1812,8 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .btn--google{display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none}
 .btn--google svg{flex:none}
 .notice--warn{background:var(--warn-bg);border-color:var(--warn-bd);color:var(--warn-fg)}
+.chip--ro{background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-fg)}
+.ro-banner{margin:0 0 12px}
 .notice--invite{background:var(--bg-tint);border-color:var(--border-blue);color:var(--navy);line-height:1.6}
 .auth--single{grid-template-columns:1fr}
 .auth--single .auth__form{max-width:520px}

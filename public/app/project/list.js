@@ -7,7 +7,7 @@ import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
 import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 import { isPhone } from '../core/device.js';
-import { sampleChip, deleteAllSamples } from './samples.js';
+import { sampleChip, readOnlyChip, deleteAllSamples } from './samples.js';
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 
 /** Project-0 home: one clear CTA + how RELAI guides a project (product UI, not a landing page). Members see the join message instead. */
@@ -29,7 +29,7 @@ export async function projectsPage(main = $("#main")) {
     onOpen: (pid) => navigate(`/app/projects/${pid}`),
     empty: () => (all.length ? '<div class="empty empty--sm"><h2>조건에 맞는 프로젝트가 없습니다.</h2></div>' : emptyState()),
     columns: [
-      { key: 'name', label: '프로젝트명', width: 320, min: 160, sticky: true, fixed: true, sort: (r) => r.name, cls: 'ttl', render: (r) => html`<a class="link" href="/app/projects/${r.id}" data-link>${r.name}</a>${raw(sampleChip(r))}` },
+      { key: 'name', label: '프로젝트명', width: 320, min: 160, sticky: true, fixed: true, sort: (r) => r.name, cls: 'ttl', render: (r) => html`<a class="link" href="/app/projects/${r.id}" data-link>${r.name}</a>${raw(sampleChip(r))}${raw(readOnlyChip(r))}` },
       { key: 'client', label: '고객사', width: 150, sort: (r) => r.client_name || '', render: (r) => r.client_name || '-' },
       { key: 'status', label: '상태', width: 90, sort: (r) => STATUS[r.status], render: (r) => html`<span class="chip ${STATUS_CHIP[r.status] || ''}">${STATUS[r.status]}</span>` },
       { key: 'phase', label: '현재 단계', width: 180, sort: (r) => r.current_phase_sequence, render: (r) => html`${no2(r.current_phase_sequence)} ${r.current_phase_name}` },

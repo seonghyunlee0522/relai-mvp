@@ -2,7 +2,7 @@
  * The header carries the minimum: project name · status · (work screens only) compact current-phase badge · (right) Activity · 보고서 · ⋯ · Help.
  * On What’s Next the phase is shown by the Lifecycle stepper and the RELAI Guide right below, so the header does not repeat it.
  * Navigation is the LNB (lnb.js); activity states come from the server payload (g.phases[].steps[].state). */
-import { sampleChip } from './samples.js';
+import { sampleChip, readOnlyChip } from './samples.js';
 import { api, wsApi } from '../core/api.js';
 import { html, no2, raw } from '../core/dom.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
@@ -20,7 +20,7 @@ import { md } from '../shared/kst-date.js';
 import { approvalGateDialog, APPROVAL_GATES, gateStep, bypassNote } from './initiation.js';
 
 /** Status pill. Phase 7 US-2: a closed project reads `✓ 완료 · 10/30` (ok family) — never the same shape as 보관됨. */
-export const statusPill = (p) => sampleChip(p) + (p.status === 'COMPLETED' && p.closed_on
+export const statusPill = (p) => sampleChip(p) + readOnlyChip(p) + (p.status === 'COMPLETED' && p.closed_on
   ? html`<span class="chip chip--done wsh__done" data-closed-pill>✓ 완료 · ${md(String(p.closed_on).slice(0, 10))}</span>`
   : html`<span class="chip ${STATUS_CHIP[p.status] || ''}">${STATUS[p.status]}</span>`);
 
@@ -31,6 +31,8 @@ export const raidBadges = (is, rs) => ({ raid: is && is.active ? html`<em class=
  * `tab` = LNB item key to mark active (next | overview | definition | requirements | wbs | overview-wbs | tests | acceptance | changes | raid | reports …);
  * `title` = optional screen title shown after the phase chip (e.g. "WBS 작성" vs "WBS · 운영 조회").
  */
+/** Banner on every screen of a project that is read-only after a downgrade (server: guideResponse.read_only). */
+export const readOnlyBanner = (g) => (g && g.read_only ? html`<div class="notice notice--warn ro-banner" id="ro-banner" role="status" data-phone-ok><b>조회 전용 프로젝트</b> · ${g.read_only.message} <a class="link" href="/app/settings#billing" data-link>플랜 · 결제 보기</a></div>` : '');
 export const projectHead = (p, g, { tab = null, title = '', badges = null } = {}) => {
   wireProjectActions();
   wireAssistant(); queueMicrotask(() => revealAskButton(p.id));   // CTA appears only when /ai/status says AI is on
@@ -39,10 +41,10 @@ export const projectHead = (p, g, { tab = null, title = '', badges = null } = {}
     // desktop (Redesign R1): rail door + section tabs + page header; project name / phase / status live in the top bar
     const info = pageInfo(p, g, { tab, title, badges });
     queueMicrotask(() => { mountProjectRail(p.id, info.door.key); setTopProject(p, g, statusPill(p)); });
-    return pageHeader(p, g, info, html`<button type="button" class="btn btn--sm btn--ask" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조 · 예: 진척률이 계획보다 낮은 이유는?"><i aria-hidden="true">✦</i>RELAI에게 물어보기</button>${raw(headerMore(p))}`);
+    return readOnlyBanner(g) + pageHeader(p, g, info, html`<button type="button" class="btn btn--sm btn--ask" data-ai-ask="${p.id}" hidden title="프로젝트 데이터를 근거로 답하는 읽기 전용 AI 보조 · 예: 진척률이 계획보다 낮은 이유는?"><i aria-hidden="true">✦</i>RELAI에게 물어보기</button>${raw(headerMore(p))}`);
   }
   queueMicrotask(() => { mountLnb(p, g, tab); phoneHead(p, g, statusPill(p)); });
-  return html`<header class="wsh">
+  return readOnlyBanner(g) + html`<header class="wsh">
     <div class="wsh__row">
       <button type="button" class="wsh__menu" data-ws-menu aria-label="메뉴 열기" title="메뉴">☰</button>
       <a class="wsh__name" href="/app/projects/${p.id}" data-link title="${p.name}">${p.name}</a>

@@ -15,7 +15,7 @@ import { isPhone, pcLine } from '../core/device.js';
 import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 import { pickJosa } from '../shared/josa.js';
 import { upcomingList, activityList } from './next.js';
-import { isSample, sampleChip, deleteAllSamples } from './samples.js';
+import { isSample, sampleChip, readOnlyChip, deleteAllSamples } from './samples.js';
 import { loadPromos, promoHtml } from '../shared/promo.js';
 
 /** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
@@ -88,7 +88,7 @@ const card = (c, i) => {
     <header class="hc__h">
       ${raw(alert ? (isOverdue(c) ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 마일스톤이 있습니다" data-overdue>지연</span>' : '<span class="hc__prio" title="심각한 확인 필요 항목이 있습니다">확인 필요</span>') : '')}
       <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a>
-      <span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}
+      <span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}${raw(readOnlyChip(c))}
       <span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>
     </header>
     <div class="hc__phase"><span class="hc__k">현재 단계</span><b>${no2(c.current_phase_sequence)} ${c.current_phase_name}</b>${raw(lifecycle(c.current_phase_sequence, c.phase_states))}${raw(c.soon && c.next_date ? html`<span class="hc__soon" title="${c.next_date.label}">D-${c.next_date_days} ${c.next_date.title}</span>` : '')}</div>
@@ -139,7 +139,7 @@ const dCard = (c, i) => {
   const late = isOverdue(c); const w = c.wbs || {};
   return html`<article class="hc hc--r2 ${late ? 'is-blocker' : ''}" data-pid="${c.id}">
     <header class="hc__h">
-      <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a><span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}
+      <a class="hc__name" href="/app/projects/${c.id}" data-link title="${c.name}">${c.name}</a><span class="hc__client">${c.client_name || ''}</span>${raw(sampleChip(c))}${raw(readOnlyChip(c))}
       ${raw(late ? '<span class="hc__prio" title="계획 종료일이 지난 작업이나 마일스톤이 있습니다" data-overdue>지연</span>' : '')}
       ${raw(c.status !== 'ACTIVE' ? html`<span class="chip ${STATUS_CHIP[c.status] || ''}">${STATUS[c.status]}</span>` : '')}
       <span class="hc__pos">${no2(c.current_phase_sequence)} 단계 / 07</span>
