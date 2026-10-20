@@ -40,12 +40,35 @@ export function assertProvider(p) {
  * Fake provider for tests and local development. Checkout returns a local URL; webhooks are JSON signed with
  * HMAC-SHA256(secret, rawBody) in `x-fake-signature`. `signedEvent()` builds such a delivery for tests.
  */
-export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET || 'fake-billing-secret' } = {}) {
+export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET || 'fake-billing-secret', recurring = false } = {}) {
   const sign = (raw) => createHmac('sha256', secret).update(raw).digest('hex');
-  const calls = { checkout: [], cancel: [], refund: [] };
+  const calls = { checkout: [], cancel: [], refund: [], regist: [], charge: [], expire: [] };
+  /**
+   * Fake 정기결제 (`recurring: true`, or NICEPAY_RECURRING_ENABLED=true through providerFromEnv): the same interface as nicepay.js —
+   * registerBillingKey → { bid }, chargeBillingKey → normalized paid / failed event, expireBillingKey. Card data is never kept.
+   * `declineNext` (count) makes the next charges fail (tests, e2e).
+   */
+  const recurringApi = !recurring ? {} : {
+    recurringEnabled: true,
+    async registerBillingKey({ order }) { const bid = `fake_bid_${randomUUID().slice(0, 8)}`; calls.regist.push({ order_id: order.id, bid }); return { bid, card_name: '테스트카드' }; },
+    async chargeBillingKey({ bid, bidEnc, order }) {
+      const key = bid || String(bidEnc || '').replace(/^fake:/, '');
+      const tid = `fake_tid_${randomUUID().slice(0, 12)}`;
+      calls.charge.push({ order_id: order.id, amount: Number(order.amount), bid: key });
+      if (this.declineNext > 0) {
+        this.declineNext -= 1;
+        return { id: `failed:${tid}`, type: 'payment.failed', order_id: order.id, payload: { status: 'failed' },
+          payment: { amount: Number(order.amount), currency: 'KRW', status: 'FAILED', provider_tid: tid, moid: order.id, failure_code: 'F113', failure_message: '카드 한도 초과' } };
+      }
+      return { id: `paid:${tid}`, type: 'subscription.activated', order_id: order.id, payment_method_summary: '테스트카드 ****4242', billing_key_enc: `fake:${key}`,
+        payment: { amount: Number(order.amount), currency: 'KRW', status: 'PAID', provider_tid: tid, moid: order.id }, payload: { status: 'paid' } };
+    },
+    async expireBillingKey(bid) { calls.expire.push(bid); return { ok: true }; },
+  };
   return assertProvider({
     name: 'fake',
     calls,
+    ...recurringApi,
     async createCheckout({ workspace, plan, successUrl }) {
       const session_id = `fake_cs_${randomUUID()}`;
       calls.checkout.push({ session_id, workspace_id: workspace.id, plan });
@@ -65,7 +88,7 @@ export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET ||
         plan: d.plan, period_start: d.period_start, period_end: d.period_end, payment_method_summary: d.payment_method_summary, immediate: Boolean(d.immediate), order_id: d.order_id,
         payment: d.payment || undefined, payload: body };
     },
-    async cancel({ subscription }) { calls.cancel.push(subscription.id); return { ok: true }; },
+    async cancel({ subscription }) { calls.cancel.push(subscription.id); if (recurring && subscription?.billing_key_enc) calls.expire.push(String(subscription.billing_key_enc).replace(/^fake:/, '')); return { ok: true }; },
     /** Full refund → normalized payment.refunded (same shape as NicePay's). */
     async refund({ order, reason }) { calls.refund.push({ order_id: order.id, amount: Number(order.amount), reason }); return { id: `cancelled:${order.provider_tid}`, type: 'payment.refunded', order_id: order.id, refund_tid: order.provider_tid, payload: {} }; },
     /** Partial cancel (AI credit pack refund). `failNextRefund` makes the next call throw (tests). */
@@ -86,7 +109,7 @@ export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET ||
  * (checkout answers 503 billing_unavailable). A misconfigured real provider (missing keys, live key in sandbox mode, …)
  * is logged and treated as "no billing" so the site still boots.
  */
-const PROVIDERS = { fake: () => createFakeProvider(), nicepay: (env) => createNicepayProvider({ env }) };
+const PROVIDERS = { fake: (env) => createFakeProvider({ recurring: env.NICEPAY_RECURRING_ENABLED === 'true' }), nicepay: (env) => createNicepayProvider({ env }) };
 export function providerFromEnv(env = process.env) {
   const name = env.BILLING_PROVIDER || (env.NODE_ENV === 'production' ? '' : 'fake');
   if (!name) return null;

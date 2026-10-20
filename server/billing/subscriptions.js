@@ -266,6 +266,9 @@ async function applyOrderToSubscription(db, order, subscriptionId, prevPlan) {
     await db.run(`UPDATE subscriptions SET extra_users = ?, extra_projects = ?, price_version = NULL, updated_at = now()${order.kind === 'RECURRING_RENEWAL' && order.period_start ? ', current_period_start = ?' : ''} WHERE id = ?`,
       [Number(order.addon_users || 0), Number(order.addon_projects || 0), ...(order.kind === 'RECURRING_RENEWAL' && order.period_start ? [order.period_start] : []), subscriptionId]);
     if (order.kind === 'RECURRING_RENEWAL') await db.run(`UPDATE subscription_changes SET status = 'APPLIED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED'`, [subscriptionId]);
+    // The slice this order paid for (refunds of unused days are computed per order, lifecycle.js).
+    await db.run(`UPDATE billing_orders o SET period_end = s.current_period_end, period_start = s.current_period_end - make_interval(months => COALESCE(o.months, 1))
+      FROM subscriptions s WHERE o.id = ? AND s.id = ? AND o.period_start IS NULL AND s.current_period_end IS NOT NULL`, [order.id, subscriptionId]);
   } else return;
   const s = await db.get('SELECT plan, billing_cycle, extra_users, extra_projects FROM subscriptions WHERE id = ?', [subscriptionId]);
   const next = renewalAmount(s.plan, s.billing_cycle || 'MONTHLY', Number(s.extra_users || 0), Number(s.extra_projects || 0));
