@@ -64,7 +64,11 @@ export async function openDb({ url = process.env.DATABASE_URL, schema = null, ma
   db.close = async () => { await pool.end(); };
   db.dropSchema = async () => { if (!schema) return; const p = new Pool({ connectionString: url, max: 1 }); try { await p.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); } finally { await p.end(); } };
   if (applyMigrations) {
-    const applied = await migrate(db, schemaSql, (client) => bind(client, { isTx: true, pool, schema }));
+    // A failed boot must give its connections back at once: serverless instances retry boot per request, and a leaked pool per
+    // attempt (kept alive while the instance is frozen) used up every Neon slot on 2026-10-21 ('remaining connection slots are reserved').
+    let applied;
+    try { applied = await migrate(db, schemaSql, (client) => bind(client, { isTx: true, pool, schema })); }
+    catch (e) { await pool.end().catch(() => {}); throw e; }
     if (applied.length) console.log(`[db] applied migrations: ${applied.join('; ')}`);
   }
   return db;
