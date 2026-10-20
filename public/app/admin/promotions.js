@@ -23,11 +23,11 @@ export async function adminPromotionsPage(main = $('#main')) {
     return html`<section class="asec apromo__ed" id="promo-editor"><div class="asec__h">${cur.id ? '프로모션 수정' : '새 프로모션'}</div>
       <form id="pf" class="apromo__f" novalidate>
         <div class="form-err" id="ferr" role="alert" hidden></div>
-        <div class="field"><label for="p-title">제목 <span class="req">*</span></label><input class="input" id="p-title" name="title" maxlength="120" value="${cur.title}" placeholder="예: 12개월 동안 전체 기능 무료"><div class="err" data-for="title"></div></div>
+        <div class="field"><label for="p-title">제목 <span class="req">*</span></label><input class="input" id="p-title" name="title" maxlength="120" value="${cur.title}" placeholder="예: 무료 플랜으로 시작"><div class="err" data-for="title"></div></div>
         <div class="field"><label for="p-body">본문</label><textarea class="input" id="p-body" name="body" rows="3" maxlength="400" placeholder="한두 문장으로">${cur.body}</textarea>
-          <div class="hint">{until}은 보는 사람의 얼리 액세스 종료일로 바뀝니다 (설정 › AI 크레딧, 홈). 종료일이 없는 사람에게는 이 프로모션을 보여 주지 않습니다.</div></div>
+          <div class="hint">문구는 그대로 보입니다. 날짜가 들어가는 문구는 시작일·종료일로 노출 기간을 정하세요.</div></div>
         <div class="apromo__row">
-          <div class="field"><label for="p-badge">배지</label><input class="input" id="p-badge" name="badge" maxlength="20" value="${cur.badge || ''}" placeholder="예: 얼리 액세스"></div>
+          <div class="field"><label for="p-badge">배지</label><input class="input" id="p-badge" name="badge" maxlength="20" value="${cur.badge || ''}" placeholder="예: 무료 플랜"></div>
           <div class="field"><label for="p-sort">순서</label><input class="input" id="p-sort" name="sort_order" type="number" value="${cur.sort_order}"><div class="hint">작을수록 앞</div></div>
         </div>
         <div class="apromo__row">
@@ -57,7 +57,7 @@ export async function adminPromotionsPage(main = $('#main')) {
   const draw = () => {
     main.innerHTML = html`<div class="apage">
       ${raw(head('프로모션', '<button class="btn btn--primary btn--sm" id="p-new">새 프로모션</button>'))}
-      <p class="hint" style="margin:-6px 0 12px">회원가입 · 로그인 · 랜딩 요금 · 설정 › AI 크레딧 · 홈에 보이는 혜택 문구입니다. 화면 표시만 바뀌며, 크레딧 지급과 얼리 액세스 기간은 바뀌지 않습니다. 기간은 한국 시간 기준이며 시작일과 종료일을 포함합니다.</p>
+      <p class="hint" style="margin:-6px 0 12px">회원가입 · 로그인 · 랜딩 요금 · 설정 › AI 크레딧 · 홈에 보이는 혜택 문구입니다. 화면 표시만 바뀌며, 크레딧 지급과 플랜 한도는 바뀌지 않습니다. 기간은 한국 시간 기준이며 시작일과 종료일을 포함합니다.</p>
       <div class="apromo">
         <div>${raw(table([
           { key: 'state', label: '상태', w: 80, render: (p) => chip(...stateOf(p, data.today)) },

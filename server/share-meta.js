@@ -9,7 +9,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 export const SHARE = {
   title: 'RELAI — 지금 해야 할 일을 안내하는 프로젝트 가이드',
-  description: '착수부터 운영까지 7단계를 따라 현재 단계와 다음 할 일을 알려주고, 요구사항 · 일정 · 테스트 · 주간보고를 한 흐름으로 잇습니다. 얼리 액세스 12개월 무료.',
+  description: '착수부터 운영까지 7단계를 따라 현재 단계와 다음 할 일을 알려주고, 요구사항 · 일정 · 테스트 · 주간보고를 한 흐름으로 잇습니다. 무료 플랜으로 바로 시작.',
 };
 
 export function originOf(req) {

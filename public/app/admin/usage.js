@@ -1,5 +1,5 @@
 /* 사용량 (batch7 #23): every workspace's AI runs and credits over the last 30 days (column group 'AI 크레딧 (30일)'), then plan-limit use
- * (group '플랜 한도 (Free만)'; early access is on FREE limits since 2026-10-20). ≥80 % warning, ≥90 % attention. */
+ * (group '플랜 한도 (Free만)'; early access retired 2026-10-20, every non-paid workspace is FREE). ≥80 % warning, ≥90 % attention. */
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { adminApi, bindFilters, bindPager, bindRows, chip, errorBlock, head, n, pager, qs, rel, sel, table } from './ui.js';

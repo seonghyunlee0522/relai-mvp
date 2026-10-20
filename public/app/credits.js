@@ -13,7 +13,6 @@ import { LEGAL } from './shared/legal-info.js';
 const n = (v) => Number(v || 0).toLocaleString('ko-KR');
 const krw = (v) => `₩${n(v)}`;
 const signed = (v) => (v > 0 ? `+${n(v)}` : v < 0 ? `−${n(-v)}` : '0');
-const day = (iso) => (iso ? fmtDT(iso).slice(0, 10) : '');
 const CHECKOUT_MSG = { success: '결제가 완료되었습니다. 크레딧이 충전되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다.', fake: '테스트 결제 화면입니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
 
 export async function creditsPage(main = $('#main')) {
@@ -22,7 +21,7 @@ export async function creditsPage(main = $('#main')) {
   const qp = new URLSearchParams(location.search);
   if (qp.get('checkout')) { toast(CHECKOUT_MSG[qp.get('checkout')] || '결제를 처리하고 있습니다.'); history.replaceState(null, '', '/app/settings/credits'); }
   let s = (await api('GET', `/api/workspaces/${wid}/credits/summary`)).credits;
-  const promos = await loadPromos('credits');   // 관리자 › 프로모션 (placement credits); {until} = this workspace's early-access end
+  const promos = await loadPromos('credits');   // 관리자 › 프로모션 (placement credits)
   const f = { month: s.this_month.month, project: '', user: '' };
   let led = null;
   const loadLedger = async () => { const p = new URLSearchParams(Object.entries(f).filter(([, v]) => v)); led = await api('GET', `/api/workspaces/${wid}/credits/ledger?${p}`); };
@@ -82,7 +81,7 @@ export async function creditsPage(main = $('#main')) {
   };
   const draw = () => {
     main.innerHTML = html`<div class="page page--narrow page--credits">${raw(head())}
-      ${raw(html`<div class="cr-promo">${raw(promoHtml(promos, { placement: 'credits', until: s.plan === 'EARLY' ? day(s.early_access_until) : null }))}</div>`)}
+      ${raw(html`<div class="cr-promo">${raw(promoHtml(promos, { placement: 'credits' }))}</div>`)}
       ${raw(summary())}${raw(payOff() || (s.can_buy && !isPhone() && (s.ai_enabled === false || !s.provider_available)) ? '' : buy())}${raw(prices())}${raw(log())}</div>`;
     main.querySelectorAll('[data-pack]').forEach((b) => b.onclick = async () => {
       if (state.user?.email_verified === false) return toast('이메일 인증 후 충전할 수 있습니다.');

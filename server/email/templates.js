@@ -63,16 +63,6 @@ export function lowBalanceEmail({ workspaceName, balance, threshold, link, suppo
   return { subject, html, text };
 }
 
-export function earlyAccessEndingEmail({ workspaceName, until, days, teamMonthly, link, support }) {
-  const day = new Date(until).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
-  const subject = `[RELAI] ${workspaceName} 얼리 액세스 무료 기간이 ${days}일 뒤(${day}) 끝납니다`;
-  const html = shell('얼리 액세스 무료 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 얼리 액세스(전체 기능 무료) 기간이 <b>${esc(day)}</b>에 끝납니다.</p>
-    <p>이후에도 프로젝트·멤버·요구사항을 제한 없이 쓰려면 Team 플랜(${esc(krw(teamMonthly))}/월, 부가세 별도)이 필요합니다. 결제하지 않으면 Free 플랜 한도가 적용되며, 한도를 넘는 기존 데이터는 삭제되지 않고 읽기 전용으로 남습니다.</p>
-    <p>남은 AI 크레딧은 그대로 쓸 수 있습니다.</p>${link ? button(link, '플랜 확인하기') : ''}`, support);
-  const text = `${workspaceName} 워크스페이스의 얼리 액세스 무료 기간이 ${day}에 끝납니다.\n이후 Team 플랜(${krw(teamMonthly)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다(데이터는 유지).\nAI 크레딧은 그대로 쓸 수 있습니다.\n${link ? `\n${link}\n` : ''}`;
-  return { subject, html, text };
-}
-
 export function creditRefundRequestEmail({ workspaceName, workspaceId, requester, refundable, note }) {
   const subject = `[RELAI] AI 크레딧 환불 요청 — ${workspaceName}`;
   const html = shell('AI 크레딧 환불 요청', `<p>워크스페이스 <b>${esc(workspaceName)}</b> (${esc(workspaceId)})</p><p>요청자: ${esc(requester)}</p>

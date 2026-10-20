@@ -6,6 +6,7 @@ import { boot } from './api-helpers.js';
 import { promoHtml } from '../../public/app/shared/promo.js';
 import { todayKst, addDays } from '../../public/app/shared/kst-date.js';
 import { clearPromoCache } from '../promotions.js';
+import { migrations } from '../migrations.js';
 
 const T = todayKst();
 
@@ -13,12 +14,14 @@ test('seed: the launch offer per placement; public read needs no login', async (
   const { client } = await boot();
   const c = client();
   const by = async (p) => (await c('GET', `/api/promotions?placement=${p}`)).json.promotions;
-  assert.deepEqual((await by('signup')).map((p) => p.badge), ['얼리 액세스', 'AI 크레딧', '이후 AI']);
+  assert.deepEqual((await by('signup')).map((p) => p.badge), ['무료 플랜', 'AI 크레딧', '이후 AI']);
   assert.deepEqual((await by('landing')).map((p) => p.id), ['promo-early-access', 'promo-ai-credits', 'promo-ai-payg']);
   assert.match((await by('signup'))[2].body, /쓴 만큼만 크레딧이 차감/);
   assert.equal((await by('login'))[0].link_url, '/signup');
-  assert.match((await by('home'))[0].title, /\{until\}/);
-  assert.match((await by('credits'))[0].title, /\{until\}/);
+  // b7-fix P0-1: early access retired — no 12개월 / 얼리 액세스 promise and no {until} rows on a fresh database
+  for (const p of ['signup', 'landing', 'login']) for (const x of await by(p)) assert.doesNotMatch(`${x.title} ${x.body} ${x.badge || ''}`, /12개월|얼리 액세스|\{until\}|₩/, `${p} ${x.id}`);
+  assert.equal((await by('login'))[0].title, '지금 가입하면 무료 플랜으로 시작');
+  assert.deepEqual(await by('home'), []); assert.deepEqual(await by('credits'), []);
   assert.deepEqual(await by('nope'), []);
 });
 
@@ -40,7 +43,7 @@ test('admin CRUD: operator only, validated, audited, honours active + KST date w
   assert.equal((await c('GET', `/api/workspaces/${w}/credits/summary`)).json.credits.balance, 500);
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]);
   const list = await c('GET', '/api/admin/promotions');
-  assert.equal(list.status, 200); assert.equal(list.json.promotions.length, 6); assert.ok(list.json.placements.credits);
+  assert.equal(list.status, 200); assert.equal(list.json.promotions.length, 4); assert.ok(list.json.placements.credits);
 
   const bad = await c('POST', '/api/admin/promotions', { title: '', placements: ['nope'], link_url: 'javascript:alert(1)', starts_on: '2026-12-01', ends_on: '2026-11-01' });
   assert.equal(bad.status, 422);
@@ -79,4 +82,22 @@ test('shared component: escapes, fills {until}, skips {until} rows without a dat
   assert.ok(!noDate.includes('data-promo="a"') && noDate.includes('data-promo="b"'));
   assert.equal(promoHtml([], {}), '');
   assert.match(promoHtml(rows.slice(1), { variant: 'line' }), /class="promo-line"/);
+});
+
+test('migration 53 (b7-fix P0-1): unedited early-access rows get Free-plan copy, unedited {until} rows are switched off; operator edits stay', async () => {
+  const { db } = await boot();
+  // the rows as migration 47 seeded them (promo-login already through migration 49), plus one operator edit
+  await db.run(`UPDATE promotions SET title = '12개월 동안 전체 기능 무료', body = '가입한 날부터 12개월 동안 RELAI의 모든 기능을 요금 없이 씁니다.', badge = '얼리 액세스' WHERE id = 'promo-early-access'`);
+  await db.run(`UPDATE promotions SET title = '지금 가입하면 12개월 무료', body = 'AI 크레딧 500도 함께 드립니다.', badge = '얼리 액세스' WHERE id = 'promo-login'`);
+  await db.run(`INSERT INTO promotions (id, title, body, badge, placements, sort_order) VALUES
+    ('promo-home', '얼리 액세스 {until}까지 무료', '', NULL, '{home}', 50),
+    ('promo-credits', '운영자가 고친 {until} 문구', '', '얼리 액세스', '{credits}', 60)`);
+  const up = migrations.find((m) => m.version === 53).up;
+  await up(db); await up(db);   // idempotent
+  const row = (id) => db.get('SELECT title, body, badge, active FROM promotions WHERE id = ?', [id]);
+  assert.deepEqual({ ...(await row('promo-early-access')) }, { title: '무료 플랜으로 시작', body: '프로젝트 2개까지 결제 정보 없이 바로 씁니다.', badge: '무료 플랜', active: true });
+  assert.deepEqual({ ...(await row('promo-login')) }, { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 500도 함께 드립니다.', badge: '무료 플랜', active: true });
+  assert.equal((await row('promo-home')).active, false);
+  assert.equal((await row('promo-credits')).active, true);   // edited by an operator → untouched
+  assert.equal((await db.get('SELECT COUNT(*)::int n FROM promotions')).n, 6);   // nothing deleted
 });

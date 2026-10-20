@@ -1376,7 +1376,7 @@ CREATE TABLE IF NOT EXISTS analytics_active_days (
   PRIMARY KEY (user_id, day)
 );
 /* Promotions (migration 47, server/promotions.js): marketing offers shown on public and in-app placements, edited in 관리자 › 프로모션.
- * Display only — credit grants and early-access dates stay in server/ai/credits.js and workspaces.early_access_until.
+ * Display only — credit grants stay in server/ai/credits.js (workspaces.early_access_until is history only: early access retired 2026-10-20).
  * placements: signup | login | landing | credits | home. starts_on / ends_on are inclusive KST dates (NULL = open). */
 CREATE TABLE IF NOT EXISTS promotions (
   id TEXT PRIMARY KEY,
@@ -1395,15 +1395,14 @@ CREATE TABLE IF NOT EXISTS promotions (
   updated_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_promotions_active ON promotions(active, sort_order);
--- Seed (once): the launch offer (copy without ₩ since batch7 #7; migration 49 rewrites unedited older rows). Runs only while migration 47 is not yet recorded, so an operator's later edits or deletions stay.
+-- Seed (once): the launch offer (copy without ₩ since batch7 #7; migration 49 rewrites unedited older rows; Free-plan copy and no
+-- early-access {until} rows since migration 53, which rewrites / deactivates unedited older rows). Runs only while migration 47 is not yet recorded, so an operator's later edits or deletions stay.
 INSERT INTO promotions (id, title, body, badge, link_url, link_label, placements, sort_order)
 SELECT v.id, v.title, v.body, v.badge, v.link_url, v.link_label, v.placements::text[], v.sort_order FROM (VALUES
-  ('promo-early-access', '12개월 동안 전체 기능 무료', '가입한 날부터 12개월 동안 RELAI의 모든 기능을 요금 없이 씁니다.', '얼리 액세스', NULL, NULL, '{signup,landing}', 10),
+  ('promo-early-access', '무료 플랜으로 시작', '프로젝트 2개까지 결제 정보 없이 바로 씁니다.', '무료 플랜', NULL, NULL, '{signup,landing}', 10),
   ('promo-ai-credits', '가입하면 AI 크레딧 500 무료', '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.', 'AI 크레딧', NULL, NULL, '{signup,landing}', 20),
   ('promo-ai-payg', '이후 AI는 쓴 만큼만', '월 기본료 없이 쓴 만큼만 크레딧이 차감됩니다.', '이후 AI', NULL, NULL, '{signup,landing}', 30),
-  ('promo-login', '지금 가입하면 12개월 무료', 'AI 크레딧 500도 함께 드립니다.', '얼리 액세스', '/signup', '무료로 시작하기', '{login}', 40),
-  ('promo-home', '얼리 액세스 {until}까지 무료', '', NULL, NULL, NULL, '{home}', 50),
-  ('promo-credits', '{until}까지 RELAI 전체 기능 무료', 'AI는 쓴 만큼만 크레딧이 차감됩니다.', '얼리 액세스', NULL, NULL, '{credits}', 60)
+  ('promo-login', '지금 가입하면 무료 플랜으로 시작', 'AI 크레딧 500도 함께 드립니다.', '무료 플랜', '/signup', '무료로 시작하기', '{login}', 40)
 ) AS v(id, title, body, badge, link_url, link_label, placements, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version >= 47)
 ON CONFLICT (id) DO NOTHING;

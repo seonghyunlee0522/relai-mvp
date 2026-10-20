@@ -6,5 +6,5 @@ export const ACTIONS = {
   SUSPEND_USER: '사용자 정지', REACTIVATE_USER: '사용자 정지 해제', SUSPEND_WORKSPACE: '워크스페이스 정지', REACTIVATE_WORKSPACE: '워크스페이스 정지 해제',
   GRANT_AI_CREDITS: 'AI 크레딧 지급', ADJUST_AI_CREDITS: 'AI 크레딧 조정', CREDIT_REFUND: 'AI 크레딧 환불', REFUND_PAYMENT: '결제 환불',
   PLATFORM_INVITE_CREATED: '고객 초대 발송', PLATFORM_INVITE_RESENT: '고객 초대 재발송', PLATFORM_INVITE_REVOKED: '고객 초대 취소',
-  SYSTEM_ADMIN_BOOTSTRAP: '운영자 자동 부여', EMAIL_TEST: '이메일 발송 테스트',
+  SYSTEM_ADMIN_BOOTSTRAP: '운영자 자동 부여', EMAIL_TEST: '이메일 발송 테스트', PURGE_TEST_ACCOUNTS: '테스트 계정 정리',
 };

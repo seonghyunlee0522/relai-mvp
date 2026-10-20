@@ -42,6 +42,12 @@ async function adoptable(db, project, node) {
     ORDER BY w.sequence LIMIT 1`, [project.id, node.phase, node.title, SKELETON_SOURCE]);
 }
 
+/**
+ * May opening the WBS (GET) write the fixed nodes? Not on a Vercel preview deploy, which shares the production database while
+ * production may still run older code (Jim batch7 review P1-1): there only sample projects are structured. Prod/local: always.
+ */
+export const structureOnOpen = (project, env = process.env) => env.VERCEL_ENV !== 'preview' || Boolean(project.sample_key);
+
 /** Make sure the project's fixed nodes exist. Cheap when they do (one query). Returns { created, adopted }. */
 export async function ensureStructure(db, project, userId) {
   if (project.sample_key && !(await db.get('SELECT 1 FROM wbs_items WHERE project_id = ? AND system_key IS NOT NULL LIMIT 1', [project.id]))) {

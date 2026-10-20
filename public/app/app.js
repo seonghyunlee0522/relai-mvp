@@ -35,6 +35,7 @@ import { adminUsagePage } from './admin/usage.js';
 import { adminDeliverablesPage } from './admin/deliverables.js';
 import { adminFunnelPage } from './admin/funnel.js';
 import { adminPromotionsPage } from './admin/promotions.js';
+import { adminPurgePage } from './admin/purge.js';
 import { adminFeedbackPage, adminFeedbackDetailPage } from './admin/feedback.js';
 import { adminAuditPage } from './admin/audit.js';
 import { adminIntegrationsPage } from './admin/integrations.js';
@@ -83,6 +84,7 @@ registerRoutes([
   [/^\/admin\/email-deliveries\/?$/, adminEmailDeliveriesPage],
   [/^\/admin\/integrations\/?$/, adminIntegrationsPage],
   [/^\/admin\/audit\/?$/, adminAuditPage],
+  [/^\/admin\/purge\/?$/, adminPurgePage],
 ], { shell: (path, view, token) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view, token)), auth: authPage, invite: invitePage,
   account: { 'forgot-password': forgotPage, 'reset-password': resetPage, 'verify-email': verifyPage } });
 onDeviceChange(render);   // rotate / resize across 768px → same page in the other mode, no reload

@@ -199,7 +199,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   const landing = await page.textContent('#pricing');
   // batch7 #7: the AI block reads credits only — no won per credit, no won per feature
   const aiBlock = await page.textContent('#pricing #ai-credits');
-  check('landing: 얼리 액세스 line + AI price block in credits only', /얼리 액세스/.test(landing) && /AI 요구사항 추출\s*30 크레딧/.test(landing) && /AI 크레딧\s*500\s*을 무료로/.test(landing) && !/1 크레딧 =/.test(landing) && !/크레딧 \(₩/.test(landing) && !/₩/.test(aiBlock), aiBlock.replace(/\s+/g, ' ').slice(0, 200));
+  check('landing: 무료 플랜 card (no 얼리 액세스 / 12개월, b7-fix) + AI price block in credits only', /무료 플랜/.test(landing) && !/얼리 액세스|12개월/.test(landing) && /AI 요구사항 추출\s*30 크레딧/.test(landing) && /AI 크레딧\s*500\s*을 무료로/.test(landing) && !/1 크레딧 =/.test(landing) && !/크레딧 \(₩/.test(landing) && !/₩/.test(aiBlock), aiBlock.replace(/\s+/g, ' ').slice(0, 200));
   await page.locator('#pricing').screenshot({ path: `${SHOTS}/12-landing-pricing-375.png` });
 
   await browser.close();

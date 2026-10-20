@@ -24,7 +24,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
 
   /* ---------- seed + public API ---------- */
   const pub = await api('GET', '/api/promotions?placement=signup');
-  check('GET /api/promotions (no auth): 3 signup cards seeded (얼리 액세스 · AI 크레딧 · 이후 AI)', pub.status === 200 && pub.json.promotions.map((p) => p.badge).join() === '얼리 액세스,AI 크레딧,이후 AI', JSON.stringify(pub.json));
+  check('GET /api/promotions (no auth): 3 signup cards seeded (무료 플랜 · AI 크레딧 · 이후 AI, b7-fix)', pub.status === 200 && pub.json.promotions.map((p) => p.badge).join() === '무료 플랜,AI 크레딧,이후 AI', JSON.stringify(pub.json));
   check('unknown placement → empty list, not an error', (await api('GET', '/api/promotions?placement=nope')).json.promotions.length === 0);
   check('admin API refuses a visitor (401)', (await api('GET', '/api/admin/promotions')).status === 401);
 
@@ -38,7 +38,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
       sub: document.querySelector('.auth__form .sub')?.textContent || '', mobile: getComputedStyle(document.querySelector('.sell-m')).display };
   });
   check('signup panel: value headline + 3 benefits + product visual + trust line', su.side && /끝까지/.test(su.h2) && su.benefits === 3 && su.shot && /카드 등록 없이/.test(su.trust), JSON.stringify(su));
-  check('signup pricing cards: 12개월 무료 · 500 크레딧 · 쓴 만큼만 (no ₩, batch7 #7)', su.cards.length === 3 && /12개월/.test(su.cards[0]) && /500/.test(su.cards[1]) && /쓴 만큼만/.test(su.cards[2]) && !su.cards.some((c) => /₩/.test(c)), JSON.stringify(su.cards));
+  check('signup pricing cards: 무료 플랜 · 500 크레딧 · 쓴 만큼만 (no ₩, no 12개월 / 얼리 액세스; b7-fix)', su.cards.length === 3 && /무료 플랜/.test(su.cards[0]) && !su.cards.some((c) => /12개월|얼리 액세스/.test(c)) && /500/.test(su.cards[1]) && /쓴 만큼만/.test(su.cards[2]) && !su.cards.some((c) => /₩/.test(c)), JSON.stringify(su.cards));
   check('signup submit is right-aligned on PC (not full width)', su.btnRight <= 1 && !su.btnFull, JSON.stringify(su));
   check('offer text left the page copy (lives in the promo component)', !/AI 크레딧 500/.test(su.sub) && su.mobile === 'none', su.sub);
   await page.screenshot({ path: `${SHOTS}/signup-1440.png`, fullPage: true });
@@ -47,7 +47,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.goto(`${BASE}/login`); await page.waitForSelector('.sell [data-promos="login"] .promo-card', { timeout: 8000 }).catch(() => {});
   const li = await page.evaluate(() => { const c = document.querySelector('.sell [data-promos="login"] .promo-card'); const a = c?.querySelector('.promo-card__btn');
     return { text: c?.textContent || '', href: a?.getAttribute('href'), right: a ? Math.round(c.getBoundingClientRect().right - a.getBoundingClientRect().right) : -1, benefits: document.querySelectorAll('.sell .sell__ben li').length }; });
-  check('login panel: 3 benefits + promo card linking to /signup, button at the right edge', li.benefits === 3 && /12개월 무료/.test(li.text) && li.href === '/signup' && li.right > 0 && li.right < 30, JSON.stringify(li));
+  check('login panel: 3 benefits + promo card linking to /signup, button at the right edge', li.benefits === 3 && /무료 플랜으로 시작/.test(li.text) && !/12개월|얼리 액세스/.test(li.text) && li.href === '/signup' && li.right > 0 && li.right < 30, JSON.stringify(li));
   await page.screenshot({ path: `${SHOTS}/login-1440.png`, fullPage: true });
 
   /* ---------- phone 390: side panel folds under the form; full-width thumb button ---------- */
@@ -62,7 +62,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
 
   /* ---------- landing pricing: server-rendered cards ---------- */
   const land = await (await page.request.get(`${BASE}/`)).text();
-  check('landing #early-access: 3 promo cards rendered by the server, no plain-text offer line', (land.match(/class="promo-card"/g) || []).length === 3 && !/1 크레딧 = ₩10/.test(land) && !/pricing__offer/.test(land));
+  check('landing #free-plan: 3 promo cards rendered by the server, no plain-text offer line', (land.match(/class="promo-card"/g) || []).length === 3 && !/1 크레딧 = ₩10/.test(land) && !/pricing__offer/.test(land));
 
   /* ---------- first-run guide: real signup in the browser → tour opens once ---------- */
   const fresh = await newPage(PC);
@@ -91,7 +91,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   /* ---------- admin 프로모션: create → shows on login → turn off → gone ---------- */
   sql(`UPDATE users SET system_role = 'SYSTEM_ADMIN', email_verified_at = now() WHERE email = '${email}'`);
   await fresh.goto(`${BASE}/admin/promotions`); await fresh.waitForSelector('#promo-tbl', { timeout: 10000 }).catch(() => {});
-  check('admin nav has 프로모션 and the 6 seeded rows are listed', /프로모션/.test(await fresh.textContent('.aside__nav')) && (await fresh.$$('#promo-tbl tbody tr[data-href]')).length === 6);
+  check('admin nav has 프로모션 and the 4 seeded rows are listed (no {until} rows since b7-fix)', /프로모션/.test(await fresh.textContent('.aside__nav')) && (await fresh.$$('#promo-tbl tbody tr[data-href]')).length === 4);
   await fresh.click('#p-new');
   await fresh.fill('#p-title', '추석 특별 혜택'); await fresh.fill('#p-body', '이번 주 가입하면 AI 크레딧 300 추가'); await fresh.fill('#p-badge', '이벤트');
   await fresh.check('[name=placements][value=login]'); await fresh.fill('#p-sort', '1');
@@ -99,6 +99,15 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await fresh.click('#p-save'); await fresh.waitForTimeout(800);
   check('admin: live preview + create', /추석 특별 혜택/.test(pv) && sql(`SELECT COUNT(*) FROM promotions WHERE title = '추석 특별 혜택'`) === '1');
   await fresh.screenshot({ path: `${SHOTS}/admin-promotions-1440.png`, fullPage: true });
+  /* ---------- admin 테스트 계정 정리 (b7-fix): dry run only — the delete button stays off until '삭제' is typed; never submitted here ---------- */
+  await fresh.goto(`${BASE}/admin/purge`); await fresh.waitForSelector('#purge-counts', { timeout: 10000 }).catch(() => {});
+  const pg = await fresh.evaluate(() => ({ nav: /테스트 계정 정리/.test(document.querySelector('.aside__nav')?.textContent || ''), rows: document.querySelectorAll('#purge-counts tbody tr').length,
+    users: Number((document.querySelector('#purge-counts tr[data-k="users"] td.num')?.textContent || '').replace(/\D/g, '')), off: document.querySelector('#purge-go')?.disabled }));
+  const usersBefore = sql('SELECT COUNT(*) FROM users');
+  check('admin 테스트 계정 정리: nav entry, dry-run counts (회원 = all but me), delete disabled before 삭제 is typed', pg.nav && pg.rows >= 10 && pg.users === Number(usersBefore) - 1 && pg.off === true, JSON.stringify({ ...pg, usersBefore }));
+  await fresh.fill('#purge-confirm', '삭제');
+  check('admin 테스트 계정 정리: typing 삭제 enables the button; the dry run deleted nothing', (await fresh.$eval('#purge-go', (b) => !b.disabled)) && sql('SELECT COUNT(*) FROM users') === usersBefore);
+  await fresh.screenshot({ path: `${SHOTS}/admin-purge-1440.png`, fullPage: true });
   const bad = await api('POST', '/api/admin/promotions', { title: 'x', placements: ['nope'], link_url: 'javascript:alert(1)' }, fresh);
   check('admin API validates placements and link scheme (422)', bad.status === 422 && bad.json.error.fields.placements && bad.json.error.fields.link_url, JSON.stringify(bad.json));
   const lp = await newPage(PC);

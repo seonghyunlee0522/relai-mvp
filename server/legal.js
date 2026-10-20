@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { LEGAL, koDate, legalFooterHtml } from '../public/app/shared/legal-info.js';
-import { CREDIT_PRICE_KRW, CREDIT_PACKS, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, EARLY_ACCESS } from './plans.js';
+import { CREDIT_PRICE_KRW, CREDIT_PACKS, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, FREE_LIMITS } from './plans.js';
 import { aiConfig } from './ai/config.js';
 import { shareMeta } from './share-meta.js';
 import { ga4For } from './ga4.js';
@@ -59,7 +59,7 @@ const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 /** 이용약관. Prices follow server/plans.js (pricing v2 + AI-credits-only billing: early access, starter credits, credit packs). */
 export function termsMarkdown(L = LEGAL, plans) {
   const T = plans?.TEAM || { base_monthly: 20000, included_users: 1, extra_user_monthly: 5000 };
-  const F = plans?.FREE?.limits || { projects: 1, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 };
+  const F = plans?.FREE?.limits || FREE_LIMITS;
   const starter = aiConfig().trialCredits;
   const packs = CREDIT_PACKS.map((p) => `${won(p.amount)}(${p.credits.toLocaleString('ko-KR')} 크레딧)`).join(', ');
   return `## 제1장 총칙
@@ -76,7 +76,6 @@ export function termsMarkdown(L = LEGAL, plans) {
 6. "고객 데이터"란 이용자가 서비스에 입력하거나 업로드한 프로젝트 정보, 요구사항, WBS, 테스트, 변경 요청, 이슈·리스크, 주간보고, 첨부·가져오기 파일 등 일체의 정보를 말합니다.
 7. "정기결제"란 고객이 등록한 결제수단으로 이용기간마다 이용요금이 자동으로 청구·결제되는 방식을 말합니다.
 8. "크레딧"이란 AI 기능 이용 시 차감되는 서비스 내 이용 단위를 말하며, 1 크레딧은 ${won(CREDIT_PRICE_KRW)}(부가가치세 포함)에 해당합니다. 회사가 무상으로 지급한 크레딧을 "무료 크레딧", 고객이 결제하여 충전한 크레딧을 "구매 크레딧"이라 합니다.
-9. "얼리 액세스"란 회사가 정한 기간 동안 워크스페이스에 요금 없이 Team 요금제와 같은 한도를 제공하는 프로모션을 말합니다.
 
 ### 제3조 (약관의 게시와 개정)
 1. 회사는 이 약관의 내용과 상호, 대표자 성명, 영업소 소재지 주소, 사업자등록번호, 통신판매업 신고번호, 연락처 등을 이용자가 쉽게 알 수 있도록 서비스 초기 화면 또는 연결 화면에 게시합니다.
@@ -109,13 +108,12 @@ export function termsMarkdown(L = LEGAL, plans) {
 
 | 요금제 | 이용요금(부가가치세 별도) | 주요 한도 |
 |---|---|---|
-| 얼리 액세스 | 무료(${EARLY_ACCESS.months}개월, 제7조 제3항) | Team 요금제와 같음(프로젝트·멤버·요구사항·WBS·주간보고 무제한) |
 | Free | 무료 | 워크스페이스당 진행 중 프로젝트 ${F.projects}개, 멤버 ${F.members}명, 요구사항 ${F.requirements}건, WBS ${F.wbs}건, 주간보고 월 ${F.weekly_reports}건 |
 | Team | 워크스페이스당 월 ${won(T.base_monthly)}(소유자 ${T.included_users}명 포함) + 사용자 추가 1명당 월 ${won(T.extra_user_monthly)}. 1개월 또는 연간(12개월) 선결제 | 프로젝트·멤버·요구사항·WBS·주간보고 무제한(멤버는 구매한 사용자 수까지) |
 | Enterprise | 별도 계약 | 별도 계약으로 정함 |
 
 2. 요금제 이용요금에는 부가가치세가 포함되어 있지 않으며, 결제 시 부가가치세 10%가 더해집니다. 크레딧 충전 금액은 부가가치세를 포함한 금액입니다. 결제 금액은 결제 전에 화면에 표시됩니다.
-3. 얼리 액세스: 회사가 정한 기간에 만든 워크스페이스는 만든 날(서비스 출시일 이전에 만든 워크스페이스는 출시일)부터 ${EARLY_ACCESS.months}개월 동안 요금 없이 Team 요금제와 같은 한도로 서비스를 이용할 수 있습니다. 얼리 액세스 기간에도 AI 기능은 제7조의2에 따라 크레딧을 차감합니다. 얼리 액세스가 끝나면 Team 요금제를 결제하지 않은 워크스페이스에는 Free 요금제의 한도가 적용되며, 한도를 초과하는 기존 데이터는 삭제되지 않고 새 항목 추가만 제한됩니다. 회사는 얼리 액세스 종료 30일 전과 7일 전에 소유자에게 이메일로 알립니다.
+3. 무료 플랜(Free 요금제): 새로 만든 워크스페이스는 Free 요금제로 시작합니다. Free 요금제에서는 워크스페이스당 진행 중 프로젝트 ${F.projects}개, 멤버 ${F.members}명, 요구사항 ${F.requirements}건, WBS ${F.wbs}건, 주간보고 월 ${F.weekly_reports}건까지 이용할 수 있으며, 워크스페이스마다 무료 크레딧 ${starter.toLocaleString('ko-KR')} 크레딧을 한 번 지급합니다(제7조의2 제2항). 한도에 이르면 새 항목 추가만 제한되며 기존 데이터는 삭제되지 않습니다.
 4. 회사는 그 밖의 프로모션을 제공할 수 있으며, 그 조건과 기간은 프로모션 안내에 따릅니다.
 
 ### 제7조의2 (AI 크레딧)
@@ -205,7 +203,7 @@ export function termsMarkdown(L = LEGAL, plans) {
 2. 협의가 되지 않아 소송이 제기되는 경우 대한민국 법을 적용하며, 관할 법원은 ${L.courtSeat}으로 합니다. 다만 소비자인 회원에게는 「민사소송법」상 관할 법원 규정을 따릅니다.
 
 ## 부칙
-이 약관은 ${koDate(L.effectiveDate)}부터 시행합니다.
+이 약관은 ${koDate(L.termsEffectiveDate || L.effectiveDate)}부터 시행합니다.
 `;
 }
 
@@ -378,7 +376,7 @@ export function legalPage(kind, { plans } = {}, L = LEGAL) {
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>${PAGE_CSS}</style></head>
 <body><header class="top"><div class="top__in"><a class="logo" href="/">RELAI</a><nav class="top__nav"><a href="/terms"${kind === 'terms' ? ' aria-current="page"' : ''}>이용약관</a><a href="/privacy"${kind === 'privacy' ? ' aria-current="page"' : ''}>개인정보처리방침</a></nav></div></header>
-<main class="doc"><h1>RELAI ${p.title}</h1><p class="doc__meta">시행일 ${koDate(L.effectiveDate)} · 버전 ${esc(kind === 'terms' ? L.termsVersion : L.privacyVersion)}</p>
+<main class="doc"><h1>RELAI ${p.title}</h1><p class="doc__meta">시행일 ${koDate(kind === 'terms' ? (L.termsEffectiveDate || L.effectiveDate) : L.effectiveDate)} · 버전 ${esc(kind === 'terms' ? L.termsVersion : L.privacyVersion)}</p>
 ${body}</main>
 ${legalFooterHtml(L)}
 </body></html>`;

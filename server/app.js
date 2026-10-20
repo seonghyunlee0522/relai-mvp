@@ -915,7 +915,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(wbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
-    if (project.status !== 'ARCHIVED') await tx(db, async (t) => WS.ensureStructure(t, project, req.user.id));   // B3.3/B3.4: fixed phase nodes appear when the WBS is first opened
+    if (project.status !== 'ARCHIVED' && WS.structureOnOpen(project)) await tx(db, async (t) => WS.ensureStructure(t, project, req.user.id));   // B3.3/B3.4: fixed phase nodes appear when the WBS is first opened (preview deploy: sample projects only, P1-1)
     res.json((await wbsResponse(project, { includeArchived: req.query.include_archived === '1' })));   // GAP-002
   }));
 

@@ -1,16 +1,14 @@
 /**
  * Daily billing jobs, run by GET /api/billing/cron/daily (Vercel Cron, `Authorization: Bearer $CRON_SECRET`).
  *   sendRenewalReminders — one-time Team purchases ending within 7 days: one e-mail per OWNER per period end.
- *   sendEarlyAccessNotices — early access ending in ≤ 30 days and in ≤ 7 days: one e-mail each per OWNER (AI-credits-only billing).
+ *   sendEarlyAccessNotices — retired 2026-10-20 (no early access any more): a no-op.
  *   chargeDueRenewals    — 정기결제 only (NICEPAY_RECURRING_ENABLED): charge billing keys whose next_billing_at has come.
  * Each row is claimed with a conditional UPDATE before any e-mail or charge, so overlapping runs never double-send or double-charge.
  * Provider calls run outside DB transactions.
  */
 import { sendEmail } from '../email/service.js';
 import { emailConfig } from '../email/config.js';
-import { renewalReminderEmail, earlyAccessEndingEmail } from '../email/templates.js';
-import { PLANS } from '../plans.js';
-import { GRANTS_PLAN_SQL } from './subscriptions.js';
+import { renewalReminderEmail } from '../email/templates.js';
 import { quote, createOrder, failOrder } from './orders.js';
 import { processWebhookEvent } from './subscriptions.js';
 
@@ -62,29 +60,9 @@ export async function chargeDueRenewals(db, provider) {
 }
 
 /**
- * Early access ending notices: each workspace gets the 30-day notice once and the 7-day notice once (claimed through
- * early_notice_30_at / early_notice_7_at before sending). A workspace that only enters the window at ≤ 7 days gets the 7-day
- * notice alone. Workspaces already on a paid plan are skipped.
+ * Early access ending notices — RETIRED (founder decision 2026-10-20: early access is gone, every workspace is on the Free
+ * plan). Kept as a no-op so the cron route's response shape stays the same; it never sends.
  */
-export async function sendEarlyAccessNotices(db, env = process.env) {
-  const out = { d30: 0, d7: 0, sent: 0 };
-  // Retired 2026-10-20: early access no longer grants unlimited use (every workspace is on FREE limits), so there is no
-  // "early access ends" to announce. Kept callable (cron route + tests); sends nothing unless EARLY_ACCESS_NOTICES=on.
-  if (env.EARLY_ACCESS_NOTICES !== 'on') return out;
-  const cfg = emailConfig(env);
-  for (const [days, col, other] of [[7, 'early_notice_7_at', 'early_notice_30_at'], [30, 'early_notice_30_at', null]]) {
-    const due = await db.all(`SELECT w.id, w.name, w.early_access_until FROM workspaces w WHERE w.deleted_at IS NULL AND w.early_access_until > now()
-      AND w.early_access_until <= now() + make_interval(days => ${days}) AND w.${col} IS NULL
-      AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.workspace_id = w.id AND s.plan <> 'FREE' AND ${GRANTS_PLAN_SQL})`);
-    for (const w of due) {
-      const claimed = await db.get(`UPDATE workspaces SET ${col} = now()${other ? `, ${other} = COALESCE(${other}, now())` : ''} WHERE id = ? AND ${col} IS NULL RETURNING id`, [w.id]);
-      if (!claimed) continue;
-      out[days === 7 ? 'd7' : 'd30'] += 1;
-      const owners = await db.all(`SELECT u.id, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.role = 'OWNER' AND u.status = 'ACTIVE'`, [w.id]);
-      const mail = earlyAccessEndingEmail({ workspaceName: w.name, until: w.early_access_until, days, teamMonthly: PLANS.TEAM.base_monthly,
-        link: cfg.appBaseUrl ? `${cfg.appBaseUrl}/app/settings#billing` : '', support: cfg.supportEmail });
-      for (const o of owners) if ((await sendEmail(db, { type: `EARLY_ACCESS_ENDING_${days}D`, to: o.email, ...mail, relatedUserId: o.id, workspaceId: w.id }, env)).status === 'SENT') out.sent += 1;
-    }
-  }
-  return out;
+export async function sendEarlyAccessNotices() {
+  return { d30: 0, d7: 0, sent: 0 };
 }

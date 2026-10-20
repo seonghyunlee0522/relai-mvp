@@ -4,7 +4,7 @@
  * Plain data + string builders only: no DOM, no imports, so the server renders the landing block with the same markup.
  *
  * Variants: 'cards' (a small pricing-style grid; signup, landing, credits, login) · 'line' (one inline sentence; Home).
- * Token {until}: replaced by the viewer's early-access end date; a promo using it is skipped when the viewer has none.
+ * Token {until} (legacy, early access retired 2026-10-20): a promo still using it is skipped, since no viewer has an end date any more.
  */
 export const PROMO_PLACEMENTS = { signup: '회원가입', login: '로그인', landing: '랜딩 · 요금', credits: '설정 › AI 크레딧', home: '홈' };
 

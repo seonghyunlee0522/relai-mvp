@@ -28,9 +28,9 @@ test('catalogue: FREE = 2 projects, other FREE limits unchanged; EARLY carries t
 test('2-project limit: the 3rd project is 402 with the upsell target; early access (future early_access_until) is on FREE limits', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'pw1@x.com');
-  const w = await db.get('SELECT early_access_until > now() AS early FROM workspaces WHERE id = ?', [A.w]);
-  assert.equal(w.early, true);                                // signup still stamps early access …
-  assert.equal(await effectivePlan(db, A.w), 'FREE');         // … but it no longer lifts the limits
+  assert.equal((await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [A.w])).early_access_until, null);   // b7-fix: signup grants no early access
+  await db.run(`UPDATE workspaces SET early_access_until = now() + interval '1 year' WHERE id = ?`, [A.w]);   // an old stamped account …
+  assert.equal(await effectivePlan(db, A.w), 'FREE');         // … is on the Free limits too
   assert.equal((await A.c('POST', `${ws(A.w)}/projects`, project({ name: '둘째' }))).status, 201);
   const r = await A.c('POST', `${ws(A.w)}/projects`, project({ name: '셋째' }));
   assert.equal(r.status, 402); assert.equal(r.json.error.code, 'plan_limit_reached');
@@ -107,7 +107,9 @@ test('500 free credits once per WORKSPACE: a 2nd project grants nothing; migrati
   await ensureAccount(db, part, { trial: 0, devInitial: 0 });
   await applyCredits(db, { wid: part, amount: 120, type: 'ADMIN_GRANT', reason: 'ops' });
 
-  assert.deepEqual(await grantMissingWorkspaceStarter(db), { granted: 2 });
+  const bare = await mk('계정 없음');          // review P2-2: no credit account at all → opened by the migration and counted
+  assert.deepEqual(await grantMissingWorkspaceStarter(db), { granted: 3 });
+  assert.equal(await bal(db, bare), 500);
   assert.equal(await bal(db, none), 500); assert.equal(await bal(db, part), 500); assert.equal(await bal(db, rich), 700);
   assert.equal(await bal(db, A.w), 500);   // already had its grant → untouched
   // idempotent: spending and re-running never grants twice
@@ -116,6 +118,6 @@ test('500 free credits once per WORKSPACE: a 2nd project grants nothing; migrati
   assert.equal(await bal(db, none), 200);
   assert.deepEqual((await starterRows(db, none)).map((r) => [Number(r.amount), r.reference_id]), [[500, 'STARTER_WORKSPACE_52']]);
   // registered as the additive migration 52
-  assert.equal(LATEST_VERSION, 52); assert.match(migrations.at(-1).name, /STARTER_WORKSPACE_52/);
+  assert.ok(migrations.some((m) => m.version === 52 && /STARTER_WORKSPACE_52/.test(m.name)));
   server.close();
 });

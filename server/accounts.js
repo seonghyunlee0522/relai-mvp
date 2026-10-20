@@ -7,7 +7,6 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ensureAccount } from './ai/credits.js';
-import { grantEarlyAccess } from './billing/subscriptions.js';
 
 export const normEmail = (e) => String(e || '').trim().toLowerCase();
 /** p***@acme.co.kr — public invite pages never show the raw address. */
@@ -35,7 +34,6 @@ export async function createWorkspaceForOwner(db, { ownerId, name }) {
   const wsId = randomUUID();
   await db.run('INSERT INTO workspaces (id, name, owner_id) VALUES (?,?,?)', [wsId, String(name).trim().slice(0, 100), ownerId]);
   await db.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,?)', [wsId, ownerId, 'OWNER']);
-  await grantEarlyAccess(db, wsId);   // early access: 12 months free (AI-credits-only billing)
   await ensureAccount(db, wsId);   // AI credit account (trial / dev starter credits per policy)
   return wsId;
 }

@@ -209,6 +209,13 @@ export const migrations = [
     const { grantMissingWorkspaceStarter } = await import('./ai/credits.js');
     await grantMissingWorkspaceStarter(db);
   } },
+  { version: 53, name: 'Early access retired for everyone (founder 2026-10-20): seeded promotions that promise 12개월 무료 / 얼리 액세스 get Free-plan copy, the {until} rows (promo-home, promo-credits) are deactivated — only rows an operator never edited; data update only, nothing deleted', async up(db) {
+    for (const [id, from, to] of PROMO_COPY_53) {
+      await db.run('UPDATE promotions SET title = ?, body = ?, badge = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ANY(?::text[]) AND badge IS NOT DISTINCT FROM ?',
+        [to.title, to.body, to.badge, id, from.title, from.bodies, from.badge]);
+    }
+    for (const [id, title] of PROMO_OFF_53) await db.run('UPDATE promotions SET active = false, updated_at = now() WHERE id = ? AND title = ? AND active', [id, title]);
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
@@ -218,6 +225,15 @@ const PROMO_COPY_49 = [
   ['promo-login', 'AI 크레딧 500 (₩5,000)도 함께 드립니다.', 'AI 크레딧 500도 함께 드립니다.'],
   ['promo-credits', 'AI는 쓴 만큼만 크레딧으로 냅니다 (1 크레딧 = ₩10).', 'AI는 쓴 만큼만 크레딧이 차감됩니다.'],
 ];
+
+/** Migration 53: [id, seeded {title, bodies (before/after 49), badge}, Free-plan copy] and the {until} rows to switch off ([id, seeded title]). */
+const PROMO_COPY_53 = [
+  ['promo-early-access', { title: '12개월 동안 전체 기능 무료', bodies: ['가입한 날부터 12개월 동안 RELAI의 모든 기능을 요금 없이 씁니다.'], badge: '얼리 액세스' },
+    { title: '무료 플랜으로 시작', body: '프로젝트 2개까지 결제 정보 없이 바로 씁니다.', badge: '무료 플랜' }],
+  ['promo-login', { title: '지금 가입하면 12개월 무료', bodies: ['AI 크레딧 500도 함께 드립니다.', 'AI 크레딧 500 (₩5,000)도 함께 드립니다.'], badge: '얼리 액세스' },
+    { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 500도 함께 드립니다.', badge: '무료 플랜' }],
+];
+const PROMO_OFF_53 = [['promo-home', '얼리 액세스 {until}까지 무료'], ['promo-credits', '{until}까지 RELAI 전체 기능 무료']];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;
 

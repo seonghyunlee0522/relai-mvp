@@ -53,10 +53,11 @@ export function mountAdminEmailTestRoutes(app, db, { guard, wrap, fail }) {
     const bad = validateTestRecipient(req.body?.to);
     if (bad) return fail(res, 400, 'invalid_recipient', bad);
     const to = req.body.to.trim();
-    const cfg = emailConfig();
-    if (!cfg.resendApiKey) return fail(res, 400, 'resend_key_missing', 'RESEND_API_KEY가 설정되지 않았습니다. Vercel 환경 변수에 키를 추가한 뒤 다시 시도하세요.');
+    // Rate limit first (review P2-3): attempts with the key missing count too, so the audit counts stay clean.
     if (await limiter.blocked(req.user.id)) return fail(res, 429, 'rate_limited', '테스트 메일은 10분에 5번까지 보낼 수 있습니다. 잠시 후 다시 시도하세요.');
     await limiter.hit(req.user.id);
+    const cfg = emailConfig();
+    if (!cfg.resendApiKey) return fail(res, 400, 'resend_key_missing', 'RESEND_API_KEY가 설정되지 않았습니다. Vercel 환경 변수에 키를 추가한 뒤 다시 시도하세요.');
 
     const provider = resendProvider(cfg, fetchOverride || globalThis.fetch);
     let sent = null; let err = null;

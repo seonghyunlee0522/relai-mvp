@@ -15,6 +15,7 @@ import { mountAdminPromotionRoutes } from './promotions.js';
 import { mountAdminFeedbackRoutes } from './feedback.js';
 import { mountAdminEmailTestRoutes } from './email/admin-test.js';
 import { mountAdminDeliverableRoutes } from './deliverables.js';
+import { mountAdminPurgeRoutes } from './purge.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -81,6 +82,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* 산출물 목록 (migration 49): the standard deliverable catalog every project picks from. */
   mountAdminDeliverableRoutes(app, db, { guard, wrap, fail });
+
+  /* 테스트 계정 정리 (one-off, founder 2026-10-20): dry run + purge of every user but the operator. */
+  mountAdminPurgeRoutes(app, db, { guard, wrap, fail });
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 

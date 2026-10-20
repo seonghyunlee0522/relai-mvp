@@ -4,7 +4,7 @@
  * CTA goes straight to the work screen; progress / schedule come from scheduleState() (Overview); attention from attentionAll().
  * Projects / Project Home / What's Next / Overview are untouched — Home only decides what to show first. */
 import { api, wsApi } from '../core/api.js';
-import { $, fmtShort, fmtDT, html, no2, raw } from '../core/dom.js';
+import { $, fmtShort, html, no2, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { STATUS, STATUS_CHIP } from '../shared/constants.js';
 import { ob } from '../onboarding/state.js';
@@ -206,11 +206,11 @@ export async function homePage(main = $('#main')) {
   const hide = main.querySelector('[data-obcl="dismiss"]');   // hidden 시작하기 → the summary line comes back (오늘 할 일 + the sample notice)
   if (hide) hide.onclick = async () => { hide.closest('.obcl').remove(); await ob.update('CHECKLIST', 'skip'); homePage(main); };
   const sd = main.querySelector('[data-samples-delete]'); if (sd) sd.onclick = async () => { if (await deleteAllSamples()) homePage(main); };
-  // AI credits at a glance (AI-credits-only billing): balance + early access, linked to 설정 › AI 크레딧. Never blocks Home.
+  // AI credits at a glance (AI-credits-only billing): balance, linked to 설정 › AI 크레딧. Never blocks Home.
   api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
     const el = $('#home-credits', main); if (!el) return;
     el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>AI 크레딧 ${c.balance.toLocaleString('ko-KR')}${c.purchased_remaining === 0 && c.free_remaining > 0 ? ' 무료 제공' : ''}</a><span class="home__promo"></span>`;
-    // the offer next to the balance comes from 관리자 › 프로모션 (placement home); {until} = this workspace's early-access end
-    loadPromos('home').then((list) => { const p = promoHtml(list, { placement: 'home', variant: 'line', until: c.plan === 'EARLY' && c.early_access_until ? fmtDT(c.early_access_until).slice(0, 10) : null }); const slot = $('.home__promo', el); if (slot && p) slot.innerHTML = ` · ${p}`; });
+    // the offer next to the balance comes from 관리자 › 프로모션 (placement home)
+    loadPromos('home').then((list) => { const p = promoHtml(list, { placement: 'home', variant: 'line' }); const slot = $('.home__promo', el); if (slot && p) slot.innerHTML = ` · ${p}`; });
   }).catch(() => {});
 }

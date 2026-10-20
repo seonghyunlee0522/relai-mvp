@@ -92,14 +92,13 @@ test('prices (AC3 table), packs (VAT included split) and refund maths are exact'
   assert.equal(refundQuote({ credits: 10, packs: [{ ...old, paid_at: new Date(now - 400 * DAY) }], unused: 3000, now }).allocations[0].manual, true);
 });
 
-test('AC1 + AC2 (T5): new workspace = early_access_until stamped but FREE limits + exactly one 500 starter grant; backfill + top-up are idempotent; cut-off respected', async () => {
+test('AC1 + AC2 (T5, b7-fix): new workspace = no early_access_until (signup grants none since 2026-10-20), FREE limits + exactly one 500 starter grant; backfill + top-up are idempotent', async () => {
   const env = await boot(); const { db } = env;
   const A = await owner(env);
-  const w = await db.get(`SELECT created_at, early_access_until, early_access_until = created_at + interval '12 months' AS exact FROM workspaces WHERE id = ?`, [A.w]);
-  assert.equal(w.exact, true);
+  assert.equal((await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [A.w])).early_access_until, null);   // early access retired: signup grants nothing
   assert.equal(await effectivePlan(db, A.w), 'FREE');   // early access retired as an unlimited plan (2026-10-20)
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
-  assert.equal(b.plan, 'FREE'); assert.equal(b.plan_label, '무료'); assert.ok(b.early_access_until); assert.equal(b.checkout.can_purchase, true);   // FREE may buy TEAM once payments are on
+  assert.equal(b.plan, 'FREE'); assert.equal(b.plan_label, '무료'); assert.equal(b.early_access_until, null); assert.equal(b.checkout.can_purchase, true);   // FREE may buy TEAM once payments are on
   // FREE limits apply: 2nd project OK, 3rd refused; 51st requirement refused
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 201);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('세 번째'))).status, 402);
@@ -117,19 +116,13 @@ test('AC1 + AC2 (T5): new workspace = early_access_until stamped but FREE limits
   await db.run(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,'OWNER')`, [oldW, A.uid]);
   await ensureAccount(db, oldW, { trial: 100 });
   await applyCredits(db, { wid: oldW, amount: -40, type: 'ADJUSTMENT', reason: 'used before' });
-  assert.equal(await grantEarlyAccess(db), 1);
+  assert.equal(await grantEarlyAccess(db), 2);   // migration 41's backfill (history only): A was never stamped at signup any more, so it is backfilled too
   const ow = await db.get(`SELECT early_access_until = (?::timestamptz + interval '12 months') AS from_launch FROM workspaces WHERE id = ?`, [EARLY_ACCESS.launch, oldW]);
   assert.equal(ow.from_launch, true);
   assert.equal((await topUpStarterCredits(db)).topped, 1);   // A already has its 500 → untouched
   assert.equal(await balance(db, oldW), 60 + 400);
   assert.equal(await grantEarlyAccess(db), 0); assert.equal((await topUpStarterCredits(db)).topped, 0);   // re-run: nothing twice
   assert.equal(await balance(db, oldW), 460); assert.equal(await balance(db, A.w), 500);
-  // a workspace created after the cut-off gets no early access
-  process.env.EARLY_ACCESS_CUTOFF = '2000-01-01T00:00:00Z';
-  const L = await owner(env, 'late@x.com', '늦은가입');
-  delete process.env.EARLY_ACCESS_CUTOFF;
-  assert.equal((await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [L.w])).early_access_until, null);
-  assert.equal(await effectivePlan(db, L.w), 'FREE');
   env.server.close();
 });
 
@@ -139,11 +132,12 @@ test('AC10 + AC12 (T5): FREE limits whatever early_access_until says (data kept)
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 201);
   // notices: 20 days left → the 30-day notice, once; 5 days left → the 7-day notice, once
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '20 days' WHERE id = ?`, [A.w]);
-  assert.equal((await sendEarlyAccessNotices(db)).d30, 0);   // retired: early access no longer ends into FREE (it already is FREE)
-  assert.equal((await sendEarlyAccessNotices(db, { ...process.env, EARLY_ACCESS_NOTICES: 'on' })).d30, 1);   // still works when switched on
+  // retired for good (b7-fix): no switch turns them back on, nothing is sent or stamped
+  assert.deepEqual(await sendEarlyAccessNotices(db, { ...process.env, EARLY_ACCESS_NOTICES: 'on' }), { d30: 0, d7: 0, sent: 0 });
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '5 days' WHERE id = ?`, [A.w]);
-  assert.equal((await sendEarlyAccessNotices(db, { ...process.env, EARLY_ACCESS_NOTICES: 'on' })).d7, 1); assert.equal((await sendEarlyAccessNotices(db, { ...process.env, EARLY_ACCESS_NOTICES: 'on' })).d7, 0);
-  assert.deepEqual((await mails(db, 'EARLY_ACCESS_ENDING_30D')).map((m) => m.recipient), ['owner@x.com']);
+  assert.deepEqual(await sendEarlyAccessNotices(db), { d30: 0, d7: 0, sent: 0 });
+  assert.deepEqual(await mails(db, 'EARLY_ACCESS_ENDING_30D'), []); assert.deepEqual(await mails(db, 'EARLY_ACCESS_ENDING_7D'), []);
+  assert.equal((await db.get('SELECT early_notice_30_at, early_notice_7_at FROM workspaces WHERE id = ?', [A.w])).early_notice_30_at, null);
   // clock moved past the end
   await db.run(`UPDATE workspaces SET early_access_until = now() - interval '1 second' WHERE id = ?`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'FREE');

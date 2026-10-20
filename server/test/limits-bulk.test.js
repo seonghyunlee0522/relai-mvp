@@ -66,11 +66,11 @@ test('WBS 뼈대 on an empty WBS: refused as a whole when it does not fit (nothi
 
 test('early-access workspace (retired 2026-10-20): on FREE limits — the same bulk path is refused as a whole', async () => {
   const { server, client } = await boot();
-  const A = await setup(client, 'lb4@x.com');   // signup still stamps early_access_until, but it no longer lifts the limits
+  const A = await setup(client, 'lb4@x.com');   // b7-fix: signup no longer stamps early_access_until; a stamped one (old account) would not lift the limits either
   const rows = Array.from({ length: LIM.requirements + 5 }, (_, i) => ({ row: i + 2, values: { title: `t${i}` } }));
   const r = await A.c('POST', `${A.req}/import`, { rows });
   assert.equal(r.status, 402); assert.equal(r.json.error.upgrade.url, '/app/billing/plans');
   const me = await A.c('GET', `/api/workspaces/${A.w}/billing`);
-  assert.equal(me.json.billing.plan, 'FREE'); assert.ok(me.json.billing.early_access_until);
+  assert.equal(me.json.billing.plan, 'FREE'); assert.equal(me.json.billing.early_access_until, null);
   server.close();
 });

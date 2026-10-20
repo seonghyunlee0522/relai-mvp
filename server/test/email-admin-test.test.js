@@ -165,7 +165,7 @@ test('send: each Resend failure maps to a Korean message and stable code, withou
   } finally { setEmailTestFetch(null); restoreEnv(); server.close(); }
 });
 
-test('validation and missing key: 400 before any send, no audit row, no rate-limit hit', async () => {
+test('validation and missing key: 400 before any send, no audit row; the missing-key attempt counts toward the rate limit (review P2-3)', async () => {
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
   const f = mockResend(); setEmailTestFetch(f);
@@ -180,7 +180,9 @@ test('validation and missing key: 400 before any send, no audit row, no rate-lim
     assert.equal(r.status, 400); assert.equal(r.json.error.code, 'resend_key_missing'); assert.match(r.json.error.message, /RESEND_API_KEY가 설정되지 않았습니다/);
     assert.equal(f.calls.length, 0);
     assert.equal((await db.get(`SELECT COUNT(*)::int n FROM admin_audit_logs WHERE action = 'EMAIL_TEST'`)).n, 0);
-    assert.equal(await db.get('SELECT 1 FROM rate_limits WHERE key = ?', [sha256(`admin_email_test:${ops.uid}`)]), undefined);
+    assert.equal((await db.get('SELECT count FROM rate_limits WHERE key = ?', [sha256(`admin_email_test:${ops.uid}`)])).count, 1);   // invalid recipients don't count, the missing key does
+    for (let i = 0; i < 4; i++) assert.equal((await ops.c('POST', '/api/admin/email/test', { to: 'a@b.co' })).json.error.code, 'resend_key_missing');
+    assert.equal((await ops.c('POST', '/api/admin/email/test', { to: 'a@b.co' })).status, 429);   // 6th attempt: limited before the key check
   } finally { setEmailTestFetch(null); restoreEnv(); server.close(); }
 });
 

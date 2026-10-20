@@ -204,6 +204,14 @@ export async function grantMissingWorkspaceStarter(db, { target = aiConfig().tri
   const rows = await db.all(`SELECT a.workspace_id FROM workspace_credit_accounts a JOIN workspaces w ON w.id = a.workspace_id
     WHERE w.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM credit_ledger l WHERE l.workspace_id = a.workspace_id AND l.reference_id IN (${STARTER_REFS.map(() => '?').join(',')}))`, STARTER_REFS);
   let granted = 0;
+  // Workspaces with no credit account yet (review P2-2): open it now — ensureAccount grants the starter on that INSERT — so the
+  // migration's count covers them too instead of leaving the grant to the first page view.
+  const noAccount = await db.all(`SELECT w.id FROM workspaces w WHERE w.deleted_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM workspace_credit_accounts a WHERE a.workspace_id = w.id)`);
+  for (const w of noAccount) {
+    await ensureAccount(db, w.id);
+    if (await db.get(`SELECT 1 FROM credit_ledger WHERE workspace_id = ? AND reference_id IN (${STARTER_REFS.map(() => '?').join(',')})`, [w.id, ...STARTER_REFS])) granted += 1;
+  }
   for (const r of rows) {
     const done = await tx(db, async (t) => {
       const acc = await lockAccount(t, r.workspace_id);
