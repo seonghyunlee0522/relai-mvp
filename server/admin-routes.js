@@ -13,6 +13,7 @@ import { mountAdminInvitationRoutes } from './auth/routes.js';
 import { funnelReport, funnelCsv } from './analytics.js';
 import { mountAdminPromotionRoutes } from './promotions.js';
 import { mountAdminFeedbackRoutes } from './feedback.js';
+import { mountAdminEmailTestRoutes } from './email/admin-test.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -60,6 +61,8 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* Invitations + e-mail deliveries (Phase 13). */
   mountAdminInvitationRoutes(app, db, { guard, wrap, fail });
+  /* E-mail setup check: status card + one test mail through Resend (연동 › 이메일 발송 테스트). */
+  mountAdminEmailTestRoutes(app, db, { guard, wrap, fail });
 
   /* Product analytics (first-party events): funnel, feature use, weekly cohort retention. Ids only — no names or e-mails. */
   app.get('/api/admin/funnel', guard, wrap(async (req, res) => res.json(await funnelReport(db, req.query))));

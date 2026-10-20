@@ -5,7 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { emailConfig } from './config.js';
-import { resendProvider, fakeEmailProvider } from './provider.js';
+import { resendProvider, fakeEmailProvider, redactSecrets } from './provider.js';
 
 let override = null;
 export function getEmailProvider(env = process.env) {
@@ -26,7 +26,8 @@ export async function sendEmail(db, { type, to, subject, html, text, tags = [], 
     await db.run(`UPDATE email_deliveries SET status = 'SENT', provider_message_id = ?, sent_at = now() WHERE id = ?`, [r?.id || null, id]);
     return { id, status: 'SENT', provider_message_id: r?.id || null };
   } catch (e) {
-    const code = String(e.code || 'send_failed').slice(0, 60); const msg = String(e.message || '메일 발송에 실패했습니다.').replace(/Bearer\s+\S+/gi, '[redacted]').slice(0, 300);
+    const code = String(e.code || 'send_failed').slice(0, 60); const raw = String(e.message || '메일 발송에 실패했습니다.');
+    const msg = redactSecrets(raw).slice(0, 300);
     await db.run(`UPDATE email_deliveries SET status = 'FAILED', error_code = ?, error_message_safe = ? WHERE id = ?`, [code, msg, id]);
     return { id, status: 'FAILED', error_code: code, error_message_safe: msg };
   }
