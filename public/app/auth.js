@@ -50,13 +50,14 @@ const productShot = () => html`<div class="sell__shot" aria-hidden="true">
       <div class="sell__todo"><small>✦ 지금 할 일 · 03 분석·설계</small><b>화면 설계를 확정하세요</b><em>설계 검토 →</em><p>요구사항 16건이 확정되었습니다. 화면 설계를 확정하면 WBS 일정이 이어집니다.</p></div>
       <div class="sell__kpi"><div><span>요구사항</span><b>16<small>확정</small></b></div><div><span>WBS 작업</span><b>42<small>38%</small></b></div><div><span>다음 주요 일정</span><b>D-12</b></div></div>
     </div></div>`;
-const sidePanel = (isSignup) => html`<aside class="auth__side sell" aria-label="RELAI 소개"><div class="sell__in">
+/** account: the account pages (forgot / reset / verify-email) keep the headline, benefits and trust line — no product visual, no offer. */
+const sidePanel = (isSignup, { account = false } = {}) => html`<aside class="auth__side sell" aria-label="RELAI 소개"><div class="sell__in">
     <p class="sell__eyebrow"><i></i>IT 프로젝트 관리 SaaS · RELAI</p>
     <h2>처음 맡은 프로젝트도<br><em>끝까지 놓치지 않게.</em></h2>
     <p class="sell__lead">착수부터 운영까지 7단계, 오늘 해야 할 일을 RELAI가 먼저 짚어 드립니다.</p>
     ${raw(benefitsHtml())}
-    ${raw(productShot())}
-    <div data-promo-slot="${isSignup ? 'signup' : 'login'}"></div>
+    ${raw(account ? '' : productShot())}
+    ${raw(account ? '' : html`<div data-promo-slot="${isSignup ? 'signup' : 'login'}"></div>`)}
     ${raw(trustHtml())}
   </div></aside>`;
 /** < 900px: benefits + offer + trust under the form (the brand band on top already shows the product). */
@@ -177,20 +178,35 @@ function gaSignUp() {
   return new Promise((done) => { const t = setTimeout(done, 800); window.gtag('event', 'sign_up', { method: 'email', event_callback: () => { clearTimeout(t); done(); } }); });
 }
 
-/* ---------- account security: forgot / reset password, e-mail verification (work with or without a session) ---------- */
-const authCard = (title, sub, body) => html`<div class="auth"><main class="auth__form">
-    <a class="logo" href="/">RELAI</a><h1>${title}</h1><p class="sub">${sub}</p>${raw(body)}
-    <p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p>${raw(legalFooterHtml(undefined, { compact: true }))}</main>
-  <aside class="auth__side"><blockquote><h2>프로젝트를 처음 맡아도<br>끝까지 진행할 수 있도록.</h2>
-    <p>RELAI가 프로젝트의 시작부터 종료까지 다음에 해야 할 일을 안내합니다.</p></blockquote></aside></div>`;
+/* ---------- account security: forgot / reset password, e-mail verification (work with or without a session) ----------
+ * One result-card layout for every state (verify-email polish, founder 2026-10-20): the login/signup frame — form column +
+ * the same dark value panel (no product visual or offer) on PC, the slim brand band on phones — a state icon, title, body
+ * and one action row (primary on the right on PC, full-width and stacked on phones). */
+const ACCT_ICONS = {
+  ok: '<path d="M20 6L9 17l-5-5"/>',
+  warn: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/>',
+  key: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  wait: '<path d="M21 12a9 9 0 1 1-6.2-8.6"/>',
+};
+const acctIcon = (tone, icon) => `<div class="acct__ic acct__ic--${tone}${icon === 'wait' ? ' acct__ic--wait' : ''}" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ACCT_ICONS[icon]}</svg></div>`;
+/** tone: ok | warn | info · icon: ACCT_ICONS key · note: a quieter second line · actions: buttons/links (primary last) · alt: 로그인으로 돌아가기. */
+const authCard = ({ tone = 'info', icon = 'key', title, sub, note = '', body = '', actions = '', alt = true }) => html`<div class="auth auth--acct"><main class="auth__form acct">
+    <div class="aband aband--acct" aria-hidden="true"><a class="aband__logo" href="/" tabindex="-1"><img src="/brand/icon.svg" alt="" width="28" height="28">RELAI</a></div>
+    <a class="logo" href="/">RELAI</a>${raw(acctIcon(tone, icon))}<h1>${title}</h1><p class="sub">${sub}</p>
+    ${raw(note ? html`<p class="acct__note">${note}</p>` : '')}${raw(body)}
+    ${raw(actions ? `<div class="acct__actions">${actions}</div>` : '')}
+    ${raw(alt ? '<p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p>' : '')}${raw(legalFooterHtml(undefined, { compact: true }))}</main>
+  ${raw(sidePanel(false, { account: true }))}</div>`;
+const btnLink = (href, label, kind = 'primary') => html`<a class="btn btn--${kind} btn--lg" href="${href}">${label}</a>`;
 const linkToken = () => { const t = new URLSearchParams(location.search).get('token') || ''; history.replaceState(null, '', location.pathname); return t; };   // keep the token out of history
 
 export function forgotPage() {
   document.title = '비밀번호 찾기 — RELAI';
-  root.innerHTML = authCard('비밀번호 찾기', '가입한 이메일을 입력하면 비밀번호 재설정 링크를 보내 드립니다.', html`<form id="f" novalidate>
+  root.innerHTML = authCard({ title: '비밀번호 찾기', sub: '가입한 이메일을 입력하면 비밀번호 재설정 링크를 보내 드립니다.', body: html`<form id="f" novalidate>
     <div class="form-err" id="ferr" role="alert" hidden></div>
     <div class="field"><label for="email">이메일 <span class="req">*</span></label><input class="input" id="email" name="email" type="email" autocomplete="username"><div class="err" data-for="email"></div></div>
-    <button class="btn btn--primary btn--lg btn--block" type="submit">재설정 링크 받기</button></form>`);
+    <button class="btn btn--primary btn--lg btn--block" type="submit">재설정 링크 받기</button></form>` });
   const form = $('#f'); $('#email').focus();
   form.addEventListener('submit', async (e) => {
     e.preventDefault(); showErrors(form, {});
@@ -198,7 +214,9 @@ export function forgotPage() {
     const btn = $('button[type=submit]', form); btn.disabled = true;
     try {
       await api('POST', '/api/auth/password/forgot', { email });
-      form.outerHTML = html`<div class="notice" role="status">${email} 로 가입된 계정이 있다면 재설정 링크를 보냈습니다. 링크는 30분 동안 한 번만 사용할 수 있습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.</div>`;
+      root.innerHTML = authCard({ icon: 'mail', title: '메일을 확인해 주세요', sub: `${email} 로 가입된 계정이 있다면 비밀번호 재설정 링크를 보냈습니다.`,
+        note: '링크는 30분 동안 한 번만 사용할 수 있습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.',
+        actions: btnLink('/forgot-password', '다시 받기', 'secondary') + btnLink('/login', '로그인으로 돌아가기'), alt: false });
     } catch (err) { btn.disabled = false; showErrors(form, err.fields, err.message); }
   });
 }
@@ -206,12 +224,13 @@ export function forgotPage() {
 export function resetPage() {
   document.title = '새 비밀번호 설정 — RELAI';
   const token = linkToken();
-  if (!token) { root.innerHTML = authCard('링크가 올바르지 않습니다', '메일의 링크를 다시 열거나 재설정 링크를 새로 받아 주세요.', '<a class="btn btn--primary btn--lg btn--block" href="/forgot-password">재설정 링크 다시 받기</a>'); return; }
-  root.innerHTML = authCard('새 비밀번호 설정', '새 비밀번호를 정하면 모든 기기에서 로그아웃되고, 새 비밀번호로 다시 로그인합니다.', html`<form id="f" novalidate>
+  const badLink = (title, sub) => authCard({ tone: 'warn', icon: 'warn', title, sub, actions: btnLink('/forgot-password', '재설정 링크 다시 받기') });
+  if (!token) { root.innerHTML = badLink('링크가 올바르지 않습니다', '메일의 링크를 다시 열거나 재설정 링크를 새로 받아 주세요.'); return; }
+  root.innerHTML = authCard({ title: '새 비밀번호 설정', sub: '새 비밀번호를 정하면 모든 기기에서 로그아웃되고, 새 비밀번호로 다시 로그인합니다.', body: html`<form id="f" novalidate>
     <div class="form-err" id="ferr" role="alert" hidden></div>
     <div class="field"><label for="password">새 비밀번호 <span class="req">*</span></label><input class="input" id="password" name="password" type="password" autocomplete="new-password"><div class="hint">영문과 숫자를 포함해 8자 이상</div><div class="err" data-for="password"></div></div>
     <div class="field"><label for="password2">새 비밀번호 확인 <span class="req">*</span></label><input class="input" id="password2" name="password2" type="password" autocomplete="new-password"><div class="err" data-for="password2"></div></div>
-    <button class="btn btn--primary btn--lg btn--block" type="submit">비밀번호 변경</button></form>`);
+    <button class="btn btn--primary btn--lg btn--block" type="submit">비밀번호 변경</button></form>` });
   const form = $('#f'); $('#password').focus();
   form.addEventListener('submit', async (e) => {
     e.preventDefault(); showErrors(form, {});
@@ -223,10 +242,10 @@ export function resetPage() {
     try {
       await api('POST', '/api/auth/password/reset', { token, password: pw });
       state.user = null;
-      form.outerHTML = html`<div class="notice" role="status">비밀번호를 변경했습니다. 새 비밀번호로 로그인해 주세요.</div><a class="btn btn--primary btn--lg btn--block" href="/login">로그인</a>`;
+      root.innerHTML = authCard({ tone: 'ok', icon: 'ok', title: '비밀번호를 변경했습니다', sub: '모든 기기에서 로그아웃되었습니다. 새 비밀번호로 로그인해 주세요.', actions: btnLink('/login', '로그인'), alt: false });
     } catch (err) {
       btn.disabled = false;
-      if (err.code === 'token_invalid') form.outerHTML = html`<div class="notice notice--warn" role="alert">${err.message}</div><a class="btn btn--primary btn--lg btn--block" href="/forgot-password">재설정 링크 다시 받기</a>`;
+      if (err.code === 'token_invalid') root.innerHTML = badLink('링크를 사용할 수 없습니다', err.message);
       else showErrors(form, err.fields, err.message);
     }
   });
@@ -235,13 +254,35 @@ export function resetPage() {
 export async function verifyPage() {
   document.title = '이메일 인증 — RELAI';
   const token = linkToken();
-  root.innerHTML = authCard('이메일 인증', '잠시만 기다려 주세요…', '<div class="loading">확인 중…</div>');
-  let ok = false; let msg = '인증 링크가 올바르지 않습니다.';
-  if (token) { try { await api('POST', '/api/auth/email/verify', { token }); ok = true; } catch (err) { msg = err.message; } }
+  root.innerHTML = authCard({ icon: 'wait', title: '이메일 인증', sub: '인증 링크를 확인 중…', alt: false });
+  let ok = false; let code = token ? '' : 'token_missing'; let msg = '';
+  if (token) { try { await api('POST', '/api/auth/email/verify', { token }); ok = true; } catch (err) { code = err.code || 'error'; msg = err.message; } }
+  // the session (optional) only picks the next step: 시작하기 vs 로그인, 인증 메일 다시 받기, 이미 인증됨
+  let user = state.user;
+  if (!user) { try { user = (await api('GET', '/api/me?optional=1')).user || null; } catch { user = null; } }
   if (state.user && ok) state.user.email_verified = true;
-  root.innerHTML = ok
-    ? authCard('이메일이 인증되었습니다', '이제 팀원 초대와 결제를 포함한 모든 기능을 사용할 수 있습니다.', '<a class="btn btn--primary btn--lg btn--block" href="/app">RELAI 시작하기</a>')
-    : authCard('인증하지 못했습니다', msg, '<p class="dim" style="margin-bottom:16px">로그인한 뒤 화면 상단의 안내에서 인증 메일을 다시 받을 수 있습니다.</p><a class="btn btn--primary btn--lg btn--block" href="/app">RELAI로 이동</a>');
+  const toApp = (label = 'RELAI로 이동', kind = 'primary') => btnLink('/app', label, kind);
+  const show = (view) => { root.innerHTML = authCard(view); };
+  const already = () => show({ tone: 'ok', icon: 'ok', title: '이미 인증된 이메일입니다', sub: `${user.email} 계정은 인증이 끝났습니다. 모든 기능을 바로 사용할 수 있습니다.`, actions: toApp(), alt: false });
+  if (ok) return show({ tone: 'ok', icon: 'ok', title: '이메일이 인증되었습니다', sub: '이제 팀원 초대와 결제를 포함한 모든 기능을 사용할 수 있습니다.',
+    actions: user ? toApp('RELAI 시작하기') : btnLink('/login', '로그인하고 시작하기'), alt: false });
+  if (user && user.email_verified) return already();
+  if (code === 'rate_limited') return show({ tone: 'warn', icon: 'warn', title: '잠시 후 다시 시도해 주세요', sub: msg, note: '요청이 많아 지금은 확인할 수 없습니다. 잠시 뒤 메일의 링크를 다시 열어 주세요.', actions: user ? toApp() : '', alt: !user });
+  const title = code === 'token_missing' ? '인증 링크가 올바르지 않습니다' : '인증 링크를 사용할 수 없습니다';
+  const sub = code === 'token_missing' ? '메일에 있는 링크를 그대로 열어 주세요. 주소 일부가 빠지면 인증할 수 없습니다.' : (msg || '인증 링크가 올바르지 않습니다.');
+  if (!user) return show({ tone: 'warn', icon: 'warn', title, sub, note: '로그인하면 화면 상단 안내에서 인증 메일을 다시 받을 수 있습니다.', actions: btnLink('/login', '로그인'), alt: false });
+  show({ tone: 'warn', icon: 'warn', title, sub, note: `${user.email} 로 새 인증 메일을 받을 수 있습니다.`, body: '<div class="form-err" id="verr" role="alert" hidden></div>',
+    actions: toApp('나중에 하기', 'secondary') + '<button class="btn btn--primary btn--lg" type="button" id="verify-again">인증 메일 다시 받기</button>', alt: false });
+  const b = $('#verify-again');
+  b.onclick = async () => {
+    b.disabled = true;
+    try {
+      const r = await api('POST', '/api/auth/email/resend', {});
+      if (r.already_verified) { user.email_verified = true; if (state.user) state.user.email_verified = true; return already(); }
+      show({ icon: 'mail', title: '인증 메일을 다시 보냈습니다', sub: `${user.email} 로 새 인증 링크를 보냈습니다. 메일의 링크를 열면 인증이 끝납니다.`,
+        note: '메일이 보이지 않으면 스팸함을 확인해 주세요. 이전에 받은 링크는 더 이상 쓸 수 없습니다.', actions: toApp(), alt: false });
+    } catch (err) { b.disabled = false; const e = $('#verr'); e.textContent = err.message || '인증 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.'; e.hidden = false; }
+  };
 }
 
 /** In-app banner for unverified accounts (shown above every page until verified). */

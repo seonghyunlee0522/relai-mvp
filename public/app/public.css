@@ -185,3 +185,28 @@
   .auth--su-a .auth__form:has(#google-btn):has(.notice--invite) .aband{display:none}
   .auth--su-a .auth__form:has(#google-btn):has(.notice--invite){padding-top:20px}
 }
+
+/* ---------- account pages (forgot / reset password, verify-email): one result card (founder 2026-10-20) ----------
+ * Same frame as login/signup (form column + dark value panel); a state icon over the title, a quiet note, one action row
+ * (primary on the right on PC like every auth action; full-width and stacked on phones). */
+.acct__ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;margin:0 0 20px;border:1px solid var(--border-blue);background:var(--blue-soft);color:var(--blue)}
+.acct__ic--ok{border-color:var(--ok-bd);background:var(--ok-bg);color:var(--ok-fg)}
+.acct__ic--warn{border-color:var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg)}
+.acct__ic--wait svg{animation:acct-spin .9s linear infinite}
+@keyframes acct-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.acct__ic--wait svg{animation:none}}
+.auth--acct .auth__form h1{font-size:26px;line-height:1.3;margin-bottom:8px;word-break:keep-all}
+.auth--acct .auth__form .sub{line-height:1.65;word-break:keep-all;overflow-wrap:anywhere}
+.acct__note{margin:-8px 0 24px;padding:10px 12px;border-radius:10px;background:var(--bg-alt);border:1px solid var(--border-soft);font-size:13px;line-height:1.6;color:var(--text-2);word-break:keep-all;overflow-wrap:anywhere}
+.auth--acct .auth__form>.logo{margin-bottom:24px}
+.acct #verr{margin-bottom:16px}
+.acct__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px}
+.acct__actions .btn{min-width:160px;padding-left:22px;padding-right:22px}
+.auth--acct .auth__side.sell .sell__ben{margin-bottom:28px}
+@media (max-width:767px){
+  .auth--acct .aband--acct{padding:14px 20px;margin-bottom:28px}
+  .auth--acct .auth__form h1{font-size:22px}
+  .acct__ic{width:44px;height:44px;border-radius:12px;margin-bottom:16px}
+  .acct__actions{flex-direction:column-reverse;gap:8px}
+  .acct__actions .btn{width:100%;min-width:0}
+}
