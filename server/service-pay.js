@@ -1,10 +1,10 @@
 /**
- * RELAI 서비스 결제 — a public page, no RELAI login (founder 2026-10-20; layout after docreel.kr/pricing).
- *   GET  /pricing[?plan=once|monthly&product=agent]   product cards, buyer form, consents, 결제 전 확인해주세요, contact, business footer
+ * RELAI 서비스 결제 — a public page, no RELAI login (founder 2026-10-20; layout after docreel.kr/pay/agent).
+ *   GET  /pay/agent[?plan=once|monthly&product=agent]   product cards, buyer form, consents, 결제 전 확인해주세요, contact, business footer
  *   POST /api/service-pay/orders                       { product, buyer, agree_* } → service_orders row (catalogue amount) + NicePay window params
  *   POST /api/service-pay/nicepay/return               NicePay window result (form POST, cross-site): verify → approve (amount from the order) → apply → 303
  *   POST /api/service-pay/subscriptions                월 구독 (billing key). Refused while NICEPAY_RECURRING_ENABLED is off; the page never calls it then
- *   GET  /pricing/done?order=…  · /pricing/failed?reason=…
+ *   GET  /pay/agent/done?order=…  · /pay/agent/failed?reason=…
  *   GET  /api/admin/service-orders                     SYSTEM_ADMIN, read-only (관리자 › 결제)
  * The NicePay webhook stays /api/billing/webhook/nicepay; billing/routes.js hands service orders to applyServiceEvent.
  * Checkout is opt-in: open only when SERVICE_PAY_ENABLED=true AND a NicePay provider is configured. Otherwise the page still
@@ -27,8 +27,8 @@ const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 /** Opt-in (review P1-1): only the exact value 'true' opens checkout. Unset, 'false' or anything else keeps it closed. */
 export const servicePayEnabled = () => String(process.env.SERVICE_PAY_ENABLED ?? '').trim().toLowerCase() === 'true';
 const checkoutReady = (provider) => servicePayEnabled() && Boolean(provider?.payWindowParams && provider?.completeReturn);
-const done = (id) => `/pricing/done?order=${encodeURIComponent(id)}`;
-const failed = (reason, id) => `/pricing/failed?reason=${encodeURIComponent(reason || 'failed')}${id ? `&order=${encodeURIComponent(id)}` : ''}`;
+const done = (id) => `/pay/agent/done?order=${encodeURIComponent(id)}`;
+const failed = (reason, id) => `/pay/agent/failed?reason=${encodeURIComponent(reason || 'failed')}${id ? `&order=${encodeURIComponent(id)}` : ''}`;
 
 /** NicePay window result. Mounted BEFORE the JSON parser / Origin check: NicePay posts it cross-site as a form. */
 export function mountServicePayReturn(app, db, { provider }) {
@@ -96,19 +96,19 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
   const emailLimit = rateLimiter(db, { name: 'service-pay-order-email', max: 5, windowMs: 60 * 60 * 1000 });   // per buyer e-mail
   const fieldsFail = (res, e) => fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {});
 
-  app.get('/pricing', (req, res) => {
+  app.get('/pay/agent', (req, res) => {
     res.set('Cache-Control', 'no-store');
     const sel = productFor(String(req.query.plan || 'once'), String(req.query.product || 'agent')) || SERVICE_PRODUCTS['agent-once'];
-    res.type('html').send(pricingPage({ selected: sel, recurring: Boolean(provider?.recurringEnabled), open: checkoutReady(provider), meta: shareMeta(req, { title: '서비스 결제 — RELAI', description: 'RELAI AI Agent 개발 및 운영 서비스 결제', path: '/pricing' }) }));
+    res.type('html').send(pricingPage({ selected: sel, recurring: Boolean(provider?.recurringEnabled), open: checkoutReady(provider), meta: shareMeta(req, { title: '서비스 결제 — RELAI', description: 'RELAI AI Agent 개발 및 운영 서비스 결제', path: '/pay/agent' }) }));
   });
-  app.get('/pricing/done', wrap(async (req, res) => {
+  app.get('/pay/agent/done', wrap(async (req, res) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
     const o = await getServiceOrder(db, req.query.order);
     if (!o) return res.redirect(failed('unknown_order'));
     if (o.status === 'FAILED') return res.redirect(failed(o.failure_code, o.id));
     res.type('html').send(resultPage({ ok: true, order: o }));
   }));
-  app.get('/pricing/failed', wrap(async (req, res) => {
+  app.get('/pay/agent/failed', wrap(async (req, res) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
     const o = req.query.order ? await getServiceOrder(db, req.query.order) : null;
     if (o?.status === 'PAID') return res.redirect(done(o.id));
@@ -141,7 +141,7 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
 const head = (title, meta = '') => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>${meta}<link rel="icon" href="/favicon.ico">
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="/service/pricing.css"></head>`;
+<link rel="stylesheet" href="/service/pay/agent.css"></head>`;
 const topbar = () => `<header class="sp-top"><div class="sp-wrap sp-top__in"><a class="sp-brand" href="/"><b>relai</b><span class="sp-brand__sep">/</span><span>서비스 결제</span></a>
 <a class="sp-top__link" href="mailto:${esc(LEGAL.contactEmail)}">문의하기</a></div></header>`;
 
@@ -155,7 +155,7 @@ function card(p, selected) {
 <div class="sp-card__top"><h3>${esc(p.title)}</h3><span class="sp-badge${p.kind === 'RECURRING' ? ' sp-badge--soon' : ''}">${c.badge}</span></div>
 <p class="sp-price"><b>${won(p.amount)}</b><span> / ${c.unit}</span></p><p class="sp-vat">부가세 포함</p>
 <ul>${c.bullets.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
-<a class="sp-btn sp-btn--line" href="/pricing?plan=${p.plan}&amp;product=${p.product}" data-pick="${p.key}" aria-pressed="${selected}">${selected ? '선택됨' : c.cta}</a></article>`;
+<a class="sp-btn sp-btn--line" href="/pay/agent?plan=${p.plan}&amp;product=${p.product}" data-pick="${p.key}" aria-pressed="${selected}">${selected ? '선택됨' : c.cta}</a></article>`;
 }
 // Card inputs carry no name: they are read by id in pricing.js and can never be part of a native form submission.
 const field = (id, label, attrs, hint = '') => `<label class="sp-f" for="${id}"><span class="sp-f__l">${label}</span><input class="sp-in" id="${id}"${id.startsWith('card_') ? '' : ` name="${id}"`} ${attrs}>${hint ? `<small>${hint}</small>` : ''}<em class="sp-err" data-err="${id}"></em></label>`;
@@ -175,7 +175,7 @@ ${prods.map((p) => `<div class="sp-sum" data-sum="${p.key}"${p.key === selected.
 <dl><dt>이용 기간</dt><dd>${p.kind === 'RECURRING' ? '매월 자동 결제' : '1개월 · 자동 갱신 없음'}</dd><dt>공급가액</dt><dd>${won(p.supply_amount)}</dd><dt>부가세</dt><dd>${won(p.vat_amount)}</dd>
 <dt class="sp-sum__tot">결제 금액</dt><dd class="sp-sum__tot">${won(p.amount)}${p.kind === 'RECURRING' ? ' / 월' : ''}</dd></dl>
 ${p.kind === 'RECURRING' ? `<p class="sp-soon" role="note">${RECURRING_SOON} 정기결제 심사가 끝나면 열립니다.</p>` : ''}</div>`).join('')}</div>
-<form class="sp-form" id="sp-form" method="post" action="/pricing" novalidate>
+<form class="sp-form" id="sp-form" method="post" action="/pay/agent" novalidate>
 <h2>구매자 정보</h2>
 <div class="sp-grid">${field('name', '이름', 'autocomplete="name" maxlength="40" required')}${field('company', '회사명 <i>(선택)</i>', 'autocomplete="organization" maxlength="80"')}
 ${field('email', '이메일', 'type="email" autocomplete="email" maxlength="120" required', '결제 확인 메일을 이 주소로 보냅니다.')}${field('phone', '연락처', 'type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" required')}</div>
@@ -206,7 +206,7 @@ ${open ? '' : `<p class="sp-note" id="sp-closed">지금은 온라인 결제를 �
 <section class="sp-contact"><h2>문의</h2><p>서비스 범위, 견적, 세금계산서 발행은 <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 문의해 주세요.</p></section>
 </main>
 ${legalFooterHtml(LEGAL).replace('class="legal-foot"', 'class="legal-foot sp-wrap"')}
-<script type="module" src="/service/pricing.js"></script></body></html>`;
+<script type="module" src="/service/pay/agent.js"></script></body></html>`;
 }
 
 const REASON = { canceled: '결제가 취소되었습니다.', expired: '결제 시간이 초과되었습니다. 다시 시도해 주세요.', amount_mismatch: '결제 금액이 주문 금액과 달라 결제하지 않았습니다.',
@@ -228,6 +228,6 @@ export function resultPage({ ok, order, reason = '' }) {
       : '<p class="sp-note">결제가 완료되지 않았으므로 청구되지 않습니다.</p>'}`;
   return `${head(`${title} — RELAI`)}<body class="sp">${topbar()}<main class="sp-wrap"><section class="sp-result ${ok ? 'is-ok' : 'is-bad'}" id="sp-result" data-status="${esc(order?.status || 'NONE')}">
 <div class="sp-result__icon" aria-hidden="true">${ok ? '✓' : '!'}</div><h1>${title}</h1>${body}${rows}
-<div class="sp-result__a">${ok || MAYBE_CHARGED.has(reason) ? '<a class="sp-btn sp-btn--line" href="/pricing">서비스 결제로 돌아가기</a>' : '<a class="sp-btn sp-btn--pri" href="/pricing">다시 결제하기</a>'}
+<div class="sp-result__a">${ok || MAYBE_CHARGED.has(reason) ? '<a class="sp-btn sp-btn--line" href="/pay/agent">서비스 결제로 돌아가기</a>' : '<a class="sp-btn sp-btn--pri" href="/pay/agent">다시 결제하기</a>'}
 <a class="sp-btn sp-btn--line" href="mailto:${esc(LEGAL.contactEmail)}">문의하기</a></div></section></main>${legalFooterHtml(LEGAL).replace('class="legal-foot"', 'class="legal-foot sp-wrap"')}</body></html>`;
 }

@@ -1,4 +1,4 @@
-/* RELAI 서비스 결제 (/pricing): public page, catalogue-only amounts (tamper rejected), idempotent approve + webhook, receipt
+/* RELAI 서비스 결제 (/pay/agent): public page, catalogue-only amounts (tamper rejected), idempotent approve + webhook, receipt
  * e-mail once, 월 구독 off → nothing called, 관리자 list. NicePay is a stubbed fetch: nothing here reaches NicePay. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -77,19 +77,19 @@ test('catalogue: exactly two products, 400,000원 VAT included', () => {
   assert.equal(SERVICE_PRODUCTS['agent-monthly'].title, 'AI Agent 개발 및 운영 월 구독');
 });
 
-test('GET /pricing: public (no login), both cards, consents, notes, business footer, ?plan selects a card, no sample/test words', async () => {
+test('GET /pay/agent: public (no login), both cards, consents, notes, business footer, ?plan selects a card, no sample/test words', async () => {
   const { server, client } = await boot();
   try {
     const c = client();
-    const r = await c('GET', '/pricing?plan=once&product=agent');
+    const r = await c('GET', '/pay/agent?plan=once&product=agent');
     assert.equal(r.status, 200);
     for (const s of ['relai', '서비스 결제', 'AI Agent 개발 및 운영', 'AI Agent 개발 및 운영 월 구독', '400,000원', '결제 전 확인해주세요', '이용약관', '개인정보처리방침',
       '개인정보 수집·이용', '결제 진행', '회사명', '연락처', LEGAL.bizNo, LEGAL.mailOrderNo, LEGAL.contactEmail, '카드번호', '유효기간', '정기결제에 동의']) assert.ok(r.text.includes(s), s);
     assert.match(r.text, /data-selected="agent-once"/);
     assert.doesNotMatch(visible(r.text), /sample|test|샘플|테스트/i);
-    assert.match((await c('GET', '/pricing?plan=monthly&product=agent')).text, /data-selected="agent-monthly"/);
-    assert.match((await c('GET', '/pricing?plan=monthly&product=agent')).text, /data-recurring="0"/);
-    const done = await c('GET', '/pricing/failed?reason=canceled');
+    assert.match((await c('GET', '/pay/agent?plan=monthly&product=agent')).text, /data-selected="agent-monthly"/);
+    assert.match((await c('GET', '/pay/agent?plan=monthly&product=agent')).text, /data-recurring="0"/);
+    const done = await c('GET', '/pay/agent/failed?reason=canceled');
     assert.equal(done.status, 200); assert.match(done.text, /결제가 취소되었습니다/);
   } finally { server.close(); }
 });
@@ -119,7 +119,7 @@ test('amount tamper: a window result for another amount is rejected without appr
     const c = client();
     const o1 = (await c('POST', '/api/service-pay/orders', ORDER())).json.order;
     const r1 = await returnPost(windowResult({ ...o1, amount: 1000 }));   // window re-signed for 1,000원 (attacker-chosen amount)
-    assert.equal(r1.status, 303); assert.match(r1.location, /^\/pricing\/failed\?reason=amount_mismatch/);
+    assert.equal(r1.status, 303); assert.match(r1.location, /^\/pay/agent\/failed\?reason=amount_mismatch/);
     assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 0, 'never approved');
     assert.equal((await db.get('SELECT status FROM service_orders WHERE id = ?', [o1.id])).status, 'FAILED');
 
@@ -127,7 +127,7 @@ test('amount tamper: a window result for another amount is rejected without appr
     np.st.approveAmount = 1000;   // NicePay answers with a different amount → refund, never PAID
     const r2 = await returnPost(windowResult(o2));
     np.st.approveAmount = null;
-    assert.match(r2.location, /^\/pricing\/failed/);
+    assert.match(r2.location, /^\/pay/agent\/failed/);
     assert.equal(np.called(/\/cancel$/).length, 1);
     assert.notEqual((await db.get('SELECT status FROM service_orders WHERE id = ?', [o2.id])).status, 'PAID');
   } finally { server.close(); }
@@ -140,11 +140,11 @@ test('approve is idempotent: replayed return and the NicePay webhook for the sam
     const o = (await c('POST', '/api/service-pay/orders', ORDER())).json.order;
     const form = windowResult(o);
     const r = await returnPost(form);
-    assert.equal(r.status, 303); assert.equal(r.location, `/pricing/done?order=${o.id}`);
+    assert.equal(r.status, 303); assert.equal(r.location, `/pay/agent/done?order=${o.id}`);
     const row = await db.get('SELECT * FROM service_orders WHERE id = ?', [o.id]);
     assert.deepEqual([row.status, row.provider_tid, row.payment_method_summary], ['PAID', form.tid, '삼성 ****1234']);
     assert.ok(row.receipt_email_sent_at);
-    assert.equal((await returnPost(form)).location, `/pricing/done?order=${o.id}`);   // replay
+    assert.equal((await returnPost(form)).location, `/pay/agent/done?order=${o.id}`);   // replay
     assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 1, 'approved once');
     const paid = { resultCode: '0000', resultMsg: 'ok', tid: form.tid, orderId: o.id, status: 'paid', amount: 400000, ediDate: '2026-10-20T12:00:01.000+0900', payMethod: 'card' };
     const w = await webhook(paid); assert.equal(w.status, 200); assert.equal(w.text, 'OK');
@@ -153,7 +153,7 @@ test('approve is idempotent: replayed return and the NicePay webhook for the sam
     assert.equal(receipts.length, 1);
     assert.match(receipts[0].subject, new RegExp(o.id)); assert.match(receipts[0].text, /400,000원/);
     assert.equal(Number((await db.get(`SELECT COUNT(*) AS n FROM email_deliveries WHERE type = 'SERVICE_RECEIPT'`)).n), 1);
-    const done = await c('GET', `/pricing/done?order=${o.id}`);
+    const done = await c('GET', `/pay/agent/done?order=${o.id}`);
     assert.equal(done.status, 200); assert.match(done.text, /결제가 완료되었습니다/); assert.ok(done.text.includes(o.id)); assert.match(done.text, /400,000원/);
     // webhook refund → REFUNDED (in-app subscriptions untouched)
     const refunded = await webhook({ resultCode: '0000', tid: form.tid, cancelledTid: `c_${form.tid}`, orderId: o.id, status: 'cancelled', amount: 0, ediDate: '2026-10-21T09:00:00.000+0900' });
@@ -168,7 +168,7 @@ test('canceled window → failure page, nothing approved', async () => {
   try {
     const o = (await client()('POST', '/api/service-pay/orders', ORDER())).json.order;
     const r = await returnPost(windowResult(o, { authResultCode: 'U310', authResultMsg: '사용자 취소' }));
-    assert.match(r.location, /^\/pricing\/failed\?reason=canceled/);
+    assert.match(r.location, /^\/pay/agent\/failed\?reason=canceled/);
     assert.equal(np.calls.length, 0);
   } finally { server.close(); }
 });
@@ -214,7 +214,7 @@ test('P1-1 opt-in: unset / "1" / "yes" keep checkout closed (503, page shows 결
     for (const v of [undefined, '', '1', 'yes', 'TRUE ', 'false']) {
       if (v === undefined) delete process.env.SERVICE_PAY_ENABLED; else process.env.SERVICE_PAY_ENABLED = v;
       const shouldOpen = v === 'TRUE ';   // trimmed + case-insensitive 'true'
-      const page = await c('GET', '/pricing');
+      const page = await c('GET', '/pay/agent');
       assert.equal(page.status, 200);
       assert.match(page.text, new RegExp(`data-open="${shouldOpen ? 1 : 0}"`), String(v));
       assert.match(page.text, /<button[^>]*id="sp-submit"[^>]*disabled/, 'the button ships disabled; pricing.js enables it only when open');
@@ -230,7 +230,7 @@ test('P1-1 opt-in: unset / "1" / "yes" keep checkout closed (503, page shows 결
 test('P2-1 form: method=post (never GET), card inputs carry no name, so a native submit can never put card data in a URL', async () => {
   const { server, client } = await boot();
   try {
-    const t = (await client()('GET', '/pricing?plan=monthly&product=agent')).text;
+    const t = (await client()('GET', '/pay/agent?plan=monthly&product=agent')).text;
     const form = t.match(/<form[^>]*id="sp-form"[^>]*>/)[0];
     assert.match(form, /method="post"/);
     for (const id of ['card_number', 'card_expiry', 'card_id_no', 'card_pw']) {
@@ -253,16 +253,16 @@ test('P1-2 claim: two concurrent returns for one order approve once, never refun
     assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 1, 'approved once');
     assert.equal(np.called(/cancel$/).length, 0, 'the good payment is never refunded');
     assert.equal(np.called(/netcancel$/).length, 0);
-    assert.equal(a.location, `/pricing/done?order=${o.id}`); assert.equal(b.location, `/pricing/done?order=${o.id}`);
+    assert.equal(a.location, `/pay/agent/done?order=${o.id}`); assert.equal(b.location, `/pay/agent/done?order=${o.id}`);
     assert.equal((await statusOf(db, o.id)).status, 'PAID');
 
     const o2 = (await c('POST', '/api/service-pay/orders', ORDER({ buyer: { ...BUYER, email: 'two@example.com' } }))).json.order;
     await db.run(`UPDATE service_orders SET status = 'APPROVING' WHERE id = ?`, [o2.id]);   // another request holds the claim
     const r = await returnPost(windowResult(o2));
-    assert.equal(r.location, `/pricing/done?order=${o2.id}`);
+    assert.equal(r.location, `/pay/agent/done?order=${o2.id}`);
     assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 1, 'no second approval');
     assert.equal((await statusOf(db, o2.id)).status, 'APPROVING', 'never failed by the losing request');
-    const page = await c('GET', `/pricing/done?order=${o2.id}`);
+    const page = await c('GET', `/pay/agent/done?order=${o2.id}`);
     assert.match(page.text, /결제를 확인하고 있습니다/);
   } finally { server.close(); }
 });
@@ -276,7 +276,7 @@ test('P1-3 refund failure: refund_failed + operator alert e-mail + honest buyer 
     np.st.onApprove = (id) => db.run(`UPDATE service_orders SET status = 'FAILED', failure_code = 'payment_failed' WHERE id = ?`, [id]);
     const o1 = (await c('POST', '/api/service-pay/orders', ORDER())).json.order;
     const r1 = await returnPost(windowResult(o1));
-    assert.match(r1.location, /^\/pricing\/failed\?reason=apply_failed/);
+    assert.match(r1.location, /^\/pay/agent\/failed\?reason=apply_failed/);
     assert.equal(np.called(/cancel$/).length, 1);
     assert.equal(alerts(mail).length, 0, 'a clean refund needs no operator');
     assert.match((await c('GET', r1.location)).text, /청구되지 않습니다/);
@@ -285,13 +285,13 @@ test('P1-3 refund failure: refund_failed + operator alert e-mail + honest buyer 
     const o2 = (await c('POST', '/api/service-pay/orders', ORDER({ buyer: { ...BUYER, email: 'b2@example.com' } }))).json.order;
     const r2 = await returnPost(windowResult(o2));
     np.st.onApprove = null; np.st.cancelFails = false;
-    assert.match(r2.location, /^\/pricing\/failed\?reason=refund_failed/);
+    assert.match(r2.location, /^\/pay/agent\/failed\?reason=refund_failed/);
     const row = await statusOf(db, o2.id);
     assert.deepEqual([row.status, row.failure_code], ['FAILED', 'refund_failed']);
     const al = alerts(mail);
     assert.equal(al.length, 1); assert.equal(al[0].to, 'ops@relai.test'); assert.ok(al[0].subject.includes(o2.id));
     assert.equal(Number((await db.get(`SELECT COUNT(*) AS n FROM email_deliveries WHERE type = 'SERVICE_PAY_ALERT'`)).n), 1);
-    const page = await c('GET', `/pricing/failed?reason=canceled&order=${o2.id}`);   // the order's state wins over the query
+    const page = await c('GET', `/pay/agent/failed?reason=canceled&order=${o2.id}`);   // the order's state wins over the query
     assert.match(page.text, /결제 확인 중 문제가 생겼습니다\. 영업일 1일 안에 연락드립니다/);
     assert.doesNotMatch(page.text, /청구되지 않습니다|다시 결제하기/);
     // 관리자 list carries the code the console flags
@@ -328,16 +328,16 @@ test('P2-4 receipt: a failed send releases the claim, the done page does not say
     const c = client();
     const o = (await c('POST', '/api/service-pay/orders', ORDER())).json.order;
     mail.failNext = { code: 'provider_down', message: 'down' };
-    assert.equal((await returnPost(windowResult(o))).location, `/pricing/done?order=${o.id}`);
+    assert.equal((await returnPost(windowResult(o))).location, `/pay/agent/done?order=${o.id}`);
     assert.equal((await statusOf(db, o.id)).receipt_email_sent_at, null);
-    let page = await c('GET', `/pricing/done?order=${o.id}`);
+    let page = await c('GET', `/pay/agent/done?order=${o.id}`);
     assert.match(page.text, /결제 확인 메일을 보내 드립니다/); assert.doesNotMatch(page.text, /메일을 보냈습니다/);
     const d = await serviceOrdersDaily(db);
     assert.equal(d.receipts_sent, 1);
     assert.equal((await serviceOrdersDaily(db)).receipts_sent, 0, 'sent once');
     assert.ok((await statusOf(db, o.id)).receipt_email_sent_at);
     assert.equal(mail.find((m) => m.to === 'buyer@example.com').length, 1);
-    page = await c('GET', `/pricing/done?order=${o.id}`);
+    page = await c('GET', `/pay/agent/done?order=${o.id}`);
     assert.match(page.text, /결제 확인 메일을 보냈습니다/);
   } finally { server.close(); }
 });

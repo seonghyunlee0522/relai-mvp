@@ -1,4 +1,4 @@
-/* RELAI 서비스 결제 (/pricing, /pricing/done, /pricing/failed) — standalone, no app CSS. Mobile first. */
+/* RELAI 서비스 결제 (/pay/agent, /pay/agent/done, /pay/agent/failed) — standalone, no app CSS. Mobile first. */
 :root{--sp-bg:#F6F8FB;--sp-card:#fff;--sp-line:#E4E8EF;--sp-text:#101828;--sp-text2:#475467;--sp-text3:#667085;--sp-pri:#1B4FD8;--sp-pri-d:#1740B0;--sp-pri-bg:#EEF3FF;--sp-bad:#B42318;--sp-bad-bg:#FEF3F2;--sp-ok:#067647;--sp-ok-bg:#ECFDF3;--sp-warn-bg:#FFFAEB;--sp-warn:#B54708}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}

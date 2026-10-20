@@ -72,7 +72,8 @@ test('public legal pages: /terms /privacy /pricing and the landing footer, no dr
     assert.match(terms, /무료 플랜\(Free 요금제\)/); assert.match(terms, /진행 중 프로젝트 2개/); assert.match(terms, /무료 크레딧 500 크레딧을 한 번 지급/);
     const privacy = (await c('GET', '/privacy', undefined, { raw: true })).buf.toString('utf8');
     for (const v of ['Vercel Inc.', '나이스페이먼츠', 'Resend', 'Neon', 'Anthropic', 'Google LLC', `개인정보 보호책임자: ${LEGAL.privacyOfficer.name}`]) assert.ok(privacy.includes(v), v);
-    const p = await c('GET', '/pricing', undefined, { raw: true }); assert.equal(p.status, 200); assert.match(p.buf.toString('utf8'), /서비스 결제/);   // RELAI 서비스 결제 page (server/service-pay.js) took over /pricing; plan prices stay at /#pricing
+    const p = await c('GET', '/pricing'); assert.equal(p.status, 302); assert.equal(p.location, '/#pricing');
+    const sp = await c('GET', '/pay/agent', undefined, { raw: true }); assert.equal(sp.status, 200); assert.match(sp.buf.toString('utf8'), /서비스 결제/);   // 서비스 결제 page moved to /pay/agent (founder 2026-10-20), kept closed
   } finally { server.close(); }
 });
 

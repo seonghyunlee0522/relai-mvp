@@ -1405,7 +1405,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountMaintenanceRoutes({ app, db, wrap, fail });                                        // GET /api/cron/purge (Vercel cron)
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
   mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });
-  mountServicePay({ app, db, wrap, fail, provider: billingProvider });   // 서비스 결제: public /pricing page, buyer orders, 관리자 list (before mountLegal's /pricing redirect)
+  mountServicePay({ app, db, wrap, fail, provider: billingProvider });   // 서비스 결제: public /pay/agent page, buyer orders, 관리자 list (before mountLegal's /pricing redirect)
   mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });    // AI credits: customer page, pack checkout, refund request, operator refund   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };

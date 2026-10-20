@@ -1,4 +1,4 @@
-// RELAI 서비스 결제 (/pricing) browser check on the stubbed NicePay (scripts/e2e-service-pay-server.mjs). No real payment.
+// RELAI 서비스 결제 (/pay/agent) browser check on the stubbed NicePay (scripts/e2e-service-pay-server.mjs). No real payment.
 //   BASE=http://127.0.0.1:3131 SHOTS=research/relai-service-pay DATABASE_URL=postgres://… node scripts/e2e-service-pay.cjs
 const fs = require('fs');
 const { execFileSync } = require('child_process');
@@ -21,7 +21,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   const ncalls = async () => (await (await page.request.get(`${BASE}/__nicepay/calls`)).json()).length;
 
   // 1) page: public, header, cards, notes, footer, no sample/test words
-  await page.goto(`${BASE}/pricing?plan=once&product=agent`);
+  await page.goto(`${BASE}/pay/agent?plan=once&product=agent`);
   const body = await page.innerText('body');
   check('header relai / 서비스 결제', /relai\s*\/\s*서비스 결제/.test(await page.innerText('.sp-top')));
   check('two product cards with 400,000원', (await page.$$('.sp-card')).length === 2 && /AI Agent 개발 및 운영[\s\S]*400,000원[\s\S]*AI Agent 개발 및 운영 월 구독[\s\S]*400,000원/.test(await page.innerText('.sp-cards')));
@@ -51,13 +51,13 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await shot('02-monthly-soon.png');
 
   // 4) one-time: order → NicePay window (stand-in) → approve → done page
-  await page.goto(`${BASE}/pricing?plan=once&product=agent`);
+  await page.goto(`${BASE}/pay/agent?plan=once&product=agent`);
   await fill(); await page.check('#agree_all');
   check('전체 동의 checks all three consents', await page.isChecked('#agree_terms') && await page.isChecked('#agree_privacy') && await page.isChecked('#agree_payment'));
   await shot('03-once-filled.png');
   await Promise.all([page.waitForURL(/__nicepay\/window/), page.click('#sp-submit')]);
   check('payment window opened for 400000원 (server amount)', /400000원/.test(await page.innerText('body')));
-  await Promise.all([page.waitForURL(/\/pricing\/done/), page.click('#np-pay button')]);
+  await Promise.all([page.waitForURL(/\/pay/agent\/done/), page.click('#np-pay button')]);
   const oid = new URL(page.url()).searchParams.get('order');
   const doneText = await page.innerText('#sp-result');
   check('done page: 결제가 완료되었습니다 + order number + 400,000원', /결제가 완료되었습니다/.test(doneText) && doneText.includes(oid) && /400,000원/.test(doneText));
@@ -69,26 +69,26 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await page.goBack(); await page.goBack().catch(() => {});
 
   // 5) tamper: window says 1,000원 → refused, failure page, no extra approval
-  await page.goto(`${BASE}/pricing?plan=once&product=agent`); await fill(); await page.check('#agree_all');
+  await page.goto(`${BASE}/pay/agent?plan=once&product=agent`); await fill(); await page.check('#agree_all');
   await Promise.all([page.waitForURL(/__nicepay\/window/), page.click('#sp-submit')]);
-  await Promise.all([page.waitForURL(/\/pricing\/failed/), page.click('#np-tamper button')]);
+  await Promise.all([page.waitForURL(/\/pay/agent\/failed/), page.click('#np-tamper button')]);
   check('tampered amount → failure page (amount_mismatch), no approval', /결제 금액이 주문 금액과 달라/.test(await page.innerText('#sp-result')) && (await (await page.request.get(`${BASE}/__nicepay/calls`)).json()).filter((c) => /^\/v1\/payments\/[^/]+$/.test(c.path)).length === 1);
   await shot('05-failed-tamper.png');
 
   // 6) cancel in the window → failure page
-  await page.goto(`${BASE}/pricing?plan=once&product=agent`); await fill(); await page.check('#agree_all');
+  await page.goto(`${BASE}/pay/agent?plan=once&product=agent`); await fill(); await page.check('#agree_all');
   await Promise.all([page.waitForURL(/__nicepay\/window/), page.click('#sp-submit')]);
-  await Promise.all([page.waitForURL(/\/pricing\/failed/), page.click('#np-cancel button')]);
+  await Promise.all([page.waitForURL(/\/pay/agent\/failed/), page.click('#np-cancel button')]);
   check('cancel → 결제가 취소되었습니다', /결제가 취소되었습니다/.test(await page.innerText('#sp-result')));
   await shot('06-failed-cancel.png');
 
   // 7) mobile 375px: no horizontal scroll
   const m = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'ko-KR', isMobile: true });
   const mp = await m.newPage();
-  await mp.goto(`${BASE}/pricing?plan=monthly&product=agent`);
+  await mp.goto(`${BASE}/pay/agent?plan=monthly&product=agent`);
   check('375px: no horizontal scroll', await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
   await shot('07-mobile-monthly.png', mp);
-  await mp.goto(`${BASE}/pricing/done?order=${oid}`); await shot('08-mobile-done.png', mp);
+  await mp.goto(`${BASE}/pay/agent/done?order=${oid}`); await shot('08-mobile-done.png', mp);
   await m.close();
 
   // 8) 관리자 › 결제 lists the service order (read-only)
@@ -105,7 +105,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
 
   // closed state (CLOSED_BASE: a second server started with E2E_CLOSED=1): page renders, button disabled '결제 준비 중'
   if (process.env.CLOSED_BASE) {
-    await page.goto(`${process.env.CLOSED_BASE}/pricing?plan=once&product=agent`);
+    await page.goto(`${process.env.CLOSED_BASE}/pay/agent?plan=once&product=agent`);
     check('closed: page renders, button disabled 결제 준비 중', (await page.$eval('#sp-submit', (b) => b.disabled)) && /결제 준비 중/.test(await page.innerText('#sp-submit')));
     await shot('10-pricing-closed.png');
   }

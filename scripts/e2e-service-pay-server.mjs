@@ -1,4 +1,4 @@
-// E2E server for RELAI 서비스 결제 (/pricing): the real app with the NicePay adapter on a stubbed NicePay API (injected fetch)
+// E2E server for RELAI 서비스 결제 (/pay/agent): the real app with the NicePay adapter on a stubbed NicePay API (injected fetch)
 // and a local stand-in for the NicePay JS SDK + payment window. Nothing reaches NicePay; no card is charged.
 //   DATABASE_URL=postgres://… PORT=3131 EMAIL_PROVIDER=fake node scripts/e2e-service-pay-server.mjs
 // The stand-in window (/__nicepay/window) offers 결제 / 취소 / 금액 변조(1,000원) so the browser run can drive every path.
