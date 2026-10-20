@@ -18,6 +18,8 @@ export async function purgeExpired(db) {
     rate_limits: await count('DELETE FROM rate_limits WHERE reset_at < now()'),
     oauth_states: await count(`DELETE FROM auth_oauth_states WHERE expires_at < now() - interval '1 day'`),
     ...(await purgeAccountData(db)),
+    // TODO(retention-legal): personal-data retention after a subscription ends / inside projects (founder policy 2026-10-21 §2) is
+    // decided by the legal review (hive research/relai-retention-legal.md). Ending a plan deletes nothing; add a job here only then.
   };
 }
 

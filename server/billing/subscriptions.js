@@ -17,7 +17,14 @@ import { applyPackEvent, isCreditOrder } from './credit-packs.js';
 
 export const STATUSES = ['ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED'];
 export const GRACE_DAYS = 7;
-/** Days a workspace keeps 조회 · 내보내기 of its data after the paid plan ends (founder 2026-10-20; data is never deleted by billing). */
+/**
+ * subscriptions.data_retention_until = ended_at + RETENTION_DAYS. Founder policy 2026-10-21 supersedes the 30-day window: ending a plan
+ * never deletes project data and 조회 · 내보내기 stays open with no end date (projects over the Free limit are read-only — limits.js
+ * projectReadOnly). Nothing reads this column to delete or hide anything; it is kept as a marker only.
+ * TODO(retention-legal): personal-data retention / destruction periods (개인정보 보호법 §21, incl. personal data inside projects;
+ * payment / contract records kept separately) are set only after the legal review in hive research/relai-retention-legal.md — hook
+ * them here and in maintenance.js, never by guessing a number.
+ */
 export const RETENTION_DAYS = 30;
 /** Order kinds that change an existing period without extending it (T3). */
 export const IN_PERIOD_KINDS = ['ADDON', 'UPGRADE'];
