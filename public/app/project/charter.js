@@ -10,7 +10,7 @@ import { api, wsApi } from '../core/api.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { $, html, raw, todayLocal, fmtDate } from '../core/dom.js';
 import { projectHead } from './guide.js';
-import { planMenu, bindPlanMenu } from './initiation.js';
+import { planMenu, bindPlanMenu, NO_REASON } from './initiation.js';
 import { definitionHref } from '../shared/lifecycle.js';
 
 const SPARK = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg>';
@@ -123,7 +123,7 @@ export function charterParts(c, { ro, def }) {
   const fmtDT = (v) => (!v ? '' : `${fmtDate(v.slice(0, 10))}${v.length > 10 ? ` ${v.slice(11, 16)}` : ''}`);
   const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">승인됨</span>' : a.status === 'REAPPROVAL' ? '<span class="chx__badge is-crit">확인 필요 · 재승인 필요</span>' : '<span class="chx__badge">미승인</span>';
   const approvalInner = !a ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수 결과 승인 ${raw(apvState)}</h3>
-    ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — 사유: ${a.bypass.reason} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
+    ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — ${a.bypass.reason === NO_REASON ? NO_REASON : `사유: ${a.bypass.reason}`} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
       : html`<dl class="chx__kvs">${raw(kv('승인자', a.approver ? `${a.approver.name}${a.approver.title ? ` ${a.approver.title}` : ''}` : ''))}${raw(kv('승인일', a.date ? fmtDate(a.date) : ''))}${raw(kv('승인 방법', a.method_label))}${raw(kv('근거', a.evidence))}</dl>
         ${raw(a.status === 'REAPPROVAL' ? '<p class="chx__p chx__bypass">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.</p>' : '')}${raw(a.conditions ? html`<h3 class="chx__lbl">조건 / 보완 요청</h3>${raw(body(a.conditions))}` : '')}`)}</div>`;
   const kickInner = !k || k.skipped ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수보고회</h3>
