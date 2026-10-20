@@ -70,12 +70,14 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   /* ---------- B1: admin 대시보드 near-limit rows ---------- */
   sql(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE email = '${email}'`);
   sql(`UPDATE workspaces SET early_access_until = NULL WHERE id = '${w}'`);   // since admin-fix 7b5b1d2 an early-access workspace reads EARLY, not Free
+  // batch7 T5: Free = 2 projects, so a second project puts this workspace at 2/2 (≥ 90%)
+  await api('POST', `/api/workspaces/${w}/projects`, { name: '새솔유통 물류 시스템 2차', client_name: '새솔유통', project_type: 'NEW_BUILD', planned_start_date: '2026-09-01', planned_end_date: '2027-02-28' });
   await page.goto(`${BASE}/admin`); await loaded('.apage');
   const near = page.locator('.aattn', { hasText: 'Free 플랜 한도 90% 이상' });
   const hrefs = await near.locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
   check('B1 near-limit list has rows and none links to undefined', hrefs.length > 0 && hrefs.every((h) => /^\/admin\/workspaces\/[\w-]+$/.test(h) && !/undefined/.test(h)), JSON.stringify(hrefs));
   const mine = near.locator(`a[href="/admin/workspaces/${w}"]`);
-  check('B1 own Free workspace (1/1 projects) is listed', (await mine.count()) === 1);
+  check('B1 own Free workspace (2/2 projects) is listed', (await mine.count()) === 1);
   if (await mine.count()) {
     const [resp] = await Promise.all([page.waitForResponse((r) => r.url().includes(`/api/admin/workspaces/${w}`)), mine.click()]);
     await loaded('.apage');

@@ -44,6 +44,9 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '김하늘', email, password });
   const w = s.json.workspaces[0].id;
   await api('POST', `/api/workspaces/${w}/onboarding/product_tour/skip`, {});
+  // PAYMENTS_ENABLED off (production) → no 충전 on 설정 › AI 크레딧 (no '결제는 PC에서' line, no PC line) and the upsell points at the plans page
+  const PAY = (await api('GET', `/api/workspaces/${w}/credits/summary`)).json.credits.payments_enabled !== false;
+  log('payments', PAY ? 'on' : 'off');
   const toPhase = async (A, keys) => { for (const key of keys) { const ph = (await api('GET', A.P)).json.phases.find((x) => x.phase_key === key); await api('POST', `${A.P}/phases/${ph.id}/activate`, { reason: 'NEXT' }); } };
   const mkProject = async (name, client) => {
     const p = (await api('POST', `/api/workspaces/${w}/projects`, { name, client_name: client, project_type: 'NEW_BUILD', planned_start_date: d(-60), planned_end_date: d(90), data_migration: 'NO', has_external_integration: 'NO' })).json.project;
@@ -125,7 +128,8 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
     const inProject = u.startsWith('/app/projects/');
     check(`A2 375 ${name}: tab bar ${inProject ? 5 : 3} tabs ≥ 44px, one active`, a.tabs === (inProject ? 5 : 3) && a.tabH >= 44, `${a.tabs} ${a.tabH} active=${a.activeTab.trim()}`);
     const viewer = name === 'report' || name === 'completion';
-    if (inProject || name === 'home' || name === 'settings' || name === 'credits') check(`A4 375 ${name}: ${viewer ? 'no' : 'exactly one'} PC line`, a.pclines === (viewer ? 0 : 1), String(a.pclines));
+    const noPc = viewer || (name === 'credits' && !PAY);   // payments off: 설정 › AI 크레딧 has nothing to do on a PC
+    if (inProject || name === 'home' || name === 'settings' || name === 'credits') check(`A4 375 ${name}: ${noPc ? 'no' : 'exactly one'} PC line`, a.pclines === (noPc ? 0 : 1), String(a.pclines));
     if (a.tiny.length) log(`  note ${name} text < 12px:`, JSON.stringify(a.tiny));
   }
   /* ---------- A17 설정 › AI 크레딧 on a phone: the dashboard is readable, 충전 / 환불 요청 are PC-only ---------- */
@@ -135,7 +139,7 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
     pay: (document.querySelector('[data-phone-pay]')?.textContent || '').trim(), filters: document.querySelectorAll('.cr-filt select').length,
     csv: Boolean(document.querySelector('#cr-csv')), cells: [...document.querySelectorAll('.cr-price tbody td')].filter((td) => td.offsetParent).length }));
   check('A17 375 AI 크레딧: summary + price table + usage log readable', crd.sum && crd.log && crd.cells >= 6, JSON.stringify(crd));
-  check('A17 375 AI 크레딧: no pack button / 충전 / 환불 요청; "결제는 PC에서"', crd.packs === 0 && !crd.refund && !crd.top && /결제는 PC에서/.test(crd.pay), JSON.stringify(crd));
+  check(`A17 375 AI 크레딧: no pack button / 충전 / 환불 요청; ${PAY ? '"결제는 PC에서"' : 'payments off: no "결제는 PC에서"'}`, crd.packs === 0 && !crd.refund && !crd.top && (PAY ? /결제는 PC에서/.test(crd.pay) : !crd.pay), JSON.stringify(crd));
   check('A17 375 AI 크레딧: month/project/user filters stay live + CSV link', crd.filters === 3 && crd.csv, JSON.stringify(crd));
   log('AUDIT', JSON.stringify(Object.fromEntries(Object.entries(AUD).map(([k, v]) => [k, v.bad.length ? v.bad : v.sw]))));
 
@@ -156,8 +160,9 @@ const FORBIDDEN = /^(\+ ?새 프로젝트|\+ ?항목 추가|\+ ?테스트 추가
   await go('/app');
   await mp.evaluate(() => window.dispatchEvent(new CustomEvent('relai:plan-limit', { detail: { message: 'Free 플랜에서는 진행 중 프로젝트를 1개까지 만들 수 있습니다.', limit: { dimension: 'projects', label: '진행 중 프로젝트', used: 1, limit: 1, plan: 'Free' } } })));
   await mp.waitForSelector('[data-notice]');
-  const pay = await mp.evaluate(() => { const d = document.querySelector('[data-notice]'); return { txt: d.innerText, btns: [...d.querySelectorAll('button')].map((b) => b.textContent.trim()) }; });
-  check('A5 paywall on phone: "결제는 PC에서 할 수 있습니다" + 닫기 only', /결제는 PC에서 할 수 있습니다/.test(pay.txt) && JSON.stringify(pay.btns) === '["닫기"]', JSON.stringify(pay.btns));
+  const pay = await mp.evaluate(() => { const d = document.querySelector('[data-notice]'); return { txt: d.innerText, btns: [...d.querySelectorAll('button')].map((b) => b.textContent.trim()), cta: d.querySelector('[data-upsell-cta]')?.getAttribute('href') || '' }; });
+  // batch7 T5: the phone upsell is the plans-page prompt (reason + '플랜 살펴보기' link + 닫기), the same with payments on or off — no checkout on a phone
+  check(`A5 paywall on phone (payments ${PAY ? 'on' : 'off'}): upsell copy + 플랜 살펴보기 → /app/billing/plans + 닫기 only`, /무료 플랜 한도에 도달했어요/.test(pay.txt) && pay.cta === '/app/billing/plans' && JSON.stringify(pay.btns) === '["닫기"]', JSON.stringify({ btns: pay.btns, cta: pay.cta }));
   await mp.screenshot({ path: `${SHOTS}/m-paywall.png` });
   await mp.click('[data-notice] [data-v]');
 

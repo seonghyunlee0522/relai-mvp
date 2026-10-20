@@ -117,11 +117,12 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   /* ---------- in-app placements: 설정 › AI 크레딧 + Home ---------- */
   await fresh.goto(`${BASE}/app/settings/credits`); await loaded(fresh); await fresh.waitForSelector('.cr-promo .promo-card', { timeout: 8000 }).catch(() => {});
   const cr = await fresh.textContent('.cr-promo').catch(() => '');
-  check('credits page: early-access promo card with this workspace\'s end date', /\d{4}\.\d{2}\.\d{2}까지 RELAI 전체 기능 무료/.test(cr) && !/\{until\}/.test(cr), cr);
+  // batch7 T5: early access is on the Free plan, so the {until} promo (early-access end date) is skipped and never leaks the token
+  check('credits page: no early-access {until} promo (Free plan since batch7 T5)', !/까지 RELAI 전체 기능 무료/.test(cr) && !/\{until\}/.test(cr), cr);
   await fresh.screenshot({ path: `${SHOTS}/credits-1440.png` });
   await fresh.goto(`${BASE}/app`); await loaded(fresh); await fresh.waitForSelector('.home__promo .promo-line', { timeout: 8000 }).catch(() => {});
   const hl = await fresh.textContent('#home-credits').catch(() => '');
-  check('Home: AI 크레딧 500 무료 제공 (no ₩) · 얼리 액세스 <date>까지 무료 (from the home promo)', /AI 크레딧 500 무료 제공/.test(hl) && !/₩/.test(hl) && /얼리 액세스 \d{4}\.\d{2}\.\d{2}까지 무료/.test(hl), hl);
+  check('Home: AI 크레딧 500 무료 제공 (no ₩), no 얼리 액세스 <date>까지 무료 (Free plan since batch7 T5)', /AI 크레딧 500 무료 제공/.test(hl) && !/₩/.test(hl) && !/얼리 액세스/.test(hl) && !/\{until\}/.test(hl), hl);
   const phc = await newPage(PHONE); await phc.context().addCookies(await fresh.context().cookies());
   await phc.goto(`${BASE}/app/settings/credits`); await loaded(phc); await phc.waitForTimeout(600);
   await phc.screenshot({ path: `${SHOTS}/credits-390.png`, fullPage: true });

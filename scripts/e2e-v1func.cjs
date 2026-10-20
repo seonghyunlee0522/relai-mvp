@@ -1,5 +1,5 @@
 // v1 functional fixes — UI checks for F4 (WBS 실적 dates in the drawer), F5 (close dialog warns about open WBS), F6 (의사결정 기록 log)
-// and payments off (PAYMENTS_ENABLED unset: no pack / plan purchase, '초기 고객은 무료로 이용합니다.'). API-level checks live in server/test/v1-func.test.js.
+// and payments off (PAYMENTS_ENABLED unset: no pack / plan purchase; plan limits + 플랜 살펴보기 since batch7 T5). API-level checks live in server/test/v1-func.test.js.
 // Not part of `npm test` (needs a running server WITHOUT PAYMENTS_ENABLED + Playwright).
 //   BASE=http://127.0.0.1:3261 SHOTS=/tmp/v1 DATABASE_URL=postgres://… node scripts/e2e-v1func.cjs
 const fs = require('fs');
@@ -31,9 +31,10 @@ const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: '
 
   /* ---------- payments off ---------- */
   await page.goto(`${BASE}/app/settings?tab=plan`); await settle(); await page.waitForSelector('#billing', { timeout: 8000 }).catch(() => {});
-  const plan = await page.evaluate(() => ({ line: document.querySelector('#free-line')?.textContent.trim() || '', pay: Boolean(document.querySelector('#bill-pay, #bill-form, [data-cycle]')),
+  const plan = await page.evaluate(() => ({ line: document.querySelector('#free-line')?.textContent.trim() || '', lim: Boolean(document.querySelector('#plan-limits')), plans: document.querySelector('#plans-link')?.getAttribute('href') || '', pay: Boolean(document.querySelector('#bill-pay, #bill-form, [data-cycle]')),
     credits: [...document.querySelectorAll('#ai-credits a')].map((a) => a.textContent.trim()).join('|') }));
-  check('요금제: "초기 고객은 무료로 이용합니다." and no plan purchase form', plan.line === '초기 고객은 무료로 이용합니다.' && !plan.pay, JSON.stringify(plan));
+  // batch7 T5: the '초기 고객은 무료로 이용합니다.' line is gone (early access is on Free limits) → plan limits + 플랜 살펴보기 → /app/billing/plans
+  check('요금제: plan limits + 플랜 살펴보기 → /app/billing/plans, no plan purchase form', !plan.line && plan.lim && plan.plans === '/app/billing/plans' && !plan.pay, JSON.stringify(plan));
   check('요금제: AI 크레딧 card link says 자세히 (no 충전)', plan.credits === '자세히', plan.credits);
   await page.screenshot({ path: `${SHOTS}/01-plan.png` });
   await page.goto(`${BASE}/app/settings/credits`); await page.waitForSelector('#cr-summary', { timeout: 8000 });

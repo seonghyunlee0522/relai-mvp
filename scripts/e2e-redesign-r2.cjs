@@ -2,6 +2,7 @@
 // plus Jim M1/M2/M3 and the P3s (Q23-1, Q23-2, invite.js). Desktop only; the phone view is covered by e2e-mobile.
 // Not part of `npm test` (needs a running server + Playwright):
 //   BASE=http://127.0.0.1:3231 SHOTS=/tmp/r2 [SHOTS2=<dir for the 1440/1920 review shots>] node scripts/e2e-redesign-r2.cjs
+//   server: PLAN_LIMITS=off (one workspace holds 6 projects; Free = 2 since batch7 T5) and SAMPLE_PROJECTS=false
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');

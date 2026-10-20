@@ -3,7 +3,7 @@
 // signed fake webhook (replay, tamper), dashboard filters + CSV, amber low balance, disabled AI at 0 with [크레딧 충전], operator refund,
 // member read-only view, 375px. Not part of `npm test` (needs a running server + Playwright + psql):
 //   BASE=http://127.0.0.1:3121 SHOTS=research/design/credits DATABASE_URL=postgres://… FAKE_BILLING_SECRET=… node scripts/e2e-credits.cjs
-//   server: BILLING_PROVIDER=fake AI_PROVIDER=fake AI_FAKE_AUTOREPLY=1 AI_ENABLED=true EMAIL_PROVIDER=fake SUPPORT_EMAIL=…
+//   server: BILLING_PROVIDER=fake AI_PROVIDER=fake AI_FAKE_AUTOREPLY=1 AI_ENABLED=true EMAIL_PROVIDER=fake SUPPORT_EMAIL=… PAYMENTS_ENABLED=true (checkout suite: with payments off it stops at the first pack) DEV_INITIAL_AI_CREDITS=500
 const fs = require('fs');
 const { createHmac, randomUUID } = require('crypto');
 const { execFileSync } = require('child_process');
@@ -67,11 +67,13 @@ const q = (s) => String(s).replace(/'/g, "''");
   // starter credits + early access visible on Home, settings, and the AI 크레딧 page (founder: show the free starter credits clearly)
   await page.goto(BASE + '/app'); await page.waitForSelector('#home-credits a', { timeout: 8000 }).catch(() => {});
   const home = await text('#home-credits');
-  check('Home: AI 크레딧 500 무료 제공 (no ₩) + 얼리 액세스', /AI 크레딧 500 무료 제공/.test(home) && !/₩/.test(home) && /얼리 액세스 \d{4}\.\d{2}\.\d{2}까지 무료/.test(home), home);
+  // batch7 T5: early access is no longer a plan (on Free limits), so the '얼리 액세스 {until}까지 무료' home promo is not shown
+  check('Home: AI 크레딧 500 무료 제공 (no ₩), no 얼리 액세스 offer', /AI 크레딧 500 무료 제공/.test(home) && !/₩/.test(home) && !/얼리 액세스/.test(home), home);
   await shot('01-home.png');
   await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing', { timeout: 8000 });
   const plan = await text('#billing .panel__h');
-  check('AC1 settings: 플랜 = 얼리 액세스 · <date>까지, no Team 구매 form', /얼리 액세스 · \d{4}\.\d{2}\.\d{2}까지/.test(plan) && !(await page.$('#bill-buy')), plan);
+  // batch7 T5: early access is on the Free plan → chip 무료 + 플랜 살펴보기 (with payments on the Team purchase form may show, as on any Free workspace)
+  check('AC1 settings: 플랜 = 무료 (early access is on the Free plan since batch7 T5) + 플랜 살펴보기', /플랜 · 결제\s*무료/.test(plan) && !/얼리 액세스/.test(plan) && Boolean(await page.$('#plans-link')), plan);
   check('settings: AI 크레딧 panel (잔액 500 크레딧, no ₩ — batch7 #7)', /잔액 500 크레딧/.test(await text('#ai-credits')) && !/₩/.test(await text('#ai-credits')));
   await shot('02-settings.png');
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary', { timeout: 8000 });
@@ -167,7 +169,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   const rows0 = sql(`SELECT COUNT(*) FROM credit_ledger WHERE workspace_id = '${q(W)}'`);
   await page.goto(`${BASE}/app/projects/${P.id}/requirements`); await viaMenu('#ai-extract'); await page.waitForSelector('.dialog--ai .ai-credit');
   l = await line();
-  check('AC6 dialog: 크레딧이 부족합니다 (필요 30 · 잔액 12) · 크레딧 충전 + 추출 disabled', l === '크레딧이 부족합니다 (필요 30 · 잔액 12) · 크레딧 충전' && await page.$eval('#ai-run', (b) => b.disabled), l);
+  check('AC6 dialog: 크레딧이 모자라요 (필요 30 · 잔액 12) · 크레딧 충전 + 추출 disabled (batch7 T5 copy)', l === '크레딧이 모자라요 (필요 30 · 잔액 12) · 크레딧 충전' && await page.$eval('#ai-run', (b) => b.disabled), l);
   await shot('09-insufficient.png');
   await page.keyboard.press('Escape');
   const no = await api('POST', `${PP}/ai/requirements/extract`, { text: '잔액 부족 상태의 요청 본문입니다.' });
