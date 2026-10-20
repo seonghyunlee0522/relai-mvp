@@ -25,7 +25,7 @@ const STATUS_LABELS = {
   TEST: { DRAFT: '초안', READY: '준비됨', BLOCKED: '차단됨', COMPLETED: '완료' },
   ACCEPTANCE: { DRAFT: '초안', REQUESTED: '검수 요청', ACCEPTED: '승인', REJECTED: '반려', REWORK_REQUIRED: '보완 필요' },
 };
-const FIELD_LABELS = { title: '제목', description: '설명', type: '분류', priority: '우선순위', scope: '범위', status: '상태', owner_user_id: '담당자', requester: '요청자', progress: '진행률',
+const FIELD_LABELS = { title: '제목', description: '설명', type: '분류', priority: '우선순위', scope: '범위', status: '상태', owner_user_id: '담당자', owner: '담당자', requester: '요청자', progress: '진행률',
   item_type: '유형', planned_start_date: '시작일', planned_end_date: '종료일', actual_start_date: '실제 시작일', actual_end_date: '실제 종료일', milestone_date: '마일스톤 날짜',
   severity: '심각도', due_date: '기한', risk_level: '위험 수준', probability: '발생 가능성', impact: '영향도', result: '결과' };
 const VALUE_FIELDS = new Set(['status', 'priority', 'scope', 'type', 'progress', 'item_type', 'planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date', 'milestone_date', 'severity', 'due_date']);

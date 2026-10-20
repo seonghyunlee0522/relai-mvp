@@ -734,7 +734,7 @@ export async function wbsPage(id) {
             ], { compact: true }))}
           </div>
           <div class="dside">
-            <div class="dfield"><span>담당자</span><div><select class="select select--sm" data-field="owner" ${readOnly ? 'disabled' : ''}>${raw(ownerOpts(ownerKey(it)))}</select>${raw(noAcct(live))}${raw(teamHint())}</div></div>
+            <div class="dfield"><span>담당자</span><div>${raw(OP.ownerPicker(members, owners, ownerKey(it), { attrs: 'data-field="owner"', disabled: readOnly }))}${raw(noAcct(live))}${raw(teamHint())}</div></div>
             <div class="dfield"><span>상태</span><div><select class="select select--sm" data-field="status" ${readOnly ? 'disabled' : ''}>${raw(opt(STATUS_EDIT, it.status))}</select>${raw(live.computed_status === 'DELAYED' ? '<small class="wlate" style="margin-left:6px">지연 — 계획 종료일 경과</small>' : '')}</div></div>
             ${raw(t === 'MILESTONE' ? html`<div class="dfield"><span>마일스톤 날짜</span><div>${raw(dateInput('milestone_date', it.milestone_date, readOnly))}${raw(live.past_end ? html`<p class="def__warn wpast__msg">${PAST_END()}</p>` : '')}${raw(shiftNote(it))}</div></div>`
               : group ? html`<div class="dfield"><span>계획 일정 <small class="dim">(자동)</small></span><div class="hint" style="height:36px;display:flex;align-items:center">${live.planned_start ? fmtShort(live.planned_start) : '-'} ~ ${live.planned_end ? fmtShort(live.planned_end) : '-'}${wdays(live) !== null ? ` · ${wdays(live)} 근무일` : ''}</div></div>

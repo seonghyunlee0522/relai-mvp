@@ -1,5 +1,5 @@
 // Jim's button sweep (batch3) — B1 admin 대시보드 'Free 플랜 한도 90% 이상' rows open the workspace · B2 개요 활동 기록 '전체 보기'
-// (and the rail 활동 기록) open the activity panel · B3 요구사항 › 분류·우선순위 tab opens unfiltered when everything is classified
+// (and the rail 활동 기록) open the activity panel · B3 요구사항 tabs = 목록 · 연결 현황 (batch7 #13); ?view=classify opens the 목록 unfiltered when everything is classified
 // (지금 할 일 keeps the 미지정 filter) · B4 간트 '+ 작업 추가' opens the add-task input.
 // Not part of `npm test` (needs a running server and Playwright). Samples may be on or off.
 //   BASE=http://127.0.0.1:3381 SHOTS=/tmp/sweep DATABASE_URL=postgres://… node scripts/e2e-sweep.cjs
@@ -35,15 +35,15 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   const unspec = Number(sql(`SELECT COUNT(*) FROM requirements WHERE project_id = '${P.id}' AND type = 'UNSPECIFIED'`));
   check('setup: 3 requirements, all with a type', unspec === 0 && Number(sql(`SELECT COUNT(*) FROM requirements WHERE project_id = '${P.id}'`)) === 3, `unspecified ${unspec}`);
 
-  /* ---------- B3: 분류·우선순위 tab is unfiltered ---------- */
+  /* ---------- B3 → batch7 #13: 분류·우선순위 is no longer a tab; ?view=classify opens the 목록 unfiltered when everything is classified ---------- */
   await page.goto(`${BASE}${U}/requirements`); await loaded('#grid');
-  const tab = page.locator('a:has-text("분류·우선순위")').first();
-  check('B3 분류·우선순위 tab link has no 미지정 filter', !/UNSPECIFIED/.test(await tab.getAttribute('href') || ''), await tab.getAttribute('href'));
-  await tab.click(); await loaded('#grid'); await page.waitForTimeout(500);
+  const tabs = await page.$$eval('.stabs [data-stab]', (els) => els.map((e) => e.dataset.stab));
+  check('B3 요구사항 tabs are 목록 · 연결 현황 (no 분류·우선순위)', JSON.stringify(tabs) === JSON.stringify(['requirements', 'req-trace']), JSON.stringify(tabs));
+  await page.goto(`${BASE}${U}/requirements?view=classify`); await loaded('#grid'); await page.waitForTimeout(500);
   const body = await page.textContent('#main');
-  check('B3 tab shows all 3 requirements (no 조건에 맞는 … 없습니다)', ['입고 등록', '재고 조회', '응답 3초 이내'].every((t) => body.includes(t)) && !/조건에 맞는/.test(body), page.url());
+  check('B3 ?view=classify shows all 3 requirements (no 조건에 맞는 … 없습니다)', ['입고 등록', '재고 조회', '응답 3초 이내'].every((t) => body.includes(t)) && !/조건에 맞는/.test(body), page.url());
   const cols = await page.$$eval('#grid th, #grid [role=columnheader]', (ths) => ths.map((t) => t.textContent.trim()));
-  check('B3 tab shows 유형 + 우선순위 columns and stays on the tab', cols.some((c) => c.includes('유형')) && cols.some((c) => c.includes('우선순위')) && /view=classify/.test(page.url()), JSON.stringify(cols));
+  check('B3 ?view=classify shows 유형 + 우선순위 columns on the 목록 tab', cols.some((c) => c.includes('유형')) && cols.some((c) => c.includes('우선순위')) && /view=classify/.test(page.url()) && (await page.getAttribute('.stabs [aria-current="page"]', 'data-stab').catch(() => '')) === 'requirements', JSON.stringify(cols));
   await page.screenshot({ path: `${SHOTS}/b3-classify-tab.png` });
   await page.goto(`${BASE}${U}/requirements?type=UNSPECIFIED`); await loaded('#grid');
   const empty = await page.textContent('#main');

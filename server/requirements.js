@@ -37,6 +37,18 @@ export function parseRequirement(b = {}, { partial = false } = {}) {
   if (has('requester_name')) { out.requester_name = str(b.requester_name); if (out.requester_name.length > 100) f.requester_name = '요청자는 100자 이내로 입력해 주세요.'; }
   if (has('requester_organization')) { out.requester_organization = str(b.requester_organization); if (out.requester_organization.length > 100) f.requester_organization = '소속은 100자 이내로 입력해 주세요.'; }
   if (has('owner_user_id')) { out.owner_user_id = b.owner_user_id ? String(b.owner_user_id) : null; }
+  // Batch7 #11: 담당자 = RELAI 사용자 or 01 관계자 (계정 없음). `owner` = one picker value ('' · 'u:<id>' · 's:<id>'); exactly one kind is kept.
+  if (b.owner_stakeholder_id !== undefined) out.owner_stakeholder_id = b.owner_stakeholder_id ? String(b.owner_stakeholder_id) : null;
+  if (b.owner !== undefined) {
+    const v = b.owner === null ? '' : String(b.owner);
+    if (!v) { out.owner_user_id = null; out.owner_stakeholder_id = null; }
+    else if (/^u:./.test(v)) { out.owner_user_id = v.slice(2); out.owner_stakeholder_id = null; }
+    else if (/^s:./.test(v)) { out.owner_stakeholder_id = v.slice(2); out.owner_user_id = null; }
+    else f.owner = '담당자 값이 올바르지 않습니다.';
+  }
+  if (out.owner_user_id !== undefined && out.owner_stakeholder_id === undefined) out.owner_stakeholder_id = null;   // a user (or 미지정) clears the 관계자
+  if (out.owner_stakeholder_id && out.owner_user_id === undefined) out.owner_user_id = null;
+  if (out.owner_user_id && out.owner_stakeholder_id) f.owner_user_id = '담당자는 RELAI 사용자와 관계자 중 한 명만 지정할 수 있습니다.';
   if (Object.keys(f).length) throw new ValidationError(f);
   return out;
 }
@@ -48,6 +60,34 @@ export function parseCriterion(b = {}) {
 }
 
 /* ---------- helpers ---------- */
+const ORG_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
+export const DELETED_OWNER = '(삭제된 담당자)';
+/** 01 관계자 of a project (project_definitions.stakeholders JSON). */
+export async function stakeholdersOf(db, projectId) {
+  const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]);
+  try { const v = r ? JSON.parse(r.stakeholders) : []; return Array.isArray(v) ? v : []; } catch { return []; }
+}
+/** A stakeholder owner must be a named 01 관계자 of this project (any 조직 구분 — 고객사 현업 is the common case, #11). */
+export const isOwnerStakeholder = async (db, projectId, id) => (await stakeholdersOf(db, projectId)).some((x) => x.id === id && x.name);
+/** Organisation label of a stakeholder: its 01 조직명, else the 조직 구분 (당사 · 고객사 · …). */
+export const orgLabel = (sh) => String((sh && (sh.org || ORG_LABEL[sh.org_type])) || '').trim();
+/**
+ * Fills owner_name / owner_label for rows that carry owner_user_id (+ owner_name from users) and owner_stakeholder_id.
+ * owner_label = what lists and exports print: a member's name, or "이름 · 조직" for a 관계자 (계정 없음); a deleted one → (삭제된 담당자).
+ */
+export async function decorateOwners(db, projectId, rows) {
+  const need = rows.some((r) => !r.owner_user_id && r.owner_stakeholder_id);
+  const byId = need ? new Map((await stakeholdersOf(db, projectId)).map((x) => [x.id, x])) : new Map();
+  for (const r of rows) {
+    if (r.owner_user_id || !r.owner_stakeholder_id) { r.owner_label = r.owner_name || ''; continue; }
+    const sh = byId.get(r.owner_stakeholder_id);
+    r.owner_no_account = true; r.owner_deleted = !sh;
+    r.owner_name = sh ? sh.name : DELETED_OWNER; r.owner_org = sh ? orgLabel(sh) : '';
+    r.owner_label = sh ? [sh.name, r.owner_org].filter(Boolean).join(' · ') : DELETED_OWNER;
+  }
+  return rows;
+}
+
 export const isWorkspaceMember = async (db, workspaceId, userId) =>
   Boolean((await db.get('SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [workspaceId, userId])));
 
@@ -83,8 +123,9 @@ export async function listRequirements(db, project, q = {}) {
     if (v.length) { where.push(`r.${k} IN (${v.map(() => '?').join(',')})`); vals.push(...v); }
   };
   multi('type', REQ_TYPES); multi('priority', REQ_PRIORITIES); multi('scope', REQ_SCOPES); multi('status', REQ_STATUSES);
-  if (q.owner === 'none') where.push('r.owner_user_id IS NULL');
-  else if (q.owner) { where.push('r.owner_user_id = ?'); vals.push(String(q.owner)); }
+  if (q.owner === 'none') where.push('r.owner_user_id IS NULL AND r.owner_stakeholder_id IS NULL');
+  else if (/^s:./.test(String(q.owner || ''))) { where.push('r.owner_user_id IS NULL AND r.owner_stakeholder_id = ?'); vals.push(String(q.owner).slice(2)); }
+  else if (q.owner) { where.push('r.owner_user_id = ?'); vals.push(String(q.owner).replace(/^u:/, '')); }
   if (q.link === 'linked') where.push('EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id WHERE l.requirement_id = r.id AND w.archived_at IS NULL)');
   else if (q.link === 'unlinked') where.push('NOT EXISTS (SELECT 1 FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id WHERE l.requirement_id = r.id AND w.archived_at IS NULL)');
   if (q.q) {
@@ -94,7 +135,7 @@ export async function listRequirements(db, project, q = {}) {
   }
   const rows = (await db.all(`SELECT ${REQ_COLS} FROM requirements r LEFT JOIN users u ON u.id = r.owner_user_id
     WHERE ${where.join(' AND ')} ORDER BY r.sequence_number`, [...vals]));
-  return rows;
+  return decorateOwners(db, project.id, rows);
 }
 
 /** Counts over non-archived requirements. Shared by the Requirements summary and the guided checklist. */
@@ -122,6 +163,7 @@ export async function getRequirement(db, project, id) {
   const r = (await db.get(`SELECT ${REQ_COLS} FROM requirements r LEFT JOIN users u ON u.id = r.owner_user_id
     WHERE r.project_id = ? AND r.id = ?`, [project.id, id]));
   if (!r) return null;
+  await decorateOwners(db, project.id, [r]);
   r.criteria = (await db.all('SELECT * FROM requirement_criteria WHERE requirement_id = ? ORDER BY sequence', [id]));
   r.links = (await linksForRequirement(db, id));
   r.raid = (await linkedRaid(db, 'REQUIREMENT', id));
@@ -151,15 +193,22 @@ export async function createRequirement(db, project, input, userId, { reservedSe
   }
   const id = randomUUID(); const ts = now();
   (await db.run(`INSERT INTO requirements (id, project_id, sequence_number, display_id, title, description, type, priority, scope, status,
-      requester_name, requester_organization, owner_user_id, created_by, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, seq, display_id, input.title, input.description ?? '', input.type ?? 'UNSPECIFIED', input.priority ?? 'UNSPECIFIED', input.scope ?? 'UNDECIDED', input.status ?? 'DRAFT', input.requester_name ?? '', input.requester_organization ?? '', input.owner_user_id ?? null, userId, ts, ts]));
+      requester_name, requester_organization, owner_user_id, owner_stakeholder_id, created_by, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, seq, display_id, input.title, input.description ?? '', input.type ?? 'UNSPECIFIED', input.priority ?? 'UNSPECIFIED', input.scope ?? 'UNDECIDED', input.status ?? 'DRAFT', input.requester_name ?? '', input.requester_organization ?? '', input.owner_user_id ?? null, input.owner_user_id ? null : input.owner_stakeholder_id ?? null, userId, ts, ts]));
   (await addHistory(db, id, 'CREATED', {}, userId, ts));
   let i = 0;
   for (const c of input.criteria || []) await db.run('INSERT INTO requirement_criteria (id, requirement_id, content, sequence) VALUES (?,?,?,?)', [randomUUID(), id, c.content, ++i]);
   return id;
 }
 
-const TRACKED = ['title', 'description', 'type', 'priority', 'scope', 'status', 'owner_user_id'];
+const TRACKED = ['title', 'description', 'type', 'priority', 'scope', 'status'];
+/** History text of an owner: member name · "이름 · 조직" (관계자) · (삭제된 담당자) · '' (미지정). */
+async function ownerText(db, projectId, userId, shId) {
+  if (userId) return ((await db.get('SELECT name FROM users WHERE id = ?', [userId])) || {}).name || '';
+  if (!shId) return '';
+  const sh = (await stakeholdersOf(db, projectId)).find((x) => x.id === shId);
+  return sh ? [sh.name, orgLabel(sh)].filter(Boolean).join(' · ') : DELETED_OWNER;
+}
 
 /** Applies only real changes; one history row per changed field. Returns list of changed fields. */
 export async function updateRequirement(db, project, existing, input, userId, { sourceChangeRequestId = null } = {}) {
@@ -168,6 +217,14 @@ export async function updateRequirement(db, project, existing, input, userId, { 
     if (input[k] === undefined || input[k] === existing[k]) continue;
     sets.push(`${k} = ?`); vals.push(input[k]); changed.push(k);
     (await addHistory(db, existing.id, 'UPDATED', { field: k, oldValue: existing[k], newValue: input[k], sourceChangeRequestId }, userId, ts));
+  }
+  // 담당자 (#11): two columns, one history row — field 'owner' with display text, since a 관계자 id means nothing in the log
+  const nu = input.owner_user_id === undefined ? existing.owner_user_id || null : input.owner_user_id || null;
+  const ns = input.owner_stakeholder_id === undefined ? existing.owner_stakeholder_id || null : input.owner_stakeholder_id || null;
+  if (nu !== (existing.owner_user_id || null) || ns !== (existing.owner_stakeholder_id || null)) {
+    sets.push('owner_user_id = ?', 'owner_stakeholder_id = ?'); vals.push(nu, nu ? null : ns); changed.push('owner');
+    (await addHistory(db, existing.id, 'UPDATED', { field: 'owner', sourceChangeRequestId,
+      oldValue: (await ownerText(db, project.id, existing.owner_user_id, existing.owner_stakeholder_id)) || '미지정', newValue: (await ownerText(db, project.id, nu, ns)) || '미지정' }, userId, ts));
   }
   const reqChanged = ['requester_name', 'requester_organization'].filter((k) => input[k] !== undefined && input[k] !== existing[k]);
   if (reqChanged.length) {

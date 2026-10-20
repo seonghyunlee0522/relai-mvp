@@ -106,6 +106,12 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
     await feature('AI WBS 초안', 50, SCHEMAS.WBS_GENERATION, () => c('POST', `${PP}/ai/wbs/generate`, { requirement_ids: reqs.map((x) => x.id) }));
     await feature('AI 영향 분석', 20, SCHEMAS.CHANGE_IMPACT, () => c('POST', `${PP}/changes/${cr.id}/ai/impact`, {}));
     await feature('RELAI에게 물어보기', 10, SCHEMAS.PROJECT_QA, () => c('POST', `${PP}/ai/ask`, { question: '이번 주 확인할 일은?' }));
+    // batch7 #18: AI 테스트 시나리오 (TEST_GENERATION, 30) — candidates only, then commit creates tests + requirement links
+    const tg = await feature('AI 테스트 시나리오', 30, SCHEMAS.TEST_GENERATION, () => c('POST', `${PP}/ai/tests/generate`, { requirement_ids: reqs.map((x) => x.id) }));
+    const tgSc = (tg?.requirements || []).flatMap((g) => g.scenarios.slice(0, 1).map(({ temp_id, ...x }) => ({ ...x, requirement_id: g.requirement.id })));
+    const tgC = await c('POST', `${PP}/ai/tests/commit`, { scenarios: tgSc });
+    check('AI 테스트 시나리오: commit → one test per ticked scenario, linked, test_data kept', tgC.status === 201 && tgC.json.created.length === tgSc.length && tgSc.length > 0
+      && Boolean((await c('GET', `${PP}/tests/${tgC.json.created[0].id}`)).json.test.test_data), JSON.stringify(tgC.json?.error || tgC.json?.created?.length));
     const plan = (await feature('AI WBS Planner 질문 (무과금)', 0, PLANNER_SCHEMAS.wbs_planning_questions, () => c('POST', `${PP}/ai/wbs-plans`, { all: true }), 201)).plan;
     await feature('AI WBS Planner 초안', 50, PLANNER_SCHEMAS.project_wbs_draft, () => c('POST', `${PP}/ai/wbs-plans/${plan.id}/generate`, {}));
 
@@ -142,7 +148,7 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
       mock.script = [];
     }
     const sum = (await c('GET', `/api/workspaces/${W}/credits/summary`)).json?.credits;
-    check('AI 크레딧 dashboard: ai_enabled true, 160 used this month', sum?.ai_enabled === true && sum?.this_month?.used === 160, JSON.stringify({ ai: sum?.ai_enabled, used: sum?.this_month?.used }));
+    check('AI 크레딧 dashboard: ai_enabled true, 190 used this month (incl. 테스트 시나리오 30)', sum?.ai_enabled === true && sum?.this_month?.used === 190, JSON.stringify({ ai: sum?.ai_enabled, used: sum?.this_month?.used }));
     check('server log has no prompt text or key', !/실패 확인|이번 주 확인할 일은|sk-mock-not-real/.test(srv.log()));
 
     await c('POST', `${PP}/wbs`, { title: '로그인 개발', planned_start_date: '2026-11-02', planned_end_date: '2026-11-13' });   // the WBS toolbar only shows with items

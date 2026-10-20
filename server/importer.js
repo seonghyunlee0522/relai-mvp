@@ -79,7 +79,7 @@ function mergeFieldErrors(errors, e, map) {
 async function reqContext(db, project, wid) {
   const members = await db.all('SELECT u.id, u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', [wid]);
   const existing = new Set((await db.all('SELECT display_id FROM requirements WHERE project_id = ?', [project.id])).map((r) => r.display_id));
-  return { members, existing };
+  return { members, existing, team: (await R.stakeholdersOf(db, project.id)).filter((x) => x.name) };   // #11: a requirement owner may be any named 01 관계자
 }
 
 function validateRequirements(rows, ctx) {
@@ -90,7 +90,7 @@ function validateRequirements(rows, ctx) {
     if (!v.title) errors.title = REQUIRED;
     const enums = {};
     for (const k of ['type', 'priority', 'scope', 'status']) { const x = resolveEnum(col(k), v[k]); if (x.error) errors[k] = x.error; else enums[k] = x.value; }
-    const ow = resolveOwner(ctx.members, v.owner); if (ow.error) errors.owner = ow.error;
+    const ow = resolveOwner(ctx.members, v.owner, ctx.team); if (ow.error) errors.owner = ow.error;
     let displayId;
     if (v.display_id) {
       const m = /^REQ-(\d{1,6})$/i.exec(v.display_id.replace(/\s+/g, ''));
@@ -110,7 +110,7 @@ function validateRequirements(rows, ctx) {
     }
     try { R.parseRequirement({ title: v.title || 'x', description: v.description, requester_name: v.requester_name, requester_organization: v.requester_organization }); } catch (e) { mergeFieldErrors(errors, e, {}); }
     if (!Object.keys(errors).length) {
-      o.model = { title: v.title, description: v.description, ...Object.fromEntries(Object.entries(enums).filter(([, x]) => x)), requester_name: v.requester_name, requester_organization: v.requester_organization, owner_user_id: ow.value, display_id: displayId, criteria };
+      o.model = { title: v.title, description: v.description, ...Object.fromEntries(Object.entries(enums).filter(([, x]) => x)), requester_name: v.requester_name, requester_organization: v.requester_organization, owner_user_id: ow.value, owner_stakeholder_id: ow.stakeholder || null, display_id: displayId, criteria };
     }
     return o;
   });

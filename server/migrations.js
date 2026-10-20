@@ -204,6 +204,7 @@ export const migrations = [
     for (const [id, from, to] of PROMO_COPY_49) await db.run('UPDATE promotions SET body = ?, updated_at = now() WHERE id = ? AND body = ?', [to, id, from]);
   } },
   { version: 50, name: 'batch7 T3: wbs_items.system_key + uq_wbs_system_key (WBS 고정 최상위 뼈대), public_holidays + 2026–2027 seed (schema.sql) — additive; existing projects get their fixed nodes when the WBS is first opened', up() {} },
+  { version: 51, name: 'Batch7 T4: requirements.owner_stakeholder_id, test_executions.step_results, test_cases.test_data + environment (schema.sql, additive)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

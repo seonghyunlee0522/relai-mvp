@@ -21,7 +21,7 @@ export const PHASE_SHORT = Object.fromEntries(LIFECYCLE_PHASES.map((p) => [p.key
 
 const P = (pid, s = '') => `/app/projects/${pid}${s}`;
 const q = (qs, k, v) => (v === undefined ? qs.has(k) : qs.get(k) === v);
-/** 분류·우선순위 tab: `?view=classify` (all requirements, Jim B3) or the 미지정 filter that 지금 할 일 links to. */
+/** 분류 view (batch7 #13: no longer a tab): `?view=classify` or the 미지정 filter that 지금 할 일 links to — the 목록 then shows 유형 + 우선순위. */
 export const isClassify = (qs) => q(qs, 'view', 'classify') || qs.get('type') === 'UNSPECIFIED' || qs.get('priority') === 'UNSPECIFIED';
 const isPath = (path, pid, suffix) => path === P(pid, suffix) || path === `${P(pid, suffix)}/`;
 /** 계획 › 프로젝트 정의: one tab (= one address) per 01 착수 task (UI/UX P1-1). 목표 and 범위 share the `goals` tab; the profile
@@ -66,9 +66,8 @@ export const PHASE_ITEMS = {
     { key: 'approval', label: '착수 결과 승인', href: definitionHref(pid, 'APPROVAL'), match: (path) => isPath(path, pid, '/definition/approval') },
   ],
   REQUIREMENTS: (pid) => [
-    { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') && !isClassify(qs) },
-    { key: 'req-classify', label: '요구사항 분류 / 우선순위', href: P(pid, '/requirements?view=classify'), match: (path, qs) => isPath(path, pid, '/requirements') && isClassify(qs) },
-    { key: 'req-trace', label: '요구사항 추적', href: P(pid, '/requirements?view=trace'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') },
+    { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') },
+    { key: 'req-trace', label: '요구사항 연결 현황', href: P(pid, '/requirements?view=trace'), match: (path, qs) => isPath(path, pid, '/requirements') && q(qs, 'view', 'trace') },
   ],
   ANALYSIS_DESIGN: (pid) => [
     { key: 'design', label: '분석·설계', enabled: false },
@@ -133,9 +132,8 @@ export const DOORS = (pid) => [
     T('approval', '착수 승인', definitionHref(pid, 'APPROVAL'), '착수 결과에 대한 고객 승인을 기록합니다.', 'INITIATION'),
   ] },
   { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), tabs: [
-    T('requirements', '목록', P(pid, '/requirements'), '고객이 원하는 기능과 조건을 모으고 확정합니다.', 'REQUIREMENTS'),
-    T('req-classify', '분류·우선순위', P(pid, '/requirements?view=classify'), '요구사항의 유형과 우선순위를 정합니다.', 'REQUIREMENTS'),
-    T('req-trace', '추적', P(pid, '/requirements?view=trace'), '요구사항이 작업과 시험까지 이어졌는지 확인합니다.', 'REQUIREMENTS'),
+    T('requirements', '목록', P(pid, '/requirements'), '고객이 원하는 기능과 조건을 모으고 분류·우선순위를 정해 확정합니다.', 'REQUIREMENTS'),
+    T('req-trace', '연결 현황', P(pid, '/requirements?view=trace'), '요구사항마다 WBS 작업과 테스트가 연결됐는지, 시험 결과는 어떤지 한눈에 봅니다.', 'REQUIREMENTS'),   // batch7 #13: 분류·우선순위 folded into 목록
   ] },
   { key: 'schedule', label: '일정', href: P(pid, '/wbs'), tabs: [
     T('wbs', '작업 목록', P(pid, '/wbs'), '요구사항을 작업으로 나누고 담당자와 기간을 정합니다.', 'ANALYSIS_DESIGN'),
@@ -174,7 +172,7 @@ export function doorOf(pid, path, qs, hint = null) {
   }
   if (sub === '/requirements') {
     if (q(qs, 'view', 'trace')) return q(qs, 'scope', 'IN_SCOPE') ? pick('schedule', 'wbs-trace') : pick('requirements', 'req-trace');
-    return isClassify(qs) ? pick('requirements', 'req-classify') : pick('requirements', 'requirements');
+    return pick('requirements', 'requirements');   // ?view=classify / 미지정 links open the 목록 with the filter chip on (#13)
   }
   if (sub === '/wbs') return q(qs, 'phase', 'DEVELOPMENT') ? pick('schedule', 'dev-status') : q(qs, 'view', 'gantt') ? pick('schedule', 'gantt') : pick('schedule', 'wbs');
   if (sub === '/tests') return pick('tests', q(qs, 'tab', 'coverage') ? 'test-plan' : q(qs, 'tab', 'acceptance') ? 'acceptance' : q(qs, 'last_result', 'FAIL') ? 'defects' : 'tests');

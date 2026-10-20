@@ -5,8 +5,8 @@
  * Credits vs. tokens: tokens and provider cost are internal metering; the user-facing unit is the Credit.
  * FEATURE_CREDIT_COST is the single place feature prices live (development defaults — the Pricing phase changes them here).
  */
-export const FEATURES = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA', 'WBS_PLAN_QUESTIONS', 'WBS_PLAN_FIX'];
-export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI 요구사항 추출', WBS_GENERATION: 'AI WBS 초안', CHANGE_IMPACT: 'AI 영향 분석', PROJECT_QA: 'RELAI에게 물어보기', WBS_PLAN_QUESTIONS: 'AI WBS Planner 질문', WBS_PLAN_FIX: 'AI WBS Planner 보완' };
+export const FEATURES = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA', 'WBS_PLAN_QUESTIONS', 'WBS_PLAN_FIX', 'TEST_GENERATION'];
+export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI 요구사항 추출', WBS_GENERATION: 'AI WBS 초안', CHANGE_IMPACT: 'AI 영향 분석', PROJECT_QA: 'RELAI에게 물어보기', WBS_PLAN_QUESTIONS: 'AI WBS Planner 질문', WBS_PLAN_FIX: 'AI WBS Planner 보완', TEST_GENERATION: '테스트 시나리오 만들기' };
 
 const envInt = (k, def) => { const n = Number(process.env[k]); return Number.isFinite(n) && process.env[k] !== undefined && process.env[k] !== '' ? n : def; };
 
@@ -15,7 +15,7 @@ const envInt = (k, def) => { const n = Number(process.env[k]); return Number.isF
  * shown before every click. AI-credits-only billing §3.2. Overridable per feature with AI_CREDIT_COST_<FEATURE>.
  */
 export function featureCreditCost(feature) {
-  const def = { REQUIREMENT_EXTRACTION: 30, WBS_GENERATION: 50, CHANGE_IMPACT: 20, PROJECT_QA: 10, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0 }[feature];   // Planner: one WBS_GENERATION charge per plan; question / fix calls are free (token cost still recorded)
+  const def = { REQUIREMENT_EXTRACTION: 30, WBS_GENERATION: 50, CHANGE_IMPACT: 20, PROJECT_QA: 10, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0, TEST_GENERATION: 30 }[feature];   // Planner: one WBS_GENERATION charge per plan; question / fix calls are free (token cost still recorded)
   if (def === undefined) throw new Error(`unknown AI feature ${feature}`);
   return Math.max(0, envInt(`AI_CREDIT_COST_${feature}`, def));
 }
@@ -41,7 +41,7 @@ export function estimateProviderCost(model, inputTokens, outputTokens) {
  * so the largest cap costs under ₩10). AI_MAX_OUTPUT_TOKENS_<FEATURE> overrides one feature; AI_MAX_OUTPUT_TOKENS, when set, is a ceiling for all.
  * WBS_GENERATION covers the Planner's full draft (up to 100 items); Q&A answers are short.
  */
-const MAX_OUTPUT_TOKENS = { REQUIREMENT_EXTRACTION: 4_000, WBS_GENERATION: 8_000, CHANGE_IMPACT: 2_500, PROJECT_QA: 1_500, WBS_PLAN_QUESTIONS: 3_000, WBS_PLAN_FIX: 3_000 };
+const MAX_OUTPUT_TOKENS = { REQUIREMENT_EXTRACTION: 4_000, WBS_GENERATION: 8_000, CHANGE_IMPACT: 2_500, PROJECT_QA: 1_500, WBS_PLAN_QUESTIONS: 3_000, WBS_PLAN_FIX: 3_000, TEST_GENERATION: 8_000 };   // TEST_GENERATION: ≤ 20 requirements × ≤ 3 scenarios
 export function maxOutputTokensFor(feature) {
   const per = Math.max(256, envInt(`AI_MAX_OUTPUT_TOKENS_${feature}`, MAX_OUTPUT_TOKENS[feature] ?? 4_000));
   const ceiling = process.env.AI_MAX_OUTPUT_TOKENS ? Math.max(256, envInt('AI_MAX_OUTPUT_TOKENS', per)) : Infinity;

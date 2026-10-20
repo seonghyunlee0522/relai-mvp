@@ -23,10 +23,10 @@ test('requirements bulk: update applies per id, skips unknown/archived/other-pro
   assert.equal(r.json.summary.total, 2); assert.equal(r.json.summary.confirmed, 2);
   const one = (await A.c('GET', `${A.req}/${r1.id}`)).json.requirement;
   assert.equal(one.status, 'CONFIRMED'); assert.equal(one.priority, 'HIGH'); assert.equal(one.owner_user_id, m.uid);
-  assert.deepEqual(one.history.filter((h) => h.action_type === 'UPDATED').map((h) => h.field_name).sort(), ['owner_user_id', 'priority', 'status']);
+  assert.deepEqual(one.history.filter((h) => h.action_type === 'UPDATED').map((h) => h.field_name).sort(), ['owner', 'priority', 'status']);   // batch7 #11: one 'owner' row (display text) for 담당자
   assert.ok(one.history.filter((h) => h.action_type === 'UPDATED').every((h) => h.source_change_display_id === cr.display_id));
   const two = (await A.c('GET', `${A.req}/${r2.id}`)).json.requirement;                       // status already CONFIRMED: only priority + owner changed
-  assert.deepEqual(two.history.filter((h) => h.action_type === 'UPDATED').map((h) => h.field_name).sort(), ['owner_user_id', 'priority']);
+  assert.deepEqual(two.history.filter((h) => h.action_type === 'UPDATED').map((h) => h.field_name).sort(), ['owner', 'priority']);
   assert.equal((await B.c('GET', `${B.req}/${foreign.id}`)).json.requirement.status, 'DRAFT');   // foreign project untouched
 
   // nothing changes → skipped with a reason, not counted

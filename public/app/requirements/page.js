@@ -26,6 +26,7 @@ import { josa } from '../shared/josa.js';
 import { toolMenu, tmItem, aiPrice } from '../shared/toolmenu.js';
 import { bindArrowNav } from '../shared/drawer.js';
 import { reqJiraPaneHtml, bindReqJiraPane, reqJiraCell, bulkCreateReqIssues } from '../shared/jira.js';
+import * as OP from '../shared/owner-picker.js';
 
 export async function requirementsPage(id) {
   const main = $('#main');
@@ -58,17 +59,22 @@ export async function requirementsPage(id) {
   if (params().get('cr')) { try { ctxCr = (await api('GET', wsApi(`/${id}/changes/${params().get('cr')}`))).change; } catch { setParam('cr', ''); } }
   const crBody = () => (ctxCr ? { source_change_request_id: ctxCr.id } : {});
 
-  const load = async () => { const d = await api('GET', rApi(listQuery())); rows = d.requirements; summary = d.summary; reqJira = d.jira || null; listGrid.setRows(rows); traceGrid.setRows(rows); };
+  let owners = { team: [], directory: [], stakeholders_total: 0 };   // #11: 담당자 = member or any 01 관계자 (조직·부서 → 사람)
+  let trace = null;   // #13 연결 현황: { rows: { [id]: { wbs, tests, pass, fail, blocked, not_run, last } }, coverage } — fetched on the 연결 현황 tab only
+  const load = async () => { const q = listQuery(); const d = await api('GET', rApi(rview() === 'trace' ? `${q}${q ? '&' : '?'}trace=1` : q)); rows = d.requirements; summary = d.summary; reqJira = d.jira || null; if (d.owners) owners = d.owners; trace = d.trace || null; listGrid.setRows(rows); traceGrid.setRows(rows); };
   const loadSel = async (rid) => { if (!sel || sel.id !== rid) reqJiraDetail = null; sel = rid ? (await api('GET', rApi(`/${rid}`))).requirement : null; setParam('sel', rid); };
   const jiraCell = (r) => (reqJira ? reqJiraCell(reqJira.by[r.id], { done: reqJira.auto_mark && Boolean(r.jira_done_at) }) || dim() : dim());
   const jiraSort = (r) => { const j = reqJira && reqJira.by[r.id]; return j ? j.rate ?? -1 : -2; };
 
   const opt = (map, cur) => Object.entries(map).map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
-  const ownerOpts = (cur) => html`<option value="">미지정</option>` + members.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
-  const ownerMap = Object.fromEntries(members.map((m) => [m.id, m.name]));
-  const ownerPairs = [['', '미지정'], ...members.map((m) => [m.id, m.name])];
+  const ALL = { all: true };   // 요구사항 담당자: every named 01 관계자 (고객사 현업 included), not only 당사·협력사
+  const ownerPick = (cur, attrs, disabled = false) => OP.ownerPicker(members, owners, cur, { attrs, disabled, all: true });
+  const ownerKey = OP.ownerKey;
+  /** Filter map: member ids (old ?owner=<user id> links keep working) + 's:<관계자 id>' with the picker's labels. */
+  const ownerMap = () => ({ ...Object.fromEntries(members.map((m) => [m.id, m.name])), ...Object.fromEntries((owners.directory || []).filter((t) => !t.member).map((t) => [`s:${t.id}`, OP.ownerText(members, owners, `s:${t.id}`, ALL)])) });
+  const ownerCell = (r) => (r.owner_label ? html`<span class="cellwrap"><i class="av">${[...r.owner_name || r.owner_label][0]}</i>${r.owner_label}</span>${raw(OP.noAcct(r))}` : dim());
   const LINK_F = { linked: 'WBS 연결됨', unlinked: 'WBS 미연결' };
-  const FILTER_DEFS = [{ key: 'q', label: '검색' }, { key: 'status', label: '상태', map: REQ_STATUS }, { key: 'scope', label: '범위', map: REQ_SCOPE }, { key: 'owner', label: '담당자', map: { ...ownerMap, none: '미지정' } },
+  const FILTER_DEFS = [{ key: 'q', label: '검색' }, { key: 'status', label: '상태', map: REQ_STATUS }, { key: 'scope', label: '범위', map: REQ_SCOPE }, { key: 'owner', label: '담당자', get map() { return { ...ownerMap(), none: '미지정' }; } },
     { key: 'type', label: '유형', map: REQ_TYPE }, { key: 'priority', label: '우선순위', map: REQ_PRIORITY }, { key: 'link', label: '연결 상태', map: LINK_F }, { key: 'archived', label: '보관 포함', format: () => '예' }];
   const dim = (t = '—') => html`<span class="dim">${t}</span>`;
   const scopeOut = () => ((g.definition && g.definition.scope_out) || []);
@@ -97,8 +103,8 @@ export async function requirementsPage(id) {
       { key: 'scope', label: '범위', width: 88, hidden: desk && baselineApproved, sort: (r) => REQ_SCOPE[r.scope], edit: { type: 'select', field: 'scope', options: REQ_SCOPE }, render: (r) => subtle(REQ_SCOPE[r.scope]) },
       { key: 'priority', label: '우선순위', width: 84, sort: (r) => ['HIGH', 'MEDIUM', 'LOW', 'UNSPECIFIED'].indexOf(r.priority), edit: { type: 'select', field: 'priority', options: REQ_PRIORITY }, render: (r) => prText(r.priority === 'UNSPECIFIED' ? '' : r.priority, REQ_PRIORITY) },
       { key: 'type', label: '유형', width: 96, card: false, hidden: desk, sort: (r) => REQ_TYPE[r.type], edit: { type: 'select', field: 'type', options: REQ_TYPE }, render: (r) => REQ_TYPE[r.type] },
-      { key: 'owner', label: '담당자', width: 112, card: false, sort: (r) => r.owner_name || '', edit: { type: 'select', field: 'owner_user_id', options: ownerPairs, value: (r) => r.owner_user_id || '', prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : '') },
-        render: (r) => (r.owner_name ? html`<span class="cellwrap"><i class="av">${[...r.owner_name][0]}</i>${r.owner_name}</span>` : dim()) },
+      { key: 'owner', label: '담당자', width: 140, card: false, sort: (r) => r.owner_label || '', edit: { type: 'select', field: 'owner', options: (r) => OP.ownerChoices(members, owners, ownerKey(r), true, { all: true, orgLabel: true }), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: OP.noAcct },
+        render: ownerCell },
       { key: 'wbs', label: 'WBS', width: 64, align: 'right', card: false, hidden: desk, sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? String(r.linked_wbs_count) : (r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' && !r.archived_at && wbsPhase() ? '<span class="dim is-unlinked" title="WBS 미연결">—</span>' : dim())) },
       { key: 'ac', label: '완료 조건', width: 72, card: false, hidden: desk, align: 'right', sort: (r) => r.criteria_count, render: (r) => (r.criteria_count ? String(r.criteria_count) : dim()) },
       { key: 'requester_name', label: '요청자', width: 110, hidden: true, sort: (r) => r.requester_name || '', render: (r) => r.requester_name || dim() },
@@ -107,19 +113,45 @@ export async function requirementsPage(id) {
       { key: 'jira', label: '지라', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v43: column option (⋯ → 보기)
     ],
   });
+  /* #13 연결 현황: a matrix, not a second 목록 — WBS 작업 · 테스트 · 최근 결과 · 지라 per requirement, 연결 안 된 것 먼저 */
+  const tr = (r) => (trace && trace.rows[r.id]) || { wbs: r.linked_wbs_count || 0, tests: 0, last: null };
+  const target = (r) => r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' && !r.archived_at;   // 없음 is a gap only for in-scope work
+  const none = (r) => (target(r) ? '<span class="chip chip--fail" data-tr-none>없음</span>' : dim());
+  const gapRank = (r) => { const t = tr(r); return (t.wbs ? 1 : 0) + (t.tests ? 1 : 0) + (t.last === 'PASS' ? 1 : 0) + (target(r) ? 0 : 10); };
   const traceGrid = createGrid({
-    key: 'req.trace', rowId: (r) => r.id, select: false, defaultSort: { key: 'display_id', dir: 'asc' },
+    key: 'req.trace.b7', rowId: (r) => r.id, select: false, defaultSort: { key: 'gap', dir: 'asc' },
     rowClass: (r) => (r.archived_at ? 'is-arch' : ''), activeId: () => (sel ? sel.id : null), onOpen: (rid) => openDetail(rid), empty: () => emptyBlock(),
     columns: [
       { key: 'display_id', label: 'ID', width: 84, sticky: true, fixed: true, sort: (r) => r.display_id, cls: 'mono', render: (r) => html`${r.display_id}` },
-      { key: 'title', label: '제목', width: 420, min: 160, sticky: true, fixed: true, sort: (r) => r.title, cls: 'ttl', render: (r) => html`<span>${r.title}</span>${raw(r.archived_at ? '<small>보관됨</small>' : '')}` },
-      { key: 'status', label: '상태', width: 100, sort: (r) => REQ_STATUS[r.status], render: (r) => statusChip(REQ_STATUS, REQ_STATUS_CHIP, r.status) },
-      { key: 'scope', label: '범위', width: 100, sort: (r) => REQ_SCOPE[r.scope], render: (r) => subtle(REQ_SCOPE[r.scope]) },
-      { key: 'wbs', label: '연결 WBS', width: 90, align: 'right', sort: (r) => r.linked_wbs_count, render: (r) => String(r.linked_wbs_count) },
-      { key: 'link', label: '연결 상태', width: 110, sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? '<span class="chip chip--done">연결됨</span>' : r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' ? '<span class="chip chip--hold">미연결</span>' : '<span class="chip chip--muted">미연결</span>') },
-      { key: 'jira', label: '지라', width: 160, sort: jiraSort, render: jiraCell },   // v43: linked Jira issues (요구사항 › 추적)
+      { key: 'title', label: '제목', width: 300, min: 160, sticky: true, fixed: true, sort: (r) => r.title, cls: 'ttl', render: (r) => html`<span>${r.title}</span>${raw(r.archived_at ? '<small>보관됨</small>' : '')}` },
+      { key: 'status', label: '상태', width: 96, sort: (r) => REQ_STATUS[r.status], render: (r) => statusChip(REQ_STATUS, REQ_STATUS_CHIP, r.status) },
+      { key: 'gap', label: '연결', width: 64, hidden: true, sort: gapRank, render: (r) => String(gapRank(r)) },   // sort key only: 연결 안 된 것 먼저
+      { key: 'wbs', label: 'WBS 작업', width: 96, align: 'right', sort: (r) => tr(r).wbs, render: (r) => (tr(r).wbs ? html`<a class="link" href="/app/projects/${p.id}/wbs?requirement=${r.id}" data-link data-tr-wbs-n><b>${tr(r).wbs}</b>건</a>` : none(r)) },
+      { key: 'tests', label: '테스트', width: 96, align: 'right', sort: (r) => tr(r).tests, render: (r) => (tr(r).tests ? html`<a class="link" href="/app/projects/${p.id}/tests?requirement=${r.id}" data-link data-tr-test-n><b>${tr(r).tests}</b>건</a>` : r.test_exclusion_reason ? html`<span class="dim" title="${r.test_exclusion_reason}">테스트 제외</span>` : none(r)) },
+      { key: 'last', label: '최근 결과', width: 120, sort: (r) => ['FAIL', 'BLOCKED', 'NOT_RUN', 'PASS'].indexOf(tr(r).last), render: (r) => { const t = tr(r); return t.last ? html`${raw(resBadge(t.last))}${raw(t.tests > 1 ? html`<small class="dim"> 통과 ${t.pass}/${t.tests}</small>` : '')}` : dim(); } },
+      { key: 'jira', label: '지라', width: 150, sort: jiraSort, render: jiraCell },   // v43: linked Jira issues
+      { key: 'go', label: '바로가기', width: 190, sortable: false, render: (r) => (ro(r) ? '' : html`<span class="covacts">${raw(target(r) && !tr(r).wbs ? html`<button type="button" class="link linkbtn" data-tr-link="${r.id}">WBS 연결</button>` : '')}${raw(target(r) && !tr(r).tests && !r.test_exclusion_reason ? html`<a class="link" href="/app/projects/${p.id}/tests?new=1&requirement=${r.id}" data-link data-tr-test="${r.id}">테스트 만들기</a>` : '')}</span>`) },
     ],
   });
+  /** 커버리지 3칸 (범위 내 n건 중 WBS 연결 · 테스트 연결 · 통과). */
+  const coverageBar = () => {
+    const c = trace ? trace.coverage : { in_scope: 0, wbs: 0, tests: 0, passed: 0 }; const n = c.in_scope;
+    const pct = (a) => (n ? `${Math.round((a / n) * 100)}%` : '대상 없음');
+    const tone = (a) => (!n ? 'muted' : a === n ? 'ok' : a === 0 ? 'crit' : 'warn');
+    return html`<div data-covbar>${raw(traceStrip([
+      { label: 'WBS 연결', value: `${a(c.wbs)} / ${n}`, sub: pct(c.wbs), tone: tone(c.wbs) },
+      { label: '테스트 연결', value: `${a(c.tests)} / ${n}`, sub: pct(c.tests), tone: tone(c.tests) },
+      { label: '테스트 통과', value: `${a(c.passed)} / ${n}`, sub: pct(c.passed), tone: tone(c.passed) },
+    ], { title: `연결 현황 · 범위 내 요구사항 ${n}건` }))}</div>`;
+  };
+  const a = (x) => Number(x || 0).toLocaleString('ko-KR');
+  /** #13 미분류 · 우선순위 미지정 chips (the old 분류·우선순위 tab). On = the ?type / ?priority=UNSPECIFIED filter. */
+  const classifyChips = () => {
+    const q = params(); const ty = Number(summary.type_unspecified) || 0; const pr = Number(summary.priority_unspecified) || 0;
+    const onT = q.get('type') === 'UNSPECIFIED'; const onP = q.get('priority') === 'UNSPECIFIED';
+    if (!ty && !pr && !onT && !onP) return '';
+    return html`<div class="kstrip" data-cls-chips role="group" aria-label="분류 필터"><button type="button" class="kchip ${onT ? 'is-on' : ''} ${ty ? 'is-warn' : ''}" data-cls="type" aria-pressed="${onT}"><b>${ty}</b>미분류</button><button type="button" class="kchip ${onP ? 'is-on' : ''} ${pr ? 'is-warn' : ''}" data-cls="priority" aria-pressed="${onP}"><b>${pr}</b>우선순위 미지정</button></div>`;
+  };
   const curGrid = () => (rview() === 'trace' ? traceGrid : listGrid);
 
   const emptyBlock = () => {
@@ -135,7 +167,7 @@ export async function requirementsPage(id) {
   const bulk = { update() {}, destroy() {} };
   const bulkFields = [
     { key: 'status', label: '상태', options: REQ_STATUS }, { key: 'scope', label: '범위', options: REQ_SCOPE }, { key: 'priority', label: '우선순위', options: REQ_PRIORITY },
-    { key: 'type', label: '유형', options: REQ_TYPE }, { key: 'owner_user_id', label: '담당자', options: [[NONE, '미지정'], ...members.map((m) => [m.id, m.name])] },
+    { key: 'type', label: '유형', options: REQ_TYPE }, { key: 'owner', label: '담당자', get options() { return [[NONE, '미지정'], ...OP.ownerGroups(members, owners, '', false, ALL).flatMap((x) => x.options)]; }, render: () => OP.ownerPicker(members, owners, '', { attrs: 'data-bv', all: true, bulk: true, search: false }) },   // #11: same 조직·부서 → 사람 picker
   ];
   const reportBulk = (r, verb) => {
     const sk = r.skipped.length;
@@ -194,7 +226,7 @@ export async function requirementsPage(id) {
     const curSt = (q.get('status') || '').includes(',') ? 'MULTI' : q.get('status') || '';
     const f = (key, label, inner) => html`<label class="tmenu__f"><span>${label}</span>${raw(inner)}</label>`;
     const menu = toolMenu([
-      ['필터 더보기', html`${raw(f('scope', '범위', filterSelect('scope', '범위', REQ_SCOPE, q.get('scope'))))}${raw(f('owner', '담당자', filterSelect('owner', '담당자', ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`)))}
+      ['필터 더보기', html`${raw(f('scope', '범위', filterSelect('scope', '범위', REQ_SCOPE, q.get('scope'))))}${raw(f('owner', '담당자', filterSelect('owner', '담당자', ownerMap(), q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`)))}
         ${raw(f('type', '유형', filterSelect('type', '유형', REQ_TYPE, q.get('type'))))}${raw(f('priority', '우선순위', filterSelect('priority', '우선순위', REQ_PRIORITY, q.get('priority'))))}${raw(f('link', '연결 상태', filterSelect('link', '연결 상태', LINK_F, q.get('link'))))}
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         ${raw(tmItem(`범위 미결정 ${summary.scope_undecided}건 보기`, 'data-kf="scope=UNDECIDED"'))}${raw(wbsPhase() ? tmItem(`WBS 미연결 (범위 내) ${summary.in_scope_unlinked}건 보기`, 'data-kf="scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked"') : '')}`],
@@ -209,17 +241,17 @@ export async function requirementsPage(id) {
     // K18: on phones 상태 · 범위 move into the 필터 sheet (search + 필터 + one primary stay in the toolbar)
     const phone = isPhone(); const quick = html`${raw(filterSelect('status', '상태', REQ_STATUS, q.get('status')))}${raw(filterSelect('scope', '범위', REQ_SCOPE, q.get('scope')))}`;
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : isClassify(q) ? 'req-classify' : 'requirements'; })(), title: '요구사항' }))}
+      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : 'requirements'; })(), title: '요구사항' }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived && wbsPhase() ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
       ${raw(summary.total && wbsPhase() ? coachMark('REQ_TRACE_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 변경 이력에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">변경 요청 기준 해제</button></div>` : '')}
       ${raw(desk ? deskTool(q) : '')}
       ${raw(desk ? '' : html`<div class="rtool">
-        <div class="seg" role="tablist"><button class="${rview() === 'list' ? 'is-on' : ''}" data-rview="list" role="tab">요구사항 목록</button><button class="${rview() === 'trace' ? 'is-on' : ''}" data-rview="trace" role="tab">연결 추적</button></div>
+        <div class="seg" role="tablist"><button class="${rview() === 'list' ? 'is-on' : ''}" data-rview="list" role="tab">요구사항 목록</button><button class="${rview() === 'trace' ? 'is-on' : ''}" data-rview="trace" role="tab">연결 현황</button></div>
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
         ${raw(phone ? '' : quick)}
-        ${raw(moreFilters(html`${raw(phone ? quick : '')}${raw(filterSelect('owner', '담당자', ownerMap, q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
+        ${raw(moreFilters(html`${raw(phone ? quick : '')}${raw(filterSelect('owner', '담당자', ownerMap(), q.get('owner'), html`<option value="none" ${q.get('owner') === 'none' ? 'selected' : ''}>미지정</option>`))}
           ${raw(filterSelect('type', '유형', REQ_TYPE, q.get('type')))}
           ${raw(filterSelect('priority', '우선순위', REQ_PRIORITY, q.get('priority')))}
           ${raw(filterSelect('link', '연결 상태', LINK_F, q.get('link')))}
@@ -235,6 +267,7 @@ export async function requirementsPage(id) {
       <div class="rrow2"><div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>
       ${raw(archived || rview() === 'trace' ? '' : html`<form class="qa" id="qa"><input class="input input--sm" id="qa-t" maxlength="200" placeholder="제목 입력 후 Enter — 요구사항 연속 추가" title="상세 항목은 목록에서 바로 수정하거나 행을 클릭해 입력하세요" autocomplete="off"></form>`)}</div>`)}
       ${raw(isPhone() ? '<p class="pcdl" data-phone-reqdoc>요구사항 정의서 <button type="button" class="link linkbtn" data-reqdoc="pdf" data-phone-ok>PDF</button> · <button type="button" class="link linkbtn" data-reqdoc="docx" data-phone-ok>Word</button></p>' : '')}
+      ${raw(rview() === 'trace' ? coverageBar() : classifyChips())}
       ${raw(appliedFilters(q, FILTER_DEFS))}
       ${raw(q.get('scope') === 'UNDECIDED' && scopeOut().length ? html`<p class="req-excl" data-scope-excl>착수 때 정한 제외 환경·조건: <b>${scopeOut().join(', ')}</b>. 이 조건에만 해당하는 요구사항은 '범위 외'로 두세요.</p>` : '')}
       <div id="bulkslot"></div>
@@ -254,7 +287,9 @@ export async function requirementsPage(id) {
     const qi = $('#q'); let qt;
     if (qi) qi.oninput = () => { clearTimeout(qt); qt = setTimeout(async () => { setParam('q', qi.value.trim()); await load(); keepUi(draw); }, 300); };
     main.querySelectorAll('[data-f]').forEach((sl) => sl.onchange = async () => { setParam(sl.dataset.f, sl.value); await load(); keepUi(draw); });
-    main.querySelectorAll('[data-rview]').forEach((b) => b.onclick = () => { setParam('view', b.dataset.rview === 'trace' ? 'trace' : ''); draw(); });
+    main.querySelectorAll('[data-rview]').forEach((b) => b.onclick = async () => { setParam('view', b.dataset.rview === 'trace' ? 'trace' : ''); await load(); draw(); });
+    main.querySelectorAll('[data-cls]').forEach((b) => b.onclick = async () => { const k = b.dataset.cls; setParam(k, params().get(k) === 'UNSPECIFIED' ? '' : 'UNSPECIFIED'); if (params().get('view') === 'classify') setParam('view', ''); await load(); draw(); });
+    main.querySelectorAll('[data-tr-link]').forEach((b) => b.onclick = async () => { await openDetail(b.dataset.trLink); dtab = 'links'; drawDetail(); });
     main.querySelectorAll('[data-kf]').forEach((b) => b.onclick = async () => { for (const k of filterKeys) setParam(k, ''); setParam('q', ''); for (const kv of (b.dataset.kf ? b.dataset.kf.split('&') : [])) { const [k, v] = kv.split('='); setParam(k, v); } await load(); draw(); });
     const ar = $('#arch'); if (ar) ar.onchange = async () => { setParam('archived', ar.checked ? '1' : ''); await load(); draw(); };
     bindMoreFilters(main);
@@ -317,8 +352,7 @@ export async function requirementsPage(id) {
             <div class="field"><label>우선순위</label><select class="select" name="priority">${raw(opt(REQ_PRIORITY, 'UNSPECIFIED'))}</select><small class="hint req-phint">${PRIORITY_HINT}</small></div>
             <div class="field"><label>범위</label><select class="select" name="scope">${raw(opt(REQ_SCOPE, 'UNDECIDED'))}</select></div>
             <div class="field"><label>상태</label><select class="select" name="status">${raw(opt(REQ_STATUS, 'DRAFT'))}</select></div>
-            <div class="field"><label>담당자</label><select class="select" name="owner_user_id">${raw(ownerOpts(''))}</select><div class="err" data-for="owner_user_id"></div></div>
-            <div class="field"></div>
+            <div class="field" style="grid-column:1/-1"><label>담당자</label>${raw(ownerPick('', 'name="owner"'))}${raw(OP.stakeholderHint(owners, p.id, archived))}<div class="err" data-for="owner"></div><div class="err" data-for="owner_user_id"></div></div>
             <div class="field"><label>요청자</label><input class="input" name="requester_name" maxlength="100" placeholder="예: 김OO 책임"></div>
             <div class="field"><label>요청자 소속</label><input class="input" name="requester_organization" maxlength="100" placeholder="예: A사 IT팀"></div>
           </div>
@@ -443,7 +477,7 @@ export async function requirementsPage(id) {
       ${raw(typeTop(r) ? typeField(r, readOnly) : '')}
       ${raw(fieldRow(html`범위`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''} aria-label="범위">${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
       ${raw(fieldRow('우선순위', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''} aria-label="우선순위">${raw(opt(REQ_PRIORITY, r.priority))}</select><small class="hint req-phint">${PRIORITY_HINT}</small>`))}
-      ${raw(fieldRow('담당자', html`<select class="select select--sm" data-field="owner_user_id" ${readOnly ? 'disabled' : ''} aria-label="담당자">${raw(ownerOpts(r.owner_user_id || ''))}</select>`))}
+      ${raw(fieldRow('담당자', html`${raw(ownerPick(ownerKey(r), 'data-field="owner"', readOnly))}${raw(OP.noAcct(r))}${raw(OP.stakeholderHint(owners, p.id, readOnly))}`))}
     </div>
     <details class="dmore" data-dmore ${moreOpen ? 'open' : ''}><summary>세부 정보 더보기</summary><div class="dgrid">
       ${raw(fieldRow('상태', html`<select class="select select--sm" data-field="status" ${readOnly ? 'disabled' : ''} aria-label="상태">${raw(opt(REQ_STATUS, r.status))}</select>`))}
@@ -479,7 +513,7 @@ export async function requirementsPage(id) {
             ${raw(fieldRow(html`범위`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
             ${raw(fieldRow('우선순위', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_PRIORITY, r.priority))}</select><small class="hint req-phint">${PRIORITY_HINT}</small>`))}
             ${raw(fieldRow(html`유형`, html`<select class="select select--sm" data-field="type" ${readOnly ? 'disabled' : ''}>${raw(opt(REQ_TYPE, r.type))}</select>`))}
-            ${raw(fieldRow('담당자', html`<select class="select select--sm" data-field="owner_user_id" ${readOnly ? 'disabled' : ''}>${raw(ownerOpts(r.owner_user_id || ''))}</select>`))}
+            ${raw(fieldRow('담당자', html`${raw(ownerPick(ownerKey(r), 'data-field="owner"', readOnly))}${raw(OP.noAcct(r))}`))}
             ${raw(fieldRow('요청자', html`<input class="input input--sm" data-field="requester_name" value="${r.requester_name}" maxlength="100" placeholder="이름" ${readOnly ? 'disabled' : ''}>`))}
             ${raw(fieldRow('요청자 소속', html`<input class="input input--sm" data-field="requester_organization" value="${r.requester_organization}" maxlength="100" placeholder="소속" ${readOnly ? 'disabled' : ''}>`))}
             <div class="dsave" id="dsave"></div>
@@ -534,7 +568,7 @@ export async function requirementsPage(id) {
   const lt = (v) => String(v || '').replace(/\b(IMPLEMENTS|SUPPORTS|VALIDATES)\b/g, (m) => LINK_TYPE[m]);
   const histText = (h, r) => {
     const val = (f, v) => { if (v == null) return '-'; if (f === 'type') return REQ_TYPE[v] || v; if (f === 'priority') return REQ_PRIORITY[v] || v; if (f === 'scope') return REQ_SCOPE[v] || v; if (f === 'status') return REQ_STATUS[v] || v;
-      if (f === 'owner_user_id') return (members.find((m) => m.id === v) || {}).name || '미지정'; return v; };
+      if (f === 'owner_user_id') return (members.find((m) => m.id === v) || {}).name || '미지정'; return v; };   // 'owner' (#11) is stored as display text
     switch (h.action_type) {
       case 'CREATED': return html`<b>${r.display_id}</b> 생성`;
       case 'ARCHIVED': return html`보관 처리`;
@@ -552,7 +586,7 @@ export async function requirementsPage(id) {
       case 'LINK_TYPE_CHANGED': return html`연결 유형 변경 <q>${lt(h.old_value)}</q> → <q>${lt(h.new_value)}</q>`;
       default: {
         const f = h.field_name; const long = f === 'title' || f === 'description';
-        return html`<b>${REQ_FIELD_LABEL[f] || f}</b> ${raw(long ? (f === 'description' ? '변경' : html`<q>${h.old_value}</q> → <q>${h.new_value}</q>`) : html`${val(f, h.old_value)} → ${val(f, h.new_value)}`)}${raw(h.source_change_request_id ? html`<small>변경 출처 <a href="/app/projects/${p.id}/changes?sel=${h.source_change_request_id}" data-link>${h.source_change_display_id || 'CR'} ${h.source_change_title || ''}</a>${h.source_change_archived_at ? ' (보관됨)' : ''}</small>` : '')}`;
+        return html`<b>${REQ_FIELD_LABEL[f] || (f === 'owner' ? '담당자' : f)}</b> ${raw(long ? (f === 'description' ? '변경' : html`<q>${h.old_value}</q> → <q>${h.new_value}</q>`) : html`${val(f, h.old_value)} → ${val(f, h.new_value)}`)}${raw(h.source_change_request_id ? html`<small>변경 출처 <a href="/app/projects/${p.id}/changes?sel=${h.source_change_request_id}" data-link>${h.source_change_display_id || 'CR'} ${h.source_change_title || ''}</a>${h.source_change_archived_at ? ' (보관됨)' : ''}</small>` : '')}`;
       }
     }
   };
@@ -641,6 +675,7 @@ export async function requirementsPage(id) {
   };
 
   if (params().get('approval') === '1' && !apvOpen) setParam('approval', '');
+  if (params().get('view') === 'classify' && Number(summary && summary.type_unspecified) > 0) { setParam('view', ''); setParam('type', 'UNSPECIFIED'); }   // #13: old 분류·우선순위 links → 목록 + 미분류 chip on
   await load();
   const initSel = params().get('sel');
   if (initSel && params().get('tab') === 'jira') { dtab = 'jira'; setParam('tab', ''); }

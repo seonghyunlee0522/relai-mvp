@@ -55,7 +55,7 @@ test('update: tracked fields logged only when changed; requester; owner must be 
   const r = (await A.c('POST', A.url, { title: 'SSO 로그인' })).json.requirement;
   let u = await A.c('PATCH', `${A.url}/${r.id}`, { type: 'FUNCTIONAL', priority: 'HIGH', scope: 'IN_SCOPE', status: 'REVIEWING', description: 'Entra ID', requester_name: '김OO 책임', requester_organization: 'A사 IT팀', owner_user_id: A.uid });
   assert.equal(u.status, 200);
-  assert.deepEqual(u.json.changed.sort(), ['description', 'owner_user_id', 'priority', 'requester', 'scope', 'status', 'type']);
+  assert.deepEqual(u.json.changed.sort(), ['description', 'owner', 'priority', 'requester', 'scope', 'status', 'type']);   // batch7 #11: 담당자 = 'owner'
   assert.equal(u.json.requirement.owner_name, '홍길동');
   const h = u.json.requirement.history.map((x) => x.action_type + ':' + (x.field_name || ''));
   assert.equal(h.filter((x) => x.startsWith('UPDATED')).length, 7);

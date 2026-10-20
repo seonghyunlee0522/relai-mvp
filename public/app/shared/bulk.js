@@ -1,5 +1,5 @@
 /* Bulk action bar — appears while rows are selected. Explicit "field + value + 적용" so a stray click cannot rewrite hundreds of rows.
- * fields: [{ key, label, type?: 'select'|'date'|'number', options?: [[value,label]…]|map, min?, max?, hint? }] */
+ * fields: [{ key, label, type?: 'select'|'date'|'number', options?: [[value,label]…]|map, min?, max?, hint?, render?: () => html with one [data-bv] }] */
 import { api } from '../core/api.js';
 import { html, raw } from '../core/dom.js';
 
@@ -7,6 +7,7 @@ const pairs = (o) => (Array.isArray(o) ? o : Object.entries(o || {}));
 
 const valueControl = (f) => {
   if (!f) return '';
+  if (f.render) return f.render();   // custom control containing one [data-bv] (요구사항 담당자: 조직·부서 → 사람 picker, batch7 #11)
   if (f.type === 'date') return html`<input class="input input--sm" type="date" data-bv aria-label="${f.label}">`;
   if (f.type === 'number') return html`<input class="input input--sm" type="number" data-bv min="${f.min ?? 0}" max="${f.max ?? 100}" step="1" placeholder="${f.hint || ''}" aria-label="${f.label}" style="width:110px">`;
   return html`<select class="select select--sm" data-bv aria-label="${f.label}"><option value="" disabled selected>값 선택</option>${raw(pairs(f.options).map(([v, l]) => html`<option value="${v}">${l}</option>`).join(''))}</select>`;

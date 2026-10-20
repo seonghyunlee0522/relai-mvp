@@ -710,6 +710,15 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     }
     return true;
   };
+  /** #11: a requirement owner is a workspace member or a named 01 관계자 of this project (계정 없음). */
+  const reqOwnerOk = async (req, res, project, input) => {
+    if (!(await ownerOk(req, res, input.owner_user_id))) return false;
+    if (input.owner_stakeholder_id && !(await R.isOwnerStakeholder(db, project.id, input.owner_stakeholder_id))) {
+      fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { owner: '담당자는 워크스페이스 멤버 또는 01 관계자에 등록된 사람만 지정할 수 있습니다.' } });
+      return false;
+    }
+    return true;
+  };
   const loadReq = async (req, res, project) => {
     const r = (await R.getRequirement(db, project, req.params.rid));
     if (!r) fail(res, 404, 'not_found', '요구사항을 찾을 수 없습니다.');
@@ -742,7 +751,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     const fmt = req.query.format === 'docx' ? 'docx' : req.query.format === 'pdf' || req.query.format === undefined ? 'pdf' : null;
     if (!fmt) return fail(res, 400, 'validation_error', '형식은 pdf 또는 docx만 지원합니다.', { fields: { format: 'pdf 또는 docx' } });
     const ws = await db.get('SELECT name FROM workspaces WHERE id = ?', [project.workspace_id]);
-    const reqs = await db.all(`SELECT id, display_id, sequence_number, title, type, priority, scope, archived_at FROM requirements WHERE project_id = ? AND archived_at IS NULL ORDER BY sequence_number`, [project.id]);
+    const reqs = await R.decorateOwners(db, project.id, await db.all(`SELECT r.id, r.display_id, r.sequence_number, r.title, r.type, r.priority, r.scope, r.archived_at, r.owner_user_id, r.owner_stakeholder_id, u.name AS owner_name
+      FROM requirements r LEFT JOIN users u ON u.id = r.owner_user_id WHERE r.project_id = ? AND r.archived_at IS NULL ORDER BY r.sequence_number`, [project.id]));   // #11: 담당자 column
     const crit = reqs.length ? await db.all('SELECT requirement_id, content FROM requirement_criteria WHERE requirement_id = ANY(?) ORDER BY sequence', [reqs.map((r) => r.id)]) : [];
     for (const r of reqs) r.criteria = crit.filter((c) => c.requirement_id === r.id);
     const today = D.localToday();
@@ -756,14 +766,15 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.get(rbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
-    res.json({ requirements: (await R.listRequirements(db, project, req.query)), summary: (await R.requirementStats(db, project.id)), jira: (await requirementJiraMap(db, project.id)) });   // v43: null unless mapped to Jira
+    res.json({ requirements: (await R.listRequirements(db, project, req.query)), summary: (await R.requirementStats(db, project.id)), jira: (await requirementJiraMap(db, project.id)),   // v43: null unless mapped to Jira
+      owners: (await SK.ownerOptions(db, project)), ...(req.query.trace === '1' ? { trace: (await T.traceMatrix(db, project.id)) } : {}) });   // #11 담당자 picker (부서 → 사람) · #13 연결 현황 매트릭스
   }));
 
   app.post(rbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project || !mutable(res, project)) return;
     const input = R.parseRequirement(req.body);
-    if (!(await ownerOk(req, res, input.owner_user_id))) return;
+    if (!(await reqOwnerOk(req, res, project, input))) return;
     const crit = Array.isArray(req.body?.criteria) ? req.body.criteria.map((c) => R.parseCriterion(typeof c === 'string' ? { content: c } : c)) : [];
     const id = (await tx(db, async (db) => { const rid = (await R.createRequirement(db, project, { ...input, criteria: crit }, req.user.id));
       if (Number((await db.get('SELECT COUNT(*) n FROM requirements WHERE project_id = ?', [project.id])).n) === 1) await recordFirst(db, { userId: req.user.id, workspaceId: req.params.wid, projectId: project.id, kind: 'requirement' });
@@ -795,7 +806,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (!r) return;
     if (r.archived_at) return fail(res, 409, 'archived', '보관된 요구사항은 수정할 수 없습니다.');
     const input = R.parseRequirement(req.body, { partial: true });
-    if (!(await ownerOk(req, res, input.owner_user_id))) return;
+    if (!(await reqOwnerOk(req, res, project, input))) return;
     const source = (await R.resolveSourceChange(db, project, req.body?.source_change_request_id));   // CR → REQ history traceability (optional)
     const changed = (await tx(db, async (db) => (await R.updateRequirement(db, project, r, input, req.user.id, { sourceChangeRequestId: source ? source.id : null }))));
     res.json({ requirement: (await R.getRequirement(db, project, r.id)), changed, summary: (await R.requirementStats(db, project.id)) });
@@ -1286,7 +1297,15 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     // Phase 5 US-4: 수행자 = a workspace member or a stakeholder of this project (팀원 / 고객사)
     if (input.performer_user_id && !(await R.isWorkspaceMember(db, req.params.wid, input.performer_user_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 워크스페이스 멤버 또는 01 관계자만 지정할 수 있습니다.' } });
     if (input.performer_stakeholder_id && !(await Q.isProjectStakeholder(db, ctx.project.id, input.performer_stakeholder_id))) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { performer: '수행자는 현재 워크스페이스 멤버 또는 01 관계자만 지정할 수 있습니다.' } });
-    const e = (await tx(db, async (db) => (await Q.addExecution(db, ctx.t, input, req.user.id))));
+    const e = (await tx(db, async (db) => {
+      const out = await Q.addExecution(db, ctx.t, input, req.user.id);
+      if (input.raise_issue) {   // batch7 #20: 실패 + '이슈로 등록' → the issue is created in the same save (same rules as …/executions/:eid/issue)
+        const ex = await db.get('SELECT * FROM test_executions WHERE id = ?', [out.id]);
+        const r = await Q.raiseIssueFromExecution(db, ctx.project, ctx.t, ex, req.user.id);
+        if (r.ok) out.issue_display_id = (await db.get('SELECT display_id FROM issues WHERE id = ?', [r.issueId])).display_id;
+      }
+      return out;
+    }));
     res.status(201).json({ ...(await tResp(ctx.project, ctx.t.id)), execution: e });
   }));
   app.post(`${tbase}/:tid/executions/:eid/issue`, guard, wrap(async (req, res) => {

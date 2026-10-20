@@ -70,7 +70,7 @@ async function buy(env, A, pack = 'P10', { amount = null, tid = null, eventId } 
 }
 
 test('prices (AC3 table), packs (VAT included split) and refund maths are exact', () => {
-  assert.deepEqual(featureCreditCosts(), { REQUIREMENT_EXTRACTION: 30, WBS_GENERATION: 50, CHANGE_IMPACT: 20, PROJECT_QA: 10, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0 });
+  assert.deepEqual(featureCreditCosts(), { REQUIREMENT_EXTRACTION: 30, WBS_GENERATION: 50, CHANGE_IMPACT: 20, PROJECT_QA: 10, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0, TEST_GENERATION: 30 });   // batch7 B8
   assert.deepEqual(CREDIT_PACKS.map((p) => [p.amount, p.credits]), [[10000, 1000], [30000, 3000], [100000, 10000]]);
   assert.deepEqual([10000, 30000, 100000].map(splitVat), [{ supply: 9091, vat: 909 }, { supply: 27273, vat: 2727 }, { supply: 90909, vat: 9091 }]);
   const q = packQuote('P10'); assert.equal(q.amount, 10000); assert.equal(q.credits, 1000); assert.equal(q.supply_amount + q.vat_amount, 10000);

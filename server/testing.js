@@ -49,7 +49,7 @@ export function parseTest(b = {}, { partial = false } = {}) {
   const f = {}; const out = {};
   const has = (k) => !partial || b[k] !== undefined; const given = (k) => b[k] !== undefined;
   if (has('title')) { out.title = str(b.title); if (!out.title || out.title.length > 200) f.title = '제목을 200자 이내로 입력해 주세요.'; }
-  for (const [k, max] of [['description', 5000], ['precondition', 2000], ['expected_result', 2000]]) if (given(k)) { out[k] = str(b[k]); if (out[k].length > max) f[k] = `${max.toLocaleString()}자 이내로 입력해 주세요.`; }
+  for (const [k, max] of [['description', 5000], ['precondition', 2000], ['expected_result', 2000], ['test_data', 2000], ['environment', 500]]) if (given(k)) { out[k] = str(b[k]); if (out[k].length > max) f[k] = `${max.toLocaleString()}자 이내로 입력해 주세요.`; }
   if (given('steps')) {
     const arr = Array.isArray(b.steps) ? b.steps : null;
     if (!arr || arr.length > 50) f.steps = '테스트 절차 형식이 올바르지 않습니다.';
@@ -75,10 +75,18 @@ export function parseExecution(b = {}, today = todayKst()) {
   if (performed_on && !isDate(performed_on)) f.performed_on = '날짜 형식이 올바르지 않습니다.';
   else if (performed_on && performed_on > today) f.performed_on = '수행일은 오늘 이후 날짜로 정할 수 없습니다.';
   if (!performed_on) performed_on = today;
+  // batch7 #20: 단계별 결과 [{ index (0-based step), result: PASS|FAIL }] and '실패 시 이슈로 등록' in the same save
+  let step_results = null;
+  if (b.step_results !== undefined && b.step_results !== null) {
+    const a = Array.isArray(b.step_results) ? b.step_results : null;
+    if (!a || a.length > 50 || a.some((x) => !x || !Number.isInteger(x.index) || x.index < 0 || x.index >= 50 || !['PASS', 'FAIL'].includes(x.result))) f.step_results = '단계별 결과 형식이 올바르지 않습니다.';
+    else step_results = [...new Map(a.map((x) => [x.index, { index: x.index, result: x.result }])).values()].sort((x, y) => x.index - y.index);
+  }
+  const raise_issue = b.raise_issue === true;
   const ids = b.resolve_issue_ids === undefined || b.resolve_issue_ids === null ? [] : b.resolve_issue_ids;
   if (!Array.isArray(ids) || ids.length > 20) f.resolve_issue_ids = '해결할 이슈 목록 형식이 올바르지 않습니다.';
   if (Object.keys(f).length) { const e = new ValidationError(f); if (f.performed_on) { e.status = 422; e.code = 'invalid_performed_on'; e.message = f.performed_on; } throw e; }
-  return { result, actual_result, note, performer_user_id, performer_stakeholder_id, performed_on, resolve_issue_ids: [...new Set(ids.map(String))] };
+  return { result, actual_result, note, performer_user_id, performer_stakeholder_id, performed_on, step_results, raise_issue: raise_issue && result === 'FAIL', resolve_issue_ids: [...new Set(ids.map(String))] };
 }
 export function parseAcceptance(b = {}, { partial = false } = {}) {
   const f = {}; const out = {};
@@ -173,6 +181,7 @@ export async function getTest(db, project, id) {
     for (const e of executions) if (e.performer_stakeholder_id) { const x = sh.find((v) => v.id === e.performer_stakeholder_id); e.performer_name = x ? x.name : '(삭제된 수행자)'; e.performer_org = x ? ORG_LABEL[x.org_type] || '' : ''; }
   }
   for (const e of executions) if (!e.performer_stakeholder_id) { e.performer_name = e.performer_user_name || e.executed_by_name || ''; e.performer_org = ''; }
+  for (const e of executions) { let v = null; try { v = e.step_results ? JSON.parse(e.step_results) : null; } catch { v = null; } e.step_results = Array.isArray(v) ? v : null; }   // batch7 #20
   const acceptances = (await db.all(`SELECT a.id, a.display_id, a.title, a.status FROM acceptance_links l JOIN acceptances a ON a.id = l.acceptance_id WHERE l.target_type = 'TEST' AND l.target_id = ? AND a.archived_at IS NULL`, [id]));
   return { ...parseSteps(t), links: { requirements: links.filter((l) => l.target_type === 'REQUIREMENT'), wbs: links.filter((l) => l.target_type === 'WBS') }, executions, acceptances, history: (await history(db, 'TEST', id)) };
 }
@@ -185,8 +194,8 @@ export async function createTest(db, project, input, userId, { reservedSequences
   if (explicit) { seq = Number(explicit[1]); display_id = formatDisplayId('TEST', seq); await reserveProjectSequence(db, project.id, 'TEST', seq); }
   else do { ({ sequence: seq, display_id } = (await nextDisplayId(db, project.id, 'TEST'))); } while (reservedSequences && reservedSequences.has(seq));
   const id = randomUUID(); const ts = now();
-  (await db.run(`INSERT INTO test_cases (id, project_id, sequence_number, display_id, title, description, precondition, steps, expected_result, status, priority, owner_user_id, created_by, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, seq, display_id, input.title, input.description ?? '', input.precondition ?? '', input.steps ?? '[]', input.expected_result ?? '', input.status ?? 'DRAFT', input.priority ?? 'MEDIUM', input.owner_user_id ?? null, userId, ts, ts]));
+  (await db.run(`INSERT INTO test_cases (id, project_id, sequence_number, display_id, title, description, precondition, steps, expected_result, status, priority, owner_user_id, created_by, created_at, updated_at, test_data, environment)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, project.id, seq, display_id, input.title, input.description ?? '', input.precondition ?? '', input.steps ?? '[]', input.expected_result ?? '', input.status ?? 'DRAFT', input.priority ?? 'MEDIUM', input.owner_user_id ?? null, userId, ts, ts, input.test_data ?? '', input.environment ?? '']));
   (await addHistory(db, 'TEST', id, 'CREATED', {}, userId, ts));
   return id;
 }
@@ -217,8 +226,8 @@ export async function addExecution(db, test, input, userId) {
   const n = (await db.get('SELECT COALESCE(MAX(execution_number), 0) + 1 AS n FROM test_executions WHERE test_case_id = ?', [test.id])).n;
   const id = randomUUID(); const ts = now();
   const pu = input.performer_stakeholder_id ? null : input.performer_user_id || userId;
-  (await db.run(`INSERT INTO test_executions (id, test_case_id, execution_number, result, actual_result, note, executed_by, executed_at, created_at, performer_user_id, performer_stakeholder_id, performed_on)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, [id, test.id, n, input.result, input.actual_result, input.note, userId, ts, ts, pu, input.performer_stakeholder_id || null, input.performed_on || todayKst()]));
+  (await db.run(`INSERT INTO test_executions (id, test_case_id, execution_number, result, actual_result, note, executed_by, executed_at, created_at, performer_user_id, performer_stakeholder_id, performed_on, step_results)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, test.id, n, input.result, input.actual_result, input.note, userId, ts, ts, pu, input.performer_stakeholder_id || null, input.performed_on || todayKst(), input.step_results && input.step_results.length ? JSON.stringify(input.step_results) : null]));
   (await addHistory(db, 'TEST', test.id, 'EXECUTED', { field: `#${n}`, newValue: input.result }, userId, ts));
   (await db.run('UPDATE test_cases SET updated_at = ? WHERE id = ?', [ts, test.id]));
   const resolved = [];
