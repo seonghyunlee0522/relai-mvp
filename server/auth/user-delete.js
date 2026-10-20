@@ -10,10 +10,13 @@
  *   DETACH  legally retained record: NULL + withdrawn_ref = this withdrawal's pseudonym (no users FK value is left)
  * Retained, with the period purgeRetained() enforces (privacy policy 제3조):
  *   계약·동의 기록 (account_withdrawals)              5 years after the withdrawal
- *   대금결제·주문·환불 (billing_orders, payments of purged workspaces, service_orders)  5 years
- *   불만·분쟁 처리 기록 (feedback)                      3 years
+ *   결제·정기결제 동의 기록 (billing_consents)          5 years after the consent
+ *   대금결제·주문·환불 (billing_orders, payments of purged workspaces, service_orders)  until 6 years after the end of the
+ *       transaction's year (국세기본법 §85의3②: 5 years from the 법정신고기한 — the next year's filing deadline — so never shorter; G-6)
+ *   불만·분쟁 처리 기록 (feedback, every member's — not only withdrawn ones, G-3)  3 years
  *   접속 기록 (login_records: 일시·IP)                 3 months (purgeAccountData, every row)
  *   관리자 조치 기록 (admin_audit_logs)                kept, name / e-mail removed
+ *   운영자 접속기록 (admin_access_logs)                2 years (server/retention.js)
  */
 import { randomBytes } from 'node:crypto';
 
@@ -85,6 +88,7 @@ export const USER_REFS = [
   ['feedback', 'user_id', 'DETACH'],
   ['billing_orders', 'user_id', 'DETACH'],
   ['admin_audit_logs', 'admin_user_id', 'DETACH'],
+  ['admin_access_logs', 'admin_user_id', 'DETACH'],   // no FK
 ];
 
 /** Author columns that were NOT NULL before migration 56 (schema.sql relaxed them). 테스트 계정 정리 (purge.js) still hands these to the operator. */
@@ -149,19 +153,27 @@ export async function hardDeleteDeactivated(db) {
 }
 
 /**
+ * G-6: payment records are kept 5 years from the 법정신고기한 (국세기본법 §85의3②), which falls in the year after the transaction
+ * (부가세 확정신고 1/25, 종합소득세 5/31 · 성실신고 6/30). A row is due once 6 full KST years have passed since the end of its year:
+ * a 2026 payment is kept until 2032-12-31, at least 5 years after any 2027 deadline.
+ */
+export const taxCutoffSql = `((date_trunc('year', now() AT TIME ZONE 'Asia/Seoul') - (?::int + 1) * interval '1 year') AT TIME ZONE 'Asia/Seoul')`;
+
+/**
  * Daily (cron /api/cron/purge via purgeAccountData): remove each retained class once its period is over. Login records (3 months)
- * are purged for every row by purgeAccountData itself. Returns counts.
+ * are purged for every row by purgeAccountData itself; the other personal-data periods run in server/retention.js. Returns counts.
  */
 export async function purgeRetained(db) {
   const count = async (sql, p = []) => Number((await db.get(`WITH d AS (${sql} RETURNING 1) SELECT COUNT(*) AS n FROM d`, p)).n);
   const out = {
     withdrawals: await count(`DELETE FROM account_withdrawals WHERE withdrawn_at < now() - (?::int * interval '1 year')`, [RETENTION.CONSENT_YEARS]),
-    complaints: await count(`DELETE FROM feedback WHERE withdrawn_ref IS NOT NULL AND created_at < now() - (?::int * interval '1 year')`, [RETENTION.COMPLAINT_YEARS]),
-    withdrawn_orders: await count(`DELETE FROM billing_orders WHERE withdrawn_ref IS NOT NULL AND created_at < now() - (?::int * interval '1 year')`, [RETENTION.PAYMENT_YEARS]),
-    service_orders: await count(`DELETE FROM service_orders WHERE created_at < now() - (?::int * interval '1 year')`, [RETENTION.PAYMENT_YEARS]),
+    billing_consents: await count(`DELETE FROM billing_consents WHERE created_at < now() - (?::int * interval '1 year')`, [RETENTION.CONSENT_YEARS]),
+    complaints: await count(`DELETE FROM feedback WHERE created_at < now() - (?::int * interval '1 year')`, [RETENTION.COMPLAINT_YEARS]),
+    withdrawn_orders: await count(`DELETE FROM billing_orders WHERE withdrawn_ref IS NOT NULL AND created_at < ${taxCutoffSql}`, [RETENTION.PAYMENT_YEARS]),
+    service_orders: await count(`DELETE FROM service_orders WHERE created_at < ${taxCutoffSql}`, [RETENTION.PAYMENT_YEARS]),
   };
-  // A deleted workspace's tombstone only carries its payments; purged_at is after its last payment, so purged_at + 5 years keeps every one 5 years.
-  const due = await db.all(`SELECT id FROM workspaces WHERE status = 'CLOSED' AND purged_at < now() - (?::int * interval '1 year') ORDER BY purged_at LIMIT 50`, [RETENTION.PAYMENT_YEARS]);
+  // A deleted workspace's tombstone only carries its payments; purged_at is after its last payment, so the cutoff on purged_at keeps every one long enough.
+  const due = await db.all(`SELECT id FROM workspaces WHERE status = 'CLOSED' AND purged_at < ${taxCutoffSql} ORDER BY purged_at LIMIT 50`, [RETENTION.PAYMENT_YEARS]);
   out.workspace_payments = 0;
   for (const { id } of due) {
     try {

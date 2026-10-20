@@ -240,6 +240,7 @@ export const migrations = [
       await db.run('UPDATE promotions SET title = ?, body = ?, badge = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ?', [to.title, to.body, to.badge, id, from.title, from.body]);
     }
   } },
+  { version: 65, name: 'Personal-data retention (relai-retention-legal.md G-1..G-6, G-8): users.inactive_notice_at (1-year inactivity notice), admin_access_logs (operator access log, 안전성 확보조치 기준 §8), purge indexes (schema.sql, additive; nothing deleted by the migration — the daily purge does it)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

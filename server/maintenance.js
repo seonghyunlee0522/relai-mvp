@@ -6,9 +6,11 @@
  *   rate_limits       window ended
  *   auth_oauth_states expired more than a day ago
  *   login_records     older than 3 months (통신비밀보호법), and workspaces deleted more than 30 days ago (server/auth/account.js)
+ *   personal data     retention periods of the privacy policy 제3조 + the 1-year inactive-account notice / deletion (server/retention.js)
  */
 import { timingSafeEqual } from 'node:crypto';
 import { purgeAccountData } from './auth/account.js';
+import { purgePersonalLogs, processInactiveAccounts } from './retention.js';
 
 export async function purgeExpired(db) {
   const count = async (sql) => Number((await db.get(`WITH d AS (${sql} RETURNING 1) SELECT COUNT(*) AS n FROM d`)).n);
@@ -18,8 +20,9 @@ export async function purgeExpired(db) {
     rate_limits: await count('DELETE FROM rate_limits WHERE reset_at < now()'),
     oauth_states: await count(`DELETE FROM auth_oauth_states WHERE expires_at < now() - interval '1 day'`),
     ...(await purgeAccountData(db)),
-    // TODO(retention-legal): personal-data retention after a subscription ends / inside projects (founder policy 2026-10-21 §2) is
-    // decided by the legal review (hive research/relai-retention-legal.md). Ending a plan deletes nothing; add a job here only then.
+    ...(await purgePersonalLogs(db)),
+    ...(await processInactiveAccounts(db)),
+    // Ending a plan deletes nothing (founder 2026-10-21 §2). Personal data inside a Free workspace nobody uses (G-9) waits for the lawyer.
   };
 }
 

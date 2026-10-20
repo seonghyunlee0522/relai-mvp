@@ -42,6 +42,7 @@ import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, mountRepor
 import { ImportFileError } from './xlsx.js';
 import { requireAction, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
 import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
+import { adminAccessLogger } from './retention.js';
 import { mountPublicPromotionRoutes, promoBlockHtml } from './promotions.js';
 import { mountFeedbackRoutes } from './feedback.js';
 import { AdminError } from './admin.js';
@@ -168,6 +169,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.use('/api', (req, res, next) => (req.suspendedUser ? fail(res, 403, 'account_suspended', '정지된 계정입니다. 운영자에게 문의해 주세요.') : next()));
   /* First-party analytics (server/analytics.js): active day + feature use on workspace writes. Never blocks or fails a request. */
   app.use(wrap(analyticsMiddleware(db)));
+  app.use('/api/admin', adminAccessLogger(db));   // 운영자 접속기록 (고시 §8): every operator request to /api/admin/*, reads included (server/retention.js)
 
   const requireAuth = (req, res, next) =>
     req.user ? next() : fail(res, 401, 'unauthenticated', '로그인이 필요합니다.');

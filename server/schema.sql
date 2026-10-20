@@ -1603,7 +1603,7 @@ CREATE TABLE IF NOT EXISTS account_withdrawals (
   terms_agreed_at   timestamptz,
   privacy_version   TEXT,
   privacy_agreed_at timestamptz,
-  source            TEXT NOT NULL DEFAULT 'SELF' CHECK (source IN ('SELF', 'BACKFILL'))   -- BACKFILL: an account withdrawn before 56 (tombstone)
+  source            TEXT NOT NULL DEFAULT 'SELF' CHECK (source IN ('SELF', 'BACKFILL', 'INACTIVE'))   -- BACKFILL: an account withdrawn before 56 (tombstone); INACTIVE: deleted after 1 year without use (mig 65)
 );
 CREATE INDEX IF NOT EXISTS idx_account_withdrawals_at ON account_withdrawals(withdrawn_at);
 CREATE INDEX IF NOT EXISTS idx_feedback_withdrawn ON feedback(created_at) WHERE withdrawn_ref IS NOT NULL;
@@ -1730,3 +1730,36 @@ CREATE TABLE IF NOT EXISTS price_change_notices (
   declined_at     timestamptz
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_price_change_notices ON price_change_notices(subscription_id, effective_at);
+
+/* Personal-data retention (migration 65, hive research/relai-retention-legal.md G-1..G-6, G-8; founder 2026-10-21 "1년 후 파기").
+ * Additive only (previews share the production DB). The jobs live in server/retention.js (daily cron /api/cron/purge).
+ *   users.inactive_notice_at  when the 30-day "your account will be deleted" e-mail went out (1 year without use, G-8). Any later
+ *                             activity (login, signed-in request) cancels it: deletion needs the last activity to be older than the notice.
+ *   admin_access_logs         개인정보처리시스템 접속기록 of operators (안전성 확보조치 기준 §8: who, when, from where, what) — every
+ *                             /api/admin request, reads included. Kept 2 years. No FK: a withdrawn operator's rows are detached (withdrawn_ref). */
+ALTER TABLE users ADD COLUMN IF NOT EXISTS inactive_notice_at timestamptz;
+CREATE TABLE IF NOT EXISTS admin_access_logs (
+  id            BIGSERIAL PRIMARY KEY,
+  admin_user_id TEXT,
+  withdrawn_ref TEXT,
+  method        TEXT NOT NULL,
+  path          TEXT NOT NULL,                   -- path + query (first 500 chars): which screen / which person was looked up
+  ip            TEXT,
+  user_agent    TEXT,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_access_logs_created ON admin_access_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_access_logs_admin ON admin_access_logs(admin_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_created ON ai_runs(created_at);
+CREATE INDEX IF NOT EXISTS idx_invitations_ended ON invitations(expires_at) WHERE status <> 'ACCEPTED';
+CREATE INDEX IF NOT EXISTS idx_free_credit_claims_granted ON free_credit_claims(granted_at);
+CREATE INDEX IF NOT EXISTS idx_billing_consents_created ON billing_consents(created_at);
+-- Migration 65 widens account_withdrawals.source with 'INACTIVE' (older code only writes SELF / BACKFILL, so it keeps working).
+DO $$ DECLARE def text; BEGIN
+  SELECT pg_get_constraintdef(oid) INTO def FROM pg_constraint WHERE conrelid = 'account_withdrawals'::regclass AND conname = 'account_withdrawals_source_check';
+  IF def IS NULL OR def NOT LIKE '%INACTIVE%' THEN
+    ALTER TABLE account_withdrawals DROP CONSTRAINT IF EXISTS account_withdrawals_source_check;
+    ALTER TABLE account_withdrawals ADD CONSTRAINT account_withdrawals_source_check CHECK (source IN ('SELF', 'BACKFILL', 'INACTIVE'));
+  END IF;
+END $$;

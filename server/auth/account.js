@@ -83,6 +83,26 @@ async function deletionPlan(db, user) {
   return { blockers, solo, shared };
 }
 
+/**
+ * 회원 탈퇴 in one transaction: the same blockers as the 계정 삭제 screen (operator, sole OWNER of a shared workspace, running paid
+ * subscription), solo workspaces closed (purged 30 days later), owner pointers handed over, then hardDeleteUser. Used by DELETE /api/me
+ * and by the 1-year inactivity deletion (server/retention.js, source 'INACTIVE'). Returns { blockers } or { deleted: [{ id, name }] }.
+ */
+export async function withdrawAccount(db, user, { method, source = 'SELF' } = {}) {
+  return tx(db, async (db) => {
+    await db.get('SELECT id FROM users WHERE id = ? FOR UPDATE', [user.id]);
+    const plan = await deletionPlan(db, user);
+    if (plan.blockers.length) return { blockers: plan.blockers };
+    for (const w of plan.solo) await closeWorkspace(db, w, user);
+    for (const w of plan.shared) {   // another OWNER remains: hand the owner pointer over
+      if (w.owner_id === user.id) await db.run(`UPDATE workspaces SET owner_id = (SELECT user_id FROM workspace_members WHERE workspace_id = ? AND role = 'OWNER' AND user_id <> ? ORDER BY created_at LIMIT 1) WHERE id = ?`, [w.id, user.id, w.id]);
+    }
+    await writeAudit(db, { adminUserId: user.id, action: 'ACCOUNT_DELETED', targetType: 'USER', targetId: user.id, metadata: { workspaces_deleted: plan.solo.map((w) => w.id), method }, actorKind: 'USER' });
+    await hardDeleteUser(db, user.id, { source });   // the users row goes; every reference is handled there (mig 56)
+    return { deleted: plan.solo.map((w) => ({ id: w.id, name: w.name })) };
+  });
+}
+
 export function mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, sessionHash, clearSessionCookie, toPublicUser }) {
   const pwLimit = rateLimiter(db, { name: 'account-password', max: 5, windowMs: 15 * 60 * 1000 });   // per user: wrong current password / re-auth
   const loadUser = (id) => db.get('SELECT id, email, name, status, system_role, password_hash, email_verified_at FROM users WHERE id = ?', [id]);
@@ -147,18 +167,7 @@ export function mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, se
   app.delete('/api/me', requireAuth, wrap(async (req, res) => {
     const user = await loadUser(req.user.id);
     if (!(await reauth(req, res, user))) return;
-    const out = await tx(db, async (db) => {
-      await db.get('SELECT id FROM users WHERE id = ? FOR UPDATE', [user.id]);
-      const plan = await deletionPlan(db, user);
-      if (plan.blockers.length) return { blockers: plan.blockers };
-      for (const w of plan.solo) await closeWorkspace(db, w, user);
-      for (const w of plan.shared) {   // another OWNER remains: hand the owner pointer over
-        if (w.owner_id === user.id) await db.run(`UPDATE workspaces SET owner_id = (SELECT user_id FROM workspace_members WHERE workspace_id = ? AND role = 'OWNER' AND user_id <> ? ORDER BY created_at LIMIT 1) WHERE id = ?`, [w.id, user.id, w.id]);
-      }
-      await writeAudit(db, { adminUserId: user.id, action: 'ACCOUNT_DELETED', targetType: 'USER', targetId: user.id, metadata: { workspaces_deleted: plan.solo.map((w) => w.id), method: user.password_hash ? 'PASSWORD' : 'RECENT_LOGIN' }, actorKind: 'USER' });
-      await hardDeleteUser(db, user.id);   // the users row goes; every reference is handled there (mig 56)
-      return { deleted: plan.solo.map((w) => ({ id: w.id, name: w.name })) };
-    });
+    const out = await withdrawAccount(db, user, { method: user.password_hash ? 'PASSWORD' : 'RECENT_LOGIN' });
     if (out.blockers) return fail(res, 409, 'account_delete_blocked', out.blockers[0].message, { blockers: out.blockers });
     clearSessionCookie(res);
     res.json({ ok: true, workspaces_deleted: out.deleted });

@@ -136,3 +136,16 @@ export function cancelEmail({ workspaceName, planLabel, immediate, periodEnd, re
   const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜: ${what}\n${refundLines.map((l) => `- ${l.label || '결제'}: ${wonKr(l.amount)} (미사용 ${l.days}/${l.period_days}일)`).join('\n')}\n${keep}\n${link ? `\n열기: ${link}\n` : ''}`;
   return { subject, html, text };
 }
+
+/** 1년 미이용 계정 (server/retention.js, privacy policy 제3조 제5항): sent 30 days before the account is deleted. Signing in cancels it. */
+export function inactiveAccountEmail({ name, lastActive, deleteOn, link, support }) {
+  const day = (d) => new Date(d).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+  const last = day(lastActive); const on = day(deleteOn);
+  const subject = `[RELAI] 1년 동안 이용하지 않은 계정이 ${on}에 삭제됩니다`;
+  const html = shell('계정 삭제 예정 안내', `<p>${name ? `${esc(name)}님, ` : ''}RELAI 계정을 <b>${esc(last)}</b> 이후 이용하지 않으셨습니다.</p>
+    <p>개인정보 처리방침에 따라 1년 동안 이용하지 않은 계정은 삭제합니다. <b>${esc(on)}</b>까지 로그인하지 않으면 계정과 혼자 쓰는 워크스페이스가 탈퇴와 같은 방법으로 삭제되며, 삭제된 데이터는 복구할 수 없습니다.</p>
+    <p>계속 쓰시려면 그 전에 한 번 로그인해 주세요. 로그인하면 삭제는 자동으로 취소됩니다.</p>${link ? button(link, '로그인하기') : ''}
+    <p style="font-size:13px;color:#667085">유료 구독 중이거나 다른 회원과 함께 쓰는 워크스페이스의 유일한 소유자인 계정은 삭제하지 않습니다. 법령에 따라 보관하는 결제·동의 기록은 계정과 연결을 끊은 상태로 정해진 기간 동안 보관 후 파기합니다.</p>`, support);
+  const text = `${name ? `${name}님, ` : ''}RELAI 계정을 ${last} 이후 이용하지 않으셨습니다.\n${on}까지 로그인하지 않으면 계정과 혼자 쓰는 워크스페이스가 탈퇴와 같은 방법으로 삭제됩니다(복구 불가).\n계속 쓰시려면 그 전에 한 번 로그인해 주세요. 로그인하면 삭제는 취소됩니다.\n${link ? `\n로그인: ${link}\n` : ''}`;
+  return { subject, html, text };
+}

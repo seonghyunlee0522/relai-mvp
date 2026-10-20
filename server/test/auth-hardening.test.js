@@ -153,6 +153,8 @@ test('purge: expired sessions / old tokens / ended rate windows are deleted; cro
   assert.equal((await U.c('GET', '/api/me')).status, 200);   // live session untouched
   assert.ok(!(await db.get(`SELECT 1 FROM sessions WHERE token_hash = 'old-session'`)));
   assert.deepEqual(await purgeExpired(db), { sessions: 0, auth_tokens: 0, rate_limits: 0, oauth_states: 0, login_records: 0, workspaces_purged: 0,
-    withdrawals: 0, complaints: 0, withdrawn_orders: 0, service_orders: 0, workspace_payments: 0 });   // mig 56 retention classes
+    withdrawals: 0, billing_consents: 0, complaints: 0, withdrawn_orders: 0, service_orders: 0, workspace_payments: 0,   // mig 56 retention classes
+    analytics_events: 0, analytics_active_days: 0, ai_runs: 0, email_deliveries: 0, ended_invitations: 0, free_credit_claims: 0, admin_access_logs: 0,   // mig 65
+    inactive_notified: 0, inactive_notice_failed: 0, inactive_deleted: 0, inactive_kept: 0 });
   server.close();
 });

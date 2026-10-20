@@ -92,25 +92,26 @@ test('purge job deletes each retained class only after its period', async () => 
   // old copies of each class (just past the period) next to fresh ones (just inside it)
   await db.run(`INSERT INTO account_withdrawals (ref, withdrawn_at) VALUES ('wd_old', now() - interval '5 years 1 day'), ('wd_keep', now() - interval '4 years 360 days')`);
   await db.run(`INSERT INTO feedback (id, withdrawn_ref, category, message, created_at) VALUES ('fb-old', 'wd_old', 'BUG', 'x', now() - interval '3 years 1 day'), ('fb-keep', 'wd_old', 'BUG', 'x', now() - interval '2 years 360 days')`);
-  await db.run(`INSERT INTO feedback (id, user_id, category, message, created_at) VALUES ('fb-live', ?, 'BUG', 'x', now() - interval '4 years')`, [A.uid]);   // a live account's: untouched
+  await db.run(`INSERT INTO feedback (id, user_id, category, message, created_at) VALUES ('fb-live', ?, 'BUG', 'x', now() - interval '4 years'), ('fb-live-keep', ?, 'BUG', 'x', now() - interval '2 years')`, [A.uid, A.uid]);   // a live account's: same 3 years (G-3)
   const order = (id, ago, who) => db.run(`INSERT INTO billing_orders (id, workspace_id, user_id, withdrawn_ref, provider, kind, unit_price, list_amount, supply_amount, vat_amount, amount, goods_name, credits, status, created_at)
     VALUES (?, ?, ?, ?, 'fake', 'CREDIT_PACK', 1, 1, 1, 0, 1, 'g', 1, 'PAID', now() - ?::interval)`, [id, A.w, who === 'live' ? A.uid : null, who === 'live' ? null : 'wd_old', ago]);
-  await order('ord-old', '5 years 1 day', 'gone'); await order('ord-keep', '4 years 360 days', 'gone'); await order('ord-live', '6 years', 'live');
+  // payments: 법정신고기한 + 5 years (G-6) = kept until 6 years after the end of the transaction's year, so 5 years 1 day is still kept
+  await order('ord-old', '7 years', 'gone'); await order('ord-keep', '5 years 1 day', 'gone'); await order('ord-live', '8 years', 'live');
   await db.run(`INSERT INTO login_records (id, withdrawn_ref, method, created_at) VALUES ('lr-old', 'wd_old', 'PASSWORD', now() - interval '3 months 1 day'), ('lr-keep', 'wd_old', 'PASSWORD', now() - interval '80 days')`);
   const so = (id, ago) => db.run(`INSERT INTO service_orders (id, product, kind, provider, goods_name, amount, supply_amount, vat_amount, buyer_name, buyer_email, buyer_phone, terms_version, privacy_version, created_at)
     VALUES (?, 'agent-once', 'ONE_TIME', 'fake', 'g', 1, 1, 0, 'n', 'e@x.com', '010', 't', 'p', now() - ?::interval)`, [id, ago]);
-  await so('so-old', '5 years 1 day'); await so('so-keep', '4 years 360 days');
-  // a deleted workspace whose tombstone (payments only) was purged more than 5 years ago, and one purged 4 years ago
-  for (const [wid, ago] of [['ws-old', '5 years 1 day'], ['ws-keep', '4 years']]) {
+  await so('so-old', '7 years'); await so('so-keep', '5 years 1 day');
+  // a deleted workspace whose tombstone (payments only) was purged 7 years ago, and one purged 5 years 1 day ago (inside the tax period)
+  for (const [wid, ago] of [['ws-old', '7 years'], ['ws-keep', '5 years 1 day']]) {
     await db.run(`INSERT INTO workspaces (id, name, owner_id, status, deleted_at, purged_at) VALUES (?, '삭제된 워크스페이스', NULL, 'CLOSED', now() - ?::interval, now() - ?::interval)`, [wid, ago, ago]);
     await db.run(`INSERT INTO payments (id, workspace_id, amount, status, provider, provider_tid, paid_at) VALUES (?, ?, 1000, 'PAID', 'fake', ?, now() - ?::interval)`, [`p-${wid}`, wid, `tid-${wid}`, ago]);
   }
 
   const out = await purgeExpired(db);
-  assert.equal(out.withdrawals, 1); assert.equal(out.complaints, 1); assert.equal(out.withdrawn_orders, 1); assert.equal(out.service_orders, 1); assert.equal(out.workspace_payments, 1);
+  assert.equal(out.withdrawals, 1); assert.equal(out.complaints, 2); assert.equal(out.withdrawn_orders, 1); assert.equal(out.service_orders, 1); assert.equal(out.workspace_payments, 1);
   const ids = async (sql) => (await db.all(sql)).map((r) => r.id).sort();
   assert.deepEqual((await db.all('SELECT ref FROM account_withdrawals ORDER BY ref')).map((r) => r.ref), [ref, 'wd_keep'].sort());
-  assert.deepEqual(await ids(`SELECT id FROM feedback WHERE id LIKE 'fb-%'`), ['fb-keep', 'fb-live']);
+  assert.deepEqual(await ids(`SELECT id FROM feedback WHERE id LIKE 'fb-%'`), ['fb-keep', 'fb-live-keep']);
   assert.deepEqual(await ids(`SELECT id FROM billing_orders WHERE id LIKE 'ord-%'`), ['ord-b', 'ord-keep', 'ord-live']);
   assert.deepEqual(await ids(`SELECT id FROM login_records WHERE id LIKE 'lr-%'`), ['lr-keep']);
   assert.deepEqual(await ids(`SELECT id FROM service_orders`), ['so-keep']);
@@ -118,7 +119,7 @@ test('purge job deletes each retained class only after its period', async () => 
   assert.deepEqual(await ids(`SELECT id FROM workspaces WHERE id LIKE 'ws-%'`), ['ws-keep']);
   // running it again changes nothing
   const again = await purgeRetained(db);
-  assert.deepEqual(again, { withdrawals: 0, complaints: 0, withdrawn_orders: 0, service_orders: 0, workspace_payments: 0 });
+  assert.deepEqual(again, { withdrawals: 0, billing_consents: 0, complaints: 0, withdrawn_orders: 0, service_orders: 0, workspace_payments: 0 });
   server.close();
 });
 
