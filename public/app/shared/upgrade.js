@@ -1,43 +1,43 @@
-/* Upgrade prompt (Phase 10 Billing). core/api.js fires `relai:plan-limit` on every 402 plan_limit_reached; this module shows one
- * dialog per burst (an import or a bulk action can hit the limit on several calls at once). The calling screen still gets the error.
- * The Team price shown comes from the server catalogue (server/plans.js) via GET …/billing, so it never drifts from checkout. */
+/* Upsell prompt (Phase 10 Billing → batch7 T5 paywall). core/api.js fires `relai:plan-limit` on every 402 plan_limit_reached and on
+ * 402 AI_CREDIT_INSUFFICIENT; this module shows one dialog per burst (an import or a bulk action can hit the limit on several calls at
+ * once). The calling screen still gets the error. Every upsell points at the plans page (/app/billing/plans). Calm copy: what happened,
+ * that nothing was lost, and where to look — no fear words, no prices (payments are off; the plans page says '가격 안내 예정'). */
 import { html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { api } from '../core/api.js';
 import { navigate } from '../core/router.js';
 import { confirmDialog, noticeDialog } from './dialogs.js';
 import { isPhone } from '../core/device.js';
 
+export const PLANS_URL = '/app/billing/plans';
 let open = false;
-const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
-/** Team price line from the billing summary, or '' when it cannot be loaded. */
-async function teamPrice() {
-  try {
-    const b = (await api('GET', `/api/workspaces/${state.workspace.id}/billing`)).billing; const co = b?.checkout;
-    if (b?.payments_enabled === false) return null;   // v1: payments off → no upgrade offer
-    return co?.base_monthly ? `Team: ${won(co.base_monthly)}/월 · 워크스페이스 1개(소유자 포함) · 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월 (부가세 별도)` : '';
-  } catch { return ''; }
+const fmt = (n) => Number(n).toLocaleString('ko-KR');
+
+/** { title, body } for a plan-limit or credit error payload (data.error from the API). */
+export function upsellCopy(err) {
+  const l = err?.limit || {};
+  if (err?.code === 'AI_CREDIT_INSUFFICIENT') {
+    return { title: 'AI 크레딧이 조금 모자라요', body: html`<p>이 AI 기능에는 <b>${fmt(err.required ?? 0)}</b> 크레딧이 필요하고, 지금 잔액은 <b>${fmt(err.balance ?? 0)}</b> 크레딧이에요.</p>
+      <p class="dim" style="margin-top:8px">워크스페이스마다 무료 크레딧 500이 한 번 제공돼요. 유료 플랜에서는 매달 크레딧이 추가로 제공됩니다. 직접 입력하는 기능은 그대로 쓸 수 있어요.</p>` };
+  }
+  if (l.seats) return { title: '구매한 사용자 수를 모두 쓰고 있어요', body: html`<p>${err?.message || ''}</p>` };
+  return { title: '무료 플랜 한도에 도달했어요', body: html`<p>${err?.message || '현재 플랜의 한도에 도달했어요.'}</p>
+    ${raw(l.dimension ? html`<p class="dim" style="margin-top:8px" data-upsell-usage>${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중</p>` : '')}
+    <p class="dim" style="margin-top:8px">지금까지 만든 내용은 모두 그대로 있어요. 유료 플랜에서는 한도 없이 계속 추가할 수 있어요.</p>` };
 }
+
 export async function showUpgradePrompt(err) {
   if (open) return; open = true;
   try {
-    const l = err?.limit || {};
-    const price = state.workspace?.id ? await teamPrice() : '';
-    if (price === null) {   // payments off (v1): say what the limit is; no plan purchase / upgrade button
-      await noticeDialog({ title: l.seats ? '구매한 사용자 수에 도달했습니다' : 'Free 플랜 한도에 도달했습니다', bodyHtml: html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}<p class="dim" style="margin-top:8px">초기 고객은 무료로 이용합니다. 한도 조정이 필요하면 운영자에게 문의해 주세요.</p>` });
-      return;
-    }
-    if (isPhone()) {   // phone = view mode: the limit + where to pay, and 닫기 only
-      await noticeDialog({ title: l.seats ? '구매한 사용자 수에 도달했습니다' : 'Free 플랜 한도에 도달했습니다', bodyHtml: html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}<p style="margin-top:8px" data-pay-pc>결제는 PC에서 할 수 있습니다</p>` });
+    const { title, body } = upsellCopy(err);
+    const url = err?.upgrade?.url || PLANS_URL;
+    if (isPhone()) {   // phone = view mode: the reason + a link, 닫기 only
+      await noticeDialog({ title, bodyHtml: html`${raw(body)}<p style="margin-top:8px"><a href="${url}" data-link data-upsell-cta>플랜 살펴보기</a></p>` });
       return;
     }
     const isOwner = state.workspace?.role === 'OWNER';
-    const body = html`<p>${err?.message || '현재 플랜의 한도에 도달했습니다.'}</p>
-      ${raw(l.dimension ? html`<p class="dim" style="margin-top:8px">${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중 (${l.plan} 플랜)</p>` : '')}
-      <p class="dim" style="margin-top:8px">${isOwner ? 'Team 플랜은 프로젝트·요구사항·WBS·주간보고 한도가 없고, 멤버는 구매한 사용자 수만큼 초대할 수 있습니다. 기존 데이터는 그대로 유지됩니다.' : '업그레이드는 워크스페이스 소유자가 할 수 있습니다. 소유자에게 Team 플랜 전환을 요청하세요.'}</p>
-      ${raw(price ? html`<p style="margin-top:8px"><b>${price}</b></p>` : '')}`;
-    const go = await confirmDialog({ title: l.seats ? '구매한 사용자 수에 도달했습니다' : 'Free 플랜 한도에 도달했습니다', body: raw(body), confirm: isOwner ? 'Team 플랜 보기' : '플랜 확인하기' });
-    if (go) navigate(err?.upgrade?.url || '/app/settings#billing');
+    const who = isOwner ? '' : html`<p class="dim" style="margin-top:8px">플랜은 워크스페이스 소유자가 바꿀 수 있어요.</p>`;
+    const go = await confirmDialog({ title, bodyHtml: html`<div data-upsell>${raw(body)}${raw(who)}</div>`, confirm: '플랜 살펴보기', cancel: '닫기' });
+    if (go) navigate(url);
   } finally { open = false; }
 }
 window.addEventListener('relai:plan-limit', (e) => { showUpgradePrompt(e.detail); });

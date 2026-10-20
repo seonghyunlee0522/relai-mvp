@@ -16,7 +16,7 @@ const costLine = (st) => {
   const cost = st?.costs?.TEST_GENERATION; const bal = st?.credits?.available;
   if (typeof cost !== 'number') return '';
   const short = typeof bal === 'number' && bal < cost;
-  return html`<span class="ai-credit ${short ? 'is-short' : ''}" data-tg-cost>${short ? '크레딧이 부족합니다 · ' : '실행하면 '}<b>${fmt(cost)}</b> 크레딧${typeof bal === 'number' ? html` · 잔액 <b>${fmt(bal)}</b>` : ''}</span>`;
+  return html`<span class="ai-credit ${short ? 'is-short' : ''}" data-tg-cost>${short ? '크레딧이 부족합니다 · ' : '실행하면 '}<b>${fmt(cost)}</b> 크레딧${typeof bal === 'number' ? html` · 잔액 <b>${fmt(bal)}</b>` : ''}${raw(short ? ' · <a href="/app/billing/plans" data-link data-upsell-cta>플랜 살펴보기</a>' : '')}</span>`;
 };
 
 export async function openTestGenDialog({ pid, onDone, preselect = null }) {

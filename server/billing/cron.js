@@ -67,8 +67,11 @@ export async function chargeDueRenewals(db, provider) {
  * notice alone. Workspaces already on a paid plan are skipped.
  */
 export async function sendEarlyAccessNotices(db, env = process.env) {
-  const cfg = emailConfig(env);
   const out = { d30: 0, d7: 0, sent: 0 };
+  // Retired 2026-10-20: early access no longer grants unlimited use (every workspace is on FREE limits), so there is no
+  // "early access ends" to announce. Kept callable (cron route + tests); sends nothing unless EARLY_ACCESS_NOTICES=on.
+  if (env.EARLY_ACCESS_NOTICES !== 'on') return out;
+  const cfg = emailConfig(env);
   for (const [days, col, other] of [[7, 'early_notice_7_at', 'early_notice_30_at'], [30, 'early_notice_30_at', null]]) {
     const due = await db.all(`SELECT w.id, w.name, w.early_access_until FROM workspaces w WHERE w.deleted_at IS NULL AND w.early_access_until > now()
       AND w.early_access_until <= now() + make_interval(days => ${days}) AND w.${col} IS NULL

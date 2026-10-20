@@ -8,6 +8,7 @@
  *     (OWNER: POLICY.billing); GET /api/billing/nicepay/pay/:orderId (the order's buyer); POST /api/billing/admin/payments/:id/refund
  *     (SYSTEM_ADMIN); GET /api/billing/cron/daily (CRON_SECRET: renewal reminders, renewal charges, monthly AI credit grants).
  */
+import { aiConfig } from '../ai/config.js';
 import express from 'express';
 import { rateLimiter } from '../security.js';
 import { requireAction, can } from '../authz.js';
@@ -24,7 +25,7 @@ import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices } from 
 import { grantDueMonthlyCredits } from './ai-grants.js';
 
 const catalogue = () => Object.values(PLANS).filter((p) => p.key !== 'EARLY').map((p) => ({ key: p.key, label: p.label, base_monthly: p.contact_sales ? null : (p.base_monthly ?? 0),
-  included_users: p.included_users ?? null, extra_user_monthly: p.extra_user_monthly ?? null, contact_sales: Boolean(p.contact_sales), limits: p.limits }));
+  included_users: p.included_users ?? null, extra_user_monthly: p.extra_user_monthly ?? null, contact_sales: Boolean(p.contact_sales), limits: p.limits, ai_credits_monthly: p.ai_credits_monthly ?? 0 }));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
 const settingsUrl = (status, reason, order = null) => (order?.kind === 'CREDIT_PACK'
@@ -131,7 +132,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const canPurchase = paymentsEnabled() && plan !== 'EARLY' && (plan === 'FREE' || (subscription && !subscription.auto_renew));
     const early = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
     return { billing: { plan, plan_label: PLANS[plan].label, subscription, early_access_until: early?.early_access_until || null, usage: await workspaceUsage(db, wid, plan),
-      plans: catalogue(), dims: USAGE_DIMS, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
+      plans: catalogue(), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
       checkout: { can_purchase: Boolean(canPurchase), cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
         base_monthly: PLANS.TEAM.base_monthly, included_users: PLANS.TEAM.included_users, extra_user_monthly: PLANS.TEAM.extra_user_monthly,
         min_users: await minUsers(db, wid), max_users: MAX_USERS, founding_eligible: await foundingEligible(db, wid), founding: FOUNDING_OFFER, vat_rate: VAT_RATE, prices_exclude_vat: true,

@@ -23,7 +23,7 @@ export async function api(method, url, body) {
   if (!res.ok) {
     if (res.status === 401 && !location.pathname.match(/^\/(login|signup|invite)/)) { location.href = '/login'; }
     if (res.status === 403 && data?.error?.code === 'account_suspended') { location.href = '/login?suspended=1'; }
-    if (res.status === 402 && data?.error?.code === 'plan_limit_reached') window.dispatchEvent(new CustomEvent('relai:plan-limit', { detail: data.error }));   // shared/upgrade.js
+    if (res.status === 402 && ['plan_limit_reached', 'AI_CREDIT_INSUFFICIENT'].includes(data?.error?.code)) window.dispatchEvent(new CustomEvent('relai:plan-limit', { detail: data.error }));   // shared/upgrade.js → plans page
     const e = new Error(data?.error?.message || '요청을 처리하지 못했습니다.');
     e.status = res.status; e.code = data?.error?.code; e.fields = data?.error?.fields || {}; e.error = data?.error || null;   // full error payload (AI credit balance/required etc.)
     throw e;

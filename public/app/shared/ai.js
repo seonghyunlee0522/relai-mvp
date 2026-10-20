@@ -18,6 +18,7 @@ export const confChip = (c) => html`<span class="hchip hchip--sm ${(CONF[c] || C
  * Credits are a usage unit on every user screen: no won amount (batch7 #7).
  * The click is the consent (AI-credits-only billing §5). Amber below the low-balance threshold; at 0 / below the price the button is disabled with [크레딧 충전]. */
 export const CREDITS_URL = '/app/settings/credits';
+export const PLANS_URL = '/app/billing/plans';   // batch7 T5 upsell target (payments off)
 const fmt = (v) => Number(v).toLocaleString('ko-KR');
 export const creditLine = (st, feature) => {
   if (!st?.enabled) return '';
@@ -25,7 +26,7 @@ export const creditLine = (st, feature) => {
   const short = typeof cost === 'number' && typeof bal === 'number' && bal < cost;
   const low = !short && typeof bal === 'number' && typeof st.low_balance_threshold === 'number' && bal < st.low_balance_threshold;
   const pay = st.payments_enabled !== false;   // v1: payments off → no 충전 link
-  if (short) return html`<span class="ai-credit is-short" title="AI 사용량은 워크스페이스 크레딧으로 집계됩니다">크레딧이 부족합니다 (필요 <b>${fmt(cost)}</b> · 잔액 <b>${fmt(bal)}</b>)${raw(pay ? html` · <a href="${CREDITS_URL}" data-link>크레딧 충전</a>` : '')}</span>`;
+  if (short) return html`<span class="ai-credit is-short" title="AI 사용량은 워크스페이스 크레딧으로 집계됩니다">크레딧이 모자라요 (필요 <b>${fmt(cost)}</b> · 잔액 <b>${fmt(bal)}</b>) · ${raw(pay ? html`<a href="${CREDITS_URL}" data-link>크레딧 충전</a>` : html`<a href="${PLANS_URL}" data-link data-upsell-cta>플랜 살펴보기</a>`)}</span>`;
   return html`<span class="ai-credit ${low ? 'is-low' : ''}" title="실행하면 이 크레딧만 차감됩니다. 실패하면 차감하지 않습니다.">예상 <b>${typeof cost === 'number' ? fmt(cost) : '-'}</b> 크레딧 · 잔액 <b>${typeof bal === 'number' ? fmt(bal) : '-'}</b> 크레딧${raw(low && pay ? ` · <a href="${CREDITS_URL}" data-link>충전</a>` : '')}</span>`;
 };
 /** Kept for older imports: credits are bought on the AI 크레딧 page. */
@@ -35,7 +36,7 @@ export const canRun = (st, feature) => Boolean(st?.enabled) && !(typeof st.costs
 /** Human copy for AI error codes (the API message is kept as detail). */
 export function aiErrorMessage(e) {
   const code = e?.code;
-  if (code === 'AI_CREDIT_INSUFFICIENT') return `크레딧이 부족합니다 (필요 ${e.error?.required ?? '?'} · 잔액 ${e.error?.balance ?? '?'}). 설정 › AI 크레딧에서 충전하세요.`;
+  if (code === 'AI_CREDIT_INSUFFICIENT') return `크레딧이 모자라요 (필요 ${e.error?.required ?? '?'} · 잔액 ${e.error?.balance ?? '?'}). 플랜 페이지에서 크레딧 안내를 확인해 주세요.`;
   if (code === 'AI_DISABLED') return 'AI 기능을 사용할 수 없습니다. 관리자에게 문의하세요.';
   if (code === 'AI_RATE_LIMITED') return e.message || 'AI 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'AI_INPUT_TOO_LARGE') return e.message;

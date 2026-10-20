@@ -3549,3 +3549,14 @@ body.is-resizing,body.is-resizing *{cursor:col-resize!important;user-select:none
 .actrow.is-comment .actrow__s{color:var(--navy)}
 .actfoot{display:flex;justify-content:center;margin:16px 0 8px;max-width:1080px}
 html.is-phone .actrow{grid-template-columns:44px minmax(0,1fr)}html.is-phone .actrow__k{display:none}
+
+/* 플랜 · 구독 (batch7 T5, app/plans.js) */
+.pl-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:16px}
+.pl-card{border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--surface,#fff)}
+.pl-card.is-current{border-color:var(--primary,#2563eb)}
+.pl-card__h{display:flex;align-items:center;gap:8px;font-size:16px}
+.pl-card__price{font-size:20px;font-weight:700;margin:10px 0 4px}
+.pl-faq{padding:10px 0;border-top:1px solid var(--border-soft)}
+.pl-faq:first-child{border-top:0}
+.pl-faq summary{cursor:pointer;font-weight:600}
+.pl-faq p{margin:8px 0 0}

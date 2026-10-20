@@ -26,20 +26,17 @@ export const GRANTS_PLAN_SQL = `(
 
 /**
  * SQL expression (workspace alias `w`): the plan key the workspace is on right now — the same rule as effectivePlan().
- * Use it in every list/detail query instead of COALESCE(subscription plan, 'FREE'), which skips early access.
+ * Early access no longer grants a plan (retired 2026-10-20): early-access workspaces are FREE; workspaces.early_access_until is kept as history.
  */
-export const EFFECTIVE_PLAN_SQL = `COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}),
-    CASE WHEN w.early_access_until IS NOT NULL AND w.early_access_until > now() THEN 'EARLY' END, '${DEFAULT_PLAN}')`;
+export const EFFECTIVE_PLAN_SQL = `COALESCE((SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}), '${DEFAULT_PLAN}')`;
 
 /**
  * The plan a workspace is on right now: a granting subscription's plan (an existing TEAM keeps working until its period ends),
- * else EARLY while workspaces.early_access_until > now(), else FREE. Time is compared in SQL (never the client clock).
+ * else FREE — early access is retired as an unlimited plan (founder decision 2026-10-20). Time is compared in SQL (never the client clock).
  */
 export async function effectivePlan(db, workspaceId) {
-  const r = await db.get(`SELECT (SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS plan,
-      (w.early_access_until IS NOT NULL AND w.early_access_until > now()) AS early FROM workspaces w WHERE w.id = ?`, [workspaceId]);
-  if (r?.plan && PLANS[r.plan]) return r.plan;
-  return r?.early ? 'EARLY' : DEFAULT_PLAN;
+  const r = await db.get(`SELECT (SELECT s.plan FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS plan FROM workspaces w WHERE w.id = ?`, [workspaceId]);
+  return r?.plan && PLANS[r.plan] ? r.plan : DEFAULT_PLAN;
 }
 
 /**

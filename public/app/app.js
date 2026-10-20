@@ -23,6 +23,7 @@ import { raidPage } from './raid/page.js';
 import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
 import { creditsPage } from './credits.js';
+import { plansPage } from './plans.js';
 import { sampleGuidePage } from './project/sample-guide.js';   // RELAI 가이드 · 샘플로 보기
 import './shared/upgrade.js';   // 402 plan_limit_reached → upgrade prompt (Phase 10)
 import { adminShell } from './admin/shell.js';
@@ -61,6 +62,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/tests\/?$/, testsPage],
   [/^\/app\/settings\/?$/, settingsPage],
   [/^\/app\/settings\/credits\/?$/, creditsPage],      // 설정 › AI 크레딧 (AI-credits-only billing)
+  [/^\/app\/billing\/plans\/?$/, plansPage],          // 플랜 · 구독 (batch7 T5: every limit / credit upsell lands here)
   // Admin Console — separate shell, operator-only (the server refuses /admin and /api/admin/* to everyone else)
   [/^\/admin\/?$/, adminDashboardPage],
   [/^\/admin\/users\/?$/, adminUsersPage],

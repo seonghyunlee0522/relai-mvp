@@ -12,11 +12,11 @@
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { aiConfig } from './config.js';
-import { LOW_BALANCE_CREDITS } from '../plans.js';
+import { LOW_BALANCE_CREDITS, PLANS_URL } from '../plans.js';
 
 export const LEDGER_TYPES = ['PLAN_GRANT', 'ADMIN_GRANT', 'AI_USAGE', 'REFUND', 'ADJUSTMENT', 'PROMOTION', 'PURCHASE'];
 /** Ledger reference of the one-time starter grant (new workspaces) and of the v41 top-up of existing workspaces to the same amount. */
-export const STARTER_REFS = ['AI_INITIAL_TRIAL_CREDITS', 'STARTER_TOPUP'];
+export const STARTER_REFS = ['AI_INITIAL_TRIAL_CREDITS', 'STARTER_TOPUP', 'STARTER_WORKSPACE_52'];
 const RESERVATION_TTL = "interval '10 minutes'";
 
 export class CreditError extends Error {
@@ -95,7 +95,7 @@ export async function reserveRun(db, { wid, projectId, userId, feature, provider
     const acc = await lockAccount(t, wid);
     const reserved = await openReservations(t, wid);
     const available = acc.balance - reserved;
-    if (cost > 0 && available < cost) throw new CreditError('AI_CREDIT_INSUFFICIENT', 'AI 크레딧이 부족합니다.', { balance: Math.max(0, available), required: cost, feature });
+    if (cost > 0 && available < cost) throw new CreditError('AI_CREDIT_INSUFFICIENT', 'AI 크레딧이 부족합니다.', { balance: Math.max(0, available), required: cost, feature, upgrade: { url: PLANS_URL } });
     const id = randomUUID();
     await t.run(`INSERT INTO ai_runs (id, workspace_id, project_id, user_id, feature, provider, model, status, input_summary, credit_cost, credit_status)
       VALUES (?,?,?,?,?,?,?,'PENDING',?,?,?)`, [id, wid, projectId, userId, feature, provider, model, inputSummary, cost, cost > 0 ? 'RESERVED' : 'NONE']);
@@ -179,7 +179,7 @@ export async function balanceSplit(db, wid) {
  */
 export async function topUpStarterCredits(db, { target = aiConfig().trialCredits } = {}) {
   if (!(target > 0)) return { topped: 0 };
-  const rows = await db.all(`SELECT a.workspace_id, COALESCE(SUM(l.amount) FILTER (WHERE l.type = 'PROMOTION' AND l.reference_id IN ('AI_INITIAL_TRIAL_CREDITS','STARTER_TOPUP')), 0) AS starter
+  const rows = await db.all(`SELECT a.workspace_id, COALESCE(SUM(l.amount) FILTER (WHERE l.type = 'PROMOTION' AND l.reference_id IN ('AI_INITIAL_TRIAL_CREDITS','STARTER_TOPUP','STARTER_WORKSPACE_52')), 0) AS starter
     FROM workspace_credit_accounts a JOIN workspaces w ON w.id = a.workspace_id LEFT JOIN credit_ledger l ON l.workspace_id = a.workspace_id
     WHERE w.deleted_at IS NULL GROUP BY a.workspace_id`);
   let topped = 0;
@@ -190,6 +190,32 @@ export async function topUpStarterCredits(db, { target = aiConfig().trialCredits
     topped += 1;
   }
   return { topped };
+}
+
+/**
+ * Migration v52 (founder decision 2026-10-20: 500 free credits per WORKSPACE, once). A workspace whose account never received a
+ * starter grant (no ledger row referencing any STARTER_REFS — e.g. created while AI_INITIAL_TRIAL_CREDITS was 0 or under
+ * DEV_INITIAL_AI_CREDITS) is topped up to a balance of `target`; nothing is ever taken away. Workspaces that already had their
+ * starter grant (new-workspace grant or the v41 top-up) are skipped, so nobody is granted twice. Idempotent: the grant writes a
+ * STARTER_WORKSPACE_52 ledger row, so a second run finds it and skips. Each workspace runs under its account-row lock.
+ */
+export async function grantMissingWorkspaceStarter(db, { target = aiConfig().trialCredits } = {}) {
+  if (!(target > 0)) return { granted: 0 };
+  const rows = await db.all(`SELECT a.workspace_id FROM workspace_credit_accounts a JOIN workspaces w ON w.id = a.workspace_id
+    WHERE w.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM credit_ledger l WHERE l.workspace_id = a.workspace_id AND l.reference_id IN (${STARTER_REFS.map(() => '?').join(',')}))`, STARTER_REFS);
+  let granted = 0;
+  for (const r of rows) {
+    const done = await tx(db, async (t) => {
+      const acc = await lockAccount(t, r.workspace_id);
+      if (await t.get(`SELECT 1 FROM credit_ledger WHERE workspace_id = ? AND reference_id IN (${STARTER_REFS.map(() => '?').join(',')})`, [r.workspace_id, ...STARTER_REFS])) return false;
+      const add = target - Number(acc.balance);
+      if (add <= 0) return false;
+      await applyCredits(t, { wid: r.workspace_id, amount: add, type: 'PROMOTION', reason: `무료 시작 크레딧 (워크스페이스당 ${target.toLocaleString('ko-KR')})`, referenceType: 'ENV', referenceId: 'STARTER_WORKSPACE_52' });
+      return true;
+    });
+    if (done) granted += 1;
+  }
+  return { granted };
 }
 
 /** Safety net for the orchestrator: whatever happened, a PENDING run is never left behind. Idempotent. */

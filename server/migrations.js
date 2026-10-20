@@ -205,6 +205,10 @@ export const migrations = [
   } },
   { version: 50, name: 'batch7 T3: wbs_items.system_key + uq_wbs_system_key (WBS 고정 최상위 뼈대), public_holidays + 2026–2027 seed (schema.sql) — additive; existing projects get their fixed nodes when the WBS is first opened', up() {} },
   { version: 51, name: 'Batch7 T4: requirements.owner_stakeholder_id, test_executions.step_results, test_cases.test_data + environment (schema.sql, additive)', up() {} },
+  { version: 52, name: 'Batch7 T5 plan limits + paywall: 500 free AI credits once per WORKSPACE — accounts that never got a starter grant are topped up to a 500 balance (credit_ledger PROMOTION STARTER_WORKSPACE_52, idempotent, additive). Early access → FREE limits is code only; no rows changed or deleted', async up(db) {
+    const { grantMissingWorkspaceStarter } = await import('./ai/credits.js');
+    await grantMissingWorkspaceStarter(db);
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

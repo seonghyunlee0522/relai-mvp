@@ -15,7 +15,6 @@ const VERIFY_HINT = '이메일 인증 후 사용할 수 있습니다.';
 /** K24: the disabled 결제하기 / 멤버 초대 hint carries its own `인증 메일 다시 받기` (the top banner can be hidden). */
 const verifyHint = (id, style = '') => html`<span class="hint" id="${id}"${raw(style ? ` style="${style}"` : '')}>${VERIFY_HINT} <button type="button" class="link linkbtn" data-verify-again>인증 메일 다시 받기</button></span>`;
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
-const PLAN_TEAM_MONTHLY = 20000;   // server/plans.js TEAM.base_monthly (VAT excluded) — shown only in the early-access note
 const ROLE = { OWNER: '소유자', ADMIN: '관리자', MEMBER: '멤버' };
 const ROLE_DESC = { OWNER: '모든 기능 · 멤버/설정/결제 관리', ADMIN: '프로젝트 생성·관리 · 멤버/설정 관리 (결제 불가)', MEMBER: '프로젝트 업무 수행 (멤버/설정/결제 불가)' };
 
@@ -45,9 +44,9 @@ export async function settingsPage(main = $('#main')) {
     if (!billing) return '';
     const s = billing.subscription; const co = billing.checkout || {};
     const st = s && SUB_STATUS[s.status];
-    const lines = !s ? '' : html`<dl class="info" style="margin-top:14px"><dt>구독 상태</dt><dd><span class="chip ${st?.[0] || ''}">${st?.[1] || s.status}</span>${raw(s.cancel_at_period_end && s.status === 'ACTIVE' ? ' <small class="dim">해지 예약 — 기간 종료 후 Free로 전환</small>' : '')}</dd>
+    const lines = !s ? '' : html`<dl class="info" style="margin-top:14px"><dt>구독 상태</dt><dd><span class="chip ${st?.[0] || ''}">${st?.[1] || s.status}</span>${raw(s.cancel_at_period_end && s.status === 'ACTIVE' ? ' <small class="dim">해지 예약 — 기간 종료 후 무료 플랜으로 전환</small>' : '')}</dd>
       ${raw(s.current_period_end ? html`<dt>이용 기간</dt><dd>${fmtDay(s.current_period_end)}까지</dd>` : '')}
-      ${raw(s.status === 'PAST_DUE' && s.grace_period_end ? html`<dt>유예 기간</dt><dd>${fmtDay(s.grace_period_end)}까지 결제수단을 확인해 주세요. 이후 Free 한도가 적용됩니다.</dd>` : '')}
+      ${raw(s.status === 'PAST_DUE' && s.grace_period_end ? html`<dt>유예 기간</dt><dd>${fmtDay(s.grace_period_end)}까지 결제수단을 확인해 주세요. 이후 무료 플랜 한도가 적용됩니다.</dd>` : '')}
       ${raw(s.seats ? html`<dt>사용자</dt><dd>${s.seats}명 <small class="dim">(소유자 포함)</small>${raw(s.billing_cycle ? html` <small class="dim">· ${s.billing_cycle === 'ANNUAL' ? '연간 선결제' : '1개월'}</small>` : '')}</dd>` : '')}
       ${raw(s.status === 'ACTIVE' && !s.auto_renew ? '<dt>자동 결제</dt><dd>없음 <small class="dim">— 기간 종료 7일 전에 연장 안내 메일을 보내 드립니다</small></dd>' : '')}
       ${raw(s.payment_method_summary ? html`<dt>결제 수단</dt><dd>${s.payment_method_summary}</dd>` : '')}</dl>`;
@@ -55,16 +54,15 @@ export async function settingsPage(main = $('#main')) {
     const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 워크스페이스 소유자만 할 수 있습니다.</p>'
       : html`${raw(co.can_purchase && billing.provider_available ? buyForm() : '')}<div class="actions" style="margin-top:14px">${raw(canCancel && s.auto_renew ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
 `;
-    // v1: payments off (PAYMENTS_ENABLED) → no purchase / upgrade button, one line instead
-    if (billing.payments_enabled === false) return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip chip--active">${billing.plan === 'EARLY' ? '얼리 액세스' : billing.plan_label}</span></div><div class="panel__b">
-      <p class="cr-early" id="free-line">초기 고객은 무료로 이용합니다.</p>${raw(planLimits())}${raw(billing.plan === 'EARLY' ? '' : usageBars(billing.usage))}${raw(lines)}${raw(canCancel && s.auto_renew ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button></div>' : '')}</div></div>`;
-    const early = billing.plan === 'EARLY' ? html`<p class="cr-early" id="early-line">RELAI 전체 기능을 무료로 씁니다. AI는 쓴 만큼만 크레딧으로 냅니다. 이후에는 Team 플랜(${won(PLAN_TEAM_MONTHLY)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다 (데이터는 삭제되지 않습니다).</p>` : '';
-    return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan === 'EARLY' ? `얼리 액세스 · ${fmtDay(billing.early_access_until)}까지` : billing.plan_label}</span></div><div class="panel__b">
-      ${raw(early)}${raw(billing.plan === 'EARLY' ? '' : usageBars(billing.usage))}${raw(lines)}${raw(billing.plan === 'EARLY' && !s ? '' : actions)}</div></div>`;
+    // v1: payments off (PAYMENTS_ENABLED) → no purchase form; the plan line, usage bars and a link to the plans page (batch7 T5)
+    const plansLink = html`<div class="actions" style="margin-top:14px"><a class="btn btn--secondary btn--sm" href="/app/billing/plans" data-link id="plans-link">플랜 살펴보기</a></div>`;
+    if (billing.payments_enabled === false) return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan_label}</span></div><div class="panel__b">
+      ${raw(planLimits())}${raw(usageBars(billing.usage))}${raw(lines)}${raw(canCancel && s.auto_renew ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button></div>' : billing.plan === 'FREE' ? plansLink : '')}</div></div>`;
+    return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan_label}</span></div><div class="panel__b">
+      ${raw(planLimits())}${raw(usageBars(billing.usage))}${raw(lines)}${raw(actions)}${raw(billing.plan === 'FREE' ? plansLink : '')}</div></div>`;
   };
-  /** 현재 플랜 · 한도 (batch7 #24): EARLY = '무제한 · YYYY-MM-DD까지'; otherwise one line '프로젝트 1/1 · 요구사항 23/50 …' above the bars. */
+  /** 현재 플랜 · 한도 (batch7 #24): one line '프로젝트 1/2 · 요구사항 23/50 …' above the bars. Early access is on FREE limits since 2026-10-20. */
   const planLimits = () => {
-    if (billing.plan === 'EARLY') return html`<p class="plan-lim" id="plan-limits">현재 플랜 · 한도: <b>무제한</b>${raw(billing.early_access_until ? html` · ${fmtDay(billing.early_access_until)}까지` : '')}</p>`;
     const u = ((billing.usage && billing.usage.dims) || []).filter((x) => x.limit !== null && x.limit !== undefined);
     return u.length ? html`<p class="plan-lim" id="plan-limits">현재 플랜 · 한도: ${u.map((x) => `${x.label} ${x.used}/${x.limit}`).join(' · ')}</p>` : '';
   };
@@ -215,7 +213,7 @@ export async function settingsPage(main = $('#main')) {
     members0 = members; bindBuy();
     const sa = $('#samples-add'); if (sa) sa.onclick = async () => { sa.disabled = true; if (await addSamples()) { await loadSamples(); draw(members); } else sa.disabled = false; };
     const sx = $('#samples-delete'); if (sx) sx.onclick = async () => { if (await deleteAllSamples()) { await loadSamples(); draw(members); } };
-    const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 Free 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
+    const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 무료 플랜 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });
     const ib = $('#invite-btn'); if (ib) ib.onclick = async () => {
       const roles = [['MEMBER', '멤버 — 프로젝트 업무 수행']]; if (workspace.role === 'OWNER') roles.push(['ADMIN', '관리자 — 프로젝트·멤버·설정 관리']);

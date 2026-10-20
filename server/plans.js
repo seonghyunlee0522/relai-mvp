@@ -2,7 +2,7 @@
  * Plan catalogue — the single source of truth for plan limits and prices (pricing v2, founder decision 2026-10-14).
  *
  * Prices are in KRW, VAT excluded (부가세 별도); the amount charged adds 10% VAT (see billing/orders.js quote()).
- *   FREE        ₩0, 1 project, 50 requirements, 100 WBS.
+ *   FREE        ₩0, 2 projects, 3 members, 50 requirements, 100 WBS, 8 weekly reports a month (founder decision 2026-10-20: 2 projects).
  *   TEAM        ₩20,000 / month per workspace, which includes the workspace owner (included_users),
  *               + ₩5,000 / month for each additional user (extra_user_monthly). No minimum.
  *               Annual prepay = 12 months at the same monthly rate, less ANNUAL_DISCOUNT_PCT (0 = no annual discount).
@@ -10,7 +10,7 @@
  * Founding offer: the first FOUNDING_OFFER.customers paying workspaces get FOUNDING_OFFER.pct off for their first year.
  *
  * AI credits: TEAM workspaces get AI_CREDITS_MONTHLY.TEAM credits per month while the subscription is ACTIVE (billing/ai-grants.js);
- * ENTERPRISE credits are granted by an operator per contract. FREE keeps the one-time trial (ai/credits.js).
+ * ENTERPRISE credits are granted by an operator per contract. Every workspace gets ONE starter grant of AI_INITIAL_TRIAL_CREDITS (500) — per workspace, never per project (ai/credits.js).
  *
  * `null` limit = unlimited. Limits are enforced by billing/limits.js. On TEAM the member limit is the purchased user count
  * (subscriptions.seats = included_users + extra users bought).
@@ -19,15 +19,18 @@
 const envInt = (v, d) => (Number.isInteger(Number(v)) && v !== undefined && v !== '' && Number(v) >= 0 ? Number(v) : d);
 export const AI_CREDITS_MONTHLY = { FREE: 0, TEAM: envInt(process.env.AI_TEAM_MONTHLY_CREDITS, 1000), ENTERPRISE: 0 };
 
+/** Free plan limits (also applied to retired early-access workspaces, founder decision 2026-10-20). */
+export const FREE_LIMITS = Object.freeze({ projects: 2, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 });
+
 export const PLANS = {
-  FREE: { key: 'FREE', label: 'Free', base_monthly: 0, ai_credits_monthly: AI_CREDITS_MONTHLY.FREE, limits: { projects: 1, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 } },
+  FREE: { key: 'FREE', label: '무료', base_monthly: 0, ai_credits_monthly: AI_CREDITS_MONTHLY.FREE, limits: FREE_LIMITS },
   TEAM: { key: 'TEAM', label: 'Team', base_monthly: 20000, included_users: 1, extra_user_monthly: 5000, per_seat: true, ai_credits_monthly: AI_CREDITS_MONTHLY.TEAM,
     limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
   ENTERPRISE: { key: 'ENTERPRISE', label: 'Enterprise', per_seat: true, contact_sales: true, ai_credits_monthly: AI_CREDITS_MONTHLY.ENTERPRISE,
     limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
-  // Early access (AI-credits-only billing, 2026-10-15): the whole app with TEAM limits for EARLY_ACCESS.months, no subscription row.
-  // effectivePlan() answers EARLY while workspaces.early_access_until > now() and no paid subscription grants a plan.
-  EARLY: { key: 'EARLY', label: '얼리 액세스', base_monthly: 0, ai_credits_monthly: 0, limits: { projects: null, members: null, requirements: null, wbs: null, weekly_reports: null } },
+  // Early access is RETIRED as an unlimited plan (founder decision 2026-10-20): effectivePlan() never answers EARLY any more —
+  // early-access workspaces are on FREE. The key stays so an old reference still resolves, with the FREE limits.
+  EARLY: { key: 'EARLY', label: '무료', base_monthly: 0, ai_credits_monthly: 0, limits: FREE_LIMITS },
 };
 export const DEFAULT_PLAN = 'FREE';
 export const VAT_RATE = 0.1;
@@ -72,6 +75,9 @@ export const EARLY_ACCESS = {
 };
 /** Supply / VAT split of a VAT-inclusive amount (₩10,000 → 9,091 + 909). */
 export const splitVat = (amount) => { const supply = Math.round(amount / (1 + VAT_RATE)); return { supply, vat: amount - supply }; };
+
+/** Where every plan-limit / credit upsell points (subscription page, batch7 T5). */
+export const PLANS_URL = '/app/billing/plans';
 
 /** Usage dimension labels in UI order. weekly_reports is counted per calendar month (see usage.js). */
 export const USAGE_DIMS = [
