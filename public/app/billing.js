@@ -79,7 +79,7 @@ function scheduledPanel(b) {
   if (!list.length) return '';
   return html`<div class="panel bl-panel" id="bl-scheduled"><div class="panel__h">예약된 변경</div><div class="panel__b"><ul class="bl-list">
     ${raw(list.map((c, i) => html`<li><span><b>${CHANGE[c.kind] || c.kind}</b>${raw(c.to ? html` → ${PLAN_LABEL[c.to] || CYCLE[c.to] || c.to}` : '')} <small class="dim">${day(c.effective_at)} 적용</small></span>
-      ${raw(b.can_manage && c.cancel_url ? html`<button class="btn btn--ghost btn--sm" data-sched-cancel="${i}">예약 취소</button>` : '')}</li>`).join(''))}
+      ${raw(b.can_manage && c.cancel_url ? html`<button class="btn btn--ghost btn--sm" data-phone-ok data-sched-cancel="${i}">예약 취소</button>` : '')}</li>`).join(''))}
   </ul><p class="hint">예약된 변경은 이용 기간이 끝나는 날 적용되고, 이미 결제한 기간에는 다시 청구하지 않아요.</p></div></div>`;
 }
 
@@ -101,7 +101,7 @@ function actionsPanel(b) {
     html`<a class="btn btn--primary btn--sm" id="bl-change" href="/app/billing/plans" data-link>${b.plan === 'FREE' ? '요금제 살펴보기' : '요금제 변경'}</a>`,
     paid && f.addons ? html`<a class="btn btn--secondary btn--sm" id="bl-addon" href="/app/billing/subscribe?addon=1" data-link>사용자 · 프로젝트 추가</a>` : '',
     paid || b.plan === 'ENTERPRISE' ? html`<a class="btn btn--secondary btn--sm" id="bl-topup" href="/app/settings/credits#cr-buy" data-link>AI 크레딧 충전</a>` : '',
-    canCancel ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel">해지</button>` : '',
+    canCancel ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel" data-phone-ok>해지</button>` : '',
   ].filter(Boolean).join('');
   const free = b.plan === 'FREE' ? html`<p class="bl-upsell" id="bl-free-topup">AI 크레딧 충전은 Pro부터 할 수 있어요. <a class="link" href="/app/billing/plans" data-link>Pro로 업그레이드</a>하면 매월 1,000 크레딧과 충전을 이용할 수 있어요.</p>` : '';
   // D3 (founder 2026-10-20): no one-time passes — a paid plan without auto renewal has been cancelled

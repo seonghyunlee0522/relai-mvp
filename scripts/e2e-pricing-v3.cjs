@@ -122,6 +122,7 @@ const ORDERS = [
   await ph.page.request.post(BASE + '/api/auth/login', { data: { email, password: 'passw0rd!' } });
   await fixtureRoutes(ph.page);
   await ph.page.goto(BASE + '/app/settings/billing'); await ph.page.waitForSelector('#billing-page #bl-plan', { timeout: 8000 }).catch(() => {}); await ph.page.waitForSelector('#bl-ledger table, #bl-ledger p', { timeout: 4000 }).catch(() => {});
+  check('billing mobile 390: 해지 + 예약 취소 visible on the phone (cancel in the same steps as paying)', await ph.page.isVisible('#bl-cancel') && await ph.page.isVisible('#bl-scheduled [data-sched-cancel]'));
   check('billing mobile 390: renders, no horizontal scroll', Boolean(await ph.page.$('#bl-usage')) && await noHScroll(ph.page));
   check('billing mobile 390: order + ledger rows show date, title and amount', await ph.page.evaluate(() => [...document.querySelectorAll('#bl-orders-tbl tbody tr, #bl-ledger-tbl tbody tr')].every((tr) => [0, 1, 2].every((i) => tr.children[i].offsetHeight > 0))));
   await tallShot(ph.page, 'app-billing-fixture-mobile.png');
@@ -135,10 +136,14 @@ const ORDERS = [
     const ad = await mk(vp, mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {});
     await ad.page.goto(BASE + '/login'); await ad.page.request.post(BASE + '/api/auth/login', { data: { email, password: 'passw0rd!' } });
     await ad.page.goto(`${BASE}/admin/workspaces/${w}`); await ad.page.waitForSelector('text=요금 · 한도 (v3)', { timeout: 8000 }).catch(() => {});
+    if (mobile) {   // the operator console is PC-only by design (batch7): a phone gets the notice, never a broken table
+      check('admin mobile 390: PC-only notice, no horizontal scroll', /운영자 콘솔은 PC에서 사용할 수 있습니다/.test(await ad.page.textContent('body')) && await noHScroll(ad.page));
+      await ad.ctx.close(); continue;
+    }
     const at = await ad.page.textContent('body');
     check(`admin ${tag}: workspace 요금 · 한도 (v3) — plan, seats, 활성 프로젝트 0 / 1, credits, 결제 내역`, /요금 · 한도 \(v3\)/.test(at) && /활성 프로젝트\s*0 \/ 1/.test(at) && /남은 좌석/.test(at) && /AI 크레딧\s*합계/.test(at) && /결제 내역 \(\d+\)/.test(at) && !/이용권/.test(at));
     check(`admin ${tag}: workspace page no horizontal scroll`, await noHScroll(ad.page));
-    if (!mobile) await tallShot(ad.page, 'admin-workspace-billing-desktop.png'); else await tallShot(ad.page, 'admin-workspace-billing-mobile.png');
+    await tallShot(ad.page, 'admin-workspace-billing-desktop.png');
     await ad.page.goto(`${BASE}/admin`); await ad.page.waitForTimeout(1200);
     const dt = await ad.page.textContent('body');
     check(`admin ${tag}: dashboard MRR (VAT 포함) + 유료 워크스페이스 (Pro·Team) when billing tables exist`, /MRR \(VAT 포함\)/.test(dt) && /유료 워크스페이스/.test(dt));

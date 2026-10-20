@@ -17,7 +17,7 @@ export function upsellCopy(err) {
   const l = err?.limit || {};
   if (err?.code === 'AI_CREDIT_INSUFFICIENT') {
     return { title: 'AI 크레딧이 조금 모자라요', body: html`<p>이 AI 기능에는 <b>${fmt(err.required ?? 0)}</b> 크레딧이 필요하고, 지금 잔액은 <b>${fmt(err.balance ?? 0)}</b> 크레딧이에요.</p>
-      <p class="dim" style="margin-top:8px">워크스페이스마다 무료 크레딧 500이 한 번 제공돼요. 유료 플랜에서는 매달 크레딧이 추가로 제공됩니다. 직접 입력하는 기능은 그대로 쓸 수 있어요.</p>` };
+      <p class="dim" style="margin-top:8px">Free는 처음 한 번 100 크레딧을 받아요. Pro는 매월 1,000, Team은 매월 3,000 크레딧을 받고 충전도 할 수 있어요. 직접 입력하는 기능은 그대로 쓸 수 있어요.</p>` };
   }
   if (l.seats) return { title: '구매한 사용자 수를 모두 쓰고 있어요', body: html`<p>${err?.message || ''}</p>` };
   return { title: '무료 플랜 한도에 도달했어요', body: html`<p>${err?.message || '현재 플랜의 한도에 도달했어요.'}</p>
