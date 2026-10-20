@@ -50,12 +50,12 @@ const ALLOW = ['RELAI', 'PDF', 'Word', 'Excel', 'Jira', 'AI', 'WBS', 'Ctrl', 'En
       const order = await page.$$eval('tr[data-row]', (els) => els.map((e) => e.dataset.row)); const byId = (x) => list.find((y) => y.id === x);
       await page.click(`tr[data-row="${order[0]}"]`); await page.waitForSelector('#drawer:not([hidden]) .drawer__h', { timeout: 8000 });
       const d = await page.evaluate(() => { const el = document.querySelector('#drawer'); const r = el.getBoundingClientRect(); const list = document.querySelector('.rtable-wrap').getBoundingClientRect();
-        const scrim = getComputedStyle(document.querySelector('.rlayout'), '::before'); return { cls: el.className, w: Math.round(r.width), right: Math.round(window.innerWidth - r.right), listVisible: list.width > 300, scrim: scrim.display !== 'none' && scrim.content !== 'none',
+        const scrim = getComputedStyle(document.querySelector('.rlayout'), '::before'); return { cls: el.className, w: Math.round(r.width), pw: Math.round(Math.min(760, Math.max(480, innerWidth * 0.34))), gap: Math.round(r.left - list.right), listVisible: list.width > 300, scrim: scrim.display !== 'none' && scrim.content !== 'none',
           more: Boolean(el.querySelector('details.dmore > summary')) && /세부 정보 더보기/.test(el.querySelector('details.dmore > summary')?.textContent || ''), nav: el.querySelectorAll('.drawer__h [data-nav]').length,
           foot: Boolean(el.querySelector('.drawer__f.dfoot')), arch: Boolean(el.querySelector('.dfoot .dfoot__arch')) }; });
       const f = await page.$eval(`#drawer .dfoot ${foot}`, (b) => b.textContent.trim()).catch(() => '');
-      check(`${what}: 480px side drawer beside the list (no scrim), ↑/↓ in the header, 세부 정보 더보기, footer 보관 · ${label}`,
-        /drawer--lg/.test(d.cls) && d.w === 480 && d.right === 0 && d.listVisible && !d.scrim && d.nav === 2 && (what === '검수' || d.more) && d.foot && d.arch && f === label, JSON.stringify({ ...d, f }));
+      check(`${what}: side drawer (batch7 B1: --panel-w = clamp(480px, 34vw, 760px)) right next to the list (gap ≤ 24px, no scrim), ↑/↓ in the header, 세부 정보 더보기, footer 보관 · ${label}`,
+        /drawer--lg/.test(d.cls) && Math.abs(d.w - d.pw) <= 1 && d.gap >= 0 && d.gap <= 24 && d.listVisible && !d.scrim && d.nav === 2 && (what === '검수' || d.more) && d.foot && d.arch && f === label, JSON.stringify({ ...d, f }));
       if (list.length > 1) {
         await page.click('#drawer .drawer__h [data-nav="1"]'); await page.waitForTimeout(500);
         const second = await page.textContent('#drawer .drawer__h b');

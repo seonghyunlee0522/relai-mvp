@@ -40,6 +40,9 @@ export function testDoneTitle(t) {
 const goLiveDone = (phase) => Array.isArray(phase && phase.steps) && phase.steps.some((a) => a.step_key === 'GO_LIVE' && a.state === 'COMPLETED');
 
 /** '2026-10-30' → '10/30'. */
+/** batch7 B5: a title cut to 30 characters (… when cut) for the one-line top-bar strip. */
+export const shortTitle = (t) => { const c = [...String(t || '')]; return c.length > 30 ? `${c.slice(0, 29).join('').trimEnd()}…` : c.join(''); };
+
 const mdDate = (d) => { const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(d || '')); return m ? `${Number(m[1])}/${Number(m[2])}` : ''; };
 
 export function projectGuidance(ctx) {
@@ -58,6 +61,8 @@ export function projectGuidance(ctx) {
   const out = (rule, title, description, why, primary, secondary = null, next = null) => ({
     current_phase: { key, name: phase?.name || PHASE_BY_KEY[key]?.name || key, sequence: phase?.sequence || (DEFAULT_PHASES.findIndex((p) => p.key === key) + 1) },
     rule, title, description, why, primary_action: primary, secondary_action: secondary, warnings, warning_links: warningLinks, next_preview: next,
+    // batch7 B5: the PC top-bar strip (다음 할 일 · short_title [지금 하기 →]) — ≤ 30 chars, the CTA's own words and target
+    short_title: shortTitle(title), cta_label: primary ? primary.label : null, href: primary ? primary.href : null,
   });
   const nextPhaseText = nextPhase ? `다음 단계: ${nextPhase.name}` : null;
 

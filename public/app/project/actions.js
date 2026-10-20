@@ -1,4 +1,4 @@
-/* Project workspace header actions: Activity panel, 보고서 menu, ⋯ menu.
+/* Project workspace header actions: 보고서 menu, ⋯ menu (활동 기록 opens its page).
  * The header is rendered as a string by projectHead() on every project screen, so the actions are wired once by
  * document-level delegation and read the project id / state from data attributes on the header. */
 import { api, wsApi } from '../core/api.js';
@@ -9,10 +9,7 @@ import { confirmDialog, toast } from '../shared/dialogs.js';
 import { periodDialog } from './dashboard.js';
 import { openJiraProjectSettings } from '../shared/jira.js';
 
-const ENT = { REQUIREMENT: '요구사항', WBS: 'WBS', CHANGE: '변경 요청', ISSUE: '이슈', RISK: '리스크', TEST: '테스트', ACCEPTANCE: '검수', PHASE: '단계', JIRA: '지라' };
-const KINDS = [['ALL', '전체'], ['COMMENT', '댓글'], ['STATUS', '상태'], ['OWNER', '담당자'], ['SCHEDULE', '일정'], ['PHASE', '단계'], ['JIRA', '지라'], ['DATA', '기타']];
 const RS = { DRAFT: ['초안', 'chip--muted'], FINAL: ['확정', 'chip--done'] };
-const fmtAt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${no2(d.getDate())} ${no2(d.getHours())}:${no2(d.getMinutes())}`; };
 
 /** Header action group (rendered inside projectHead). */
 export const headerActions = (p) => {
@@ -95,38 +92,17 @@ function moreMenu(btn, c) {
   };
 }
 
-/** Activity slide-over: unified feed with kind filters. Opened on demand, never part of a default screen. */
-export async function openActivity(pid) {
+/** batch7 #22: 활동 기록 is a full page (보고서 › 활동 기록, /activity) — every old entry point (⋯, 지금 할 일 '전체 보기', 건강도, the phone menu) lands there. */
+export function openActivity(pid) {
   closeMenus();
-  document.querySelector('.actpanel')?.remove();
-  const el = document.createElement('div'); el.className = 'actpanel';
-  el.innerHTML = html`<div class="actpanel__scrim" data-close></div><aside class="actpanel__p" role="dialog" aria-modal="true" aria-labelledby="actT">
-    <div class="actpanel__h"><b id="actT">활동 기록</b><button type="button" class="drawer__x" data-close aria-label="닫기">×</button></div>
-    <div class="actpanel__f">${raw(KINDS.map(([k, l]) => html`<button type="button" class="fchip2 ${k === 'ALL' ? 'is-on' : ''}" data-kind="${k}">${l}</button>`).join(''))}</div>
-    <div class="actpanel__b"><div class="amenu__empty" style="padding:16px">불러오는 중…</div></div></aside>`;
-  document.body.append(el);
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  document.addEventListener('keydown', onKey);
-  el.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) close(); else if (e.target.closest('a[data-link]')) close(); });
-  let items = [];
-  const draw = (kind) => {
-    const rows = kind === 'ALL' ? items : items.filter((i) => i.kind === kind);
-    $('.actpanel__b', el).innerHTML = rows.length ? html`<ol class="actlist">${raw(rows.map((r) => html`<li class="${r.kind === 'COMMENT' ? 'is-comment' : ''}">
-      <div class="actlist__m"><span class="chip chip--muted">${r.kind === 'COMMENT' ? '댓글' : ENT[r.entity_type] || r.entity_type}</span><b>${r.actor_name || '시스템'}</b><time>${fmtAt(r.at)}</time></div>
-      <a href="/app/projects/${pid}/${r.href}" data-link>${raw(r.display_id ? html`<span class="mono">${r.display_id}</span> ` : '')}${r.kind === 'COMMENT' ? r.title || '' : r.title || ''}</a>
-      <p>${r.summary}</p></li>`).join(''))}</ol>` : '<div class="amenu__empty" style="padding:16px">해당하는 활동이 없습니다.</div>';
-  };
-  el.querySelectorAll('[data-kind]').forEach((b) => b.onclick = () => { el.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('is-on', x === b)); draw(b.dataset.kind); });
-  try { items = (await api('GET', wsApi(`/${pid}/activity?limit=120`))).items; draw('ALL'); }
-  catch (e) { $('.actpanel__b', el).innerHTML = html`<div class="amenu__empty" style="padding:16px">${e.message}</div>`; }
+  navigate(`/app/projects/${pid}/activity`);
 }
 
 let wired = false;
 export function wireProjectActions() {
   if (wired) return; wired = true;
   document.addEventListener('click', (e) => {
-    const sa = e.target.closest('[data-stab-action="activity"]');   // 보고서 door › 활동 기록 tab
+    const sa = e.target.closest('[data-stab-action="activity"]');   // 지금 할 일 › 최근 활동 '전체 보기' → the 활동 기록 page
     if (sa) { const h = document.querySelector('.phead__act'); if (h) openActivity(h.dataset.pid); return; }
     const btn = e.target.closest('.wsh__act [data-act], .phead__act [data-act]');
     if (!btn) { if (!e.target.closest('.amenu')) closeMenus(); else if (e.target.closest('a[data-link]')) closeMenus(); return; }

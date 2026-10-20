@@ -270,7 +270,7 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   // L-C1: WBS grid — one text format for dates (10/20) and progress (0%) on editable rows; no mm/dd/yyyy; owner name + 계정 없음 not clipped
   await page.goto(`${A.url}/wbs`); await page.waitForSelector('main table');
   // R2: 계획 시작 / 계획 종료 are restorable columns on desktop (default = one 기간 column) — show them for this check
-  const cols = async (on) => { await page.click('.rtool [data-tmore]'); await page.click('.tmenu [data-gcols]'); for (const k of ['start', 'end']) await page[on ? 'check' : 'uncheck'](`.gpop [data-gcol="${k}"]`); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); };
+  const cols = async (on) => { await page.click('.rtool [data-gcols]'); for (const k of ['start', 'end']) await page[on ? 'check' : 'uncheck'](`.gpop [data-gcol="${k}"]`); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); };
   await cols(true);
   await page.mouse.move(5, 5);
   const fmt = await page.$$eval('main tbody tr:not(.is-group)', (trs) => trs.slice(0, 12).map((tr) => [...tr.querySelectorAll('.cedit__v')].map((v) => v.textContent.trim())).flat());

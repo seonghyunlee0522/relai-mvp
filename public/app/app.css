@@ -1434,7 +1434,7 @@ a.akpi__i:hover{border-color:var(--border-blue)}
 /* assistant panel */
 .aipanel{position:fixed;inset:0;z-index:120}
 .aipanel__scrim{position:absolute;inset:0;background:rgba(16,24,40,.38)}
-.aipanel__p{position:absolute;top:0;right:0;bottom:0;width:min(560px,100%);background:#fff;box-shadow:var(--sh-lift);display:flex;flex-direction:column;border-left:1px solid var(--border)}
+.aipanel__p{position:absolute;top:0;right:0;bottom:0;width:min(var(--panel-w-eff),100%);background:#fff;box-shadow:var(--sh-lift);display:flex;flex-direction:column;border-left:1px solid var(--border)}
 .aipanel__h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border-soft)}
 .aipanel__h b{display:block;font-size:var(--fs-md)}.aipanel__h small{display:block;margin-top:2px}
 .aipanel__b{flex:1;overflow:auto;padding:16px 18px;background:var(--bg-alt);display:flex;flex-direction:column;gap:12px}
@@ -1481,14 +1481,8 @@ a.akpi__i:hover{border-color:var(--border-blue)}
 .amenu .chip{height:20px;font-size:var(--fs-xs);padding:0 8px}
 
 /* Activity slide-over */
-.actpanel{position:fixed;inset:0;z-index:80}
-.actpanel__scrim{position:absolute;inset:0;background:rgba(16,24,40,.28)}
-.actpanel__p{position:absolute;top:0;right:0;bottom:0;width:min(460px,100vw);background:#fff;display:flex;flex-direction:column;box-shadow:-10px 0 30px rgba(16,24,40,.12)}
-.actpanel__h{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-soft);font-size:var(--fs-md)}
-.actpanel__f{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border-soft)}
 .fchip2{height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);background:#fff;font-size:var(--fs-sm);color:var(--text-2);cursor:pointer}
 .fchip2.is-on{background:var(--navy);border-color:var(--navy);color:#fff}
-.actpanel__b{flex:1;overflow:auto}
 .actlist{list-style:none;margin:0;padding:0}
 .actlist li{padding:10px 16px;border-bottom:1px solid var(--border-soft);font-size:var(--fs-sm)}
 .actlist li.is-comment{background:var(--bg-alt)}
@@ -2126,8 +2120,8 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .st--warn{background:var(--warn-bg);color:var(--warn-fg)}
 
 /* ---- Work Screen drawer (right) + full screen expand ---- */
-.wdrawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,92vw);background:#fff;border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(16,24,40,.08);z-index:90;display:flex;flex-direction:column}
-.wdrawer--wide{width:min(700px,92vw)}
+.wdrawer{position:fixed;top:0;right:0;bottom:0;width:min(var(--panel-w-eff),92vw);background:#fff;border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(16,24,40,.08);z-index:90;display:flex;flex-direction:column}
+.wdrawer--wide{width:min(max(700px,var(--panel-w-eff)),92vw)}
 .wdrawer--full{left:232px;width:auto;border-left:0;box-shadow:none}
 .shell.is-collapsed .wdrawer--full{left:56px}
 @media (max-width:900px){.wdrawer--full{left:0}}
@@ -2506,7 +2500,7 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .badge--st.is-skip::before{content:'—'}
 /* 02 기준선 승인 = the same right-side panel as 01 착수 결과 승인 (Q6-1); chips for 승인 방법; inline errors; warn line (L-D1..L-D3) */
 .rlayout.has-drawer:has(>.drawer--side)::before,.rlayout.has-drawer:has(.drawer.drawer--side)::before{background:transparent;pointer-events:none}
-.rlayout .drawer.drawer--side{left:auto;right:0;top:0;bottom:0;transform:none;width:min(700px,92vw);height:auto;max-height:none;border-radius:0;border:0;border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(16,24,40,.08);z-index:90}
+.rlayout .drawer.drawer--side{left:auto;right:0;top:0;bottom:0;transform:none;width:min(max(560px,var(--panel-w-eff)),92vw);height:auto;max-height:none;border-radius:0;border:0;border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(16,24,40,.08);z-index:90}
 .drawer--side .wd__h{flex:none}
 .drawer--side .drawer__b{flex:1;overflow-y:auto;padding:16px 18px}
 .drawer--side .drawer__f{flex:none}
@@ -3018,7 +3012,7 @@ html.is-phone .rtable.cr-log td:nth-child(3),html.is-phone .rtable.cr-log td:nth
  * REDESIGN R1 — desktop frame (≥ 768px; hive research/relai-redesign-spec.md §4): 56px top bar · 76px rail · section tabs ·
  * page header. Everything here is scoped to html:not(.is-phone) — the phone view mode below keeps its own shell.
  * ===================================================================================================================== */
-:root{--bg-page:#F5F6F8;--topbar-h:56px;--rail-w:76px;--tabs-h:44px;--drawer-w:480px}
+:root{--bg-page:#F5F6F8;--topbar-h:56px;--rail-w:76px;--tabs-h:44px;--drawer-w:var(--panel-w-eff)}   /* --drawer-w: older name of the batch7 panel width */
 html:not(.is-phone){--border:#E2E5EA}
 .dtop,.rail{display:none}
 html:not(.is-phone) .shell,html:not(.is-phone) .shell.is-collapsed,html:not(.is-phone) .shell--ws,html:not(.is-phone) .shell--ws.is-collapsed{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);grid-template-rows:var(--topbar-h) minmax(0,1fr)}
@@ -3227,8 +3221,7 @@ a.nxt:hover{border-color:var(--border-blue);background:#fff}
 /* detail drawer (requirement · WBS item): a 480px panel beside the list — no scrim, the list stays usable; at ≥ 1280px the page
  * makes room for it, below that it overlays the right edge (never a sideways scroll). Create forms keep the centred dialog. */
 html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden]))::before{display:none}
-html:not(.is-phone) .rlayout .drawer.drawer--lg{left:auto;right:0;top:var(--topbar-h);bottom:0;transform:none;width:min(var(--drawer-w),100vw - var(--rail-w));height:auto;max-height:none;border-radius:0;border:0;border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(16,24,40,.10);z-index:75}
-@media (min-width:1280px){html:not(.is-phone) .shell--ws .page--wide:has(>.rlayout.has-drawer>.drawer--lg:not([hidden])){padding-right:var(--drawer-w)}}
+html:not(.is-phone) .rlayout .drawer.drawer--lg{left:auto;right:0;top:var(--topbar-h);bottom:0;transform:none;width:min(var(--panel-w-eff),100vw - var(--rail-w));height:auto;max-height:none;border-radius:0;border:0;border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(16,24,40,.10);z-index:75}
 html:not(.is-phone) #main:has(.drawer--lg:not([hidden])) .btn--primary:not(.drawer .btn--primary){background:#fff;color:var(--navy);border-color:var(--border-strong)}
 .drawer--lg .drawer__b{overflow-y:auto}
 .dstack{display:flex;flex-direction:column;gap:10px}
@@ -3408,7 +3401,7 @@ html.is-phone .kpi__s{white-space:normal;overflow:visible;text-overflow:clip}
  * 2. Desktop spacing scale: blocks on a page are separated by --gap-block (16px); a toolbar that belongs to the table under it
  *    keeps --gap-tight (8px). Grids of cards/tiles use --gap-block too. */
 :root{--gap-block:var(--s4);--gap-tight:var(--s2)}
-.actions,.drawer__f,.wd__f,.def__foot,.stage__f,.gl__f,.imp__f,.aid__f,.tmenu__f,.doc__actions,.page__acts,.rpl__btns,.covacts,.act__f,.actpanel__f,.dfoot{display:flex;justify-content:flex-end}
+.actions,.drawer__f,.wd__f,.def__foot,.stage__f,.gl__f,.imp__f,.aid__f,.tmenu__f,.doc__actions,.page__acts,.rpl__btns,.covacts,.act__f,.dfoot{display:flex;justify-content:flex-end}
 :is(.actions,.drawer__f,.wd__f,.def__foot,.stage__f,.gl__f,.imp__f,.aid__f,.tmenu__f,.dfoot)>:first-child:not(.btn):not(button):not(.wd__btns):not(.def__btns):not(.stage__btns):not(.gl__btns):not(.aid__btns):not(.dfoot__r){margin-right:auto}
 .welcome .actions{justify-content:center}
 a.me{color:inherit;text-decoration:none;border-radius:var(--r)}
@@ -3455,3 +3448,104 @@ html:not(.is-phone) .rtable td{height:36px}
 /* 5. 프로젝트 개요 (PC): 사업수행계획서 내려받기 moved up into the page header (charter.js), so the document starts right under the
  *    header and the outline rail lines up with it instead of keeping the old 62px offset. */
 html:not(.is-phone) .chl:not(:has(.chx__head)) .chr{margin-top:0}
+
+/* =====================================================================================================================
+ * batch7 T1 — shell & design system (hive research/relai-batch7-spec.md B1 · B2 · B5, #1 #8 #9 #12 #14 #17 #19 #22).
+ * Keep this block together for merging. Contracts other tracks use: --tag-* / .tag / .prio, --panel-w, .dtabs-w.
+ * ===================================================================================================================== */
+:root{
+  /* B2 status tags: one fg/bg/bd triple per meaning (every pair ≥ 4.5:1). The app has no dark theme yet — add the dark values here when it gets one. */
+  --tag-done-fg:#0E7A4F;   --tag-done-bg:#E8F7F0;   --tag-done-bd:#BFE8D3;     /* 끝남·확정 */
+  --tag-active-fg:#243F9C; --tag-active-bg:#EDF0FA; --tag-active-bd:#C7D0EE;   /* 진행·검토 */
+  --tag-draft-fg:#7A5200;  --tag-draft-bg:#FEF6D8;  --tag-draft-bd:#F0D98F;    /* 작성·초안 */
+  --tag-hold-fg:#5B4E8C;   --tag-hold-bg:#F1EFF8;   --tag-hold-bd:#D9D3EC;     /* 멈춤 (보류 · 차단) */
+  --tag-bad-fg:#B42318;    --tag-bad-bg:#FEF1F2;    --tag-bad-bd:#F3C4C9;      /* 문제 (실패 · 지연 · 열린 이슈) */
+  --tag-muted-fg:#4F5B6D;  --tag-muted-bg:#F1F3F6;  --tag-muted-bd:#DFE3EA;    /* 제외 · 반려 · 미착수 · 보관 */
+  --prio-high:#C0262D; --prio-medium:#667085; --prio-low:#2E51C4;
+  /* B1 panel: width follows the screen; a user's drag (drawer.js) wins, but never squeezes the list below 360px */
+  --panel-w:clamp(480px,34vw,760px); --panel-gap:16px;
+  --panel-w-eff:min(var(--panel-w-user,var(--panel-w)),max(480px,calc(100vw - var(--rail-w) - 360px)));
+}
+.tag--done{--t-fg:var(--tag-done-fg);--t-bg:var(--tag-done-bg);--t-bd:var(--tag-done-bd)}
+.tag--active{--t-fg:var(--tag-active-fg);--t-bg:var(--tag-active-bg);--t-bd:var(--tag-active-bd)}
+.tag--draft{--t-fg:var(--tag-draft-fg);--t-bg:var(--tag-draft-bg);--t-bd:var(--tag-draft-bd)}
+.tag--hold{--t-fg:var(--tag-hold-fg);--t-bg:var(--tag-hold-bg);--t-bd:var(--tag-hold-bd)}
+.tag--bad{--t-fg:var(--tag-bad-fg);--t-bg:var(--tag-bad-bg);--t-bd:var(--tag-bad-bd)}
+.tag--muted{--t-fg:var(--tag-muted-fg);--t-bg:var(--tag-muted-bg);--t-bd:var(--tag-muted-bd)}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;font-size:var(--fs-xs);font-weight:600;white-space:nowrap;line-height:1}
+.tag,.chip[class*="tag--"],.res[class*="tag--"]{color:var(--t-fg);background:var(--t-bg);box-shadow:inset 0 0 0 1px var(--t-bd)}
+/* an editable status in a grid row: the select sits inside the same pill (grid.js toneOf) */
+.tsel{display:inline-flex;align-items:center;max-width:100%;min-width:0}
+.tsel--tag{height:22px;border-radius:999px;padding:0 2px 0 4px;color:var(--t-fg);background:var(--t-bg);box-shadow:inset 0 0 0 1px var(--t-bd)}
+.tsel--tag .cell--sel,.gtable tbody tr:hover .tsel--tag .cell--sel{height:20px;min-height:0;padding:0 14px 0 4px;font-size:var(--fs-xs);font-weight:600;color:inherit;background-color:transparent;border:0;box-shadow:none}
+/* priority: no border, arrow + word (높음 ▲ 빨강 · 보통 – 회색 · 낮음 ▼ 파랑) */
+.prio{display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap}
+.prio>i{font-style:normal;font-size:.8em;line-height:1}
+.prio--high,.prio--critical{color:var(--prio-high);font-weight:700}.prio--medium{color:var(--prio-medium);font-weight:500}.prio--low{color:var(--prio-low);font-weight:600}
+.tsel--prio .cell--sel{color:inherit;font-weight:inherit}
+.tsel--prio::before{font-size:.75em;margin-right:2px}
+.tsel--prio.prio--high::before,.tsel--prio.prio--critical::before{content:"▲"}.tsel--prio.prio--medium::before{content:"–"}.tsel--prio.prio--low::before{content:"▼"}
+
+/* #8 RELAI에게 물어보기: the one coloured secondary in every work-screen header (brand tint, ✦, 32px) */
+.btn--ask{height:32px;gap:6px;padding:0 12px;border:1px solid var(--blue);background:linear-gradient(180deg,#F3F5FD,#E3E8F8);color:var(--blue-deep);font-weight:700;white-space:nowrap}
+.btn--ask>i{font-style:normal;color:var(--blue);font-size:13px;line-height:1}
+.btn--ask:hover{background:var(--blue-soft);border-color:var(--blue-deep)}
+.phead__r .btn--ask{order:-1}
+
+/* #17 / B5 top-bar strip: 다음 할 일 · <short title> [지금 하기 →] */
+.dnext{display:none}
+html:not(.is-phone) .dnext:not([hidden]){display:flex;align-items:center;gap:8px;min-width:0;flex:0 1 auto;max-width:min(620px,44vw);height:36px;padding:0 4px 0 12px;border:1px solid var(--border-blue);border-radius:999px;background:var(--bg-tint);font-size:var(--fs-sm);color:var(--navy)}
+.dnext__k{flex:none;font-weight:700;color:var(--blue-deep)}
+.dnext__k::after{content:" ·";color:var(--text-3);font-weight:400}
+.dnext--slim .dnext__k::after{content:""}
+.dnext__t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dnext__n{font-variant-numeric:tabular-nums;padding-right:8px}
+.dnext__dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 3px var(--warn-bg)}
+.dnext__go{flex:none;display:inline-flex;align-items:center;height:28px;padding:0 12px;border-radius:999px;background:var(--blue);color:#fff;font-weight:700;font-size:var(--fs-sm);white-space:nowrap}
+.dnext__go:hover{background:var(--blue-deep)}
+@media (max-width:1023px){.dnext__k,.dnext__t{display:none}.dnext__dot{margin-left:-4px}html:not(.is-phone) .dnext:not([hidden]){padding-left:8px}}
+
+/* #9 grid toolbar: 컬럼 sits next to the search box */
+.rtool--r2>.gtools{flex:none}
+
+/* B1 (#1 · #19) detail panel. ≥ 1280px: an in-flow column right next to the list — the list column is only as wide as the table,
+ * so the panel is never a mouse-trip away on a wide screen; spare width stays to the panel's right. Narrower: overlays the right edge. */
+html:not(.is-phone) .rlayout .drawer.drawer--lg::before,html:not(.is-phone) .rlayout .drawer.drawer--side::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;cursor:col-resize;z-index:6}
+html:not(.is-phone) .rlayout .drawer.drawer--lg:hover::before,html:not(.is-phone) .rlayout .drawer.drawer--side:hover::before{background:linear-gradient(90deg,var(--border-blue) 0 2px,transparent 2px)}
+body.is-resizing,body.is-resizing *{cursor:col-resize!important;user-select:none}
+@media (min-width:1280px){
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])),html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--side:not([hidden])){display:grid;grid-template-columns:minmax(0,max-content) var(--panel-w-eff);grid-template-rows:minmax(0,1fr);grid-auto-rows:auto;column-gap:var(--panel-gap);align-items:stretch;justify-content:start}
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden]))>:not(.drawer),html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--side:not([hidden]))>:not(.drawer){grid-column:1;min-width:0}
+  html:not(.is-phone) .rlayout.has-drawer>.drawer.drawer--lg,html:not(.is-phone) .rlayout.has-drawer>.drawer.drawer--side{position:relative;grid-column:2;grid-row:1 / span 2;inset:auto;width:auto;height:auto;min-height:0;max-height:none;transform:none;z-index:4;border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh-card)}
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--side:not([hidden]))::before{display:none}
+}
+
+/* #14 tab bars: one line; overflow fades + ‹ › (detail.js syncDtabs) */
+.dtabs-w{position:relative;flex:none;background:#fff;min-width:0}
+.dtabs-w>.dtabs{overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap}
+.dtabs-w>.dtabs::-webkit-scrollbar{display:none}
+.dtabs-w>.dtabs button{white-space:nowrap;flex:none}
+.dtabs__arr{position:absolute;top:0;bottom:1px;width:30px;border:0;padding:0;display:none;align-items:center;justify-content:center;cursor:pointer;color:var(--text-2);font-size:18px;line-height:1;z-index:3;font-family:inherit}
+.dtabs__arr:hover{color:var(--blue-deep)}
+.dtabs__arr--l{left:0;background:linear-gradient(90deg,#fff 55%,rgba(255,255,255,0))}
+.dtabs__arr--r{right:0;background:linear-gradient(270deg,#fff 55%,rgba(255,255,255,0))}
+.dtabs-w.is-over:not(.at-start)>.dtabs__arr--l,.dtabs-w.is-over:not(.at-end)>.dtabs__arr--r{display:flex}
+
+/* #22 보고서 › 활동 기록 page */
+.actbar{flex-wrap:wrap;row-gap:8px}
+.actpage{display:flex;flex-direction:column;gap:14px;max-width:1080px}
+.actday{background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+.actday__h{margin:0;padding:10px 16px;font-size:var(--fs-sm);font-weight:700;color:var(--navy);background:var(--bg-alt);border-bottom:1px solid var(--border-soft)}
+.actday__h em{font-style:normal;font-weight:600;color:var(--text-3);margin-left:4px}
+.actday__l{list-style:none;margin:0;padding:0}
+.actrow{display:grid;grid-template-columns:48px 76px minmax(0,1fr);gap:10px;align-items:baseline;padding:10px 16px;border-top:1px solid var(--border-soft)}
+.actrow:first-child{border-top:0}
+.actrow__t{font-variant-numeric:tabular-nums;color:var(--text-3);font-size:var(--fs-sm)}
+.actrow__k{justify-self:start}
+.actrow__h{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:var(--fs-sm)}
+.actrow__h b{color:var(--navy)}
+.actrow__h .link{min-width:0;overflow-wrap:anywhere}
+.actrow__s{margin:2px 0 0;color:var(--text-2);font-size:var(--fs-sm)}
+.actrow.is-comment .actrow__s{color:var(--navy)}
+.actfoot{display:flex;justify-content:center;margin:16px 0 8px;max-width:1080px}
+html.is-phone .actrow{grid-template-columns:44px minmax(0,1fr)}html.is-phone .actrow__k{display:none}

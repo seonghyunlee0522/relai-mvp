@@ -243,6 +243,19 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   }
   check('PC probe: no page errors', errors.length === before && errors.length === 0, JSON.stringify(errors));
 
+  /* ---------- batch7 B2 (#12): same meaning = same colour on 요구사항 · WBS · 테스트 · 변경 요청 · 이슈 (computed colours) ---------- */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const toneSeen = {}; const perScreen = {};
+  for (const [name, url] of [['요구사항', `${M}/requirements`], ['WBS', `${M}/wbs`], ['테스트', `${M}/tests`], ['변경 요청', `${M}/changes`], ['이슈', `${M}/issues`]]) {
+    await page.goto(`${BASE}${url}`); await loaded('.phead');
+    const got = await page.evaluate(() => [...document.querySelectorAll('#main [class*="tag--"]')].filter((e) => e.offsetParent !== null).map((e) => { const t = /\btag--([a-z]+)\b/.exec(e.className); const c = getComputedStyle(e); return t ? [t[1], c.backgroundColor, c.color, e.textContent.trim().slice(0, 8)] : null; }).filter(Boolean));
+    perScreen[name] = [...new Set(got.map((g) => g[0]))];
+    for (const [tone, bg, fg, label] of got) { toneSeen[tone] = toneSeen[tone] || { bg: new Set(), fg: new Set(), labels: new Set(), screens: new Set() }; toneSeen[tone].bg.add(bg); toneSeen[tone].fg.add(fg); toneSeen[tone].labels.add(label); toneSeen[tone].screens.add(name); }
+  }
+  const sum = Object.fromEntries(Object.entries(toneSeen).map(([t, v]) => [t, { bg: [...v.bg], fg: [...v.fg], screens: [...v.screens], labels: [...v.labels].slice(0, 6) }]));
+  check('B2 status tags: every tone has ONE background and ONE text colour across 요구사항 · WBS · 테스트 · 변경 요청 · 이슈', Object.values(sum).every((v) => v.bg.length === 1 && v.fg.length === 1), JSON.stringify(sum));
+  check('B2 status tags: 끝남·확정 (done) tags appear on at least 4 of the 5 screens with the same green', sum.done && sum.done.screens.length >= 4 && sum.done.bg.length === 1, JSON.stringify({ perScreen, done: sum.done }));
+
   await browser.close();
   const fail = results.filter(([, ok]) => !ok).length;
   log(`\n${results.length - fail}/${results.length} passed`);

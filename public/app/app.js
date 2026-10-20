@@ -15,6 +15,7 @@ import { charterPage } from './project/charter.js';
 import { checklistPage } from './project/checklist.js';
 import { reportPage } from './project/report.js';
 import { reportsPage } from './project/reports.js';
+import { activityPage } from './project/activity.js';   // batch7 #22: 보고서 › 활동 기록
 import { requirementsPage } from './requirements/page.js';
 import { wbsPage } from './wbs/page.js';
 import { changesPage } from './changes/page.js';
@@ -50,6 +51,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/checklist\/?$/, checklistPage],      // 06 전환·오픈 · 07 운영 activity checklists         // Overview › Project Charter (read-only view of 프로젝트 정의)
   [/^\/app\/projects\/([\w-]+)\/phases(?:\/[A-Z_]+)?\/?$/, phasePage],   // legacy deep links → What’s Next
   [/^\/app\/projects\/([\w-]+)\/reports\/?$/, reportsPage],
+  [/^\/app\/projects\/([\w-]+)\/activity\/?$/, activityPage],
   [/^\/app\/projects\/([\w-]+)\/reports\/([\w-]+)\/?$/, reportPage],
   [/^\/app\/projects\/([\w-]+)\/requirements\/?$/, requirementsPage],
   [/^\/app\/projects\/([\w-]+)\/wbs\/?$/, wbsPage],

@@ -151,13 +151,13 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   check('R2-3 요구사항 default columns = ID, 제목, 상태, (범위 while 02 is open — Jim M2), 우선순위, 담당자', JSON.stringify(rc) === JSON.stringify(['ID', '제목', '상태', '범위', '우선순위', '담당자']), JSON.stringify(rc));
   const rCtl = await ctrlCount('[data-rtool-r2]');
   const above = await page.evaluate(() => { const g = document.querySelector('#grid').getBoundingClientRect().top; const v = (e) => e && e.offsetParent !== null; return { kstrip: v(document.querySelector('#kstrip')), qaBelow: document.querySelector('#qa') ? document.querySelector('#qa').getBoundingClientRect().top > g : null }; });
-  check('R2-4 controls above the requirements table ≤ 4 (status filter, search, ⋯, + 추가); quick add sits under the table', rCtl <= 4 && !above.kstrip && above.qaBelow === true, JSON.stringify({ rCtl, above }));
-  // 컬럼 chooser via ⋯, remembered after reload
-  await page.click('[data-rtool-r2] [data-tmore]'); await page.click('.tmenu [data-gcols]'); await page.check('.gpop [data-gcol="type"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  check('R2-4 controls above the requirements table ≤ 5 (status filter, search, 컬럼 — batch7 #9, ⋯, + 추가); quick add sits under the table', rCtl <= 5 && !above.kstrip && above.qaBelow === true, JSON.stringify({ rCtl, above }));
+  // 컬럼 chooser (batch7 #9: in the toolbar, no longer inside ⋯), remembered after reload
+  await page.click('[data-rtool-r2] [data-gcols]'); await page.check('.gpop [data-gcol="type"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.reload(); await settle('#grid');
   const rc2 = await colsOf();
-  check('R2-3 요구사항: hidden column restored from ⋯ › 컬럼 and remembered after reload', rc2.includes('유형'), JSON.stringify(rc2));
-  await page.click('[data-rtool-r2] [data-tmore]'); await page.click('.tmenu [data-gcols]'); await page.uncheck('.gpop [data-gcol="type"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  check('R2-3 요구사항: hidden column restored from 컬럼 and remembered after reload', rc2.includes('유형'), JSON.stringify(rc2));
+  await page.click('[data-rtool-r2] [data-gcols]'); await page.uncheck('.gpop [data-gcol="type"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   // ⋯ keyboard: Enter opens and focuses inside, Esc closes
   await page.focus('[data-rtool-r2] [data-tmore]'); await page.keyboard.press('Enter'); await page.waitForTimeout(150);
   const kOpen = await page.evaluate(() => { const m = document.querySelector('[data-rtool-r2] .tmenu'); return !m.hidden && m.contains(document.activeElement); });
@@ -172,7 +172,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
       fields: ['[data-field="title"]', '[data-field="description"]', '#crit-in', '[data-field="scope"]', '[data-field="priority"]', '[data-field="owner_user_id"]'].map(v), hiddenMore: !v('[data-field="type"]'), more: v('[data-dmore] > summary'),
       foot: [...document.querySelectorAll('#drawer .drawer__f button')].map((b) => b.textContent.trim()) };
   });
-  check('R2-9 requirement drawer opens beside the list at 1440 (480px, list still visible, no scrim)', dr.dw === 480 && dr.gRight <= dr.dLeft + 1 && dr.gW > 500 && dr.scrim === 'none', JSON.stringify(dr));
+  check('R2-9 requirement drawer opens right next to the list at 1440 (batch7 B1: 34vw = 490px, gap ≤ 24px, list still visible, no scrim)', Math.abs(dr.dw - 490) <= 1 && dr.gRight <= dr.dLeft + 1 && dr.dLeft - dr.gRight <= 24 && dr.gW > 500 && dr.scrim === 'none', JSON.stringify(dr));
   check('R2-9 drawer shows 6 fields (제목·설명·완료 조건·범위·우선순위·담당자) + "세부 정보 더보기"', dr.fields.every(Boolean) && dr.hiddenMore && dr.more, JSON.stringify(dr.fields));
   check('R2-9 drawer footer: 댓글 · 보류 · 확정하기 (one primary)', ['댓글', '보류', '확정하기'].every((x) => dr.foot.includes(x)) && (await page.$$eval('#drawer .drawer__f .btn--primary', (e) => e.length)) === 1, JSON.stringify(dr.foot));
   await shot('c-requirements-drawer.png');
@@ -216,20 +216,20 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   const wc = await colsOf();
   check('R2-3 일정 default columns = 번호, 작업, 기간, 진행률, 담당자, 상태', JSON.stringify(wc) === JSON.stringify(['번호', '작업', '기간', '진행률', '담당자', '상태']), JSON.stringify(wc));
   const wCtl = await ctrlCount('[data-rtool-r2]');
-  check('R2-4 controls above the WBS table ≤ 5 (status filter, search, 담당자, ⋯, + 작업 추가)', wCtl <= 5 && !(await vis('#kstrip')), String(wCtl));
-  await page.click('[data-rtool-r2] [data-tmore]'); await page.click('.tmenu [data-gcols]'); await page.check('.gpop [data-gcol="end"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  check('R2-4 controls above the WBS table ≤ 6 (status filter, search, 담당자, 컬럼 — batch7 #9, ⋯, + 작업 추가)', wCtl <= 6 && !(await vis('#kstrip')), String(wCtl));
+  await page.click('[data-rtool-r2] [data-gcols]'); await page.check('.gpop [data-gcol="end"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.reload(); await settle('#grid');
   const wc2 = await colsOf();
   check('R2-3 일정: hidden column (계획 종료) restored from 컬럼 and remembered after reload', wc2.includes('계획 종료'), JSON.stringify(wc2));
-  await page.click('[data-rtool-r2] [data-tmore]'); await page.click('.tmenu [data-gcols]'); await page.uncheck('.gpop [data-gcol="end"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await page.click('[data-rtool-r2] [data-gcols]'); await page.uncheck('.gpop [data-gcol="end"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   const menuTxt = await page.$eval('[data-rtool-r2] .tmenu', (m) => m.textContent);
-  check('R2-4 WBS ⋯ keeps every moved action (마일스톤, AI 초안 + price, Excel, 컬럼, 모두 펼치기/접기, 여러 개 선택)', ['마일스톤 추가', 'AI로 초안 만들기', '크레딧 (₩', 'Excel로 가져오기', '컬럼', '모두 펼치기', '모두 접기', '여러 개 선택'].every((x) => menuTxt.includes(x)), menuTxt.replace(/\s+/g, ' ').slice(0, 300));
-  check('R2-4 no row checkboxes until 여러 개 선택', (await page.$$('#grid [data-pick]')).length === 0);
+  check('R2-4 WBS ⋯ keeps every moved action (마일스톤, AI 초안 + price, Excel, 모두 펼치기/접기); batch7 #9: 컬럼 and 여러 개 선택 are not in it', ['마일스톤 추가', 'AI로 초안 만들기', '크레딧', 'Excel로 가져오기', '모두 펼치기', '모두 접기'].every((x) => menuTxt.includes(x)) && !menuTxt.includes('여러 개 선택') && !/컬럼/.test(menuTxt), menuTxt.replace(/\s+/g, ' ').slice(0, 300));
+  check('R2-4 (batch7 #9) row checkboxes always shown on a PC', (await page.$$('#grid [data-pick]')).length > 0);
   await page.click(`#grid tr[data-id="${T[1].id}"] .wtitle__t`); await page.waitForSelector('#drawer:not([hidden]) [data-dx]'); await page.waitForTimeout(300);
   const wd = await page.evaluate(() => { const d = document.querySelector('#drawer').getBoundingClientRect(); const g = document.querySelector('#grid').getBoundingClientRect(); const hid = [...document.querySelectorAll('#drawer .dx')].every((e) => e.offsetParent === null); return { dw: Math.round(d.width), ok: g.right <= d.left + 1 && g.width > 500, hid }; });
   await page.click('#drawer [data-dx]'); await page.waitForTimeout(150);
   const shown = await page.$$eval('#drawer .dx', (els) => els.some((e) => e.offsetParent !== null));
-  check('R2-9 WBS drawer beside the list (480px); 실적·단계·가중치·상위 항목 behind "세부 정보 더보기"', wd.dw === 480 && wd.ok && wd.hid && shown, JSON.stringify({ wd, shown }));
+  check('R2-9 WBS drawer beside the list (batch7 B1: 490px at 1440); 실적·단계·가중치·상위 항목 behind "세부 정보 더보기"', Math.abs(wd.dw - 490) <= 1 && wd.ok && wd.hid && shown, JSON.stringify({ wd, shown }));
   await shot('d-wbs-drawer.png');
   await page.click('#drawer .drawer__h'); await page.keyboard.press('ArrowDown'); await page.waitForTimeout(900);
   check('R2-9 WBS: keyboard ↓ moves to the next item', /^3$/.test((await page.textContent('#drawer .drawer__h .mono')).trim()), await page.textContent('#drawer .drawer__h .mono'));

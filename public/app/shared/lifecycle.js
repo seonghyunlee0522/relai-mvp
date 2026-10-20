@@ -158,7 +158,7 @@ export const DOORS = (pid) => [
     T('weekly', '주간보고', P(pid, '/reports'), '보고 기간의 진행 이력을 모아 주간보고 초안을 만들고 확정합니다.'),
     T('docs', '공식 문서', P(pid, '/charter'), '사업수행계획서와 완료보고서 같은 공식 문서를 봅니다.'),
     T('health', '건강도', P(pid, '/overview'), '일정·범위·품질 지표로 프로젝트 상태를 한눈에 봅니다.'),
-    { key: 'activity', label: '활동 기록', action: 'activity' },
+    T('activity', '활동 기록', P(pid, '/activity'), '프로젝트에서 바뀐 내용과 댓글을 날짜별로 봅니다.'),   // batch7 #22: a page, not a slide-over
   ] },
 ];
 
@@ -183,6 +183,7 @@ export function doorOf(pid, path, qs, hint = null) {
   if (sub === '/charter') return pick('reports', 'docs');
   if (sub === '/edit') return pick('plan');   // ⋯ › 프로젝트 정보 수정: the project's 계획 door (Q22-3)
   if (sub === '/overview') return pick('reports', 'health');
+  if (sub === '/activity') return pick('reports', 'activity');
   if (sub.startsWith('/reports')) return pick('reports', hint === 'close' ? 'docs' : 'weekly');
   return pick('next');
 }

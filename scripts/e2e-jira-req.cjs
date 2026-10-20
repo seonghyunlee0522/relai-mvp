@@ -124,8 +124,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   check('J9 추적 view: Jira column with keys', (await page.locator('.rjcell').count()) >= 3 && (await text('main')).includes(key1));
   await shot('05-trace');
   await page.goto(`${BASE}${U}/requirements`);
-  await page.click('[data-tmore]');
-  await page.click('.tmenu [data-gcols]').catch(() => {});
+  await page.click('[data-rtool-r2] [data-gcols]').catch(() => {});   // batch7 #9: 컬럼 is in the toolbar
   check('J9 list: Jira column option', await page.locator('.gpop [data-gcol="jira"]').count() === 1);
   await page.check('.gpop [data-gcol="jira"]').catch(() => {});
   await page.waitForSelector('.gtable .rjcell', { timeout: 5000 }).catch(() => {});

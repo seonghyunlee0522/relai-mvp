@@ -178,7 +178,7 @@ export async function wbsPage(id) {
     const s0 = r.planned_start; const e0 = r.planned_end; if (!s0 && !e0) return isLeafTask(r) && !roRow(r) ? '<span class="wper wper--empty" data-period-empty title="눌러서 계획 시작·종료일을 입력합니다">날짜 지정</span>' : dim();   // Jim P2-3: an empty 기간 says it can be clicked
     return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''} ${r.rollup ? 'dim' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${raw(r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : '')}${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(periodShift(r))}`; } }] : []);
   const grid = createGrid({
-    key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
+    key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', select: !archived, selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
     rowClass: (r) => `${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
     canEdit: editable, activeId: () => (sel ? sel.id : null), onOpen: (iid) => { if (iid !== GHOST) openDetail(iid); },
     onSelect: (s) => bulk.update(s.size),
@@ -358,12 +358,12 @@ export async function wbsPage(id) {
       ['필터 더보기', html`${raw(fl('보기', html`<select class="select select--sm" id="quick" aria-label="보기"><option value="">전체 보기</option>${raw(Object.entries(QUICK_LABEL).map(([k, l]) => html`<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>`))}
         ${raw(fl('상태', html`<select class="select select--sm" id="f-cst" aria-label="상태"><option value="">전체</option>${raw(Object.entries(WBS_CSTATUS).map(([k, l]) => html`<option value="${k}" ${cur === k ? 'selected' : ''}>${l}</option>`).join(''))}</select>`))}
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`],
-      ['보기', html`${raw(v === 'gantt' ? tmItem('전체 일정 맞추기', 'id="gfit"') + tmItem('오늘로 이동', 'id="gtoday"') : '')}${raw(tmItem('모두 펼치기', 'id="expall"'))}${raw(tmItem('모두 접기', 'id="colall"'))}${raw(v === 'list' ? grid.toolsHtml() : '')}${raw(v === 'list' && !archived ? tmItem('여러 개 선택', `data-selmode class="tmenu__i ${selMode ? 'is-on' : ''}"`, '체크박스로 여러 작업의 담당자·일정을 한 번에 바꿉니다') : '')}`],
+      ['보기', html`${raw(v === 'gantt' ? tmItem('전체 일정 맞추기', 'id="gfit"') + tmItem('오늘로 이동', 'id="gtoday"') : '')}${raw(tmItem('모두 펼치기', 'id="expall"'))}${raw(tmItem('모두 접기', 'id="colall"'))}`],
       [archived ? '' : '추가', archived ? '' : tmItem('◆ 마일스톤 추가', 'id="add-ms"', '기간 없이 날짜만 있는 주요 시점')],
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 WBS 내보내기 (Excel)', 'data-xl="export"'))}`],
       [archived ? '' : 'AI', archived ? '' : ai.enabled ? tmItem('AI로 초안 만들기', 'id="ai-wbs" title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다" data-tour-id="ai-wbs"', aiPrice(ai, 'WBS_GENERATION')) : tmItem('AI로 초안 만들기', 'id="ai-wbs" disabled', 'AI 기능이 설정되지 않았습니다')],
     ], { label: '일정 메뉴 더보기' });
-    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}<span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-wbs-pc" data-ai-pc title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다">AI로 초안 만들기</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(seg)}<input class="input input--sm" id="q" type="search" placeholder="작업명, 번호 검색" value="${q.get('q') || ''}" aria-label="작업 검색">${raw(ownerSel)}${raw(v === 'list' ? grid.toolsHtml() : '')}<span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-wbs-pc" data-ai-pc title="요구사항과 프로젝트 수행 업무(데이터 이관·인프라·연계·전환·교육)를 확인해 전체 WBS 초안을 만듭니다">AI로 초안 만들기</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 작업 추가</button>')}</div>`;
   };
 
   const draw = () => {
@@ -656,7 +656,7 @@ export async function wbsPage(id) {
     d.innerHTML = html`<div class="drawer__h"><b class="mono">${it.wbs_code}</b>${raw(statusBadge(live))}<span class="lbl-sub">${group ? '작업 그룹' : WBS_TYPE[t]}</span>${raw(it.archived_at ? `<span class="chip">보관됨</span>${archived ? '' : '<button type="button" class="btn btn--secondary btn--xs" id="restore">복구</button>'}` : '')}
         <span class="dnav"><button type="button" data-nav="-1" aria-label="이전 항목" title="이전 (목록 순서)" ${at <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-nav="1" aria-label="다음 항목" title="다음 (목록 순서)" ${at < 0 || at >= ids.length - 1 ? 'disabled' : ''}>↓</button></span>
         <button class="drawer__x" id="dclose" aria-label="닫기">×</button></div>
-      ${raw(dtabs([{ key: 'info', label: '기본 정보' }, { key: 'req', label: '관련 요구사항', count: liveReq.length }, { key: 'dep', label: '선행 작업', count: it.predecessors.length }, { key: 'jira', label: '지라 실행', count: it.jira && it.jira.total ? it.jira.total : undefined }, { key: 'hist', label: '변경 이력', count: hist.length }, { key: 'cmt', label: '댓글', count: comments.length }], dtab))}
+      ${raw(dtabs([{ key: 'info', label: '기본' }, { key: 'req', label: '요구사항', count: liveReq.length }, { key: 'dep', label: '선행', count: it.predecessors.length }, ...(jira ? [{ key: 'jira', label: '지라', count: it.jira && it.jira.total ? it.jira.total : undefined }] : []), { key: 'hist', label: '이력', count: hist.length }, { key: 'cmt', label: '댓글', count: comments.length }], dtab))}
       <div class="drawer__b">
         <section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>
           <div class="dlayout"><div>

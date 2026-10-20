@@ -106,7 +106,7 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
   /* ---------- US-1 표 셀 편집 ---------- */
   await page.goto(`${A.url}/wbs?ctx=monitor`); await page.waitForSelector(`tr[data-id="${t1.id}"]`);
   // Redesign R2: the editable 계획 시작 / 계획 종료 columns sit behind ⋯ › 컬럼 on desktop (default = one 기간 column)
-  if (!(await page.$(`tr[data-id="${t1.id}"] [data-edit="planned_end_date"]`))) { await page.click('.rtool [data-tmore]'); await page.click('.tmenu [data-gcols]'); for (const k of ['start', 'end']) await page.check(`.gpop [data-gcol="${k}"]`); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); }
+  if (!(await page.$(`tr[data-id="${t1.id}"] [data-edit="planned_end_date"]`))) { await page.click('.rtool [data-gcols]'); for (const k of ['start', 'end']) await page.check(`.gpop [data-gcol="${k}"]`); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); }
   const setCell = async (id, field, v) => page.$eval(`tr[data-id="${id}"] [data-edit="${field}"]`, (el, val) => { el.value = val; el.dispatchEvent(new Event('change', { bubbles: true })); }, v);
   await setCell(t1.id, 'planned_end_date', d(14));
   await page.waitForSelector('[data-delay-dialog]');

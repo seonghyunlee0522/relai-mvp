@@ -60,13 +60,12 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   /* ---------- B2: 활동 기록 전체 보기 ---------- */
   for (const [label, url] of [['개요', `${U}/overview`], ['건강도', `${U}/overview#health`]]) {
     await page.goto(`${BASE}${url}`); await loaded('#act-all');
-    await page.click('#act-all'); await page.waitForTimeout(600);
-    check(`B2 ${label} 활동 기록 전체 보기 opens the activity panel`, Boolean(await page.$('.actpanel .actpanel__p')));
+    await page.click('#act-all'); await page.waitForSelector('.actpage', { timeout: 5000 }).catch(() => {});
+    check(`B2 ${label} 활동 기록 전체 보기 opens the 활동 기록 page (batch7 #22)`, Boolean(await page.$('.actpage')) && /\/activity$/.test(new URL(page.url()).pathname) && !(await page.$('.actpanel')));
     if (label === '개요') await page.screenshot({ path: `${SHOTS}/b2-activity.png` });
-    await page.keyboard.press('Escape'); await page.evaluate(() => document.querySelector('.actpanel')?.remove());
   }
   const rail = await page.$('[data-lnb-action="activity"]');
-  if (rail) { await rail.click(); await page.waitForTimeout(600); check('B2 rail 활동 기록 opens the activity panel', Boolean(await page.$('.actpanel .actpanel__p'))); }
+  if (rail) { await rail.click(); await page.waitForSelector('.actpage', { timeout: 5000 }).catch(() => {}); check('B2 rail 활동 기록 opens the 활동 기록 page', Boolean(await page.$('.actpage'))); }
 
   /* ---------- B1: admin 대시보드 near-limit rows ---------- */
   sql(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE email = '${email}'`);

@@ -2,7 +2,7 @@
  * Sort · column show/hide · column resize · multi-select (shift range) · pagination · inline edit · keyboard rows.
  * Markup is stateless (`html()`); view preferences (sort, hidden columns, widths, page size) persist per grid key.
  *
- * cfg: { key, columns, rowId(r), rowClass?(r), select = true, paginate = true, pageSize = 100, sortable = true,
+ * cfg: { key, columns, rowId(r), rowClass?(r), select = true (PC: checkbox column always on; false = read-only grid), paginate = true, pageSize = 100, sortable = true,
  *        canEdit?(r, col), onEdit?(id, field, value), onOpen?(id), onSelect?(selectedSet), empty?(), activeId?() }
  * column: { key, label, width, min, sort?(r) → comparable, render(r) → html, cls?, align?, sticky?, hidden?, fixed?,
  *           edit?: { type: 'select'|'date'|'number', field, options?(r)|map|[[v,l] | {group, options}], value?(r), prefix?(r), suffix?(r), title?(r) (date), min?, max?,
@@ -18,12 +18,15 @@ const SIZES = [50, 100, 200, 500];
 const CHK_W = 38;
 
 const pairs = (o) => (Array.isArray(o) ? o : Object.entries(o || {}));
+/** 'tag--done' / 'prio prio--high' taken from a cell's read-only markup (badges.js tag / statusChip / prio), '' when it has none. */
+const toneOf = (markup) => { const m = /\b(tag--[a-z]+)\b/.exec(markup || ''); if (m) return `tsel--tag ${m[1]}`; const p = /\bprio--([a-z]+)\b/.exec(markup || ''); return p ? `tsel--prio prio--${p[1]}` : ''; };
 
 export function createGrid(cfg) {
   const cols = cfg.columns;
   const prefs = store.get(`grid.${cfg.key}`, {}) || {};
   const canSelect = cfg.select !== false && !isPhone();   // phone = view mode: card rows, no checkboxes, no inline edit
-  let select = canSelect && cfg.selectMode !== false;   // Redesign R2: desktop lists start without checkboxes; ⋯ › 여러 개 선택 turns them on
+  // batch7 #9: on a PC the checkbox column is always there (no ⋯ › 여러 개 선택 any more); only a read-only grid (select: false) has none
+  let select = canSelect;
   const st = {
     rows: [],
     sort: cfg.sortable === false ? null : (prefs.sort || cfg.defaultSort || null),
@@ -74,8 +77,10 @@ export function createGrid(cfg) {
       // [[v, l], { group: '라벨', options: [[v, l]] }, …] → <optgroup>s (an empty group is left out)
       const body = Array.isArray(src) && src.some((o) => o && o.group) ? src.map((o) => (o && o.group ? (o.options.length ? html`<optgroup label="${o.group}">${raw(optHtml(o.options))}</optgroup>` : '') : optHtml([o]))).join('') : optHtml(src);
       const sel = html`<select class="cell cell--sel ${cls || ''}" data-edit="${ed.field}" aria-label="${c.label}">${raw(body)}</select>`;
-      const suf = ed.suffix ? ed.suffix(r) : '';
-      return ed.prefix || suf ? html`<span class="cellwrap">${raw(ed.prefix ? ed.prefix(r) : '')}${raw(sel)}${raw(suf)}</span>` : sel;
+      // batch7 B2: an editable status / priority wears the same tag as its read-only render (확정 = 초록, 높음 = 빨강 ▲ …)
+      const look = toneOf(c.render(r)); const box = look ? html`<span class="tsel ${look}">${raw(sel)}</span>` : sel;
+      const pre = ed.prefix ? ed.prefix(r) : ''; const suf = ed.suffix ? ed.suffix(r) : '';
+      return pre || suf ? html`<span class="cellwrap">${raw(pre)}${raw(box)}${raw(suf)}</span>` : box;
     }
     // Date / number cells read as text at rest (one format with the read-only rows: `10/20`, `0%`) and show the native input on hover/focus (L-C1).
     const atRest = (inp, text) => html`<span class="cedit">${raw(inp)}<span class="cedit__v" aria-hidden="true">${raw(text)}</span></span>`;
@@ -260,7 +265,8 @@ export function createGrid(cfg) {
       for (const id of [...st.selected]) if (!live.has(id)) st.selected.delete(id);
     },
     html: () => html`<div id="grid" class="grid">${raw(inner())}</div>`,
-    toolsHtml: () => html`<span class="gtools" data-gtools="${cfg.key}"><button type="button" class="btn btn--secondary btn--sm" data-gcols aria-haspopup="true">컬럼</button><div class="gpop" hidden></div></span>`,
+    /** The 컬럼 button + popover. batch7 #9: pages put it in the toolbar itself (left side), not inside ⋯. */
+    toolsHtml: () => html`<span class="gtools" data-gtools="${cfg.key}"><button type="button" class="btn btn--secondary btn--sm" data-gcols aria-haspopup="true" title="표시할 컬럼 고르기">컬럼</button><div class="gpop" hidden></div></span>`,
     bind(root) {
       st.el = root.querySelector('#grid');
       bindTools(root);
@@ -276,8 +282,8 @@ export function createGrid(cfg) {
     rowById,
     clearSelection() { st.selected.clear(); st.anchor = null; syncSelectionUi(); },
     get selectMode() { return select; },
-    /** Show / hide the checkbox column (turning it off clears the selection). */
-    setSelectMode(on) { select = canSelect && Boolean(on); if (!select) { st.selected.clear(); st.anchor = null; notify(); } refresh(); },
+    /** Kept for older callers: the PC checkbox column no longer turns off (batch7 #9) — this only clears the selection. */
+    setSelectMode(on) { if (!on) { st.selected.clear(); st.anchor = null; notify(); } refresh(); },
     selectedIds: () => [...st.selected],
     /** Pre-tick rows (e.g. Jim P1-1: the tasks without an owner); only while the checkbox column is on. */
     select(ids) { if (!select) return; ids.forEach((i) => st.selected.add(String(i))); syncSelectionUi(); notify(); },

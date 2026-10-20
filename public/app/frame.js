@@ -84,15 +84,62 @@ export function mountTopbar() {
     catch (e) { vp.textContent = e.message; vp.disabled = false; }
   };
 }
-/** Middle of the top bar inside a project: 프로젝트 전환 ▾ · current phase · status pill. Empty outside a project. */
+/** Middle of the top bar inside a project: 프로젝트 전환 ▾ · current phase · status pill (+ the 다음 할 일 strip). Empty outside a project. */
 export function setTopProject(p, g, pill) {
   const el = $('#dtop-p'); if (!el) return;
+  setTopNext(p, g);
   if (!p) { el.innerHTML = ''; el.dataset.pid = ''; return; }
   const cur = g && g.current_phase;
   el.dataset.pid = p.id;
   el.innerHTML = html`<span class="dmenuwrap"><button type="button" class="dtop__proj" data-dmenu="projects" data-pid="${p.id}" aria-haspopup="menu" aria-expanded="false" title="${p.name} · 프로젝트 전환"><b>${p.name}</b><i aria-hidden="true">▾</i></button></span>
     ${raw(cur ? html`<a class="dtop__phase" href="/app/projects/${p.id}" data-link title="현재 단계 · 지금 할 일">${no2(cur.sequence)} ${cur.name}</a>` : '')}${raw(pill)}`;
 }
+
+/* ---------- 다음 할 일 strip (batch7 #17 / B5): the guidance CTA on every project screen, so nobody has to go back to 지금 할 일 ----------
+ * `[!] 다음 할 일 · 요구사항 12건을 WBS에 연결하세요 [지금 하기 →]`. Data = the page's own guide payload (g.guidance); after a save
+ * (core/api.js fires relai:data-changed) it re-reads GET …/:pid/guidance, debounced. Hidden: closed / archived project, phone.
+ * On 지금 할 일 the big card already says it → the strip only shows '단계 진행 n/m'. */
+let nextState = { pid: null, g: null, timer: null };
+const isMoveHref = (h) => /\?move=next$/.test(h || '');
+function drawNext() {
+  const el = $('#dtop-next'); if (!el) return;
+  const { pid, g } = nextState; const q = g && g.guidance; const p = g && g.project;
+  if (!pid || !q || !p || p.status === 'COMPLETED' || p.status === 'ARCHIVED') { el.hidden = true; el.innerHTML = ''; el.dataset.pid = ''; return; }
+  el.hidden = false; el.dataset.pid = pid;
+  const onNext = location.pathname.replace(/\/$/, '') === `/app/projects/${pid}`;
+  if (onNext) {
+    const cur = g.current_phase; const req = cur && Array.isArray(cur.steps) ? cur.steps.filter((s) => s.importance === 'REQUIRED') : [];
+    const done = req.filter((s) => s.state === 'COMPLETED' || s.state === 'SKIPPED').length;
+    el.className = 'dnext dnext--slim';
+    el.innerHTML = req.length ? html`<span class="dnext__k">단계 진행</span><b class="dnext__n" data-next-progress>${done}/${req.length}</b>` : '';
+    el.hidden = !req.length; return;
+  }
+  const warns = q.warnings || []; const a = q.primary_action;
+  const href = q.href || (a && a.href) || ''; const label = q.cta_label || (a && a.label) || '';
+  const nx = g.next_phase; const cta = isMoveHref(href) && nx ? `${no2(nx.sequence)} ${nx.name} 단계 시작 →` : label;
+  const go = !href ? '' : href.startsWith('/api/') ? html`<a class="dnext__go" href="${href}" download title="${cta}" data-next-go>지금 하기 →</a>`
+    : html`<a class="dnext__go" href="${href}" data-link title="${cta}" aria-label="지금 하기: ${cta}" data-next-go>지금 하기 →</a>`;
+  el.className = `dnext ${warns.length ? 'has-warn' : ''}`;
+  el.innerHTML = html`${raw(warns.length ? html`<i class="dnext__dot" role="img" aria-label="주의 ${warns.length}건" title="${warns.join('\n')}"></i>` : '')}<span class="dnext__k">다음 할 일</span><span class="dnext__t" title="${q.title}">${q.short_title || q.title}</span>${raw(go)}`;
+}
+export function setTopNext(p, g) {
+  clearTimeout(nextState.timer);
+  nextState = { pid: p ? p.id : null, g: p && g ? { ...g, project: g.project || p } : null, timer: null };
+  drawNext();
+}
+let wiredNext = false;
+function wireNext() {
+  if (wiredNext) return; wiredNext = true;
+  window.addEventListener('relai:data-changed', (e) => {
+    const { pid } = nextState; const url = (e.detail && e.detail.url) || '';
+    if (!pid || !url.includes(`/projects/${pid}`)) return;
+    clearTimeout(nextState.timer);
+    nextState.timer = setTimeout(async () => {
+      try { const r = await api('GET', wsApi(`/${pid}/guidance`)); if (nextState.pid === pid && nextState.g) { nextState.g = { ...nextState.g, guidance: r.guidance }; drawNext(); } } catch { /* keep the last strip */ }
+    }, 500);
+  });
+}
+wireNext();
 
 /* ---------- rail ---------- */
 const railItem = (key, label, href, active, tourId) => html`<a class="rail__i ${active ? 'is-active' : ''}" href="${href}" data-link data-door="${key}" ${raw(active ? 'aria-current="page"' : '')} data-tour-id="${tourId}">${raw(RAIL_ICON[key])}<span>${label}</span></a>`;

@@ -53,14 +53,16 @@ export function summarize(type, ev) {
   return SIMPLE[a] || '변경했습니다.';
 }
 
-async function recentChanges(db, pid, lim = RECENT_LIMIT) {
+async function recentChanges(db, pid, lim = RECENT_LIMIT, before = null) {
   lim = Math.max(1, Math.min(200, Number(lim) || RECENT_LIMIT));
+  // batch7 #22: `before` (ISO time) pages the 활동 기록 screen — only events strictly older than the last one shown
+  const bf = (col) => (before ? ` AND ${col} < '${before}'::timestamptz` : '');
   const cols = `h.changed_at AS at, h.seq, u.name AS actor_name, h.action_type, h.field_name, h.old_value, h.new_value, e.id AS entity_id, e.title`;
   const order = `ORDER BY h.changed_at DESC, h.seq DESC LIMIT ${lim}`;
   // One history table per entity (FK column) …
-  const direct = (table, fk, ent, code = 'e.display_id') => db.all(`SELECT ${cols}, ${code} AS display_id FROM ${table} h JOIN ${ent} e ON e.id = h.${fk} LEFT JOIN users u ON u.id = h.changed_by WHERE e.project_id = ? ${order}`, [pid]);
+  const direct = (table, fk, ent, code = 'e.display_id') => db.all(`SELECT ${cols}, ${code} AS display_id FROM ${table} h JOIN ${ent} e ON e.id = h.${fk} LEFT JOIN users u ON u.id = h.changed_by WHERE e.project_id = ?${bf('h.changed_at')} ${order}`, [pid]);
   // … or polymorphic on (entity_type, entity_id): one query per concrete entity table.
-  const poly = (table, type, ent) => db.all(`SELECT ${cols}, e.display_id FROM ${table} h JOIN ${ent} e ON e.id = h.entity_id AND h.entity_type = '${type}' LEFT JOIN users u ON u.id = h.changed_by WHERE e.project_id = ? ${order}`, [pid]);
+  const poly = (table, type, ent) => db.all(`SELECT ${cols}, e.display_id FROM ${table} h JOIN ${ent} e ON e.id = h.entity_id AND h.entity_type = '${type}' LEFT JOIN users u ON u.id = h.changed_by WHERE e.project_id = ?${bf('h.changed_at')} ${order}`, [pid]);
   const [reqs, wbs, chg, issues, risks, tests, accs, phases] = await Promise.all([
     direct('requirement_history', 'requirement_id', 'requirements'),
     direct('wbs_history', 'wbs_item_id', 'wbs_items', 'e.wbs_code'),
@@ -69,10 +71,10 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT) {
     poly('qa_history', 'TEST', 'test_cases'), poly('qa_history', 'ACCEPTANCE', 'acceptances'),
     db.all(`SELECT t.changed_at AS at, t.seq, u.name AS actor_name, p.id AS entity_id, p.phase_key, p.name AS title, t.reason
       FROM phase_transitions t JOIN project_phases p ON p.id = t.to_phase_id LEFT JOIN users u ON u.id = t.changed_by
-      WHERE t.project_id = ? ORDER BY t.changed_at DESC, t.seq DESC LIMIT ${lim}`, [pid]),
+      WHERE t.project_id = ?${bf('t.changed_at')} ORDER BY t.changed_at DESC, t.seq DESC LIMIT ${lim}`, [pid]),
   ]);
   const integ = await db.all(`SELECT a.created_at AS at, a.seq, u.name AS actor_name, a.action, a.summary, a.wbs_item_id AS entity_id, w.wbs_code AS display_id, w.title
-      FROM integration_activity a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN wbs_items w ON w.id = a.wbs_item_id WHERE a.project_id = ? ORDER BY a.created_at DESC, a.seq DESC LIMIT ${lim}`, [pid]);
+      FROM integration_activity a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN wbs_items w ON w.id = a.wbs_item_id WHERE a.project_id = ?${bf('a.created_at')} ORDER BY a.created_at DESC, a.seq DESC LIMIT ${lim}`, [pid]);
   const tag = (rows, type, href) => rows.map((r) => ({ ...r, entity_type: type, href: href(r.entity_id), summary: summarize(type, r) }));
   const events = [
     ...tag(reqs, 'REQUIREMENT', (id) => `requirements?sel=${id}`), ...tag(wbs, 'WBS', (id) => `wbs?sel=${id}`), ...tag(chg, 'CHANGE', (id) => `changes?sel=${id}`),
@@ -143,20 +145,22 @@ export async function projectDashboard(db, project) {
  * Project activity feed (GET …/:pid/activity): every history table + comments merged newest-first.
  * Opened on demand from the workspace header — never rendered on a default screen.
  */
-export async function projectActivity(db, pid, { limit = 80 } = {}) {
+export async function projectActivity(db, pid, { limit = 80, before = null } = {}) {
   const lim = Math.max(1, Math.min(200, Number(limit) || 80));
+  const bt = before && !Number.isNaN(Date.parse(before)) ? new Date(before).toISOString() : null;   // validated → safe to inline
   const [events, comments] = await Promise.all([
-    recentChanges(db, pid, lim),
+    recentChanges(db, pid, lim, bt),
     db.all(`SELECT c.id, c.entity_type, c.entity_id, c.body, c.created_at AS at, COALESCE(c.author_label, u.name) AS actor_name,
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT display_id FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT wbs_code FROM wbs_items w WHERE w.id = c.entity_id) END AS display_id,
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT title FROM wbs_items w WHERE w.id = c.entity_id) END AS title
-      FROM comments c LEFT JOIN users u ON u.id = c.created_by WHERE c.project_id = ? ORDER BY c.created_at DESC, c.seq DESC LIMIT ${lim}`, [pid]),
+      FROM comments c LEFT JOIN users u ON u.id = c.created_by WHERE c.project_id = ?${bt ? ` AND c.created_at < '${bt}'::timestamptz` : ''} ORDER BY c.created_at DESC, c.seq DESC LIMIT ${lim}`, [pid]),
   ]);
   const KIND = (e) => (e.entity_type === 'PHASE' ? 'PHASE' : e.entity_type === 'JIRA' ? 'JIRA' : /상태를/.test(e.summary) ? 'STATUS' : /담당자/.test(e.summary) ? 'OWNER' : /(시작일|종료일|마일스톤 날짜|주요 일정 날짜|기한|위치를 이동|순서를 옮)/.test(e.summary) ? 'SCHEDULE' : 'DATA');
   const items = [
     ...events.map((e) => ({ ...e, kind: KIND(e) })),
     ...comments.map((c) => ({ at: c.at, actor_name: c.actor_name, entity_type: c.entity_type, entity_id: c.entity_id, display_id: c.display_id, title: c.title,
       summary: c.body.length > 140 ? c.body.slice(0, 140) + '…' : c.body, href: c.entity_type === 'REQUIREMENT' ? `requirements?sel=${c.entity_id}` : `wbs?sel=${c.entity_id}`, kind: 'COMMENT' })),
-  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, lim);
-  return { items };
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  // more = something older exists beyond this page (either source filled its own limit)
+  return { items: items.slice(0, lim), more: items.length > lim || events.length >= lim || comments.length >= lim };
 }

@@ -78,7 +78,7 @@ export async function requirementsPage(id) {
   const ro = (r) => archived || Boolean(r.archived_at);
   const listGrid = createGrid({
     key: desk ? `req.list.r2.${meId}` : 'req.list', rowId: (r) => r.id, tableClass: 'gtable--req', defaultSort: { key: 'display_id', dir: 'asc' }, pageSize: 100,   // R2: column choice remembered per user
-    selectMode: !desk || selMode, forceShow: () => (!desk ? [] : [...(params().get('scope') ? ['scope'] : []), ...(classifyView() ? ['type', 'priority'] : [])]),   // filtering by 범위 always shows the 범위 column (Jim M2); 분류·우선순위 shows 유형 + 우선순위 (Jim P1-2)
+    select: !archived, selectMode: !desk || selMode, forceShow: () => (!desk ? [] : [...(params().get('scope') ? ['scope'] : []), ...(classifyView() ? ['type', 'priority'] : [])]),   // filtering by 범위 always shows the 범위 column (Jim M2); 분류·우선순위 shows 유형 + 우선순위 (Jim P1-2)
     rowClass: (r) => (r.archived_at ? 'is-arch' : ''), canEdit: (r) => !ro(r),
     activeId: () => (sel ? sel.id : null),
     onOpen: (rid) => openDetail(rid),
@@ -198,11 +198,10 @@ export async function requirementsPage(id) {
         ${raw(f('type', '유형', filterSelect('type', '유형', REQ_TYPE, q.get('type'))))}${raw(f('priority', '우선순위', filterSelect('priority', '우선순위', REQ_PRIORITY, q.get('priority'))))}${raw(f('link', '연결 상태', filterSelect('link', '연결 상태', LINK_F, q.get('link'))))}
         <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>
         ${raw(tmItem(`범위 미결정 ${summary.scope_undecided}건 보기`, 'data-kf="scope=UNDECIDED"'))}${raw(wbsPhase() ? tmItem(`WBS 미연결 (범위 내) ${summary.in_scope_unlinked}건 보기`, 'data-kf="scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked"') : '')}`],
-      ['보기', html`${raw(rview() === 'list' ? listGrid.toolsHtml() : '')}${raw(rview() === 'list' && !archived ? tmItem('여러 개 선택', `data-selmode class="tmenu__i ${selMode ? 'is-on' : ''}"`, '체크박스로 여러 요구사항을 한 번에 바꿉니다') : '')}`],
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 목록 내보내기 (Excel)', 'data-xl="export"'))}${raw(tmItem('요구사항 정의서 PDF', 'data-reqdoc="pdf"'))}${raw(tmItem('요구사항 정의서 Word', 'data-reqdoc="docx"'))}`],
       [ai.enabled && !archived ? 'AI' : '', ai.enabled && !archived ? tmItem('AI로 요구사항 추출', 'id="ai-extract" title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)"', aiPrice(ai, 'REQUIREMENT_EXTRACTION')) : ''],
     ], { label: '요구사항 메뉴 더보기' });
-    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(statusSeg(curSt))}<input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}" aria-label="요구사항 검색"><span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-extract-pc" data-ai-pc title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}</div>`;
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(statusSeg(curSt))}<input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}" aria-label="요구사항 검색">${raw(rview() === 'list' ? listGrid.toolsHtml() : '')}<span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-extract-pc" data-ai-pc title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}</div>`;
   };
 
   const draw = () => {

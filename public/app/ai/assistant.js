@@ -26,7 +26,7 @@ export async function openAssistant(pid) {
     <div class="aipanel__h"><div><b id="aiAT">RELAI에게 물어보기</b><small class="dim">읽기 전용 · 답변은 프로젝트 데이터를 근거로 합니다</small></div><button type="button" class="drawer__x" data-close aria-label="닫기">×</button></div>
     <div class="aipanel__b" id="ai-log"></div>
     <form class="aipanel__f" id="ai-form"><div class="aipanel__meta">${raw(creditLine(st, 'PROJECT_QA'))}<small class="dim">${st.notice || ''}</small></div>
-      <div class="aipanel__in"><textarea class="textarea" id="ai-q" rows="2" maxlength="1000" placeholder="예) CR-003 영향은 어디까지야?  (Enter 전송, Shift+Enter 줄바꿈)" ${canRun(st, 'PROJECT_QA') ? '' : 'disabled'}></textarea><button class="btn btn--primary btn--sm" type="submit" id="ai-send" ${canRun(st, 'PROJECT_QA') ? '' : 'disabled'}>질문</button></div></form></aside>`;
+      <div class="aipanel__in"><textarea class="textarea" id="ai-q" rows="2" maxlength="1000" placeholder="예: 진척률이 계획보다 낮은 이유는?  (Enter 전송, Shift+Enter 줄바꿈)" ${canRun(st, 'PROJECT_QA') ? '' : 'disabled'}></textarea><button class="btn btn--primary btn--sm" type="submit" id="ai-send" ${canRun(st, 'PROJECT_QA') ? '' : 'disabled'}>질문</button></div></form></aside>`;
   document.body.append(el);
   const log = $('#ai-log', el); const form = $('#ai-form', el); const ta = $('#ai-q', el);
   const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };

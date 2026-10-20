@@ -247,7 +247,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await page.goto(reqUrl); await page.waitForSelector('.rtool');
   check('US-4(4) WBS banner from 03', Boolean(await page.$('[data-tour-id="req-next"]')));
   // R2: the WBS column is hidden by default on desktop → show it from ⋯ › 컬럼, check, hide again
-  await page.click('.rtool [data-tmore]'); await page.click('.tmenu [data-gcols]'); await page.check('.gpop [data-gcol="wbs"]');
+  await page.click('.rtool [data-gcols]'); await page.check('.gpop [data-gcol="wbs"]');
   check('P-1 03: KPI WBS 미연결 + 미연결 mark shown', /WBS 미연결 \(범위 내\)/.test((await page.$$eval('.rtool [data-kf]', (els) => els.map((e) => e.textContent).join(' ')))) && Boolean(await page.$('.is-unlinked')));
   await page.uncheck('.gpop [data-gcol="wbs"]'); await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.goto(`${reqUrl}?sel=${r1.id}`); await page.waitForSelector('#drawer .dtitle'); await page.click('[data-dtab="links"]');

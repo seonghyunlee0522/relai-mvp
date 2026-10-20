@@ -1,5 +1,6 @@
 /* Detail drawer layout helpers (L): Header = ID + status chips + close · Body = state → details → relations → history · Footer = destructive action. */
 import { html, raw } from '../core/dom.js';
+import { store } from '../core/ui.js';
 
 /** Drawer header. `chips` is pre-rendered HTML (status badges). */
 export const drawerHead = (idLabel, chips = '', { archived = false, closeId = 'dclose', nav = '' } = {}) =>
@@ -47,3 +48,24 @@ export function bindListNav(root, ids, cur, open) {
 export const moreFields = (inner, open = false) => html`<details class="dmore" data-dmore ${open ? 'open' : ''}><summary>세부 정보 더보기</summary><div class="dgrid">${raw(inner)}</div></details>`;
 /** Desktop footer: 보관 link + meta (left), the item's actions (right). Read-only → no footer. */
 export const deskFoot = ({ ro, meta = '', archId = 'xarchive', right = '' }) => (ro ? '' : html`<div class="drawer__f dfoot"><button type="button" class="link linkbtn dfoot__arch" id="${archId}">보관</button><span class="hint">${raw(meta)}</span><span class="dfoot__r">${raw(right)}</span></div>`);
+
+/* batch7 B1 (#1 · #19): the detail panel's width. Default = --panel-w (clamp(480px, 34vw, 760px)); dragging the 6px strip on its
+ * left edge sets --panel-w-user (480–960px), kept on this device (localStorage via store, try/catch inside). Double-click = default.
+ * One document listener for every detail / approval panel (.drawer--lg · .drawer--side), whatever page rendered it. */
+const PANEL_MIN = 480; const PANEL_MAX = 960; const EDGE = 6;
+const setPanelW = (w) => { const el = document.documentElement; if (w) el.style.setProperty('--panel-w-user', `${w}px`); else el.style.removeProperty('--panel-w-user'); };
+export const panelEdge = (d, x) => { const r = d.getBoundingClientRect(); return x >= r.left - 1 && x <= r.left + EDGE; };
+if (typeof document !== 'undefined' && document.body && !document.body.dataset.panelResize) {
+  document.body.dataset.panelResize = '1';
+  const saved = Number(store.get('panel.w', 0)); if (saved >= PANEL_MIN && saved <= PANEL_MAX) setPanelW(saved);
+  const panelAt = (e) => { const d = e.target.closest && e.target.closest('.drawer--lg, .drawer--side'); return d && !d.hidden && panelEdge(d, e.clientX) ? d : null; };
+  document.addEventListener('pointerdown', (e) => {
+    const d = panelAt(e); if (!d || e.button !== 0) return;
+    e.preventDefault();
+    const right = d.getBoundingClientRect().right; let w = 0;
+    const move = (ev) => { w = Math.round(Math.min(PANEL_MAX, Math.max(PANEL_MIN, right - ev.clientX))); setPanelW(w); };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.body.classList.remove('is-resizing'); if (w) store.set('panel.w', w); };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.body.classList.add('is-resizing');
+  }, true);
+  document.addEventListener('dblclick', (e) => { if (panelAt(e)) { setPanelW(0); store.set('panel.w', 0); } }, true);
+}

@@ -2,8 +2,32 @@
  * Pages own the data; these helpers only render and wire generic interactions. */
 import { esc, fmtDT, html, raw } from '../core/dom.js';
 
-/** Tab bar. tabs: [{ key, label, count? }] */
-export const dtabs = (tabs, active) => html`<div class="dtabs" role="tablist">${raw(tabs.map((t) => html`<button type="button" role="tab" class="${t.key === active ? 'is-on' : ''}" data-dtab="${t.key}" aria-selected="${t.key === active}">${t.label}${raw(t.count !== undefined && t.count !== null ? html`<em>${t.count}</em>` : '')}</button>`).join(''))}</div>`;
+/** Tab bar. tabs: [{ key, label, count? }]. batch7 #14: one line, never wrapped — when it does not fit the panel, the hidden side
+ * fades and gets a ‹ / › button (state kept by syncDtabs; buttons are mouse helpers, the tabs stay reachable with Tab). */
+export const dtabs = (tabs, active) => html`<div class="dtabs-w" data-dtabs-w><div class="dtabs" role="tablist">${raw(tabs.map((t) => html`<button type="button" role="tab" class="${t.key === active ? 'is-on' : ''}" data-dtab="${t.key}" aria-selected="${t.key === active}">${t.label}${raw(t.count !== undefined && t.count !== null ? html`<em>${t.count}</em>` : '')}</button>`).join(''))}</div>
+  <button type="button" class="dtabs__arr dtabs__arr--l" data-dtabs-go="-1" data-phone-ok tabindex="-1" aria-label="이전 탭 보기">‹</button><button type="button" class="dtabs__arr dtabs__arr--r" data-dtabs-go="1" data-phone-ok tabindex="-1" aria-label="다음 탭 보기">›</button></div>`;
+
+/** Marks every tab bar under `root` as overflowing / scrolled to an end (CSS shows the fades and ‹ ›). */
+export function syncDtabs(root = document) {
+  root.querySelectorAll('[data-dtabs-w]').forEach((w) => {
+    const t = w.querySelector('.dtabs'); if (!t) return;
+    const over = t.scrollWidth > t.clientWidth + 1;
+    w.classList.toggle('is-over', over); w.classList.toggle('at-start', t.scrollLeft <= 1); w.classList.toggle('at-end', t.scrollLeft + t.clientWidth >= t.scrollWidth - 1);
+  });
+}
+if (typeof document !== 'undefined' && document.body && !document.body.dataset.dtabsBound) {
+  document.body.dataset.dtabsBound = '1';
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-dtabs-go]'); if (!b) return;
+    const t = b.closest('[data-dtabs-w]').querySelector('.dtabs'); t.scrollBy({ left: Number(b.dataset.dtabsGo) * Math.max(120, t.clientWidth * 0.6), behavior: 'smooth' });
+  });
+  document.addEventListener('scroll', (e) => { if (e.target.classList && e.target.classList.contains('dtabs')) syncDtabs(e.target.parentElement.parentElement || document); }, true);
+  // a tab bar appears whenever a page renders a drawer: re-check after DOM changes and size changes (cheap — a handful of bars at most)
+  let raf = 0; const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => later()) : null;
+  const later = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (ro) document.querySelectorAll('[data-dtabs-w]:not([data-ro])').forEach((w) => { w.dataset.ro = '1'; ro.observe(w); }); syncDtabs(); }); };
+  new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('resize', later);
+}
 
 /** Wires tab switching (pure DOM toggle — no re-render). Panes are `[data-pane="<key>"]`. */
 export const bindDtabs = (root, onChange = () => {}) => {
@@ -11,6 +35,7 @@ export const bindDtabs = (root, onChange = () => {}) => {
     b.onclick = () => {
       root.querySelectorAll('[data-dtab]').forEach((x) => { const on = x === b; x.classList.toggle('is-on', on); x.setAttribute('aria-selected', String(on)); });
       root.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.dtab; });
+      b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       onChange(b.dataset.dtab);
     };
   });

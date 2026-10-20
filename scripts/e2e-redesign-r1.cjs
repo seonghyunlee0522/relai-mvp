@@ -141,9 +141,8 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   const doc = await page.evaluate(() => ({ title: document.querySelector('.phead__title').textContent.trim(), h: [...document.querySelectorAll('#main h1')].filter((e) => e.getClientRects().length).map((e) => e.textContent.trim()) }));
   check('L1 공식 문서 title = 프로젝트 개요, shown once on desktop', doc.title === '프로젝트 개요' && doc.h.length === 1, JSON.stringify(doc));
 
-  await page.click('[data-stab-action="activity"]'); await page.waitForSelector('.actpanel', { timeout: 4000 }).catch(() => {});
-  check('보고서 › 활동 기록 tab opens the activity panel', Boolean(await page.$('.actpanel')));
-  await page.keyboard.press('Escape');
+  await page.click('.stabs [data-stab="activity"]'); await page.waitForSelector('.actpage', { timeout: 4000 }).catch(() => {});   // batch7 #22: a page, not a panel
+  check('보고서 › 활동 기록 tab opens the 활동 기록 page (/activity, no slide-over)', /\/activity$/.test(new URL(page.url()).pathname) && Boolean(await page.$('.actpage')) && !(await page.$('.actpanel')));
 
   // ---- A6 header ⋯ by keyboard (Tab focus, Enter opens + focus inside, ↓ moves, Esc closes and returns focus)
   await page.goto(`${BASE}${U}/requirements`); await settle();
@@ -155,8 +154,8 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   const k4 = await page.evaluate(() => ({ open: Boolean(document.querySelector('.amenu')), back: document.activeElement && document.activeElement.classList.contains('phead__more') }));
   check('A6 ⋯ menu: Enter opens with focus inside, ↓/Tab move, Esc closes and returns focus', k1.open && k1.inMenu && k2 !== k1.first && k3 && !k4.open && k4.back, JSON.stringify({ k1, k2, k3, k4 }));
   await page.focus('.phead__more'); await page.keyboard.press('Enter'); await page.waitForTimeout(100);
-  await page.keyboard.press('Enter'); await page.waitForSelector('.actpanel', { timeout: 4000 }).catch(() => {});
-  check('A6 ⋯ › 활동 기록 works from the keyboard', Boolean(await page.$('.actpanel'))); await page.keyboard.press('Escape');
+  await page.keyboard.press('Enter'); await page.waitForSelector('.actpage', { timeout: 4000 }).catch(() => {});
+  check('A6 ⋯ › 활동 기록 works from the keyboard (opens the page)', Boolean(await page.$('.actpage')) && /\/activity$/.test(new URL(page.url()).pathname)); await page.goBack(); await settle();
   await page.focus('[data-dmenu="me"]'); await page.keyboard.press('Enter'); await page.waitForTimeout(100);
   const me = await page.evaluate(() => Boolean(document.activeElement && document.activeElement.closest('.dmenu')));
   await page.keyboard.press('Escape');

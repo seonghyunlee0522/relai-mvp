@@ -47,7 +47,7 @@ const EN = /\b(Workspace|Integrations?|Owner|OWNER|Member|MEMBER|Admin|ADMIN|Mem
   check('주간보고 tab: one primary "이번 주 주간보고 만들기" + past report list (기간 · 확정)', prim.length === 1 && prim[0] === '이번 주 주간보고 만들기' && /2026-10-05 ~ 2026-10-11/.test(await page.textContent('.rpl__t')) && /확정/.test(await page.textContent('.rpl__t')), JSON.stringify(prim));
   await shot('01-reports-weekly');
   for (const [n, k] of [['02-reports-docs', 'docs'], ['03-reports-health', 'health']]) { await page.click(`.stabs [data-stab="${k}"]`); await settle(); await page.waitForTimeout(500); await shot(n); }
-  await page.click('.stabs [data-stab-action="activity"]'); await page.waitForTimeout(800); await shot('04-reports-activity'); await page.keyboard.press('Escape');
+  await page.click('.stabs [data-stab="activity"]'); await settle(); await page.waitForTimeout(500); await shot('04-reports-activity'); await page.goBack(); await settle();   // batch7 #22: a page
 
   // ---- create this week's report from the tab, then the report view header
   await page.goto(`${BASE}${U}/reports`); await settle();

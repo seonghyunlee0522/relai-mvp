@@ -182,7 +182,7 @@ export function mountDashboardRoute({ app, db, guard, wrap, loadProject, base })
   /** Project activity (history + comments), opened on demand from the workspace header. */
   app.get(`${base}/:pid/activity`, guard, wrap(async (req, res) => {
     const project = await loadProject(req, res); if (!project) return;
-    res.json(await projectActivity(db, project.id, { limit: req.query.limit }));
+    res.json(await projectActivity(db, project.id, { limit: req.query.limit, before: req.query.before || null }));   // batch7 #22: ?before=<ISO> pages the 활동 기록 screen
   }));
   /** Redesign R2: 지금 할 일 › 다가오는 일정 — milestone-type dates and task ends in the next N days (read-only, computed). */
   app.get(`${base}/:pid/upcoming`, guard, wrap(async (req, res) => {

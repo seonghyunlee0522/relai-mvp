@@ -28,6 +28,8 @@ export async function api(method, url, body) {
     e.status = res.status; e.code = data?.error?.code; e.fields = data?.error?.fields || {}; e.error = data?.error || null;   // full error payload (AI credit balance/required etc.)
     throw e;
   }
+  // batch7 B5: a successful write tells listeners (the top-bar 다음 할 일 strip) that project data changed
+  if (method !== 'GET') { try { window.dispatchEvent(new CustomEvent('relai:data-changed', { detail: { method, url } })); } catch { /* no window (tests) */ } }
   return data;
 }
 export const wsApi = (p = '') => `/api/workspaces/${state.workspace.id}/projects${p}`;
