@@ -1,11 +1,15 @@
-/** E-mail configuration. Links are always built from APP_BASE_URL — never from a request Host header. */
+/**
+ * E-mail configuration. Server-only: RESEND_API_KEY / EMAIL_FROM come from the environment alone (never from a request, never
+ * sent to the browser or logged). Links are always built from APP_BASE_URL — never from a request Host header.
+ */
 const str = (v) => String(v ?? '').trim();
+export const DEFAULT_EMAIL_FROM = 'RELAI <noreply@relai.kr>';
 export class EmailConfigError extends Error { constructor(msg) { super(msg); this.code = 'email_config'; } }
 export function emailConfig(env = process.env) {
   const provider = (str(env.EMAIL_PROVIDER) || (env.NODE_ENV === 'production' ? 'resend' : 'fake')).toLowerCase();
   const appBaseUrl = str(env.APP_BASE_URL).replace(/\/+$/, '');
   return {
-    provider, resendApiKey: str(env.RESEND_API_KEY), from: str(env.EMAIL_FROM) || 'RELAI <no-reply@relai.local>', supportEmail: str(env.SUPPORT_EMAIL) || '',
+    provider, resendApiKey: str(env.RESEND_API_KEY), from: str(env.EMAIL_FROM) || DEFAULT_EMAIL_FROM, supportEmail: str(env.SUPPORT_EMAIL) || '',
     appBaseUrl, inviteExpiryDays: Number(env.INVITE_EXPIRY_DAYS) > 0 ? Number(env.INVITE_EXPIRY_DAYS) : 7,
     timeoutMs: Number(env.EMAIL_HTTP_TIMEOUT_MS) > 0 ? Number(env.EMAIL_HTTP_TIMEOUT_MS) : 10000,
   };

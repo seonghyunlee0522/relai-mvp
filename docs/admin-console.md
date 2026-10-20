@@ -81,3 +81,16 @@ PATCH /api/admin/feedback/:id          {status?, admin_note?}
 - 실제 Payment Provider 어댑터(`server/billing/provider.js` 레지스트리에 추가).
 - "Subscription 재동기화", "결제 재시도" 같은 안전한 Action과 그 Audit Action 추가. Plan 강제 변경은 만들지 않는다.
 - Payment Provider별 status/provider 값 사전과 Payments 필터 옵션 정렬.
+
+## 9. 이메일 발송 테스트 (연동 탭)
+
+관리자 › 연동 맨 위 카드. 운영 도메인을 Resend에서 인증했는지, `EMAIL_PROVIDER=resend`로 바꾸기 **전에** 확인하는 용도.
+
+- **설정 (서버 전용, env만)**: `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_PROVIDER` (`server/email/config.js`). `EMAIL_FROM`이 비어 있으면 `RELAI <noreply@relai.kr>`. 키는 브라우저로 보내지 않고, 응답·로그·감사 로그·`email_deliveries`에 남기지 않는다 (`redactSecrets`). `public/`은 `server/email/*`을 import하지 않는다 (테스트로 확인).
+- **Resend 연동 방식**: 공식 `resend` SDK 대신 `fetch` 어댑터(`server/email/provider.js`, `POST https://api.resend.com/emails` 하나). 쓰는 엔드포인트가 하나뿐이라 SDK가 주는 이득이 없고, 의존성·번들이 늘지 않으며, 테스트에서 `fetch`만 바꿔 끼우면 된다.
+- **API** (둘 다 `requireAuth → requireSystemAdmin`: 비로그인 401, 운영자 아님 403)
+  - `GET /api/admin/email/status` → `{ provider, from, from_is_default, default_from, key_present, domain }` — 키는 있음/없음만.
+  - `POST /api/admin/email/test` `{ to }` → `EMAIL_PROVIDER` 값과 상관없이 Resend로 1통. 받는 주소는 1개, 254자 이하, 줄바꿈·제어 문자·쉼표·세미콜론·공백 불가. 운영자당 10분에 5번(`rate_limits`, 초과 시 429 `rate_limited`). 키가 없으면 400 `resend_key_missing` (발송·기록 없음).
+  - 성공 200 `{ result: 'SENT', provider_message_id, ... }`. 실패 502, Resend 원문 대신 고정 한국어 메시지: `resend_key_invalid`(401) · `resend_domain_not_verified`(403) · `resend_invalid`(400/422) · `resend_rate_limited`(429) · `resend_server_error`(5xx) · `resend_timeout` · `resend_network`.
+  - Resend까지 간 시도는 모두 감사 로그 `EMAIL_TEST` (target_type `EMAIL`, metadata `to`, `result`, `error_code`, `from`).
+- **실서비스 전환 순서**: ① Resend › Domains에 `relai.kr` 추가 → 안내된 DKIM/SPF(필요 시 MX·DMARC) 레코드를 DNS에 넣고 Verified 확인 ② 이 카드에서 본인 주소로 테스트 → `발송 성공` 확인 ③ Vercel Production에 `EMAIL_PROVIDER=resend` 설정(`EMAIL_FROM`은 `relai.kr` 주소) 후 재배포 ④ 회원가입 인증 메일·초대 메일 수신 확인.
