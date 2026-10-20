@@ -54,11 +54,12 @@ const bind = (client, { isTx = false, pool = null, schema = null } = {}) => ({
  * Open a pool. `schema` (tests) isolates everything under a dedicated PostgreSQL schema so each test gets a fresh,
  * independent database without creating a database per test. Pool size is conservative (env DB_POOL_MAX, default 10).
  */
-export async function openDb({ url = process.env.DATABASE_URL, schema = null, max = Number(process.env.DB_POOL_MAX || 10), createSchema = false, applyMigrations = true } = {}) {
+export async function openDb({ url = process.env.DATABASE_URL, schema = null, max = Number(process.env.DB_POOL_MAX || 10), idleTimeoutMillis = 30_000, connectionTimeoutMillis = 10_000, onPool = null, createSchema = false, applyMigrations = true } = {}) {
   if (!url) throw new Error('DATABASE_URL is not set');
   const options = schema ? `-c search_path=${schema},public -c timezone=${APP_TIMEZONE}` : `-c timezone=${APP_TIMEZONE}`;
-  const pool = new Pool({ connectionString: url, max, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000, options });
+  const pool = new Pool({ connectionString: url, max, idleTimeoutMillis, connectionTimeoutMillis, options });
   pool.on('error', (e) => console.error('[db] idle client error', e.message));
+  if (onPool) onPool(pool);   // serverless: attachDatabasePool keeps the instance alive until idle clients are closed
   if (schema && createSchema) { const c = await pool.connect(); try { await c.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`); } finally { c.release(); } }
   const db = bind(pool, { pool, schema });
   db.close = async () => { await pool.end(); };

@@ -15,6 +15,7 @@
     "db:validate": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-postgres.js --validate"
   },
   "dependencies": {
+    "@vercel/functions": "^3.10.1",
     "docx": "^9.11.0",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",

@@ -4,3 +4,7 @@ node_modules
 !.env.example
 data/
 .vercel
+.vercel-static/assets
+.vercel-static/brand
+.vercel-static/img
+.vercel-static/service
