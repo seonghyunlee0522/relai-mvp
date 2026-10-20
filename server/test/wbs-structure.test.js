@@ -10,19 +10,19 @@ import { suggestFor } from '../wbs-structure.js';
 const listW = async (A) => (await A.c('GET', A.wbs)).json;
 const sys = (items) => items.filter((i) => i.is_system);
 
-test('new project: opening the WBS shows the 6 fixed nodes 1..6; 데이터 이관 있음 → 7 with 이관 4th; nothing counted', async () => {
+test('new project: opening the WBS shows the 7 fixed nodes 1..7 (07 운영 last, P2 #6); 데이터 이관 있음 → 8 with 이관 4th; nothing counted', async () => {
   const { server, client, db } = await boot();
   const A = await setup(client, 's1@x.com');
   await A.c('PATCH', A.purl, { data_migration: 'NO' });
   let w = await listW(A);
-  assert.deepEqual(sys(w.items).map((i) => `${i.wbs_code}:${i.title}`), ['1:착수', '2:요구사항 정의', '3:분석·설계', '4:구현', '5:시험', '6:전환·오픈']);
+  assert.deepEqual(sys(w.items).map((i) => `${i.wbs_code}:${i.title}`), ['1:착수', '2:요구사항 정의', '3:분석·설계', '4:구현', '5:시험', '6:전환·오픈', '7:운영']);
   assert.ok(sys(w.items).every((i) => i.item_type === 'SUMMARY' && i.is_group && i.depth === 0));
   assert.equal(w.summary.total, 0, "'WBS 0건' stays 0"); assert.equal(w.summary.summaries, 0); assert.equal(w.outside_count, 0);
-  w = await listW(A); assert.equal(sys(w.items).length, 6, 'idempotent');
+  w = await listW(A); assert.equal(sys(w.items).length, 7, 'idempotent');
   // project home / guide still sees an empty WBS
   assert.equal((await A.c('GET', A.purl)).json.wbs?.total ?? 0, 0);
   const B = await setup(client, 's1b@x.com'); await B.c('PATCH', B.purl, { data_migration: 'YES' });
-  assert.deepEqual(sys((await listW(B)).items).map((i) => `${i.wbs_code}:${i.title}`), ['1:착수', '2:요구사항 정의', '3:분석·설계', '4:데이터 이관', '5:구현', '6:시험', '7:전환·오픈']);
+  assert.deepEqual(sys((await listW(B)).items).map((i) => `${i.wbs_code}:${i.title}`), ['1:착수', '2:요구사항 정의', '3:분석·설계', '4:데이터 이관', '5:구현', '6:시험', '7:전환·오픈', '8:운영']);
   // plan limit + usage count exclude the fixed nodes
   const n = Number((await db.get(`SELECT COUNT(*) n FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = ? AND i.archived_at IS NULL AND i.system_key IS NULL`, [A.w])).n);
   assert.equal(n, 0);
@@ -46,10 +46,10 @@ test('guards: rename / retype / move / indent / outdent / duplicate / delete / r
   assert.equal((await A.c('PATCH', `${A.wbs}/${dev.id}`, { description: '개발 전체', owner_user_id: A.uid })).status, 200);
   assert.equal((await A.c('PATCH', `${A.wbs}/${dev.id}`, { title: '구현', description: '같은 이름은 변경 아님' })).status, 200);
   const child = (await A.c('POST', A.wbs, { title: '로그인 개발', parent_id: dev.id })).json.item; assert.equal(child.wbs_code, '4.1');
-  const top = (await A.c('POST', A.wbs, { title: '사용자 최상위' })).json.item; assert.equal(top.wbs_code, '7', 'top-level user items follow the nodes');
+  const top = (await A.c('POST', A.wbs, { title: '사용자 최상위' })).json.item; assert.equal(top.wbs_code, '8', 'top-level user items follow the nodes');
   // moving a user item to position 1 at the root still keeps the nodes first
   const r = await A.c('POST', `${A.wbs}/${top.id}/move`, { parent_id: null, sequence: 1 }); assert.equal(r.status, 200);
-  assert.equal(r.json.items.find((i) => i.id === top.id).wbs_code, '7');
+  assert.equal(r.json.items.find((i) => i.id === top.id).wbs_code, '8');
   // bulk delete skips fixed nodes
   const b = await A.c('POST', `${A.wbs}/bulk`, { ids: [dev.id, top.id], action: 'archive' });
   assert.equal(b.status, 200, JSON.stringify(b.json)); assert.ok(b.json.skipped.some((s) => s.id === dev.id));
@@ -76,7 +76,7 @@ test('existing project (737c631 WBS): old 뼈대 groups adopted by phase + name,
   const odd = (await A.c('POST', A.wbs, { title: '기타 잡무' })).json.item;
   const w = await listW(A);
   const nodes = sys(w.items);
-  assert.equal(nodes.length, 6);
+  assert.equal(nodes.length, 7);
   assert.equal(nodes.find((n) => n.title === '분석·설계').id, ad.id, 'adopted: same row, now a fixed node'); assert.equal(w.items.find((i) => i.id === t1.id).parent_id, ad.id);
   assert.ok(!nodes.some((n) => n.id === st.id), '안정화 is not a phase name → not adopted');
   assert.ok(!nodes.some((n) => n.id === fake.id), 'a hand-made 시험 group (no 뼈대 history) is not adopted');
@@ -102,16 +102,16 @@ test('데이터 이관 switch: on → node 4 + trait YES, numbers shift; off wit
   const A = await setup(client, 's4@x.com'); await A.c('PATCH', A.purl, { data_migration: 'NO' });
   await listW(A);
   let r = await A.c('POST', `${A.wbs}/structure/data-migration`, { on: true }); assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.deepEqual(sys(r.json.items).map((i) => `${i.wbs_code}:${i.title}`), ['1:착수', '2:요구사항 정의', '3:분석·설계', '4:데이터 이관', '5:구현', '6:시험', '7:전환·오픈']);
+  assert.deepEqual(sys(r.json.items).map((i) => `${i.wbs_code}:${i.title}`), ['1:착수', '2:요구사항 정의', '3:분석·설계', '4:데이터 이관', '5:구현', '6:시험', '7:전환·오픈', '8:운영']);
   assert.equal(r.json.data_migration, 'YES'); assert.equal((await db.get('SELECT data_migration FROM projects WHERE id = ?', [A.p.id])).data_migration, 'YES');
   const dm = sys(r.json.items).find((i) => i.title === '데이터 이관');
   const c1 = (await A.c('POST', A.wbs, { title: '매핑 정의', parent_id: dm.id })).json.item; await A.c('POST', A.wbs, { title: '본 이관', parent_id: dm.id });
   r = await A.c('POST', `${A.wbs}/structure/data-migration`, { on: false }); assert.equal(r.status, 409); assert.equal(r.json.error.code, 'has_children'); assert.match(r.json.error.message, /하위 2건을 먼저 옮기세요/);
   for (const id of [c1.id, (await listW(A)).items.find((i) => i.title === '본 이관').id]) await A.c('POST', `${A.wbs}/${id}/archive`, {});
   r = await A.c('POST', `${A.wbs}/structure/data-migration`, { on: false }); assert.equal(r.status, 200);
-  assert.equal(sys(r.json.items).length, 6); assert.equal(r.json.data_migration, 'NO');
+  assert.equal(sys(r.json.items).length, 7); assert.equal(r.json.data_migration, 'NO');
   assert.equal((await A.c('POST', `${A.wbs}/${dm.id}/restore`, {})).status, 409, 'the archived node comes back through the switch only');
-  r = await A.c('POST', `${A.wbs}/structure/data-migration`, { on: true }); assert.equal(sys(r.json.items).length, 7);
+  r = await A.c('POST', `${A.wbs}/structure/data-migration`, { on: true }); assert.equal(sys(r.json.items).length, 8);
   server.close();
 });
 

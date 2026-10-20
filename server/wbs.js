@@ -2,6 +2,7 @@
  * WBS engine: hierarchy, codes, ordering, progress roll-up, finish-to-start dependencies.
  * Relationships are id-based; wbs_code is display-only and recomputed after every structural change.
  */
+import { fsConflict, fsWarning } from '../public/app/shared/wbs-deps.js';
 import { randomUUID } from 'node:crypto';
 import { ValidationError, isDate } from './validate.js';
 import { assertWithinLimit } from './billing/limits.js';
@@ -32,7 +33,7 @@ export class SystemNodeError extends ValidationError {
   constructor(action = '변경') { super({ system_key: `고정 단계 항목은 ${action}할 수 없습니다.` }); this.status = 409; this.code = 'system_node'; this.message = `'단계' 고정 항목은 ${action}할 수 없습니다. 하위 항목을 추가해 사용하세요.`; }
 }
 export const isSystem = (it) => Boolean(it && it.system_key);
-const SYSTEM_ORDER = ['PHASE:INITIATION', 'PHASE:REQUIREMENTS', 'PHASE:ANALYSIS_DESIGN', 'OPT:DATA_MIGRATION', 'PHASE:DEVELOPMENT', 'PHASE:TESTING', 'PHASE:TRANSITION_GO_LIVE'];
+const SYSTEM_ORDER = ['PHASE:INITIATION', 'PHASE:REQUIREMENTS', 'PHASE:ANALYSIS_DESIGN', 'OPT:DATA_MIGRATION', 'PHASE:DEVELOPMENT', 'PHASE:TESTING', 'PHASE:TRANSITION_GO_LIVE', 'PHASE:OPERATIONS'];
 const sysIdx = (k) => { const i = SYSTEM_ORDER.indexOf(k); return i < 0 ? 98 : i; };
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const dateOrNull = (v) => (v === undefined ? undefined : v === null || v === '' ? null : v);
@@ -360,7 +361,10 @@ export async function getWbs(db, project, id) {
     WHERE d.predecessor_id = ? AND s.archived_at IS NULL ORDER BY s.sequence`, [id]));
   const history = await listWbsHistory(db, id);
   const lastDelay = history.find((h) => h.note);   // US-1 Drawer: "계획 5/14 → 5/21 (+7일)" + the latest reason
-  return { ...it, predecessors: preds.filter((p) => !p.archived_at), successors: succs, requirement_links: (await linksForWbs(db, id)), raid: (await linkedRaid(db, 'WBS', id)), testing: (await testsFor(db, 'WBS', id)), changes: (await changesFor(db, 'WBS', id)),
+  // P2 (Jim prod 10-21 #11): FS links whose successor starts on/before the predecessor ends → shown as a warning (never blocks)
+  const dep_conflicts = preds.filter((p) => !p.archived_at).map((p) => { const pi = items.find((i) => i.id === p.predecessor_id); const c = fsConflict(pi, it);
+    return c ? { predecessor_id: p.predecessor_id, wbs_code: p.wbs_code, title: p.title, ...c, message: fsWarning(pi, c) } : null; }).filter(Boolean);
+  return { ...it, predecessors: preds.filter((p) => !p.archived_at), successors: succs, dep_conflicts, requirement_links: (await linksForWbs(db, id)), raid: (await linkedRaid(db, 'WBS', id)), testing: (await testsFor(db, 'WBS', id)), changes: (await changesFor(db, 'WBS', id)),
     history, comments: (await listComments(db, 'WBS', id)), delay_note: lastDelay ? { note: lastDelay.note, at: lastDelay.changed_at, by: lastDelay.changed_by_name } : null };
 }
 

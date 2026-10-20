@@ -99,7 +99,7 @@ ${AREA_GUIDE}
 - item_type: TASK | MILESTONE. 하위 항목을 갖는 묶음도 TASK입니다(자식이 있으면 상위 작업). MILESTONE은 하위 항목이 없습니다. SUMMARY는 사용하지 않습니다.
 - 깊이는 기본 2~3단계로 유지하고 최대 5단계를 넘지 않습니다. 전체 항목은 최대 80개. 프로젝트가 크면 상세보다 상위 수준 초안을 만들고 notes에 그 사실을 적습니다.
 - 각 항목에 project_area를 지정합니다(영역 분류·Coverage용).
-- 각 항목에 phase를 지정합니다. WBS 최상위는 RELAI 단계로 고정되어 있고 최상위 항목은 그 단계 아래에 들어갑니다: INITIATION(착수) · REQUIREMENTS(요구사항 정의) · ANALYSIS_DESIGN(분석·설계) · DATA_MIGRATION(데이터 이관) · DEVELOPMENT(구현) · TESTING(시험) · TRANSITION_GO_LIVE(전환·오픈). 하위 항목은 상위와 같은 값을 씁니다. 단계 이름만 되풀이하는 최상위 묶음("테스트", "분석/설계")은 만들지 말고 작업을 바로 그 단계에 둡니다.
+- 각 항목에 phase를 지정합니다. WBS 최상위는 RELAI 단계로 고정되어 있고 최상위 항목은 그 단계 아래에 들어갑니다: INITIATION(착수) · REQUIREMENTS(요구사항 정의) · ANALYSIS_DESIGN(분석·설계) · DATA_MIGRATION(데이터 이관) · DEVELOPMENT(구현) · TESTING(시험) · TRANSITION_GO_LIVE(전환·오픈) · OPERATIONS(운영: 운영 인수·유지보수·하자보수처럼 오픈 이후 운영 단계의 작업만). 하위 항목은 상위와 같은 값을 씁니다. 단계 이름만 되풀이하는 최상위 묶음("테스트", "분석/설계")은 만들지 말고 작업을 바로 그 단계에 둡니다.
 - related_requirement_ids에는 <project_data>의 선택 요구사항 display_id(REQ-nnn)만, 그리고 실제로 그 요구사항을 구현·검증하는 작업에만 넣습니다. 관리/인프라/교육 같은 수행 작업은 빈 배열로 둡니다. 억지로 모든 요구사항을 연결하지 않습니다.
 - 사용자가 NOT_NEEDED로 답한 영역, 프로젝트가 작아 불필요한 PM 업무는 과도하게 만들지 않습니다.
 - 기존 WBS에 이미 같은 작업이 있으면 다시 만들지 말고 notes에 "기존 x.y와 유사" 식으로 적습니다.

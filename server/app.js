@@ -1033,8 +1033,10 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   app.post(`${wbase}/:iid/dependencies`, guard, wrap(async (req, res) => {
     const ctx = (await wbsMutable(req, res)); if (!ctx) return;
-    (await tx(db, async (db) => (await W.addDependency(db, ctx.project, ctx.w, String(req.body?.predecessor_id || ''), req.user.id))));
-    res.status(201).json({ item: (await W.getWbs(db, ctx.project, ctx.w.id)), ...(await wbsResponse(ctx.project)) });
+    const predId = String(req.body?.predecessor_id || '');
+    (await tx(db, async (db) => (await W.addDependency(db, ctx.project, ctx.w, predId, req.user.id))));
+    const item = (await W.getWbs(db, ctx.project, ctx.w.id));
+    res.status(201).json({ item, warning: (item.dep_conflicts || []).find((c) => c.predecessor_id === predId)?.message || null, ...(await wbsResponse(ctx.project)) });
   }));
 
   app.delete(`${wbase}/:iid/dependencies/:did`, guard, wrap(async (req, res) => {

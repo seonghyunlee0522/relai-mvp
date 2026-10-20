@@ -65,5 +65,5 @@ test('phase inference and node aliases', () => {
   assert.equal(inferPlanPhase({ title: '요구사항 정의서 작성' }), 'REQUIREMENTS');
   assert.equal(inferPlanPhase({ title: '무엇인지 모름' }), 'DEVELOPMENT');
   assert.equal(sameAsNode('분석/설계'), 'ANALYSIS_DESIGN'); assert.equal(sameAsNode('테스트'), 'TESTING'); assert.equal(sameAsNode('설계', { strict: true }), null); assert.equal(sameAsNode('분석·설계', { strict: true }), 'ANALYSIS_DESIGN');
-  assert.equal(FIXED_NODES.filter((n) => !n.optional).length, 6);
+  assert.equal(FIXED_NODES.filter((n) => !n.optional).length, 7);   // P2 (Jim prod 10-21 #6): + 07 운영
 });

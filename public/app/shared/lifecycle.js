@@ -136,8 +136,9 @@ export const DOORS = (pid) => [
     T('req-trace', '연결 현황', P(pid, '/requirements?view=trace'), '요구사항마다 WBS 작업과 테스트가 연결됐는지, 시험 결과는 어떤지 한눈에 봅니다.', 'REQUIREMENTS'),   // batch7 #13: 분류·우선순위 folded into 목록
   ] },
   { key: 'schedule', label: '일정', href: P(pid, '/wbs'), tabs: [
-    T('wbs', '작업 목록', P(pid, '/wbs'), '요구사항을 작업으로 나누고 담당자와 기간을 정합니다.', 'ANALYSIS_DESIGN'),
-    T('gantt', '간트', P(pid, '/wbs?view=gantt'), '작업 기간과 마일스톤을 일정표로 봅니다.', 'ANALYSIS_DESIGN'),
+    // P2 (Jim prod 10-21 #6): the schedule runs through every phase, so its chip is the project's current phase (no phase here), not 03
+    T('wbs', '작업 목록', P(pid, '/wbs'), '요구사항을 작업으로 나누고 담당자와 기간을 정합니다.', null),
+    T('gantt', '간트', P(pid, '/wbs?view=gantt'), '작업 기간과 마일스톤을 일정표로 봅니다.', null),
     T('wbs-trace', '요구사항 연결', P(pid, '/requirements?view=trace&scope=IN_SCOPE'), '범위 내 요구사항을 어떤 작업으로 구현하는지 연결합니다.', 'ANALYSIS_DESIGN'),
     T('dev-status', '구현 현황', P(pid, '/wbs?phase=DEVELOPMENT'), '구현 단계 작업의 진행률과 지연을 확인합니다.', 'DEVELOPMENT'),
   ] },

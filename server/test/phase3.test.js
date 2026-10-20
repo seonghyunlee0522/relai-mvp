@@ -122,7 +122,7 @@ test('US-2 뼈대: 15 confirmed + 이관 있음 + 연계 없음 → 3·15·3·3�
   assert.equal(r.status, 201, JSON.stringify(r.json)); assert.deepEqual(r.json.result, { created: 33, tasks: 30, milestones: 3, linked: 15 });
   const items = r.json.items;
   const groups = items.filter((i) => i.depth === 0 && i.item_type === 'SUMMARY');
-  assert.deepEqual(groups.map((x) => [x.title, x.lifecycle_phase, x.children_count, x.wbs_code]), [['착수', 'INITIATION', 3, '1'], ['요구사항 정의', 'REQUIREMENTS', 3, '2'], ['분석·설계', 'ANALYSIS_DESIGN', 3, '3'], ['데이터 이관', 'TRANSITION_GO_LIVE', 2, '4'], ['구현', 'DEVELOPMENT', 15, '5'], ['시험', 'TESTING', 3, '6'], ['전환·오픈', 'TRANSITION_GO_LIVE', 4, '7']]);
+  assert.deepEqual(groups.map((x) => [x.title, x.lifecycle_phase, x.children_count, x.wbs_code]), [['착수', 'INITIATION', 3, '1'], ['요구사항 정의', 'REQUIREMENTS', 3, '2'], ['분석·설계', 'ANALYSIS_DESIGN', 3, '3'], ['데이터 이관', 'TRANSITION_GO_LIVE', 2, '4'], ['구현', 'DEVELOPMENT', 15, '5'], ['시험', 'TESTING', 3, '6'], ['전환·오픈', 'TRANSITION_GO_LIVE', 4, '7'], ['운영', 'OPERATIONS', 0, '8']]);   // P2 #6: 07 운영 node (empty)
   assert.ok(groups.every((x) => x.is_system), 'the groups are the fixed nodes');
   const kids = (title) => items.filter((i) => i.parent_id === groups.find((x) => x.title === title).id).map((i) => i.title);
   assert.deepEqual(kids('분석·설계'), ['상세 요구사항 분석', '화면 설계', 'DB 설계']);

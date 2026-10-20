@@ -26,6 +26,7 @@ import { choiceDialog, confirmDialog, pickerDialog, toast, toastAction, withDela
 import { planShiftText, workdaysBetween } from '../shared/kst-date.js';
 import { holidays } from '../shared/holidays.js';
 import { nodeByKey } from '../shared/wbs-structure.js';
+import { fsConflicts, fsWarning } from '../shared/wbs-deps.js';
 import * as OP from '../shared/owner-picker.js';
 import { aiStatus } from '../shared/ai.js';
 import { openWbsPlanner } from '../ai/wbs-planner.js';
@@ -140,6 +141,8 @@ export async function wbsPage(id) {
     }
     return out;
   };
+  let fsMap = new Map(); let fsFor = null;   // FS-conflict map, recomputed only when `items` changes (row chips + Gantt)
+  const fsOf = () => { if (fsFor !== items) { fsFor = items; fsMap = fsConflicts(items); } return fsMap; };
   const syncRows = () => grid.setRows(visible());
 
   /** Owner picker: the shared component (shared/owner-picker.js, also the Issue 담당자 — Phase 4 US-6). */
@@ -182,6 +185,7 @@ export async function wbsPage(id) {
       ${raw(it.children_count ? html`<button class="wtog" data-tog="${it.id}" aria-label="${collapsed.has(it.id) ? '펼치기' : '접기'}">${collapsed.has(it.id) ? '▸' : '▾'}</button>` : '<span class="wtog wtog--none"></span>')}
       ${raw(it.item_type === 'MILESTONE' ? '<i class="wms" title="마일스톤">◆</i>' : '')}<span class="wtitle__t">${it.title}</span>
       ${raw(it.predecessors.length ? html`<small class="wdep" title="선행 작업 ${it.predecessors.length}개">←${it.predecessors.length}</small>` : '')}
+      ${raw((() => { const c = fsOf().get(it.id); return c ? html`<small class="wdep wdep--warn" data-fs-warn title="${c.map((x) => fsWarning(x.pred, x)).join('\n')}">⚠ 선행 일정</small>` : ''; })())}
       ${raw(it.linked_req_count ? html`<small class="wdep" title="연결된 요구사항 ${it.linked_req_count}개">요구 ${it.linked_req_count}</small>` : '')}
       ${raw(withActions && !archived ? html`<span class="wact"><button class="wadd" data-addchild="${it.id}" title="하위 작업 추가" aria-label="하위 작업 추가" ${it.item_type === 'MILESTONE' ? 'disabled' : ''}>+</button><button class="wadd wmenu" data-rowmenu="${it.id}" title="더보기" aria-label="행 메뉴">⋯</button></span>` : '')}</div>`;
   };
@@ -296,6 +300,23 @@ export async function wbsPage(id) {
       sc.scrollLeft = Math.max(0, Math.round((t0 - gx.start) / day) * px + px / 2 - sc.clientWidth / 2); gx.left = sc.scrollLeft; gx.mode = 'keep';
     } else sc.scrollLeft = gx.left;
   };
+  /** P2 (Jim prod 10-21 #11): 선행(FS) links on the Gantt — predecessor end → successor start, an elbow line per link between the
+   *  visible rows (38px each). Red + dashed when the successor starts before the predecessor ends (same rule as the row chip). */
+  const ROW_H = 38;
+  const ganttLinks = (vis, x, px) => {
+    const at = new Map(vis.map((it, i) => [it.id, i])); const conf = fsOf(); const segs = [];
+    const endX = (it) => { const ms = it.item_type === 'MILESTONE' && it.milestone_date; const e = ms ? it.milestone_date : span(it).e; return e ? x(e) + (ms ? px / 2 : px) : null; };
+    const startX = (it) => { const ms = it.item_type === 'MILESTONE' && it.milestone_date; const s0 = ms ? it.milestone_date : span(it).s; return s0 ? x(s0) + (ms ? px / 2 : 0) : null; };
+    for (const it of vis) for (const d of it.predecessors || []) {
+      const pi = at.get(d.predecessor_id); const si = at.get(it.id); if (pi === undefined) continue;
+      const pr = vis[pi]; const x1 = endX(pr); const x2 = startX(it); if (x1 === null || x2 === null) continue;
+      const y1 = pi * ROW_H + ROW_H / 2; const y2 = si * ROW_H + ROW_H / 2; const bad = (conf.get(it.id) || []).some((c) => c.pred.id === pr.id);
+      const mx = Math.max(x1 + 6, Math.min(x2 - 6, x1 + 6)); const path = x2 - 6 >= x1 + 6 ? `M${x1} ${y1} H${mx} V${y2} H${x2}` : `M${x1} ${y1} H${x1 + 6} V${(y1 + y2) / 2} H${x2 - 8} V${y2} H${x2}`;
+      segs.push(`<path d="${path}" class="glink${bad ? ' is-bad' : ''}" data-glink="${pr.id}>${it.id}" marker-end="url(#garr${bad ? 'B' : ''})"><title>${(bad ? '⚠ ' : '') + `선행 ${pr.wbs_code} → ${it.wbs_code}`.replace(/[<>&"]/g, '')}</title></path>`);
+    }
+    if (!segs.length) return '';
+    return `<svg class="glinks" aria-hidden="true" width="100%" height="${vis.length * ROW_H}"><defs><marker id="garr" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" class="glink__h"/></marker><marker id="garrB" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" class="glink__h is-bad"/></marker></defs>${segs.join('')}</svg>`;
+  };
   const gantt = (rows) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const px = gx.px;
@@ -323,6 +344,7 @@ export async function wbsPage(id) {
               else bar = html`<b class="glab glab--none">일정 없음</b>`; }
             return html`<div class="gantt__row ${sel && sel.id === it.id ? 'is-sel' : ''}" data-row="${it.id}">${raw(bar)}</div>`;
           }).join(''))}
+          ${raw(ganttLinks(rows.filter((r) => !r._ghost), x, px))}
         </div></div></div></div>`;
   };
 
@@ -772,6 +794,7 @@ export async function wbsPage(id) {
         </section>
         <section data-pane="dep" ${dtab === 'dep' ? '' : 'hidden'}>
           <h4 class="dh">선행 작업 <em>${it.predecessors.length}</em></h4>
+          ${raw((it.dep_conflicts || []).length ? html`<div class="notice notice--warn" data-fs-warn role="status">${raw(it.dep_conflicts.map((c) => html`<div>⚠ ${c.message}</div>`).join(''))}</div>` : '')}
           <ol class="crit">${raw(it.predecessors.map((pp) => html`<li><span class="mono wcode">${pp.wbs_code}</span><span class="crit__in" style="padding:6px 4px">${pp.title}</span><small class="dim">선행 완료 후 시작</small>
             ${raw(readOnly ? '' : html`<span class="crit__act" style="opacity:1"><button data-dep-del="${pp.id}" title="삭제">×</button></span>`)}</li>`).join(''))}</ol>
           ${raw(readOnly ? (it.predecessors.length ? '' : '<p class="hint">선행 작업이 없습니다.</p>') : html`<div class="crit-add"><input class="input input--sm" id="dep-q" placeholder="선행 작업 검색 (번호 또는 이름)" style="flex:1" list="dep-list"><datalist id="dep-list">${raw(predCandidates.map((x) => html`<option value="${x.wbs_code} ${x.title}">`).join(''))}</datalist><button class="btn btn--secondary btn--sm" id="dep-add">추가</button></div><div class="err" id="dep-err"></div><p class="hint">순환 관계(A→B→A)는 저장되지 않습니다.</p>`)}
@@ -824,7 +847,7 @@ export async function wbsPage(id) {
       const hit = cand.find((x) => `${x.wbs_code} ${x.title}`.toLowerCase() === q) || cand.find((x) => x.wbs_code === q) || cand.filter((x) => x.title.toLowerCase().includes(q));
       const picked = Array.isArray(hit) ? (hit.length === 1 ? hit[0] : null) : hit;
       if (!picked) { $('#dep-err').textContent = Array.isArray(hit) && hit.length > 1 ? '여러 작업이 일치합니다. 번호까지 입력해 주세요.' : '일치하는 작업이 없습니다.'; return; }
-      try { dtab = 'dep'; await after(await api('POST', wApi(`/${it.id}/dependencies`), { predecessor_id: picked.id })); }
+      try { dtab = 'dep'; const r = await api('POST', wApi(`/${it.id}/dependencies`), { predecessor_id: picked.id }); await after(r); if (r.warning) toast(`선행 작업을 추가했습니다. ${r.warning}`); }
       catch (e) { $('#dep-err').textContent = e.fields ? Object.values(e.fields)[0] : e.message; }
     };
     const dq = $('#dep-q'); if (dq) dq.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#dep-add').click(); } };
