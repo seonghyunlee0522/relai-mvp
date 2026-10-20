@@ -1,6 +1,6 @@
 // batch7 T5 paywall browser check: a FREE limit hit inside the app (3rd project) opens the upsell dialog whose CTA routes to
 // /app/billing/plans; AI with too few credits opens the same upsell; the plans page shows 무료 vs 유료 플랜, the limit table and the FAQ
-// with no won amount while payments are off; 구독하기 only says '결제 준비 중입니다. 곧 오픈 예정이에요.' (no checkout call);
+// with Team 플랜 월 22,000원 (NicePay review product list); 구독하기 opens the card page whose submit only says '결제 준비 중입니다. 곧 오픈 예정이에요.' (no checkout call);
 // 설정 › 플랜 links to the plans page; the landing pricing shows FREE = 2 projects and '가격 안내 예정'.
 // Not part of `npm test` (needs a running server, Playwright and psql):
 //   BASE=http://127.0.0.1:3595 SHOTS=research/relai-b7-t5 DATABASE_URL=postgres://… node scripts/e2e-paywall.cjs
@@ -60,7 +60,7 @@ const SOON = '결제 준비 중입니다. 곧 오픈 예정이에요.';
   const pt = await page.textContent('#main');
   check('plans page: 무료 vs 유료 플랜 cards', (await page.locator('.pl-card[data-plan="FREE"]').count()) === 1 && (await page.locator('.pl-card[data-plan="TEAM"]').count()) === 1);
   check('plans page: current plan = 무료', /현재 플랜/.test(await page.locator('.pl-card[data-plan="FREE"]').textContent()));
-  check('plans page: price 가격 안내 예정, no ₩ / 원) while payments are off', /가격 안내 예정/.test(pt) && !/₩/.test(pt) && !/원\)/.test(pt));
+  check('plans page: Team 플랜 priced 월 22,000원 (부가세 포함) — NicePay review product list, no ₩ sign', /월 22,000원/.test(pt) && /부가세 포함/.test(pt) && !/₩/.test(pt));
   const rows = await page.$$eval('.pl-table tbody tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent.trim())));
   const row = (k) => rows.find((r) => r[0].startsWith(k)) || [];
   check('limit table: projects 2개 / 무제한', row('진행 중 프로젝트')[1] === '2개' && row('진행 중 프로젝트')[2] === '무제한', JSON.stringify(row('진행 중 프로젝트')));
@@ -68,9 +68,13 @@ const SOON = '결제 준비 중입니다. 곧 오픈 예정이에요.';
   check('limit table: AI 크레딧 워크스페이스당 500 (1회)', /워크스페이스당 500 \(1회\)/.test(row('AI 크레딧')[1] || ''), JSON.stringify(row('AI 크레딧')));
   check('FAQ present (≥ 4 questions, data-kept answer)', (await page.locator('#pl-faq details').count()) >= 4 && /삭제되거나 읽기 전용으로 바뀌지 않아요/.test(pt));
   await shot('t5-plans.png');
-  await page.click('#pl-subscribe');
+  await page.click('#pl-subscribe');   // → card registration page; with payments off its submit only says 결제 준비 중
+  await page.waitForSelector('#subscribe-page', { timeout: 5000 }).catch(() => {});
+  await page.fill('#sub-number', '1234567890123456'); await page.selectOption('#sub-mm', '12'); await page.selectOption('#sub-yy', '29');
+  await page.fill('#sub-id', '800101'); await page.fill('#sub-pw', '12'); await page.check('input[name=agree_recurring]'); await page.check('input[name=agree_pg]');
+  await page.click('#sub-pay');
   const toast = await page.locator('.toast', { hasText: SOON }).first().textContent({ timeout: 3000 }).catch(() => '');
-  check('구독하기 → 준비 중 message', toast.trim() === SOON, toast);
+  check('구독하기 → card page → submit → 준비 중 message', toast.trim() === SOON, toast);
   await shot('t5-plans-subscribe.png');
   check('no checkout / NicePay call made', checkoutCalls.length === 0, JSON.stringify(checkoutCalls));
 
