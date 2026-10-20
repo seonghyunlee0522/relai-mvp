@@ -4,7 +4,7 @@
  */
 import { PLANS, DEFAULT_PLAN, USAGE_DIMS, pctOf, tierOf, limitsFor } from './plans.js';
 import { GRANTS_PLAN_SQL, EFFECTIVE_PLAN_SQL, effectivePlan } from './billing/subscriptions.js';
-import { ACTIVE_PROJECT_SQL, SEAT_MEMBER_SQL, PENDING_INVITE_SQL } from './billing/limits.js';
+import { ACTIVE_PROJECT_SQL, SEAT_MEMBER_SQL, PENDING_INVITE_SQL, OPERATOR_OWNED_SQL } from './billing/limits.js';
 
 const USAGE_SQL = `
   SELECT w.id AS workspace_id, w.name, w.status, w.created_at,
@@ -18,6 +18,7 @@ const USAGE_SQL = `
       COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
       COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at,
     ${EFFECTIVE_PLAN_SQL} AS plan_key,
+    ${OPERATOR_OWNED_SQL('w')} AS operator_owned,   -- operator-owned workspaces have no project / seat limit (billing/limits.js)
     (SELECT row_to_json(s) FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS sub,   -- whole row: limitsFor reads seats / extra_* / project_limit / price_version
     (SELECT COUNT(*) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days') AS ai_runs_30d,
     (SELECT COUNT(*) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days' AND r.status = 'FAILED') AS ai_failed_30d,
@@ -30,7 +31,7 @@ const USAGE_SQL = `
 export function shapeUsage(row, planKey = DEFAULT_PLAN) {
   const plan = PLANS[planKey] || PLANS[DEFAULT_PLAN];
   const sub = (typeof row.sub === 'string' ? JSON.parse(row.sub) : row.sub) || {};
-  const lim = limitsFor({ ...sub, plan: plan.key });
+  const lim = row.operator_owned ? { projects: null, users: null } : limitsFor({ ...sub, plan: plan.key });
   const limitOf = { projects: lim.projects, members: lim.users };
   const dims = USAGE_DIMS.map((d) => { const used = Number(row[d.key] || 0); const limit = limitOf[d.key]; return { key: d.key, label: d.label, used, limit: limit ?? null, pct: pctOf(used, limit) }; });
   const pcts = dims.map((d) => d.pct).filter((p) => p !== null);
@@ -65,7 +66,7 @@ const shapeAi = (r) => ({ runs_30d: Number(r.ai_runs_30d || 0), failed_30d: Numb
  */
 export async function allWorkspacesUsage(db, { sort = 'ai', page = 1, size = 50, q = '' } = {}) {
   const limits = PLANS[DEFAULT_PLAN].limits;
-  const pctExpr = (k) => (limits[k] === null || limits[k] === undefined ? 'NULL' : `CASE WHEN u.plan_key = '${DEFAULT_PLAN}' THEN ROUND(u.${k} * 100.0 / ${limits[k]}) END`);
+  const pctExpr = (k) => (limits[k] === null || limits[k] === undefined ? 'NULL' : `CASE WHEN u.plan_key = '${DEFAULT_PLAN}' AND NOT u.operator_owned THEN ROUND(u.${k} * 100.0 / ${limits[k]}) END`);
   const where = q ? `WHERE u.name ILIKE ?` : '';
   const params = q ? [`%${q}%`] : [];
   const total = (await db.get(`SELECT COUNT(*) AS n FROM (${USAGE_SQL}) u ${where}`, params)).n;
@@ -79,6 +80,6 @@ export async function workspacesNearLimit(db, minPct = 90, limit = 10) {
   const l = PLANS[DEFAULT_PLAN].limits;
   const conds = Object.entries(l).filter(([, v]) => v !== null).map(([k, v]) => `u.${k} * 100.0 / ${v} >= ${minPct}`);
   if (!conds.length) return [];
-  const rows = await db.all(`SELECT u.* FROM (${USAGE_SQL}) u WHERE u.status = 'ACTIVE' AND u.plan_key = '${DEFAULT_PLAN}' AND (${conds.join(' OR ')}) ORDER BY u.name LIMIT ${limit}`);
+  const rows = await db.all(`SELECT u.* FROM (${USAGE_SQL}) u WHERE u.status = 'ACTIVE' AND u.plan_key = '${DEFAULT_PLAN}' AND NOT u.operator_owned AND (${conds.join(' OR ')}) ORDER BY u.name LIMIT ${limit}`);
   return rows.map((r) => ({ workspace_id: r.workspace_id, name: r.name, ...shapeUsage(r) }));
 }

@@ -19,7 +19,8 @@
  * Over limit (decision D6): data is never deleted. When usage > limits (after a downgrade, expiry or refund) the workspace is
  * OVER_LIMIT: new projects / invites are refused by the checks above and editing inside active projects is refused by the
  * project write guard (app.js) until the owner completes / archives projects or removes members. `OVER_LIMIT_LOCK=off` turns
- * the edit lock off (creation checks stay). `PLAN_LIMITS=off` disables everything (legacy test fixtures).
+ * the edit lock off (creation checks stay). `PLAN_LIMITS=off` disables everything (legacy test fixtures). Operator-owned
+ * workspaces (OPERATOR_OWNED_SQL) are exempt from all of it.
  */
 import { PLANS, USAGE_DIMS, PLANS_URL, limitsFor } from '../plans.js';
 import { effectivePlan } from './subscriptions.js';
@@ -50,9 +51,22 @@ export async function countUsage(db, workspaceId) {
   return { projects_active: Number(r?.projects_active || 0), members: Number(r?.members || 0), pending_invites: Number(r?.pending_invites || 0) };
 }
 
-/** Subscription fields limitsFor needs, with the EFFECTIVE plan. */
+/**
+ * Operator exemption (founder 2026-10-21, Slack 1792510926.552669 "관리자만 예외로하고 켜줘"): a workspace whose OWNER is an operator
+ * (users.system_role = 'SYSTEM_ADMIN', the flag the admin console checks) has no project / seat limit and no read-only lock.
+ * Owner = workspaces.owner_id or an OWNER membership (owner_id is nullable). AI credit checks are not affected.
+ */
+export const OPERATOR_OWNED_SQL = (a = 'w') => `EXISTS (SELECT 1 FROM users ou WHERE ou.system_role = 'SYSTEM_ADMIN' AND ou.deleted_at IS NULL
+  AND (ou.id = ${a}.owner_id OR EXISTS (SELECT 1 FROM workspace_members om WHERE om.workspace_id = ${a}.id AND om.user_id = ou.id AND om.role = 'OWNER')))`;
+export async function operatorOwned(db, workspaceId) {
+  return Boolean((await db.get(`SELECT ${OPERATOR_OWNED_SQL('w')} AS x FROM workspaces w WHERE w.id = ?`, [workspaceId]))?.x);
+}
+const UNLIMITED = Object.freeze({ projects: null, users: null });
+
+/** Subscription fields limitsFor needs, with the EFFECTIVE plan. Operator-owned workspaces → unlimited (`operator: true`). */
 export async function workspaceLimits(db, workspaceId) {
   const plan = await effectivePlan(db, workspaceId);
+  if (await operatorOwned(db, workspaceId)) return { plan, limits: { ...UNLIMITED }, operator: true };
   const sub = plan === 'FREE' ? null : await db.get('SELECT plan, extra_users, extra_projects, seats, project_limit, price_version FROM subscriptions WHERE workspace_id = ?', [workspaceId]);
   return { plan, limits: limitsFor({ ...(sub || {}), plan }) };
 }
