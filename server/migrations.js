@@ -241,6 +241,11 @@ export const migrations = [
     }
   } },
   { version: 65, name: 'Personal-data retention (relai-retention-legal.md G-1..G-6, G-8): users.inactive_notice_at (1-year inactivity notice), admin_access_logs (operator access log, 안전성 확보조치 기준 §8), purge indexes (schema.sql, additive; nothing deleted by the migration — the daily purge does it)', up() {} },
+  { version: 66, name: 'Free starter credits 100 → 200 (founder 2026-10-21 "200으로 올리고 다른 메시지도 모두 200으로 통일"): the seeded v3 promotions that say AI 크레딧 100 get 200 — only rows an operator never edited; data update only, nothing deleted. Existing credit balances are not changed', async up(db) {
+    for (const [id, from, to] of PROMO_COPY_66) {
+      await db.run('UPDATE promotions SET title = ?, body = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ?', [to.title, to.body, id, from.title, from.body]);
+    }
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
@@ -270,6 +275,14 @@ const PROMO_COPY_64 = [
     { title: 'Pro · Team은 매월 AI 크레딧', body: 'Pro는 매월 1,000, Team은 매월 3,000 크레딧을 드립니다. 모자라면 충전해서 씁니다.', badge: '유료 플랜' }],
   ['promo-login', { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 500도 함께 드립니다.' },
     { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 100도 함께 드립니다.', badge: '무료 플랜' }],
+];
+
+/** Migration 66: [id, v3 copy after 64, copy with the Free starter at 200]. */
+const PROMO_COPY_66 = [
+  ['promo-ai-credits', { title: '가입하면 AI 크레딧 100 무료', body: '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다. 처음 한 번 드립니다.' },
+    { title: '가입하면 AI 크레딧 200 무료', body: '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다. 처음 한 번 드립니다.' }],
+  ['promo-login', { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 100도 함께 드립니다.' },
+    { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 200도 함께 드립니다.' }],
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

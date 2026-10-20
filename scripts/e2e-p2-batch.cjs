@@ -18,7 +18,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function startServer() {
   const port = 3900 + Math.floor(Math.random() * 400);
   const env = { ...process.env, PORT: String(port), DATABASE_URL: DB, EMAIL_PROVIDER: 'fake', INTEGRATION_PROVIDER: 'fake', AI_ENABLED: 'true', AI_PROVIDER: 'fake', AI_FAKE_AUTOREPLY: '1',
-    AI_INITIAL_TRIAL_CREDITS: '100', DEV_INITIAL_AI_CREDITS: '0', AI_USER_MINUTE_LIMIT: '0', SAMPLE_PROJECTS: 'true', PAYMENTS_ENABLED: 'false', NODE_ENV: 'development' };
+    AI_INITIAL_TRIAL_CREDITS: '200', DEV_INITIAL_AI_CREDITS: '0', AI_USER_MINUTE_LIMIT: '0', SAMPLE_PROJECTS: 'true', PAYMENTS_ENABLED: 'false', NODE_ENV: 'development' };
   delete env.PLAN_LIMITS;
   const child = spawn(process.execPath, ['server/index.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = ''; child.stdout.on('data', (d) => { out += d; }); child.stderr.on('data', (d) => { out += d; });
@@ -53,7 +53,7 @@ async function startServer() {
     check('#2 home: 진행 중인 프로젝트 1개 (3 samples not counted)', /진행 중인 프로젝트 1개/.test(head), head);
     await A.page.waitForSelector('.home__credits', { timeout: 6000 }).catch(() => {});
     const cr = (await A.page.textContent('.home__credits').catch(() => '')) || '';
-    check('#2 home: "AI 크레딧 잔액 100", no "무료 제공"', /AI 크레딧 잔액 100/.test(cr) && !/무료 제공/.test(await A.page.textContent('body')), cr);
+    check('#2 home: "AI 크레딧 잔액 200", no "무료 제공"', /AI 크레딧 잔액 200/.test(cr) && !/무료 제공/.test(await A.page.textContent('body')), cr);
     await A.shot('02-home-owner.png');
 
     /* #1 member home: '…님의 워크스페이스에 참여 중' (no duplicate) */

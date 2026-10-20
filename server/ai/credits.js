@@ -5,7 +5,7 @@
  *
  * Buckets (pricing v3 T2, migration 62, design.md §4) — `balance` = plan + promo + purchased:
  *   PLAN       monthly base credits of a paid plan (billing/ai-grants.js); expire at plan_expires_at (end of the credit cycle)
- *   PROMO      Free 100 (once per owner / e-mail / workspace, D7), operator and promotion grants; no expiry
+ *   PROMO      Free 200 (once per owner / e-mail / workspace, D7), operator and promotion grants; no expiry
  *   PURCHASED  top-ups (유상, billing/credit-packs.js); valid PURCHASED_VALID_YEARS, the only refundable bucket
  * Spend order PLAN → PROMO → PURCHASED (refundable money last). Every ledger row carries its split in d_plan / d_promo / d_purchased.
  * Locking the account (lockAccount) also (1) folds drift written by pre-62 code (balance changed, buckets not) back into the
@@ -89,13 +89,13 @@ async function writeLedger(t, { wid, runId = null, type, amount, balanceAfter, r
   return id;
 }
 
-/** Normalized e-mail for the Free-100 claim: trimmed, lower case, "+tag" dropped from the local part. */
+/** Normalized e-mail for the Free-200 claim: trimmed, lower case, "+tag" dropped from the local part. */
 export const normalizeEmail = (email) => String(email || '').trim().toLowerCase().replace(/\+[^@]*(?=@)/, '');
 /** sha256 of the normalized e-mail (free_credit_claims.email_hash) — the address itself is never stored there. */
 export const emailHash = (email) => createHash('sha256').update(`relai-free-credit:${normalizeEmail(email)}`).digest('hex');
 
 /**
- * Free 100 claim (D7). scope 'owner' (default): one grant per owner account AND per normalized e-mail, recorded in free_credit_claims
+ * Free 200 claim (D7). scope 'owner' (default): one grant per owner account AND per normalized e-mail, recorded in free_credit_claims
  * in the caller's transaction (ON CONFLICT DO NOTHING decides a race) — a second workspace of the same owner, or the same e-mail after
  * withdrawal and re-signup, gets nothing. scope 'workspace': once per workspace only (the account INSERT already guarantees that).
  */
@@ -109,7 +109,7 @@ async function claimFree(t, wid, scope) {
 /**
  * Creates the account on first touch and applies the ONE-TIME initial grant policy, exactly once per workspace:
  *   - DEV_INITIAL_AI_CREDITS > 0  (development / test)  → PLAN_GRANT of that amount (PROMO bucket), and the trial grant is skipped
- *   - otherwise AI_INITIAL_TRIAL_CREDITS (production, default 100 = Free 최초 100) → PROMOTION "무료 시작 크레딧", only when the
+ *   - otherwise AI_INITIAL_TRIAL_CREDITS (production, default 200 = Free 최초 200) → PROMOTION "무료 시작 크레딧", only when the
  *     owner's Free claim is still open (claimFree, D7)
  * The grant is tied to the INSERT (ON CONFLICT DO NOTHING + changes = 1) under the row lock, so an existing account —
  * or two concurrent first calls — can never be granted twice. An existing account is returned normalized (lockAccount).
@@ -303,7 +303,7 @@ export async function balanceSplit(db, wid) {
  * Migration 62 backfill (idempotent, additive — nobody loses a credit): accounts not split yet get
  *   purchased_balance = min(balance, purchased − refunded)  (the old balanceSplit rule), promo_balance = the rest, plan_balance = 0;
  * any later drift (balance ≠ sum of buckets) is folded into PROMO. Owners whose workspace already received a starter grant get a
- * free_credit_claims row (old starter grants count as the Free claim — design.md §11), so no second 100 is granted.
+ * free_credit_claims row (old starter grants count as the Free claim — design.md §11), so no second Free grant is given.
  */
 export async function backfillCreditBuckets(db) {
   const split = await db.run(`UPDATE workspace_credit_accounts a SET purchased_balance = LEAST(a.balance, GREATEST(0, COALESCE((SELECT SUM(l.amount) FROM credit_ledger l

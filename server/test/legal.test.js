@@ -68,7 +68,7 @@ test('public legal pages: /terms /privacy /pricing and the landing footer, no dr
     const terms = (await c('GET', '/terms', undefined, { raw: true })).buf.toString('utf8');
     assert.match(terms, /이용약관/); assert.match(terms, new RegExp(`${koDate(LEGAL.termsEffectiveDate)}부터 시행`)); assert.match(terms, new RegExp(`버전 ${LEGAL.termsVersion}`));
     // pricing v3 (founder spec 2026-10-20, VAT 포함): the terms table carries exactly the founder's numbers
-    for (const s of ['월 30,000원', '연 288,000원', '월 24,000원 환산', '월 80,000원', '연 768,000원', '월 64,000원 환산', '최초 100 크레딧(1회)', '매월 1,000 크레딧', '매월 3,000 크레딧',
+    for (const s of ['월 30,000원', '연 288,000원', '월 24,000원 환산', '월 80,000원', '연 768,000원', '월 64,000원 환산', '최초 200 크레딧(1회)', '매월 1,000 크레딧', '매월 3,000 크레딧',
       '월 1,000원', '연 9,600원(월 800원)', '월 10,000원', '연 96,000원(월 8,000원)', '월 8,000원', '연 76,800원(월 6,400원)', '부가가치세 10%를 포함', '10,000원 단위', '1 크레딧은 10원']) assert.ok(terms.includes(s), `terms lacks ${s}`);
     // legal-review §10: no v2 wording (VAT 별도, Team 20,000 + 5,000/인, Free 2 projects / 500 credits, 정상가 + 위약금 10%)
     assert.doesNotMatch(terms, /얼리 액세스|12개월 동안 요금 없이|부가가치세 별도|20,000원|5,000원|진행 중 프로젝트 2개|500 크레딧|위약금\(잔여 금액의 10%\)/);

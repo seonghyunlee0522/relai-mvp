@@ -26,7 +26,7 @@ test('plan cards: founder numbers for 월간 and 연간, VAT 포함, 월간 defa
   const t = text(h);
   for (const s of ['30,000원 /월', '80,000원 /월', '연 288,000원 결제', '월 24,000원 환산', '72,000원 할인(20%)', '연 768,000원 결제', '월 64,000원 환산', '192,000원 할인(20%)',
     '활성 프로젝트 1개', '활성 프로젝트 3개', '활성 프로젝트 10개', '기본 사용자 3명', '기본 사용자 15명', '기본 사용자 40명',
-    '최초 100 크레딧 (1회)', '매월 1,000 크레딧', '매월 3,000 크레딧', '추가 사용자 1명 월 1,000원', '추가 사용자 1명 월 800원 환산',
+    '최초 200 크레딧 (1회)', '매월 1,000 크레딧', '매월 3,000 크레딧', '추가 사용자 1명 월 1,000원', '추가 사용자 1명 월 800원 환산',
     '추가 프로젝트 1개 월 10,000원', '추가 프로젝트 1개 월 8,000원 환산', '추가 프로젝트 1개 월 8,000원', '추가 프로젝트 1개 월 6,400원 환산',
     'AI 크레딧 충전 불가', 'AI 크레딧 충전 10,000원 단위', '10,000원 = 1,000 크레딧 단위', '계약에 따름', '별도 견적', 'VAT 10%', '12개월분을 한 번에 결제', '이월되지 않습니다']) assert.ok(t.includes(s), `cards lack "${s}"`);
   // §21의2①1: in 연간 the big price (.pc__p) is the amount charged, the monthly equivalent is the smaller line
@@ -59,9 +59,9 @@ test('Billing page (v3 fixture): plan, cycle, next payment, usage vs limits with
 test('Billing page (live T1 shape): null buckets → total only; empty scheduled hidden; Free → Pro upgrade, no 충전 / 해지; member read-only', () => {
   const free = fixture({ plan: 'FREE', plan_label: 'Free', cycle: null, status: null, auto_renew: false, next_payment_at: null, next_payment_amount: null, addons: { extra_users: 0, extra_projects: 0 },
     limits: { projects: 1, users: 3 }, usage: { projects_active: 1, members: 2, pending_invites: 0, seats_left: 1 }, scheduled: [], subscription: null,
-    credits: { total: 100, plan: null, plan_expires_at: null, promo: null, purchased: null } });
+    credits: { total: 200, plan: null, plan_expires_at: null, promo: null, purchased: null } });
   const h = billingHtml(free); const t = text(h);
-  assert.ok(t.includes('사용 가능 100 크레딧')); assert.doesNotMatch(h, /bl-b-plan|bl-scheduled|id="bl-topup"|id="bl-cancel"|id="bl-addon"/);
+  assert.ok(t.includes('사용 가능 200 크레딧')); assert.doesNotMatch(h, /bl-b-plan|bl-scheduled|id="bl-topup"|id="bl-cancel"|id="bl-addon"/);
   assert.ok(t.includes('AI 크레딧 충전은 Pro부터 할 수 있어요')); assert.ok(t.includes('요금제 살펴보기')); assert.ok(t.includes('결제 정보 없이 이용 중'));
   const member = billingHtml({ ...free, can_manage: false });
   assert.match(member, /id="bl-owner-only"/); assert.doesNotMatch(member, /id="bl-change"/);

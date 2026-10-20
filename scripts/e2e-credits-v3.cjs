@@ -1,5 +1,5 @@
 // Pricing v3 T2 browser check — 설정 › AI 크레딧 on the fake billing provider (no real payment):
-// FREE: buckets line (무료 100), 충전 panel = "Pro로 업그레이드하면 충전할 수 있어요" CTA, no pay button, checkout API 402 with no order row.
+// FREE: buckets line (무료 200), 충전 panel = "Pro로 업그레이드하면 충전할 수 있어요" CTA, no pay button, checkout API 402 with no order row.
 // PRO (row set with psql): chips + stepper over server-priced options, quote (결제 금액 / 충전 크레딧 / 대상 워크스페이스 / 유효기간·환불),
 // 결제 → fake checkout → signed paid webhook → 구매 bucket; monthly grant shows 기본 n (소멸일); 375px: no pay button.
 //   BASE=http://127.0.0.1:3162 SHOTS=… DATABASE_URL=postgres://… node scripts/e2e-credits-v3.cjs
@@ -42,7 +42,7 @@ const q = (s) => String(s).replace(/'/g, "''");
 
   // FREE
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-buy', { timeout: 10000 });
-  check('FREE: buckets line shows 무료 100 · 구매 0', /무료 100/.test(await text('#cr-buckets')) && /구매 0/.test(await text('#cr-buckets')), await text('#cr-buckets'));
+  check('FREE: buckets line shows 무료 200 · 구매 0', /무료 200/.test(await text('#cr-buckets')) && /구매 0/.test(await text('#cr-buckets')), await text('#cr-buckets'));
   check('FREE: upgrade CTA instead of the pay button', /Pro로 업그레이드하면 충전할 수 있어요/.test(await text('#cr-buy')) && !(await page.$('#cr-pay')));
   await shot('01-free-credits.png');
   const co = await api('POST', `${CR}/checkout`, { amount: 10000 });
@@ -67,7 +67,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-buckets');
   check('PRO: buckets line 구매 2,000', /구매 2,000/.test(await text('#cr-buckets')), await text('#cr-buckets'));
   const b = (await api('GET', `/api/workspaces/${W}/billing`)).json?.billing?.credits;
-  check('GET billing credits buckets filled', b && b.total === 2100 && b.promo === 100 && b.purchased === 2000 && b.plan === 0, JSON.stringify(b));
+  check('GET billing credits buckets filled', b && b.total === 2200 && b.promo === 200 && b.purchased === 2000 && b.plan === 0, JSON.stringify(b));
   await shot('03-pro-after-topup.png');
 
   // 375px

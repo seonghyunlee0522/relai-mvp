@@ -4,7 +4,7 @@
  *
  * Every price is in KRW and VAT INCLUDED (부가세 포함): the list price is the card amount. supply/VAT for receipts = splitVat(amount).
  *              월간      연간 (12개월 한 번에, 20% 할인)   활성 프로젝트   기본 사용자   AI 크레딧
- *   FREE       0         0                                 1               3            최초 100 (once, no monthly grant, no top-up)
+ *   FREE       0         0                                 1               3            최초 200 (once, no monthly grant, no top-up)
  *   PRO        30,000    288,000 (월 환산 24,000)          3               15           매월 1,000, top-up allowed
  *   TEAM       80,000    768,000 (월 환산 64,000)          10              40           매월 3,000, top-up allowed
  *   ENTERPRISE contact sales — limits set by an operator (subscriptions.seats / project_limit), top-up per contract
@@ -22,7 +22,7 @@ const envInt = (v, d) => (Number.isInteger(Number(v)) && v !== undefined && v !=
 /** Monthly AI credit grant per plan (0 = none). TEAM can be overridden with env AI_TEAM_MONTHLY_CREDITS, PRO with AI_PRO_MONTHLY_CREDITS. */
 export const AI_CREDITS_MONTHLY = { FREE: 0, PRO: envInt(process.env.AI_PRO_MONTHLY_CREDITS, 1000), TEAM: envInt(process.env.AI_TEAM_MONTHLY_CREDITS, 3000), ENTERPRISE: 0 };
 /** Credits a new Free workspace gets once (never again through re-signup, recovery or a plan change — ai/credits.js, T2). */
-export const FREE_ONCE_CREDITS = 100;
+export const FREE_ONCE_CREDITS = 200;
 
 /** Free plan limits (also the limits of retired early-access workspaces). requirements / WBS / weekly reports: unlimited (D1). */
 export const FREE_LIMITS = Object.freeze({ projects: 1, members: 3, requirements: null, wbs: null, weekly_reports: null });

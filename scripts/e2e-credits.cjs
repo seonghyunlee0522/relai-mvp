@@ -69,7 +69,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   await page.goto(BASE + '/app'); await page.waitForSelector('#home-credits a', { timeout: 8000 }).catch(() => {});
   const home = await text('#home-credits');
   // batch7 T5: early access is no longer a plan (on Free limits), so the '얼리 액세스 {until}까지 무료' home promo is not shown
-  check('Home: AI 크레딧 500 무료 제공 (no ₩), no 얼리 액세스 offer', /AI 크레딧 500 무료 제공/.test(home) && !/₩/.test(home) && !/얼리 액세스/.test(home), home);
+  check('Home: AI 크레딧 잔액 500 (P2 #2: balance, not "무료 제공"; no ₩), no 얼리 액세스 offer', /AI 크레딧 잔액 500/.test(home) && !/무료 제공/.test(home) && !/₩/.test(home) && !/얼리 액세스/.test(home), home);
   await shot('01-home.png');
   await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing', { timeout: 8000 });
   const plan = await text('#bl-plan');   // pricing v3 T4: 설정 › 요금제 is the Billing view (현재 요금제 panel)
@@ -218,7 +218,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   const landing = await page.textContent('#pricing');
   // batch7 #7: the AI block reads credits only — no won per credit, no won per feature
   const aiBlock = await page.textContent('#pricing #ai-credits');
-  check('landing: Free plan card + v3 copy Free 100 once (no 얼리 액세스 / 12개월, b7-fix) + AI price block in credits only', /Free/.test(landing) && !/얼리 액세스|12개월 무료|무료 12개월|12개월간 무료/.test(landing) && /AI 요구사항 추출\s*30 크레딧/.test(landing) && /Free는 처음 한 번 AI 크레딧 100/.test(landing) && !/1 크레딧 =/.test(landing) && !/크레딧 \(₩/.test(landing) && !/₩/.test(aiBlock), aiBlock.replace(/\s+/g, ' ').slice(0, 200));
+  check('landing: Free plan card + v3 copy Free 200 once (no 얼리 액세스 / 12개월, b7-fix) + AI price block in credits only', /Free/.test(landing) && !/얼리 액세스|12개월 무료|무료 12개월|12개월간 무료/.test(landing) && /AI 요구사항 추출\s*30 크레딧/.test(landing) && /Free는 처음 한 번 AI 크레딧 200/.test(landing) && !/1 크레딧 =/.test(landing) && !/크레딧 \(₩/.test(landing) && !/₩/.test(aiBlock), aiBlock.replace(/\s+/g, ' ').slice(0, 200));
   await page.locator('#pricing').screenshot({ path: `${SHOTS}/12-landing-pricing-375.png` });
 
   await browser.close();

@@ -371,3 +371,20 @@ test('mig 64: unedited v2 launch promotions get v3 copy (Free 100 once, Pro 1,00
   const all = (await db.all('SELECT title, body FROM promotions WHERE active')).map((r) => `${r.title} ${r.body}`).join(' ');
   assert.doesNotMatch(all, /월 기본료 없이|프로젝트 2개|크레딧 500(?! 무료)/);
 });
+
+test('mig 66: Free starter 100 → 200 — unedited v3 promotions say AI 크레딧 200; edited rows stay; idempotent', async () => {
+  const db = await testDb();
+  const { migrations } = await import('../migrations.js');
+  const row = (id) => db.get('SELECT title, body FROM promotions WHERE id = ?', [id]);
+  await db.run(`UPDATE promotions SET title = '가입하면 AI 크레딧 100 무료', body = '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다. 처음 한 번 드립니다.' WHERE id = 'promo-ai-credits'`);
+  await db.run(`UPDATE promotions SET title = '지금 가입하면 무료 플랜으로 시작', body = 'AI 크레딧 100도 함께 드립니다.' WHERE id = 'promo-login'`);
+  await db.run(`UPDATE promotions SET title = '무료 플랜으로 시작', body = '운영자가 고친 문구 100' WHERE id = 'promo-early-access'`);
+  const up = migrations.find((m) => m.version === 66).up;
+  await up(db); await up(db);
+  assert.equal((await row('promo-ai-credits')).title, '가입하면 AI 크레딧 200 무료');
+  assert.equal((await row('promo-login')).body, 'AI 크레딧 200도 함께 드립니다.');
+  assert.equal((await row('promo-early-access')).body, '운영자가 고친 문구 100');   // not a mig-66 row → untouched
+  await db.run(`UPDATE promotions SET title = '가입하면 AI 크레딧 100 무료', body = '운영자가 고친 문구' WHERE id = 'promo-ai-credits'`);
+  await up(db);
+  assert.equal((await row('promo-ai-credits')).title, '가입하면 AI 크레딧 100 무료');   // operator-edited body → untouched
+});

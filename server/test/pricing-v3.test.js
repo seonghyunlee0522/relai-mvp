@@ -18,7 +18,7 @@ test('catalogue: list prices are the card amounts (VAT included) for FREE / PRO 
   assert.deepEqual([addonPrice('PRO', 'user', 'ANNUAL'), addonPrice('PRO', 'project', 'ANNUAL'), addonPrice('TEAM', 'project', 'ANNUAL')], [9600, 96000, 76800]);
   assert.equal(addonPrice('FREE', 'user', 'MONTHLY'), null);
   assert.deepEqual([PLANS.FREE.included, PLANS.PRO.included, PLANS.TEAM.included], [{ projects: 1, users: 3 }, { projects: 3, users: 15 }, { projects: 10, users: 40 }]);
-  assert.deepEqual([PLANS.FREE.credits, PLANS.PRO.credits.monthly, PLANS.TEAM.credits.monthly], [{ once: 100, monthly: 0 }, 1000, 3000]);
+  assert.deepEqual([PLANS.FREE.credits, PLANS.PRO.credits.monthly, PLANS.TEAM.credits.monthly], [{ once: 200, monthly: 0 }, 1000, 3000]);
   assert.deepEqual([PLANS.FREE.topup, PLANS.PRO.topup, PLANS.TEAM.topup], [false, true, true]);
   assert.deepEqual([CYCLES.MONTHLY.months, CYCLES.ANNUAL.months], [1, 12]);
 });

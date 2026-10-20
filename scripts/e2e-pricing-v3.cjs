@@ -58,7 +58,7 @@ const ORDERS = [
     const team = await page.textContent('#plan-cards [data-plan="TEAM"]');
     check(`landing ${tag}: Team 연 768,000원 · 월 64,000원 · 10개 · 40명 · 매월 3,000`, /연 768,000원/.test(team) && /월 64,000원 환산/.test(team) && /10개/.test(team) && /40명/.test(team) && /매월 3,000 크레딧/.test(team));
     const free = await page.textContent('#plan-cards [data-plan="FREE"]');
-    check(`landing ${tag}: Free 1개 · 3명 · 최초 100 · 충전 불가`, /1개/.test(free) && /3명/.test(free) && /최초 100 크레딧/.test(free) && /불가/.test(free));
+    check(`landing ${tag}: Free 1개 · 3명 · 최초 200 · 충전 불가`, /1개/.test(free) && /3명/.test(free) && /최초 200 크레딧/.test(free) && /불가/.test(free));
     check(`landing ${tag}: Enterprise 별도 견적 + 도입 문의`, /별도 견적/.test(await page.textContent('#plan-cards [data-plan="ENTERPRISE"]')) && Boolean(await page.$('#plan-cards [data-loc="pricing_enterprise"][href^="mailto:"]')));
     check(`landing ${tag}: VAT 포함 note + AI credits block in credits only`, /VAT 10%\) 포함/.test(await page.textContent('#plan-cards .pc-note')) && !/₩|\d원/.test(await page.textContent('#ai-credits')));
     check(`landing ${tag}: Pro/Team buy buttons = 정기결제 준비 중 (recurring not approved), Free = 무료로 시작하기`, /정기결제 준비 중/.test(await page.textContent('#plan-cards [data-plan-soon="PRO"]')) && /정기결제 준비 중/.test(await page.textContent('#plan-cards [data-plan-soon="TEAM"]')) && !(await page.$('#plan-cards [data-loc="pricing_pro"]')) && Boolean(await page.$('#plan-cards [data-loc="pricing_free"]')));
@@ -141,7 +141,7 @@ const ORDERS = [
       await ad.ctx.close(); continue;
     }
     const at = await ad.page.textContent('body');
-    check(`admin ${tag}: workspace 요금 · 한도 (v3) — plan, seats, 활성 프로젝트 0 / 1, credits, 결제 내역`, /요금 · 한도 \(v3\)/.test(at) && /활성 프로젝트\s*0 \/ 1/.test(at) && /남은 좌석/.test(at) && /AI 크레딧\s*합계/.test(at) && /결제 내역 \(\d+\)/.test(at) && !/이용권/.test(at));
+    check(`admin ${tag}: workspace 요금 · 한도 (v3) — plan, seats, 활성 프로젝트 0 (no "/ 1": the owner is the operator here → exempt since e43c462), credits, 결제 내역`, /요금 · 한도 \(v3\)/.test(at) && /활성 프로젝트\s*0( \/ 1)?/.test(at) && /남은 좌석/.test(at) && /AI 크레딧\s*합계/.test(at) && /결제 내역 \(\d+\)/.test(at) && !/이용권/.test(at));
     check(`admin ${tag}: workspace page no horizontal scroll`, await noHScroll(ad.page));
     await tallShot(ad.page, 'admin-workspace-billing-desktop.png');
     await ad.page.goto(`${BASE}/admin`); await ad.page.waitForTimeout(1200);

@@ -74,7 +74,7 @@ function creditsPanel(b) {
       ${raw(row('bl-b-promo', '가입·프로모션', c.promo, ''))}
       ${raw(row('bl-b-purchased', '유상(충전)', c.purchased, '충전일부터 5년'))}
     </div><p class="hint">기본 → 가입·프로모션 → 유상 순서로 차감돼요.</p>` : '')}
-    ${raw(free ? '<p class="hint" id="bl-free-credits">Free는 처음 한 번 100 크레딧을 드리고, 매월 지급이나 충전은 없어요. Pro로 바꾸면 매월 1,000 크레딧을 받고 필요한 만큼 충전할 수 있어요.</p>' : '')}
+    ${raw(free ? '<p class="hint" id="bl-free-credits">Free는 처음 한 번 200 크레딧을 드리고, 매월 지급이나 충전은 없어요. Pro로 바꾸면 매월 1,000 크레딧을 받고 필요한 만큼 충전할 수 있어요.</p>' : '')}
     <div id="bl-ledger"></div>
   </div></div>`;
 }

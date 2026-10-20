@@ -1612,15 +1612,15 @@ CREATE INDEX IF NOT EXISTS idx_billing_orders_withdrawn ON billing_orders(create
 -- Pricing v3 T1 (migration 61): active-project count (DRAFT / ACTIVE / ON_HOLD; COMPLETED and ARCHIVED never count; samples excluded).
 CREATE INDEX IF NOT EXISTS idx_projects_ws_active ON projects(workspace_id) WHERE status IN ('DRAFT','ACTIVE','ON_HOLD') AND sample_key IS NULL;
 
-/* Pricing v3 T2 (migration 62) — AI credit buckets, EXPIRY, Free-100 claims. Additive only (the production DB is shared with previews
+/* Pricing v3 T2 (migration 62) — AI credit buckets, EXPIRY, Free starter claims. Additive only (the production DB is shared with previews
  * running older code): new nullable / defaulted columns, a widened CHECK, one new table. No sum CHECK on the buckets: code that predates
  * 62 still writes `balance` alone, and ai/credits.js folds any such drift back into the buckets under the account lock.
  *   plan_balance       monthly base credits of a paid plan; expire at plan_expires_at (end of the credit cycle), never carried over
- *   promo_balance      Free 100, operator / promotion grants; no expiry while the workspace exists
+ *   promo_balance      Free starter (200), operator / promotion grants; no expiry while the workspace exists
  *   purchased_balance  top-ups (유상); valid PURCHASED_VALID_YEARS, refundable
  *   balance            stays the total (= plan + promo + purchased); spend order PLAN → PROMO → PURCHASED
  * credit_ledger d_plan / d_promo / d_purchased: the per-bucket split of `amount` (NULL on rows written before 62).
- * free_credit_claims: one Free-100 grant per owner account and per normalized e-mail hash (D7; 부정이용 방지, kept after withdrawal).
+ * free_credit_claims: one Free starter grant per owner account and per normalized e-mail hash (D7; 부정이용 방지, kept after withdrawal).
  * workspaces.enterprise_topup: ENTERPRISE workspaces may top up only when the contract says so (operator flag). */
 ALTER TABLE workspace_credit_accounts ADD COLUMN IF NOT EXISTS plan_balance BIGINT NOT NULL DEFAULT 0 CHECK (plan_balance >= 0);
 ALTER TABLE workspace_credit_accounts ADD COLUMN IF NOT EXISTS plan_expires_at timestamptz;
