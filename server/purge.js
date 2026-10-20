@@ -13,6 +13,7 @@
  */
 import { tx } from './db.js';
 import { AdminError, writeAudit } from './admin.js';
+import { userFkColumns, NULLABLE_SINCE_56 } from './auth/user-delete.js';
 
 export const PURGE_MAX_USERS = 500;
 export const PURGE_CONFIRM = '삭제';
@@ -65,9 +66,8 @@ export async function purgeTestAccounts(db, operatorId, { commit = false, env = 
     await t.run(`UPDATE workspace_members SET role = 'OWNER' WHERE user_id = ? AND workspace_id IN (SELECT id FROM workspaces WHERE owner_id IN (${PU}))`, [operatorId]);
     await t.run(`UPDATE workspaces SET owner_id = ? WHERE owner_id IN (${PU})`, [operatorId]);
     // Every other reference to a deleted user in kept data (FKs without ON DELETE action, and plain id columns).
-    const refs = await t.all(`SELECT cl.relname AS tbl, a.attname AS col, a.attnotnull AS notnull FROM pg_constraint c
-      JOIN pg_class cl ON cl.oid = c.conrelid JOIN pg_namespace ns ON ns.oid = cl.relnamespace JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
-      WHERE c.contype = 'f' AND c.confrelid = 'users'::regclass AND c.confdeltype IN ('a', 'r') AND ns.nspname = current_schema()`);
+    const refs = (await userFkColumns(t)).filter((r) => r.deltype === 'a' || r.deltype === 'r')   // FKs without ON DELETE action
+      .map((r) => ({ ...r, notnull: r.notnull || NULLABLE_SINCE_56.has(`${r.tbl}.${r.col}`) }));   // authors still go to the operator, as before 56
     for (const r of [...refs, { tbl: 'activity_checklist_items', col: 'owner_user_id' }, { tbl: 'test_executions', col: 'performer_user_id' }, { tbl: 'promotions', col: 'updated_by' }]) {
       await t.run(`UPDATE "${r.tbl}" SET "${r.col}" = ${r.notnull ? '?' : 'NULL'} WHERE "${r.col}" IN (${PU})`, r.notnull ? [operatorId] : []);
     }

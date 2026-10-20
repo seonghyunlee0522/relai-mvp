@@ -64,7 +64,7 @@ export async function loadGuide(db, project, ctx = null) {
     const tpl = PHASE_BY_KEY[p.phase_key];
     return { ...p, short: tpl ? tpl.short : p.name, en: tpl ? tpl.en : null, steps: acts, summary: ctx ? activitySummary(acts) : null, is_current: p.phase_key === project.current_phase };
   });
-  const history = (await db.all(`SELECT t.id, t.reason, t.changed_at, t.changed_by, u.name AS changed_by_name,
+  const history = (await db.all(`SELECT t.id, t.reason, t.changed_at, t.changed_by, COALESCE(u.name, CASE WHEN t.withdrawn_actor THEN '탈퇴한 사용자' END) AS changed_by_name,
       f.phase_key AS from_key, f.name AS from_name, tp.phase_key AS to_key, tp.name AS to_name
     FROM phase_transitions t
     LEFT JOIN project_phases f ON f.id = t.from_phase_id

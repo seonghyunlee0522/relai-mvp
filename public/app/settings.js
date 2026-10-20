@@ -167,7 +167,7 @@ export async function settingsPage(main = $('#main')) {
       <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl></div></div>
     ${raw(samplesCard())}
     ${raw(account || ownerWs ? html`<details class="danger-zone" id="danger"><summary>위험 구역 <small class="dim">계정 삭제${ownerWs ? ' · 워크스페이스 삭제' : ''}</small></summary><div class="danger-zone__b">
-      ${raw(account ? html`<div class="danger-zone__row"><div><b>계정 삭제</b><p class="hint">계정 정보가 즉시 삭제되고 복구할 수 없습니다.</p></div><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}
+      ${raw(account ? html`<div class="danger-zone__row"><div><b>계정 삭제</b><p class="hint">계정이 즉시 삭제되고 복구할 수 없습니다.</p></div><button class="btn btn--ghost btn--sm is-danger" id="acct-delete">계정 삭제</button></div>` : '')}
       ${raw(ownerWs ? html`<div class="danger-zone__row"><div><b>워크스페이스 삭제</b><p class="hint">모든 프로젝트와 데이터에 접근할 수 없게 되고 30일 후 파기됩니다.</p></div><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>` : '')}
     </div></details>` : '')}`;
   };
@@ -237,9 +237,9 @@ export async function settingsPage(main = $('#main')) {
       await loadAccount(); const d = account.deletion;
       if (d.blockers.length) return confirmDialog({ title: '지금은 계정을 삭제할 수 없습니다', body: d.blockers.map((b) => b.message).join(' '), confirm: '확인' });
       const r = await formDialog({ title: '계정을 삭제할까요?', confirm: '계정 삭제',
-        body: html`<p>이름·이메일·비밀번호 등 계정 정보가 즉시 삭제되고 다시 복구할 수 없습니다. 다른 워크스페이스에서 작성한 업무 기록은 '탈퇴한 사용자'로 남습니다.</p>
+        body: html`<p>계정이 즉시 삭제되고 다시 복구할 수 없습니다. 다른 워크스페이스에서 작성한 업무 기록은 '탈퇴한 사용자'로 남습니다.</p>
           ${raw(d.workspaces_deleted.length ? html`<p>혼자 쓰는 워크스페이스 <b>${d.workspaces_deleted.map((w) => w.name).join(', ')}</b>도 함께 삭제되며 30일 후 데이터가 완전히 파기됩니다.</p>` : '')}
-          <p class="hint">로그인 기록은 통신비밀보호법에 따라 3개월, 결제 기록은 전자상거래법에 따라 5년 동안 보관 후 파기합니다.</p>${raw(reauthNote())}`,
+          <p class="hint">법령에 따라 계정과 연결을 끊은 채 로그인 기록은 3개월, 의견·문의 기록은 3년, 결제 기록과 약관 동의 기록은 5년 동안 보관 후 파기합니다.</p>${raw(reauthNote())}`,
         fields: reauthField(), submit: (v) => api('DELETE', '/api/me', { password: v.password }) });
       if (r) location.href = '/login?deleted=1';
     };

@@ -23,5 +23,5 @@ export const addWbsHistory = async (db, wbsId, action, { field = null, oldValue 
     VALUES (?,?,?,?,?,?,?,?,?)`, [randomUUID(), wbsId, action, field, txt(oldValue), txt(newValue), userId, ts, note]));
 
 export const listWbsHistory = async (db, wbsId) =>
-  (await db.all(`SELECT h.*, u.name AS changed_by_name FROM wbs_history h LEFT JOIN users u ON u.id = h.changed_by
+  (await db.all(`SELECT h.*, COALESCE(u.name, CASE WHEN h.withdrawn_actor THEN '탈퇴한 사용자' END) AS changed_by_name FROM wbs_history h LEFT JOIN users u ON u.id = h.changed_by
     WHERE h.wbs_item_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [wbsId]));

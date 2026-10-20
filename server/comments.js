@@ -15,7 +15,7 @@ export function parseComment(b = {}) {
   return { body };
 }
 
-const SHAPE = `c.id, c.body, c.created_by, COALESCE(c.author_label, u.name) AS author_name, c.created_at`;   // v1 P2-1: sample comments say 샘플
+const SHAPE = `c.id, c.body, c.created_by, COALESCE(c.author_label, u.name, CASE WHEN c.created_by IS NULL THEN '탈퇴한 사용자' END) AS author_name, c.created_at`;   // v1 P2-1: sample comments say 샘플
 
 export async function listComments(db, entityType, entityId) {
   return db.all(`SELECT ${SHAPE} FROM comments c LEFT JOIN users u ON u.id = c.created_by

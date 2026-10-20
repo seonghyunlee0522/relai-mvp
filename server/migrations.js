@@ -221,6 +221,10 @@ export const migrations = [
     await db.run('ALTER TABLE service_orders DROP CONSTRAINT IF EXISTS service_orders_status_check');
     await db.run(`ALTER TABLE service_orders ADD CONSTRAINT service_orders_status_check CHECK (status IN ('PENDING','APPROVING','PAID','FAILED','REFUNDED'))`);
   } },
+  { version: 56, name: '회원 탈퇴 = users row deleted (founder 2026-10-20): author columns nullable, withdrawn_actor / withdrawn_ref / billing_orders buyer fields, account_withdrawals (schema.sql, additive); data: every DEACTIVATED tombstone is hard-deleted by the same hardDeleteUser() as self-service withdrawal (idempotent: none left → nothing to do)', async up(db) {
+    const { hardDeleteDeactivated } = await import('./auth/user-delete.js');
+    await hardDeleteDeactivated(db);
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

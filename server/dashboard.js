@@ -57,7 +57,7 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT, before = null) {
   lim = Math.max(1, Math.min(200, Number(lim) || RECENT_LIMIT));
   // batch7 #22: `before` (ISO time) pages the 활동 기록 screen — only events strictly older than the last one shown
   const bf = (col) => (before ? ` AND ${col} < '${before}'::timestamptz` : '');
-  const cols = `h.changed_at AS at, h.seq, u.name AS actor_name, h.action_type, h.field_name, h.old_value, h.new_value, e.id AS entity_id, e.title`;
+  const cols = `h.changed_at AS at, h.seq, COALESCE(u.name, CASE WHEN h.withdrawn_actor THEN '탈퇴한 사용자' END) AS actor_name, h.action_type, h.field_name, h.old_value, h.new_value, e.id AS entity_id, e.title`;
   const order = `ORDER BY h.changed_at DESC, h.seq DESC LIMIT ${lim}`;
   // One history table per entity (FK column) …
   const direct = (table, fk, ent, code = 'e.display_id') => db.all(`SELECT ${cols}, ${code} AS display_id FROM ${table} h JOIN ${ent} e ON e.id = h.${fk} LEFT JOIN users u ON u.id = h.changed_by WHERE e.project_id = ?${bf('h.changed_at')} ${order}`, [pid]);
@@ -69,11 +69,11 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT, before = null) {
     direct('change_request_history', 'change_request_id', 'change_requests'),
     poly('raid_history', 'ISSUE', 'issues'), poly('raid_history', 'RISK', 'risks'),
     poly('qa_history', 'TEST', 'test_cases'), poly('qa_history', 'ACCEPTANCE', 'acceptances'),
-    db.all(`SELECT t.changed_at AS at, t.seq, u.name AS actor_name, p.id AS entity_id, p.phase_key, p.name AS title, t.reason
+    db.all(`SELECT t.changed_at AS at, t.seq, COALESCE(u.name, CASE WHEN t.withdrawn_actor THEN '탈퇴한 사용자' END) AS actor_name, p.id AS entity_id, p.phase_key, p.name AS title, t.reason
       FROM phase_transitions t JOIN project_phases p ON p.id = t.to_phase_id LEFT JOIN users u ON u.id = t.changed_by
       WHERE t.project_id = ?${bf('t.changed_at')} ORDER BY t.changed_at DESC, t.seq DESC LIMIT ${lim}`, [pid]),
   ]);
-  const integ = await db.all(`SELECT a.created_at AS at, a.seq, u.name AS actor_name, a.action, a.summary, a.wbs_item_id AS entity_id, w.wbs_code AS display_id, w.title
+  const integ = await db.all(`SELECT a.created_at AS at, a.seq, COALESCE(u.name, CASE WHEN a.withdrawn_actor THEN '탈퇴한 사용자' END) AS actor_name, a.action, a.summary, a.wbs_item_id AS entity_id, w.wbs_code AS display_id, w.title
       FROM integration_activity a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN wbs_items w ON w.id = a.wbs_item_id WHERE a.project_id = ?${bf('a.created_at')} ORDER BY a.created_at DESC, a.seq DESC LIMIT ${lim}`, [pid]);
   const tag = (rows, type, href) => rows.map((r) => ({ ...r, entity_type: type, href: href(r.entity_id), summary: summarize(type, r) }));
   const events = [
@@ -150,7 +150,7 @@ export async function projectActivity(db, pid, { limit = 80, before = null } = {
   const bt = before && !Number.isNaN(Date.parse(before)) ? new Date(before).toISOString() : null;   // validated → safe to inline
   const [events, comments] = await Promise.all([
     recentChanges(db, pid, lim, bt),
-    db.all(`SELECT c.id, c.entity_type, c.entity_id, c.body, c.created_at AS at, COALESCE(c.author_label, u.name) AS actor_name,
+    db.all(`SELECT c.id, c.entity_type, c.entity_id, c.body, c.created_at AS at, COALESCE(c.author_label, u.name, CASE WHEN c.created_by IS NULL THEN '탈퇴한 사용자' END) AS actor_name,
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT display_id FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT wbs_code FROM wbs_items w WHERE w.id = c.entity_id) END AS display_id,
         CASE c.entity_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements r WHERE r.id = c.entity_id) ELSE (SELECT title FROM wbs_items w WHERE w.id = c.entity_id) END AS title
       FROM comments c LEFT JOIN users u ON u.id = c.created_by WHERE c.project_id = ?${bt ? ` AND c.created_at < '${bt}'::timestamptz` : ''} ORDER BY c.created_at DESC, c.seq DESC LIMIT ${lim}`, [pid]),

@@ -69,7 +69,7 @@ test('Google-only user: sets a password once e-mail is verified (no current pass
   assert.equal((await c('POST', '/api/me/password', { new_password: 'googlepw2' })).status, 400);
 });
 
-test('account deletion: re-auth, blocked while sole OWNER with members, then anonymized; solo workspace deleted; e-mail reusable', async () => {
+test('account deletion: re-auth, blocked while sole OWNER with members, then deleted; solo workspace deleted; e-mail reusable', async () => {
   const { client, db } = await boot();
   const A = await setup(client, 'del@x.com', '삭제자');
   const B = await addMember(client, A, 'mate@x.com', '동료');
@@ -82,15 +82,17 @@ test('account deletion: re-auth, blocked while sole OWNER with members, then ano
   const bWs = (await B.c('GET', '/api/me')).json.workspaces.find((w) => w.id !== A.w).id;
   r = await B.c('DELETE', '/api/me', { password: 'passw0rd!' }); assert.equal(r.status, 200); assert.deepEqual(r.json.workspaces_deleted.map((w) => w.id), [bWs]);
   assert.equal((await B.c('GET', '/api/me')).status, 401);
-  const gone = await db.get('SELECT email, name, status, password_hash, deleted_at FROM users WHERE id = ?', [B.uid]);
-  assert.equal(gone.status, 'DEACTIVATED'); assert.equal(gone.name, '탈퇴한 사용자'); assert.equal(gone.password_hash, null); assert.ok(gone.deleted_at); assert.ok(!gone.email.includes('mate'));
+  assert.equal(await db.get('SELECT id FROM users WHERE id = ?', [B.uid]), undefined);   // mig 56: the account row itself is deleted
   assert.equal(await n(db, 'SELECT COUNT(*) n FROM user_identities WHERE user_id = ?', [B.uid]), 0);
   assert.equal(await n(db, 'SELECT COUNT(*) n FROM workspace_members WHERE user_id = ? AND workspace_id = ?', [B.uid, A.w]), 0);
   assert.equal((await db.get('SELECT status FROM workspaces WHERE id = ?', [bWs])).status, 'CLOSED');
   assert.equal(await n(db, `SELECT COUNT(*) n FROM admin_audit_logs WHERE target_id = ? AND metadata::text LIKE '%mate@x.com%'`, [B.uid]), 0);
   assert.equal((await login(client, 'mate@x.com')).r.status, 401);
-  // login records stay for their 3 months (pseudonymous user id)
-  assert.ok(await n(db, 'SELECT COUNT(*) n FROM login_records WHERE user_id = ?', [B.uid]) >= 1);
+  // login records stay for their 3 months, detached: no user id, only the withdrawal pseudonym
+  const ref = (await db.get(`SELECT target_id FROM admin_audit_logs WHERE action = 'ACCOUNT_DELETED' ORDER BY created_at DESC LIMIT 1`)).target_id;
+  assert.match(ref, /^wd_/);
+  assert.equal(await n(db, 'SELECT COUNT(*) n FROM login_records WHERE user_id = ?', [B.uid]), 0);
+  assert.ok(await n(db, 'SELECT COUNT(*) n FROM login_records WHERE withdrawn_ref = ?', [ref]) >= 1);
 
   // A is now the only member → deletion goes through and takes the workspace along
   r = await A.c('DELETE', '/api/me', { password: 'passw0rd!' }); assert.equal(r.status, 200); assert.deepEqual(r.json.workspaces_deleted.map((w) => w.id), [A.w]);

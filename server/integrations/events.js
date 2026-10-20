@@ -8,7 +8,7 @@ export async function logActivity(db, { projectId, provider = 'JIRA', action, su
   await db.run('INSERT INTO integration_activity (id, project_id, provider, action, summary, wbs_item_id, actor_id) VALUES (?,?,?,?,?,?,?)', [randomUUID(), projectId, provider, action, String(summary).slice(0, 500), wbsItemId, actorId]);
 }
 export async function listActivity(db, projectId, limit = 50) {
-  return db.all(`SELECT a.id, a.action, a.summary, a.wbs_item_id, a.created_at AS at, u.name AS actor_name, w.wbs_code, w.title FROM integration_activity a
+  return db.all(`SELECT a.id, a.action, a.summary, a.wbs_item_id, a.created_at AS at, COALESCE(u.name, CASE WHEN a.withdrawn_actor THEN '탈퇴한 사용자' END) AS actor_name, w.wbs_code, w.title FROM integration_activity a
     LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN wbs_items w ON w.id = a.wbs_item_id WHERE a.project_id = ? ORDER BY a.created_at DESC, a.seq DESC LIMIT ?`, [projectId, limit]);
 }
 

@@ -149,7 +149,7 @@ export const requesterOptions = async (db, projectId) =>
     UNION SELECT DISTINCT requester_organization FROM change_requests WHERE project_id = ? AND requester_organization <> '' ORDER BY v`, [projectId, projectId])).map((r) => r.v);
 
 export async function getChange(db, project, id) {
-  const c = (await db.get(`SELECT ${CR_COLS}, cb.name AS created_by_name FROM change_requests c LEFT JOIN users rb ON rb.id = c.reviewed_by LEFT JOIN users cb ON cb.id = c.created_by
+  const c = (await db.get(`SELECT ${CR_COLS}, COALESCE(cb.name, '탈퇴한 사용자') AS created_by_name FROM change_requests c LEFT JOIN users rb ON rb.id = c.reviewed_by LEFT JOIN users cb ON cb.id = c.created_by
     WHERE c.project_id = ? AND c.id = ?`, [project.id, id]));
   if (!c) return null;
   const stakeholders = await stakeholdersOf(db, project.id);
@@ -172,7 +172,7 @@ export async function getChange(db, project, id) {
     WHERE x.change_request_id = ?
       AND NOT EXISTS (SELECT 1 FROM change_request_wbs_impacts i WHERE i.change_request_id = x.change_request_id AND i.wbs_item_id = w.id)
     GROUP BY w.id, u.name ORDER BY w.sequence, w.wbs_code`, [id]));
-  c.history = (await db.all(`SELECT h.*, u.name AS changed_by_name FROM change_request_history h LEFT JOIN users u ON u.id = h.changed_by
+  c.history = (await db.all(`SELECT h.*, COALESCE(u.name, CASE WHEN h.withdrawn_actor THEN '탈퇴한 사용자' END) AS changed_by_name FROM change_request_history h LEFT JOIN users u ON u.id = h.changed_by
     WHERE h.change_request_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [id]));
   return c;
 }
