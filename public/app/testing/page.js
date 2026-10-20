@@ -265,8 +265,8 @@ export async function testsPage(id) {
       <h4 class="dh">테스트 절차 <em>${x.steps.length}</em>${raw(ro ? '' : '<button class="link linkbtn" id="steps-save" style="margin-left:auto;width:auto;font-size:12.5px" hidden>절차 저장</button>')}</h4>
       <div id="steps-wrap">${raw(stepsEditor(x.steps, ro))}</div>
       <div class="dfield" style="margin-top:10px"><span>기대 결과</span><div><textarea class="textarea" data-field="expected_result" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="기대 결과를 적어 주세요" ${ro ? 'disabled' : ''}>${x.expected_result}</textarea></div></div>
-      <div class="dfield" style="margin-top:10px" data-tc-data><span>테스트 계정·데이터</span><div><textarea class="textarea" data-field="test_data" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="예) 일반 사용자 계정 1개, 청구 이력이 있는 고객 데이터" ${ro ? 'disabled' : ''}>${x.test_data || ''}</textarea>${raw(ro ? '' : '<small class="hint">비밀번호 같은 비밀값은 적지 마세요. 계정의 역할과 데이터 종류만 적습니다.</small>')}</div></div>
-      <div class="dfield" style="margin-top:10px" data-tc-env><span>대상 환경</span><div><input class="input input--sm" data-field="environment" value="${x.environment || ''}" maxlength="500" placeholder="예) PC Chrome, 모바일 Safari" ${ro ? 'disabled' : ''}></div></div>
+      <div class="dfield dfield--gap" data-tc-data><span>테스트 계정·데이터</span><div><textarea class="textarea" data-field="test_data" maxlength="2000" rows="2" placeholder="예) 일반 사용자 계정 1개, 청구 이력이 있는 고객 데이터" ${ro ? 'disabled' : ''}>${x.test_data || ''}</textarea>${raw(ro ? '' : '<small class="hint">비밀번호 같은 비밀값은 적지 마세요. 계정의 역할과 데이터 종류만 적습니다.</small>')}</div></div>
+      <div class="dfield dfield--gap" data-tc-env><span>대상 환경</span><div><input class="input input--sm" data-field="environment" value="${x.environment || ''}" maxlength="500" placeholder="예) PC Chrome, 모바일 Safari" ${ro ? 'disabled' : ''}></div></div>
       <div class="dsave" id="dsave"></div>
       ${raw(ro ? '' : runBox(x))}
       ${raw(execTimeline(x))}
@@ -387,24 +387,24 @@ export async function testsPage(id) {
     const open = x.executions.filter((e) => e.issue_id && !['RESOLVED', 'CLOSED'].includes(e.issue_status));
     const me = state.user ? `u:${state.user.id}` : ''; const today = todayKst();
     const steps = (x.steps || []).filter((st) => st.instruction);
-    return html`<section class="runbox" id="runbox" data-runbox aria-labelledby="rbT" style="margin-top:16px;padding:12px;border:1px solid var(--line, #e3e6ea);border-radius:10px">
-      <h4 class="dh" id="rbT" style="margin-top:0">실행 기록 <small class="dim" style="font-weight:500;letter-spacing:0;text-transform:none">기록은 수정되지 않고 실행 이력으로 쌓입니다</small></h4>
-      ${raw(steps.length ? html`<div class="field" data-run-steps><span class="lbl">단계별 결과</span><ol class="steps" style="margin:4px 0 0">${raw(steps.map((st, i) => html`<li data-run-step="${i}" style="display:flex;gap:8px;align-items:center"><span class="steps__n">${i + 1}</span><span style="flex:1;min-width:0">${st.instruction}${raw(st.expected ? html`<small class="dim" style="display:block">예상: ${st.expected}</small>` : '')}</span>
-        <label style="white-space:nowrap"><input type="radio" name="rs-${i}" value="PASS"> 통과</label><label style="white-space:nowrap"><input type="radio" name="rs-${i}" value="FAIL"> 실패</label></li>`).join(''))}</ol></div>` : '')}
+    return html`<section class="runbox" id="runbox" data-runbox aria-labelledby="rbT">
+      <h4 class="dh" id="rbT">실행 기록 <small class="dim">기록은 수정되지 않고 실행 이력으로 쌓입니다</small></h4>
+      ${raw(steps.length ? html`<div class="field" data-run-steps><span class="lbl">단계별 결과</span><ol class="steps runbox__steps">${raw(steps.map((st, i) => html`<li class="runbox__step" data-run-step="${i}"><span class="steps__n">${i + 1}</span><span class="runbox__txt">${st.instruction}${raw(st.expected ? html`<small class="dim">예상: ${st.expected}</small>` : '')}</span>
+        <label><input type="radio" name="rs-${i}" value="PASS"> 통과</label><label><input type="radio" name="rs-${i}" value="FAIL"> 실패</label></li>`).join(''))}</ol></div>` : '')}
       <div class="field"><span class="lbl">결과 <span class="req">*</span></span><div class="resq">${raw(['PASS', 'FAIL', 'BLOCKED'].map((r) => html`<label class="resq__o resq--${r.toLowerCase()}"><input type="radio" name="result" value="${r}"><b>${RESULT[r]}</b><small>${r === 'PASS' ? '기대한 대로 동작' : r === 'FAIL' ? '기대와 다르게 동작' : '환경 문제 등으로 수행 불가'}</small></label>`).join(''))}</div><div class="err" id="rd-err"></div></div>
-      <div class="field"><label for="rd-actual">실제 결과</label><textarea class="textarea" id="rd-actual" maxlength="2000" style="min-height:56px" placeholder="실제로 어떻게 동작했는지 (실패면 꼭 적어 주세요)"></textarea></div>
+      <div class="field"><label for="rd-actual">실제 결과</label><textarea class="textarea" id="rd-actual" maxlength="2000" rows="2" placeholder="실제로 어떻게 동작했는지 (실패면 꼭 적어 주세요)"></textarea></div>
       <div class="prow"><div class="field"><label for="rd-who">수행자</label><select class="select" id="rd-who">${raw(performerOptions(members, performers, me))}</select></div>
         <div class="field"><label for="rd-on">수행일</label><input class="input" type="date" id="rd-on" value="${today}" max="${today}"><div class="err" id="rd-on-err"></div></div></div>
       <div class="field"><label for="rd-note">메모</label><input class="input" id="rd-note" maxlength="1000" placeholder="환경, 데이터, 참고 사항"></div>
-      <label class="rd-issue" id="rd-issue-wrap" hidden style="display:flex;gap:6px;align-items:center;margin:4px 0"><input type="checkbox" id="rd-issue" checked> 실패 내용을 이슈로 등록 (담당자·연결된 요구사항/WBS 복사)</label>
+      <label class="rd-issue" id="rd-issue-wrap" hidden><input type="checkbox" id="rd-issue" checked> 실패 내용을 이슈로 등록 (담당자·연결된 요구사항/WBS 복사)</label>
       ${raw(open.length ? html`<div class="rd-resolve" id="rd-resolve" hidden>${raw(open.map((e) => html`<label><input type="checkbox" data-resolve="${e.issue_id}" checked> ${e.issue_display_id}도 해결로 바꾸기</label>`).join(''))}</div>` : '')}
-      <div class="actions" style="margin-top:8px"><button type="button" class="btn btn--primary btn--sm" id="run-save">결과 기록</button></div>
+      <div class="actions"><button type="button" class="btn btn--primary btn--sm" id="run-save">결과 기록</button></div>
     </section>`;
   };
   /** 실행 이력 타임라인 right under the form: the last 3 runs (all of them on the 실행 이력 tab). */
-  const execTimeline = (x) => (x.executions.length ? html`<div class="runlog" data-runlog style="margin-top:12px"><h4 class="dh">최근 실행 <em>${x.executions.length}</em>${raw(x.executions.length > 3 ? '<button type="button" class="link linkbtn" data-goto-exec style="margin-left:auto;width:auto;font-size:12.5px">전체 이력 →</button>' : '')}</h4>
+  const execTimeline = (x) => (x.executions.length ? html`<div class="runlog" data-runlog><h4 class="dh">최근 실행 <em>${x.executions.length}</em>${raw(x.executions.length > 3 ? '<button type="button" class="link linkbtn" data-goto-exec>전체 이력 →</button>' : '')}</h4>
     <ol class="exec">${raw(x.executions.slice(0, 3).map((e) => html`<li class="exec__i exec--${e.result.toLowerCase()}" data-runlog-i><span class="exec__n">#${e.execution_number}</span>${raw(resBadge(e.result))}<span class="exec__who">${execLine(e)}</span>${raw(e.step_results ? html`<small class="dim"> · 단계 ${e.step_results.filter((r) => r.result === 'PASS').length}/${e.step_results.length} 통과</small>` : '')}
-      ${raw(e.issue_display_id ? html` · <a class="link mono" href="/app/projects/${p.id}/issues?sel=${e.issue_id}" data-link data-runlog-issue>${e.issue_display_id}</a>` : '')}${raw(e.actual_result ? html`<p class="hint" style="margin:2px 0 0">${e.actual_result}</p>` : '')}</li>`).join(''))}</ol></div>` : '');
+      ${raw(e.issue_display_id ? html` · <a class="link mono" href="/app/projects/${p.id}/issues?sel=${e.issue_id}" data-link data-runlog-issue>${e.issue_display_id}</a>` : '')}${raw(e.actual_result ? html`<p class="hint">${e.actual_result}</p>` : '')}</li>`).join(''))}</ol></div>` : '');
   /** Reads the inline form → the POST body, or null after showing what is missing. */
   const readRun = (box) => {
     const today = todayKst();
