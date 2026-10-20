@@ -119,7 +119,7 @@ test('amount tamper: a window result for another amount is rejected without appr
     const c = client();
     const o1 = (await c('POST', '/api/service-pay/orders', ORDER())).json.order;
     const r1 = await returnPost(windowResult({ ...o1, amount: 1000 }));   // window re-signed for 1,000원 (attacker-chosen amount)
-    assert.equal(r1.status, 303); assert.match(r1.location, /^\/pay/agent\/failed\?reason=amount_mismatch/);
+    assert.equal(r1.status, 303); assert.match(r1.location, /^\/pay\/agent\/failed\?reason=amount_mismatch/);
     assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 0, 'never approved');
     assert.equal((await db.get('SELECT status FROM service_orders WHERE id = ?', [o1.id])).status, 'FAILED');
 
@@ -127,7 +127,7 @@ test('amount tamper: a window result for another amount is rejected without appr
     np.st.approveAmount = 1000;   // NicePay answers with a different amount → refund, never PAID
     const r2 = await returnPost(windowResult(o2));
     np.st.approveAmount = null;
-    assert.match(r2.location, /^\/pay/agent\/failed/);
+    assert.match(r2.location, /^\/pay\/agent\/failed/);
     assert.equal(np.called(/\/cancel$/).length, 1);
     assert.notEqual((await db.get('SELECT status FROM service_orders WHERE id = ?', [o2.id])).status, 'PAID');
   } finally { server.close(); }
@@ -168,7 +168,7 @@ test('canceled window → failure page, nothing approved', async () => {
   try {
     const o = (await client()('POST', '/api/service-pay/orders', ORDER())).json.order;
     const r = await returnPost(windowResult(o, { authResultCode: 'U310', authResultMsg: '사용자 취소' }));
-    assert.match(r.location, /^\/pay/agent\/failed\?reason=canceled/);
+    assert.match(r.location, /^\/pay\/agent\/failed\?reason=canceled/);
     assert.equal(np.calls.length, 0);
   } finally { server.close(); }
 });
@@ -276,7 +276,7 @@ test('P1-3 refund failure: refund_failed + operator alert e-mail + honest buyer 
     np.st.onApprove = (id) => db.run(`UPDATE service_orders SET status = 'FAILED', failure_code = 'payment_failed' WHERE id = ?`, [id]);
     const o1 = (await c('POST', '/api/service-pay/orders', ORDER())).json.order;
     const r1 = await returnPost(windowResult(o1));
-    assert.match(r1.location, /^\/pay/agent\/failed\?reason=apply_failed/);
+    assert.match(r1.location, /^\/pay\/agent\/failed\?reason=apply_failed/);
     assert.equal(np.called(/cancel$/).length, 1);
     assert.equal(alerts(mail).length, 0, 'a clean refund needs no operator');
     assert.match((await c('GET', r1.location)).text, /청구되지 않습니다/);
@@ -285,7 +285,7 @@ test('P1-3 refund failure: refund_failed + operator alert e-mail + honest buyer 
     const o2 = (await c('POST', '/api/service-pay/orders', ORDER({ buyer: { ...BUYER, email: 'b2@example.com' } }))).json.order;
     const r2 = await returnPost(windowResult(o2));
     np.st.onApprove = null; np.st.cancelFails = false;
-    assert.match(r2.location, /^\/pay/agent\/failed\?reason=refund_failed/);
+    assert.match(r2.location, /^\/pay\/agent\/failed\?reason=refund_failed/);
     const row = await statusOf(db, o2.id);
     assert.deepEqual([row.status, row.failure_code], ['FAILED', 'refund_failed']);
     const al = alerts(mail);

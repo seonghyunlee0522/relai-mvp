@@ -57,7 +57,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   await shot('03-once-filled.png');
   await Promise.all([page.waitForURL(/__nicepay\/window/), page.click('#sp-submit')]);
   check('payment window opened for 400000원 (server amount)', /400000원/.test(await page.innerText('body')));
-  await Promise.all([page.waitForURL(/\/pay/agent\/done/), page.click('#np-pay button')]);
+  await Promise.all([page.waitForURL(/\/pay\/agent\/done/), page.click('#np-pay button')]);
   const oid = new URL(page.url()).searchParams.get('order');
   const doneText = await page.innerText('#sp-result');
   check('done page: 결제가 완료되었습니다 + order number + 400,000원', /결제가 완료되었습니다/.test(doneText) && doneText.includes(oid) && /400,000원/.test(doneText));
@@ -71,14 +71,14 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   // 5) tamper: window says 1,000원 → refused, failure page, no extra approval
   await page.goto(`${BASE}/pay/agent?plan=once&product=agent`); await fill(); await page.check('#agree_all');
   await Promise.all([page.waitForURL(/__nicepay\/window/), page.click('#sp-submit')]);
-  await Promise.all([page.waitForURL(/\/pay/agent\/failed/), page.click('#np-tamper button')]);
+  await Promise.all([page.waitForURL(/\/pay\/agent\/failed/), page.click('#np-tamper button')]);
   check('tampered amount → failure page (amount_mismatch), no approval', /결제 금액이 주문 금액과 달라/.test(await page.innerText('#sp-result')) && (await (await page.request.get(`${BASE}/__nicepay/calls`)).json()).filter((c) => /^\/v1\/payments\/[^/]+$/.test(c.path)).length === 1);
   await shot('05-failed-tamper.png');
 
   // 6) cancel in the window → failure page
   await page.goto(`${BASE}/pay/agent?plan=once&product=agent`); await fill(); await page.check('#agree_all');
   await Promise.all([page.waitForURL(/__nicepay\/window/), page.click('#sp-submit')]);
-  await Promise.all([page.waitForURL(/\/pay/agent\/failed/), page.click('#np-cancel button')]);
+  await Promise.all([page.waitForURL(/\/pay\/agent\/failed/), page.click('#np-cancel button')]);
   check('cancel → 결제가 취소되었습니다', /결제가 취소되었습니다/.test(await page.innerText('#sp-result')));
   await shot('06-failed-cancel.png');
 
