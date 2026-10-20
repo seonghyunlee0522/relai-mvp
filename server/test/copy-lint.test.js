@@ -1,6 +1,7 @@
 /* batch7 #6 · #7 copy lint: a shipped SaaS never announces what it does not do yet, and credits are a usage unit on user screens.
  *  - "아직 지원 / 준비 중입니다 / 곧 제공 / coming soon" never appear in user-facing strings of public/app or server
- *    (exception: 착수보고회 summary '준비 중 · n/m', a state name, server/definition.js).
+ *    (exceptions: 착수보고회 summary '준비 중 · n/m', a state name, server/definition.js; and the plans page 구독하기 reply
+ *    '결제 준비 중입니다. 곧 오픈 예정이에요.' — founder decision 2026-10-20, batch7 T5, public/app/plans.js SUBSCRIBE_SOON only).
  *  - '₩' never appears in the app outside the admin console, the credit-pack purchase buttons (credits.js `krw`, only rendered while
  *    payments are on), the Team purchase form (settings.js / upgrade.js `won`, payments on only) and comments. */
 import test from 'node:test';
@@ -19,6 +20,7 @@ test('#6 no "not yet" copy in user-facing strings', () => {
   const bad = [];
   for (const f of files) codeLines(readFileSync(f, 'utf8')).forEach((l, i) => {
     if (!/아직 지원|준비 중입니다|곧 제공|coming soon/i.test(l)) return;
+    if (relative(root, f) === 'public/app/plans.js' && /^export const SUBSCRIBE_SOON = /.test(l.trim())) return;   // founder-mandated wording (T5)
     bad.push(`${relative(root, f)}:${i + 1} ${l.trim().slice(0, 120)}`);
   });
   assert.deepEqual(bad, []);
