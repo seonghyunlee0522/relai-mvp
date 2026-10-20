@@ -14,10 +14,10 @@ const teamLabel = (t) => (t.role ? `${t.name} · ${t.role}` : t.name);
 const ORG = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 export const OUR_TEAM = '우리 팀';
 const groupLabel = (t) => [t.org || ORG[t.org_type] || '기타', t.department].filter(Boolean).join(' · ');
-export function ownerGroups(members, owners, cur = '', short = false, { all = false } = {}) {
+export function ownerGroups(members, owners, cur = '', short = false, { all = false, orgLabel = false } = {}) {   // orgLabel: "이름 · 조직" for 관계자 outside 우리 팀 (list cells)
   const o = owners || {};
   const dir = ((all && o.directory) || o.team || []).filter((t) => !t.member || `s:${t.id}` === cur);   // K13
-  const lab = (t) => (short ? t.name : teamLabel(t));
+  const lab = (t) => (orgLabel && t.org_type !== 'OWN' ? [t.name, t.org || ORG[t.org_type]].filter(Boolean).join(' · ') : short ? t.name : teamLabel(t));
   const groups = [{ label: OUR_TEAM, options: [...(members || []).map((m) => [`u:${m.id}`, m.name]), ...dir.filter((t) => t.org_type === 'OWN').map((t) => [`s:${t.id}`, lab(t)])] }];
   for (const t of dir.filter((x) => x.org_type !== 'OWN')) {
     const label = groupLabel(t); let g = groups.find((x) => x.label === label);
