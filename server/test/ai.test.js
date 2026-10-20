@@ -136,9 +136,9 @@ test('WBS generation: hierarchy, invalid parent / cycle / depth / foreign requir
     { temp_id: 'AI-WBS-8', parent_temp_id: null, item_type: 'MILESTONE', title: 'SSO 오픈', requirement_ids: [q2.id] },
   ] });
   assert.equal(c.status, 201, JSON.stringify(c.json));
-  assert.deepEqual(c.json.created.map((x) => x.wbs_code), ['2', '2.1', '2.2', '3']); assert.equal(c.json.links, 3);
+  assert.deepEqual(c.json.created.map((x) => x.wbs_code), ['4.1', '4.1.1', '4.1.2', '6.1']); assert.equal(c.json.links, 3);   // batch7: under 구현 (4) and 전환·오픈 (6) — 'SSO 구현' by its title, 'SSO 오픈' by 오픈
   const tree = (await A.c('GET', A.wbs)).json.items;
-  assert.equal(tree.find((i) => i.wbs_code === '2.1').linked_req_count, 1);
+  assert.equal(tree.find((i) => i.wbs_code === '4.1.1').linked_req_count, 1);
   const detail = (await A.c('GET', `${A.wbs}/${c.json.created[0].id}`)).json.item;
   assert.ok(detail.history.some((h) => h.action_type === 'AI_GENERATED'));
   assert.equal((await A.c('GET', `${A.req}/${q1.id}`)).json.requirement.links.length, 2);
@@ -284,4 +284,28 @@ test('title similarity helper', () => {
   assert.equal(titleSimilarity('SSO 로그인', 'SSO 로그인 지원'), 1);
   assert.ok(titleSimilarity('관리자 대시보드 화면', '관리자용 대시보드') > 0.6);
   assert.ok(titleSimilarity('SSO 로그인', '결제 모듈 연동') < 0.3);
+});
+
+test('batch7 #21: "진척률 차이 이유" → schedule intent; the prompt carries 진척 요약 (계획 x% · 실제 y% · 편차 z%p) and the tasks behind the gap', async () => {
+  assert.ok(classifyQuestion('진척률 차이 이유').intents.includes('schedule'));
+  for (const q of ['건강도가 왜 주의야?', '계획 대비 얼마나 늦어?', '편차가 왜 생겼어']) assert.ok(classifyQuestion(q).intents.includes('schedule'), q);
+  const { server, client } = await boot();
+  const A = await setup(client, 'v21@x.com');
+  // two leaf tasks fully in the past: planned 100% each; one 20%, one 100% → actual 60, variance −40
+  const late = await mkWbs(A, { title: '결제 연동 개발', planned_start_date: '2026-01-05', planned_end_date: '2026-01-30', progress: 20, status: 'IN_PROGRESS' });
+  await mkWbs(A, { title: '로그인 개발', planned_start_date: '2026-01-05', planned_end_date: '2026-01-16', progress: 100 });
+  await mkWbs(A, { title: '일정 없는 작업' });
+  setFakeProvider(() => ({ data: { answer: '결제 연동 개발이 늦어 편차가 생겼습니다.', references: [], warnings: [] } }));
+  const r = await A.c('POST', `${A.purl}/ai/ask`, { question: '진척률 차이 이유?' });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const prompt = fakeCalls().at(-1).user;
+  assert.match(prompt, /## 진척 요약\n계획 진척률 100% · 실제 40% · 편차 -60%p/);
+  assert.match(prompt, /계획일 없는 작업 1건/);
+  assert.match(prompt, new RegExp(`- ${late.wbs_code.replace('.', '\\.')} 결제 연동 개발 · 계획 100% · 실제 20% · 종료 예정 2026-01-30 · 담당 미지정 \\(편차 기여 40%p\\)`));
+  assert.match(prompt, /결제 연동 개발 진척 20%/, 'wbsLine prints progress');
+  // the Overview '이유 보기' reads the same list (no AI)
+  const v = (await A.c('GET', `${A.purl}/health/variance`)).json.variance;
+  assert.deepEqual([v.planned, v.actual, v.variance, v.undated], [100, 40, -60, 1]);
+  assert.deepEqual(v.drivers.map((d) => [d.title, d.contribution]), [['결제 연동 개발', 40]]);
+  server.close();
 });

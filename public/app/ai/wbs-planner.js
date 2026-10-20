@@ -7,6 +7,8 @@ import { $, html, raw } from '../core/dom.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { REQ_PRIORITY, REQ_SCOPE, REQ_SCOPE_CHIP, REQ_STATUS, REQ_STATUS_CHIP, REQ_TYPE, plannerDefaultReq } from '../shared/constants.js';
 import { aiDialog, runLine, aiNotice, aiStatus, canRun, reportError, warningsHtml } from '../shared/ai.js';
+import { allocateSchedule, inferPlanPhase, sameAsNode, nodesFor, nodeByPlan, FIXED_NODES } from '../shared/wbs-structure.js';
+import { workdaysBetween, md } from '../shared/kst-date.js';
 
 const STEPS = ['대상 확인', '추가 확인', 'AI 초안 생성', '초안 검토', '누락 검토', 'WBS 반영'];
 const COV = { COVERED: ['✓', '충족', 'is-ok'], PARTIAL: ['△', '부분', 'is-warn'], MISSING: ['✕', '누락', 'is-crit'], NOT_APPLICABLE: ['–', '해당 없음', 'is-muted'], UNKNOWN: ['?', '미확인', 'is-muted'] };
@@ -17,7 +19,7 @@ export async function openWbsPlanner({ pid, onDone }) {
   const [st, reqRes, list] = await Promise.all([aiStatus(pid, { fresh: true }), api('GET', wsApi(`/${pid}/requirements`)), api('GET', base).catch(() => ({ active: null, plans: [] }))]);
   const reqs = reqRes.requirements.filter((r) => !r.archived_at);
   const d = aiDialog({ title: 'AI로 WBS 만들기', subtitle: '요구사항뿐 아니라 데이터 이관·인프라·연계·전환·교육 같은 프로젝트 수행 업무까지 확인해 전체 WBS 초안을 함께 만듭니다. 검토·선택한 항목만 WBS에 반영됩니다.', feature: 'WBS_GENERATION', status: st });
-  d.el.querySelector('.dialog').classList.add('dialog--ai-xl');
+  d.el.querySelector('.dialog').classList.add('dialog--ai-xl', 'dialog--ai-sheet');   // batch7 #15: full sheet (min(1440px, 100vw−48px) × 100vh−48px)
   let plan = null; let step = 1; let items = []; let reqIndex = new Map();
   const picked = new Set(reqs.filter(plannerDefaultReq).map((r) => r.id)); const defaultCount = picked.size;
   const stepsBar = () => html`<ol class="wpz__steps" aria-label="진행 단계">${raw(STEPS.map((s, i) => html`<li class="${i + 1 === step ? 'is-cur' : i + 1 < step ? 'is-done' : ''}"><i>${i + 1 < step ? '✓' : i + 1}</i><span>${s}</span></li>`).join(''))}</ol>`;
@@ -109,40 +111,101 @@ export async function openWbsPlanner({ pid, onDone }) {
     catch (e) { d.busy(false); reportError(e); drawQuestions(); }
   };
 
-  /* ---------- step 4: tree review ---------- */
+  /* ---------- step 4: tree review (batch7 #15) — full sheet: tree under the fixed phase heads (left) + edit panel (right, 320px).
+   * Rows are one line (check · 번호 · 제목 · 기간 · one chip); the rest lives in the panel. Dates are spread by rule (근무일, phase ratios —
+   * public/app/shared/wbs-structure.js allocateSchedule), the same function the server runs on commit; '날짜 넣지 않기' turns it off. */
   const depthOf = (it) => { let n = 1; let p = it.parent_temp_id; let g = 0; while (p && g++ < 10) { const x = items.find((i) => i.temp_id === p); if (!x) break; n++; p = x.parent_temp_id; } return n; };
   const ordered = () => { const out = []; const seen = new Set(); const place = (it) => { if (seen.has(it.temp_id)) return; const p = it.parent_temp_id && items.find((i) => i.temp_id === it.parent_temp_id); if (p) place(p); seen.add(it.temp_id); out.push(it); }; items.forEach(place); return out; };
   const selectChain = (it) => { let p = it.parent_temp_id; let g = 0; while (p && g++ < 10) { const x = items.find((i) => i.temp_id === p); if (!x) break; x.selected = true; p = x.parent_temp_id; } };
-  const edits = () => items.map((i) => ({ temp_id: i.temp_id, title: i.title, description: i.description, item_type: i.item_type, parent_temp_id: i.parent_temp_id, planned_duration_days: i.planned_duration_days, related_requirement_ids: i.related_requirement_ids, selected: i.selected }));
+  const edits = () => items.map((i) => ({ temp_id: i.temp_id, title: i.title, description: i.description, item_type: i.item_type, parent_temp_id: i.parent_temp_id, phase: i.phase ?? null, planned_duration_days: i.planned_duration_days, related_requirement_ids: i.related_requirement_ids, selected: i.selected }));
   const counts = () => { const s = items.filter((i) => i.selected); return { total: s.length, linked: s.filter((i) => i.related_requirement_ids.length).length, delivery: s.filter((i) => !i.related_requirement_ids.length && i.item_type !== 'MILESTONE').length, ms: s.filter((i) => i.item_type === 'MILESTONE').length }; };
-  const drawTree = (run = null) => {
-    step = 4; const list = ordered(); const c = counts();
+  const topOf = (it) => { let x = it; let g = 0; while (x.parent_temp_id && g++ < 20) { const p = items.find((i) => i.temp_id === x.parent_temp_id); if (!p) break; x = p; } return x; };
+  const phaseOf = (it) => inferPlanPhase(topOf(it));
+  let sched = null; let datesOn = true; const phaseDays = {}; let selTemp = null; const folded = new Set(); let foldInit = false;
+  const loadSched = async () => { if (sched) return; try { sched = await api('GET', `${base}/${plan.id}/schedule`); } catch { sched = { start: null, end: null, holidays: [] }; } sched.hol = new Map((sched.holidays || []).map((h) => [h.day, h.name])); datesOn = Boolean(sched.start); };
+  /** The same input the server uses: chosen items, a parent kept only when it is chosen too. */
+  const allocation = () => {
+    const chosen = ordered().filter((i) => i.selected); const ids = new Set(chosen.map((i) => i.temp_id));
+    const input = chosen.map((i) => ({ ...i, parent_temp_id: i.parent_temp_id && ids.has(i.parent_temp_id) ? i.parent_temp_id : null }));
+    return allocateSchedule({ items: input, start: sched.start, end: sched.end, hol: sched.hol, withDm: sched.with_dm, phaseWorkdays: phaseDays });
+  };
+  const dper = (a, b) => (a ? `${md(a)}${b && b !== a ? `–${md(b)}` : ''}` : '');
+  const drawTree = async (run = null) => {
+    step = 4; await loadSched();
+    const list = ordered(); const c = counts(); const alloc = datesOn && sched.start ? allocation() : null; const dates = alloc && alloc.ok ? alloc.dates : {};
+    const withDm = sched.with_dm || list.some((i) => phaseOf(i) === 'DATA_MIGRATION');
+    const heads = alloc && alloc.ok ? alloc.phases : nodesFor(withDm).map((n) => ({ plan: n.plan, title: n.title }));
+    // a top-level group that only repeats its phase name is the phase itself (commit does the same) → its children show one level up
+    const merged = new Set(list.filter((i) => !i.parent_temp_id && list.some((x) => x.parent_temp_id === i.temp_id) && sameAsNode(i.title) === phaseOf(i)).map((i) => i.temp_id));
+    const lvl = (it) => depthOf(it) - (merged.has(topOf(it).temp_id) ? 1 : 0);
+    if (!foldInit) { foldInit = true; for (const it of list) if (lvl(it) >= 2 && list.some((x) => x.parent_temp_id === it.temp_id)) folded.add(it.temp_id); }   // 단계 + 1·2레벨 open
+    const hiddenBy = (it) => { let p = it.parent_temp_id; let g = 0; while (p && g++ < 20) { if (folded.has(p)) return true; p = items.find((i) => i.temp_id === p)?.parent_temp_id; } return folded.has(`PH:${phaseOf(it)}`); };
+    const chip = (it) => (it.related_requirement_ids.length ? html`<span class="chip chip--active" title="${it.related_requirement_ids.map((d) => `${d} ${reqIndex.get(d)?.title || ''}`).join('\n')}">${it.related_requirement_ids[0]}${it.related_requirement_ids.length > 1 ? ` +${it.related_requirement_ids.length - 1}` : ''}</span>`
+      : it.similar_to ? html`<span class="chip chip--hold" title="기존 ${it.similar_to.wbs_code} ${it.similar_to.title}">유사</span>` : it.item_type === 'MILESTONE' ? '' : '<span class="chip chip--muted">수행</span>');
+    const rowHtml = (it, code) => { const dt = dates[it.temp_id]; const kids = list.some((x) => x.parent_temp_id === it.temp_id);
+      const per = it.item_type === 'MILESTONE' ? (dt ? `◆ ${md(dt.milestone_date)}` : '') : dt ? `${dper(dt.planned_start_date, dt.planned_end_date)} · ${workdaysBetween(dt.planned_start_date, dt.planned_end_date, sched.hol)}일` : kids ? '' : it.planned_duration_days ? `참고 ${it.planned_duration_days}일` : '';
+      return html`<div class="wpr ${it.selected ? 'is-sel' : ''} ${selTemp === it.temp_id ? 'is-cur' : ''} ${it.fix ? 'is-fix' : ''} ${kids ? 'is-grp' : ''}" data-t="${it.temp_id}" style="--l:${lvl(it) - 1}" role="row">
+        <label class="wpr__ck"><input type="checkbox" data-sel="${it.temp_id}" ${it.selected ? 'checked' : ''} aria-label="${it.title} 선택"></label>
+        ${raw(kids ? html`<button type="button" class="wpr__tog" data-fold="${it.temp_id}" aria-label="${folded.has(it.temp_id) ? '펼치기' : '접기'}">${folded.has(it.temp_id) ? '▸' : '▾'}</button>` : '<span class="wpr__tog"></span>')}
+        <span class="wpr__code mono">${code}</span><span class="wpr__t" title="${it.title}" data-title="${it.temp_id}">${it.item_type === 'MILESTONE' ? '◆ ' : ''}${it.title}</span>
+        <span class="wpr__per">${per}</span><span class="wpr__chip">${raw(chip(it))}</span></div>`; };
+    let body = '';
+    heads.forEach((h, hi) => {
+      const mine = list.filter((i) => phaseOf(i) === h.plan && !merged.has(i.temp_id)); const n = mine.filter((i) => i.selected).length;
+      const tip = h.holidays && h.holidays.length ? `공휴일: ${h.holidays.map((x) => `${md(x.day)} ${x.name}`).join(', ')}` : '이 기간에 공휴일이 없습니다';
+      const pk = `PH:${h.plan}`;
+      body += html`<div class="wph wph--${h.plan.toLowerCase()}" data-phase="${h.plan}" role="row"><button type="button" class="wpr__tog" data-fold="${pk}" aria-label="${folded.has(pk) ? '펼치기' : '접기'}">${folded.has(pk) ? '▸' : '▾'}</button>
+        <b class="wph__t">${hi + 1} ${h.title}</b><small class="wph__n">작업 ${n}</small><span class="wph__sp"></span>
+        ${raw(h.start ? html`<span class="wph__per" title="${tip}">${dper(h.start, h.end)}</span><label class="wph__d" title="이 단계의 근무일 수 — 바꾸면 단계 안 작업이 다시 배분됩니다"><input type="number" class="input input--xs" min="1" max="999" data-phase-days="${h.plan}" value="${h.workdays}" aria-label="${h.title} 근무일"> 근무일</label>` : '')}</div>`;
+      // codes: phase index + position among visible siblings
+      const kidsOf = (pid) => mine.filter((i) => (pid ? i.parent_temp_id === pid : !i.parent_temp_id || merged.has(i.parent_temp_id)));
+      const walk = (pid, prefix) => kidsOf(pid).forEach((it, k) => { const code = `${prefix}.${k + 1}`; if (!hiddenBy(it)) body += rowHtml(it, code); walk(it.temp_id, code); });
+      walk(null, String(hi + 1));
+    });
+    const sumText = !sched.start ? '<span class="hint">프로젝트 기간(01 프로젝트 개요의 시작·종료일)이 없어 날짜는 넣지 않습니다.</span>'
+      : html`<label class="toggle"><input type="checkbox" id="wp-dates" ${datesOn ? 'checked' : ''}> 날짜 자동 배분</label><small class="dim">${datesOn && alloc && alloc.ok ? `${sched.start} ~ ${sched.end} · 근무일 ${alloc.workdays}일 (주말·공휴일 제외)${alloc.overrun ? ' · 종료일을 넘습니다' : ''}` : '날짜 없이 반영합니다 (WBS에서 직접 입력)'}</small>`;
     d.body.innerHTML = html`${raw(stepsBar())}
-      <div class="aid__sum"><b>AI WBS 초안 ${list.length}건</b>${raw(runLine(run, d))}<span class="aid__sp"></span>
-        <span class="wpz__legend"><span class="chip chip--active">REQ</span> 요구사항 구현 <span class="chip chip--muted">수행</span> 프로젝트 수행 업무 <span class="chip chip--hold">유사</span> 기존 WBS와 유사</span>
+      <div class="aid__sum"><b>AI WBS 초안 ${list.length}건</b>${raw(runLine(run, d))}<span class="aid__sp"></span>${raw(sumText)}
         <label class="toggle"><input type="checkbox" id="wp-all" ${items.every((i) => i.selected) ? 'checked' : ''}> 전체 선택</label></div>
       ${raw(warningsHtml(plan.draft.warnings))}${raw(plan.draft.notes?.length ? html`<ul class="aid__notes">${raw(plan.draft.notes.map((n) => html`<li>${n}</li>`).join(''))}</ul>` : '')}
-      <div class="wtree" id="wp-tree">${raw(list.map((it) => html`<div class="wtree__r ${it.selected ? 'is-sel' : ''} ${it.fix ? 'is-fix' : ''}" data-t="${it.temp_id}" style="--d:${depthOf(it) - 1}">
-        <label class="aic__ck"><input type="checkbox" data-sel="${it.temp_id}" ${it.selected ? 'checked' : ''} aria-label="${it.title} 선택"></label>
-        <select class="select select--xs" data-f="item_type" data-t="${it.temp_id}" aria-label="유형"><option value="TASK" ${it.item_type === 'TASK' ? 'selected' : ''}>작업</option><option value="MILESTONE" ${it.item_type === 'MILESTONE' ? 'selected' : ''}>마일스톤</option></select>
-        <input class="input input--sm wtree__title" data-f="title" data-t="${it.temp_id}" value="${it.title}" maxlength="200" aria-label="업무명">
-        <select class="select select--xs wtree__parent" data-f="parent_temp_id" data-t="${it.temp_id}" aria-label="상위 항목"><option value="">(최상위)</option>${raw(items.filter((p) => p.temp_id !== it.temp_id && p.item_type !== 'MILESTONE').map((p) => html`<option value="${p.temp_id}" ${p.temp_id === it.parent_temp_id ? 'selected' : ''}>${p.title}</option>`).join(''))}</select>
-        <span class="wtree__meta"><span class="chip chip--muted" title="영역">${AREA_SHORT[it.project_area] || it.project_area}</span>${raw(it.related_requirement_ids.length ? it.related_requirement_ids.map((id) => html`<span class="chip chip--active" title="${reqIndex.get(id)?.title || ''}">${id}</span>`).join('') : it.item_type === 'MILESTONE' ? '' : '<span class="chip chip--muted">수행</span>')}${raw(it.similar_to ? html`<span class="chip chip--hold" title="${it.similar_to.title}">기존 ${it.similar_to.wbs_code}과 유사</span>` : '')}
-          <input class="input input--xs wtree__dur" data-f="planned_duration_days" data-t="${it.temp_id}" type="number" min="0" max="365" value="${it.planned_duration_days ?? ''}" placeholder="일" title="AI 참고값 (일) — 실제 일정은 WBS에서 입력" aria-label="참고 기간">
-          <button type="button" class="link linkbtn wtree__link" data-link-edit="${it.temp_id}" title="요구사항 연결 수정">연결</button></span>
-      </div>`).join(''))}</div>
-      <p class="hint">기간은 <b>AI 참고값</b>이며 실제 날짜·담당자는 생성 후 WBS 화면에서 입력합니다. 하위 항목을 선택하면 상위 항목이 함께 선택되고, 상위를 해제하면 하위 항목도 해제됩니다. 기존 WBS와 유사한 항목은 기본 해제되어 있습니다.</p>`;
+      <div class="wps" data-wps><div class="wps__tree" id="wp-tree" role="treegrid" aria-label="WBS 초안">${raw(body)}</div><aside class="wps__side" id="wp-side">${raw(sidePanel(dates))}</aside></div>`;
     foot(html`<button type="button" class="btn btn--secondary btn--sm" id="wp-back2">← 질문 수정</button><span class="hint">선택 ${c.total}건 · 요구사항 연결 ${c.linked} · 수행 업무 ${c.delivery} · 마일스톤 ${c.ms}</span>`, html`<button type="button" class="btn btn--secondary btn--sm" data-close>나중에 이어하기</button><button type="button" class="btn btn--primary btn--sm" id="wp-cov" ${c.total ? '' : 'disabled'}>다음: 누락 검토</button>`);
     $('#wp-back2', d.el).onclick = async () => { await saveEdits(); drawQuestions(); };
     $('#wp-cov', d.el).onclick = async () => { if (await saveEdits()) drawCoverage(); };
+    const dsw = $('#wp-dates', d.el); if (dsw) dsw.onchange = () => { datesOn = dsw.checked; drawTree(); };
     d.body.querySelectorAll('[data-sel]').forEach((cb) => cb.onchange = () => { const it = items.find((i) => i.temp_id === cb.dataset.sel); it.selected = cb.checked; if (cb.checked) selectChain(it); else { const off = (p) => items.filter((x) => x.parent_temp_id === p.temp_id).forEach((x) => { x.selected = false; off(x); }); off(it); } drawTree(); });
     $('#wp-all', d.el).onchange = (e) => { items.forEach((i) => { i.selected = e.target.checked; }); drawTree(); };
-    d.body.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { const it = items.find((i) => i.temp_id === el.dataset.t);
-      if (el.dataset.f === 'parent_temp_id') { const v = el.value || null; let p = v; let g = 0; while (p && g++ < 20) { if (p === it.temp_id) { toast('자기 자신의 하위로 옮길 수 없습니다.'); el.value = it.parent_temp_id || ''; return; } p = items.find((i) => i.temp_id === p)?.parent_temp_id || null; } it.parent_temp_id = v; if (it.selected) selectChain(it); drawTree(); }
+    d.body.querySelectorAll('[data-fold]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const k = b.dataset.fold; if (folded.has(k)) folded.delete(k); else folded.add(k); drawTree(); });
+    d.body.querySelectorAll('[data-phase-days]').forEach((inp) => inp.onchange = () => { const v = Math.round(Number(inp.value)); if (v > 0) phaseDays[inp.dataset.phaseDays] = v; else delete phaseDays[inp.dataset.phaseDays]; drawTree(); });
+    d.body.querySelectorAll('.wpr').forEach((r) => r.onclick = (e) => { if (e.target.closest('input,button,label') || selTemp === r.dataset.t) return; selTemp = r.dataset.t; drawTree(); });   // the current row stays put so a double-click edits its title
+    d.body.querySelectorAll('[data-title]').forEach((t) => t.ondblclick = () => { const it = items.find((i) => i.temp_id === t.dataset.title); const inp = document.createElement('input'); inp.className = 'input input--xs wpr__in'; inp.value = it.title; inp.maxLength = 200; t.replaceWith(inp); inp.focus(); inp.select();
+      const fin = (ok) => { if (ok && inp.value.trim()) it.title = inp.value.trim(); drawTree(); }; inp.onkeydown = (e) => { if (e.key === 'Enter') fin(true); if (e.key === 'Escape') fin(false); }; inp.onblur = () => fin(true); });
+    bindSide();
+  };
+  /** Right panel: the selected row's 유형 · 단계 · 상위 · 참고 기간 · 요구사항 (the row itself stays one line). */
+  const sidePanel = (dates) => {
+    const it = selTemp && items.find((i) => i.temp_id === selTemp);
+    if (!it) return '<div class="wps__empty"><b>행을 선택하세요</b><p class="hint">행을 누르면 유형·단계·상위 항목·기간·요구사항을 여기서 고칩니다. 제목은 두 번 눌러 바로 고칠 수 있습니다.</p><p class="hint">날짜는 프로젝트 기간을 근무일(주말·공휴일 제외)로 바꿔 단계 비율(착수 5 · 요구사항 15 · 분석·설계 20 · 구현 35 · 시험 15 · 전환·오픈 10)로 나누고, 단계 안에서는 AI 참고 기간을 비율로 써서 차례로 배치합니다.</p></div>';
+    const top = !it.parent_temp_id; const dt = dates[it.temp_id];
+    return html`<div class="wps__f"><h4>${it.title}</h4>
+      <label class="field"><span>유형</span><select class="select select--sm" data-f="item_type"><option value="TASK" ${it.item_type === 'TASK' ? 'selected' : ''}>작업</option><option value="MILESTONE" ${it.item_type === 'MILESTONE' ? 'selected' : ''}>마일스톤</option></select></label>
+      ${raw(top ? html`<label class="field"><span>단계</span><select class="select select--sm" data-f="phase">${raw(FIXED_NODES.map((n) => html`<option value="${n.plan}" ${phaseOf(it) === n.plan ? 'selected' : ''}>${n.title}</option>`).join(''))}</select></label>` : html`<p class="hint">단계: ${nodeByPlan.get(phaseOf(it))?.title || ''} (최상위 항목을 따릅니다)</p>`)}
+      <label class="field"><span>상위 항목</span><select class="select select--sm" data-f="parent_temp_id"><option value="">(단계 바로 아래)</option>${raw(items.filter((p) => p.temp_id !== it.temp_id && p.item_type !== 'MILESTONE').map((p) => html`<option value="${p.temp_id}" ${p.temp_id === it.parent_temp_id ? 'selected' : ''}>${p.title}</option>`).join(''))}</select></label>
+      ${raw(it.item_type === 'MILESTONE' ? '' : html`<label class="field"><span>참고 기간 (근무일)</span><input class="input input--sm" data-f="planned_duration_days" type="number" min="0" max="365" value="${it.planned_duration_days ?? ''}" placeholder="AI 참고값"></label>`)}
+      ${raw(dt ? html`<p class="hint">배분된 일정: ${dt.milestone_date || `${dt.planned_start_date} ~ ${dt.planned_end_date} (${workdaysBetween(dt.planned_start_date, dt.planned_end_date, sched.hol)} 근무일)`}</p>` : '')}
+      <div class="field"><span>요구사항 연결</span><div>${raw(it.related_requirement_ids.length ? it.related_requirement_ids.map((x) => html`<span class="chip chip--active" title="${reqIndex.get(x)?.title || ''}">${x}</span>`).join(' ') : '<span class="dim">없음 (수행 업무)</span>')} <button type="button" class="link linkbtn" data-link-edit="${it.temp_id}">수정</button></div></div>
+      ${raw(it.similar_to ? html`<p class="hint">기존 ${it.similar_to.wbs_code} ${it.similar_to.title}과 비슷해 기본 해제했습니다.</p>` : '')}
+      <small class="dim">영역: ${AREA_SHORT[it.project_area] || it.project_area}</small></div>`;
+  };
+  const bindSide = () => {
+    const side = $('#wp-side', d.el); if (!side) return;
+    side.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { const it = items.find((i) => i.temp_id === selTemp); if (!it) return;
+      if (el.dataset.f === 'parent_temp_id') { const v = el.value || null; let p = v; let g = 0; while (p && g++ < 20) { if (p === it.temp_id) { toast('자기 자신의 하위로 옮길 수 없습니다.'); el.value = it.parent_temp_id || ''; return; } p = items.find((i) => i.temp_id === p)?.parent_temp_id || null; } it.parent_temp_id = v; if (it.selected) selectChain(it); }
       else if (el.dataset.f === 'planned_duration_days') it.planned_duration_days = el.value === '' ? null : Math.max(0, Math.min(365, Number(el.value) || 0));
-      else if (el.dataset.f === 'item_type') { it.item_type = el.value; if (el.value === 'MILESTONE') items.filter((x) => x.parent_temp_id === it.temp_id).forEach((x) => { x.parent_temp_id = null; }); drawTree(); }
-      else it[el.dataset.f] = el.value; });
-    d.body.querySelectorAll('[data-link-edit]').forEach((b) => b.onclick = () => editLinks(items.find((i) => i.temp_id === b.dataset.linkEdit)));
+      else if (el.dataset.f === 'item_type') { it.item_type = el.value; if (el.value === 'MILESTONE') items.filter((x) => x.parent_temp_id === it.temp_id).forEach((x) => { x.parent_temp_id = null; }); }
+      else if (el.dataset.f === 'phase') it.phase = el.value;
+      drawTree(); });
+    side.querySelectorAll('[data-link-edit]').forEach((b) => b.onclick = () => editLinks(items.find((i) => i.temp_id === b.dataset.linkEdit)));
   };
   const editLinks = (it) => {
     const all = [...reqIndex.values()]; const cur = new Set(it.related_requirement_ids);
@@ -180,10 +243,10 @@ export async function openWbsPlanner({ pid, onDone }) {
   };
   const commit = async () => {
     const c = counts();
-    if (!(await confirmDialog({ title: `WBS ${c.total}건을 반영할까요?`, body: `선택한 항목이 실제 WBS로 생성되고 요구사항 연결 ${c.linked}건이 추가됩니다. 번호·순서는 RELAI가 정하며, 반영 후에는 WBS 화면에서 수정할 수 있습니다.`, confirm: 'WBS에 반영' }))) return;
+    if (!(await confirmDialog({ title: `WBS ${c.total}건을 반영할까요?`, body: `선택한 항목이 단계 아래 실제 WBS로 생성되고 요구사항 연결 ${c.linked}건이 추가됩니다.${datesOn && sched && sched.start ? ' 배분한 날짜(근무일 기준)도 함께 넣습니다.' : ' 날짜는 넣지 않습니다.'} 번호·순서는 RELAI가 정하며, 반영 후에는 WBS 화면에서 수정할 수 있습니다.`, confirm: 'WBS에 반영' }))) return;
     d.busy(true, 'WBS를 생성하는 중입니다…');
     try {
-      const r = await api('POST', `${base}/${plan.id}/commit`, { items: edits() });
+      const r = await api('POST', `${base}/${plan.id}/commit`, { items: edits(), schedule: { enabled: Boolean(datesOn && sched && sched.start), phase_workdays: { ...phaseDays } } });
       toast(`WBS ${r.created.length}건을 생성하고 요구사항 연결 ${r.links}건을 추가했습니다.`);
       d.busy(false); d.close(); if (onDone) await onDone(r);
     } catch (e) { d.busy(false); const f = e.fields ? Object.values(e.fields)[0] : null; toast(f || e.message); }

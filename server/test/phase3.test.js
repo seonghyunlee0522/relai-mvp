@@ -115,18 +115,21 @@ test('US-2 뼈대: 15 confirmed + 이관 있음 + 연계 없음 → 3·15·3·3�
   assert.equal(g.guidance.rule, 'WBS_EMPTY'); assert.equal(g.guidance.primary_action.label, 'WBS 뼈대 만들기'); assert.match(g.guidance.primary_action.href, /\/wbs\?skeleton=1$/);
   assert.equal(step(g, 'ANALYSIS_DESIGN', 'NON_DEV_TASKS').importance, 'RECOMMENDED');
   const pv = (await A.c('GET', `${A.wbs}/skeleton/preview`)).json.preview;
-  assert.deepEqual(pv.groups.map((x) => [x.title, x.count]), [['분석·설계', 3], ['구현', 15], ['시험', 3], ['전환·오픈', 3], ['안정화', 1]]);
-  assert.equal(pv.milestones, 3); assert.equal(pv.linked, 15); assert.equal(pv.total, 28); assert.equal(pv.available, true);
+  // batch7 B3: one group per fixed phase node (착수 · 요구사항 정의 added, 데이터 이관 is its own node, 안정화 is a 전환·오픈 task)
+  assert.deepEqual(pv.groups.map((x) => [x.title, x.count]), [['착수', 2], ['요구사항 정의', 2], ['분석·설계', 3], ['데이터 이관', 2], ['구현', 15], ['시험', 3], ['전환·오픈', 3]]);
+  assert.equal(pv.milestones, 3); assert.equal(pv.linked, 15); assert.equal(pv.total, 33); assert.equal(pv.available, true);
   let r = await A.c('POST', `${A.wbs}/skeleton`, {});
-  assert.equal(r.status, 201, JSON.stringify(r.json)); assert.deepEqual(r.json.result, { created: 28, tasks: 25, milestones: 3, linked: 15 });
+  assert.equal(r.status, 201, JSON.stringify(r.json)); assert.deepEqual(r.json.result, { created: 33, tasks: 30, milestones: 3, linked: 15 });
   const items = r.json.items;
   const groups = items.filter((i) => i.depth === 0 && i.item_type === 'SUMMARY');
-  assert.deepEqual(groups.map((x) => [x.title, x.lifecycle_phase, x.children_count]), [['분석·설계', 'ANALYSIS_DESIGN', 3], ['구현', 'DEVELOPMENT', 15], ['시험', 'TESTING', 3], ['전환·오픈', 'TRANSITION_GO_LIVE', 3], ['안정화', 'TRANSITION_GO_LIVE', 1]]);
+  assert.deepEqual(groups.map((x) => [x.title, x.lifecycle_phase, x.children_count, x.wbs_code]), [['착수', 'INITIATION', 3, '1'], ['요구사항 정의', 'REQUIREMENTS', 3, '2'], ['분석·설계', 'ANALYSIS_DESIGN', 3, '3'], ['데이터 이관', 'TRANSITION_GO_LIVE', 2, '4'], ['구현', 'DEVELOPMENT', 15, '5'], ['시험', 'TESTING', 3, '6'], ['전환·오픈', 'TRANSITION_GO_LIVE', 4, '7']]);
+  assert.ok(groups.every((x) => x.is_system), 'the groups are the fixed nodes');
   const kids = (title) => items.filter((i) => i.parent_id === groups.find((x) => x.title === title).id).map((i) => i.title);
   assert.deepEqual(kids('분석·설계'), ['상세 요구사항 분석', '화면 설계', 'DB 설계']);
   assert.deepEqual(kids('시험'), ['통합 테스트', '고객 인수 테스트(UAT)', '결함 조치']);
-  assert.deepEqual(kids('전환·오픈'), ['데이터 이관', '사용자 교육', '운영 환경 배포·오픈']);
-  assert.deepEqual(kids('안정화'), ['오픈 후 안정화 지원']);
+  assert.deepEqual(kids('전환·오픈'), ['사용자 교육', '운영 환경 배포·오픈', '오픈 후 안정화 지원', '안정화 종료']);
+  assert.deepEqual(kids('데이터 이관'), ['이관 대상 분석·매핑', '데이터 이관·검증']);
+  assert.deepEqual(kids('착수'), ['착수보고회', '사업수행계획서 작성', '킥오프'], '01 주요 일정 milestones land under their phase');
   assert.equal(kids('구현')[0], `${reqs[0].display_id} 기능 1`);
   const tasks = items.filter((i) => i.item_type === 'TASK');
   assert.ok(tasks.every((i) => i.lifecycle_phase && !i.owner_user_id && !i.owner_stakeholder_id && !i.planned_start_date && !i.planned_end_date), 'tagged, no dates, no owners');
@@ -156,7 +159,7 @@ test('US-2 branches: 연계 있음 → 인터페이스 설계; 이관 없음 →
   const { server, client, db } = await boot();
   const A = await setup(client); await setTraits(A, { data_migration: 'NO', has_external_integration: 'YES' }); await to03(A);
   const pv = (await A.c('GET', `${A.wbs}/skeleton/preview`)).json.preview;
-  assert.deepEqual(pv.groups.map((x) => x.count), [4, 1, 3, 2, 1]); assert.equal(pv.linked, 0); assert.equal(pv.milestones, 0);
+  assert.deepEqual(pv.groups.map((x) => x.count), [2, 2, 4, 1, 3, 3]); assert.equal(pv.linked, 0); assert.equal(pv.milestones, 0);
   const t = (await A.c('POST', A.wbs, { title: '임시' })).json.item; await A.c('POST', `${A.wbs}/${t.id}/archive`, {});
   const r = await A.c('POST', `${A.wbs}/skeleton`, {}); assert.equal(r.status, 201);
   const titles = r.json.items.map((i) => i.title);
@@ -186,7 +189,8 @@ test('US-2 시험 작업을 모두 지우면 완료 가이드에 "시험 작업�
   // fill owners + dates so the guide reaches WBS_DONE
   for (const it of items.filter((i) => i.item_type === 'TASK')) await A.c('PATCH', `${A.wbs}/${it.id}`, { owner: 's:sh-pl', planned_start_date: '2026-11-02', planned_end_date: '2026-11-20' });
   let g = (await A.c('GET', A.purl)).json; assert.equal(g.guidance.rule, 'WBS_DONE'); assert.ok(!g.guidance.warnings.includes('시험 작업이 없습니다'));
-  await A.c('POST', `${A.wbs}/${items.find((i) => i.title === '시험').id}/archive`, {});
+  const testNode = items.find((i) => i.title === '시험'); assert.equal((await A.c('POST', `${A.wbs}/${testNode.id}/archive`, {})).status, 409, 'batch7: a fixed node cannot be deleted');
+  for (const t of items.filter((i) => i.parent_id === testNode.id)) await A.c('POST', `${A.wbs}/${t.id}/archive`, {});
   g = (await A.c('GET', A.purl)).json; assert.equal(g.guidance.rule, 'WBS_DONE'); assert.ok(g.guidance.warnings.includes('시험 작업이 없습니다'));
   server.close();
 });
@@ -207,7 +211,7 @@ test('US-3 종료일 초과: row flag for task/milestone; guide count only tasks
   await A.c('POST', A.wbs, { title: '안정화 종료', item_type: 'MILESTONE', milestone_date: '2027-05-31' });
   await A.c('POST', A.wbs, { title: '정상', planned_start_date: '2027-03-01', planned_end_date: '2027-04-30' });
   const r = (await A.c('GET', A.wbs)).json;
-  const by = Object.fromEntries(r.items.map((i) => [i.title, i.past_end]));
+  const by = Object.fromEntries(r.items.filter((i) => !i.is_system).map((i) => [i.title, i.past_end]));
   assert.deepEqual(by, { 개발: true, '오픈 후 안정화 지원': true, '안정화 종료': true, 정상: false });
   assert.equal(r.summary.tasks_over_end, 1);
   server.close();

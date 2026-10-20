@@ -5,6 +5,8 @@
  */
 import { REQ_TYPES, REQ_PRIORITIES, REQ_SCOPES } from '../requirements.js';
 import { WBS_TYPES } from '../wbs.js';
+import { PLAN_PHASES } from '../../public/app/shared/wbs-structure.js';
+export { PLAN_PHASES };
 import { IMPACT_TYPES } from '../changes.js';
 
 export const CONFIDENCE = ['HIGH', 'MEDIUM', 'LOW'];
@@ -24,6 +26,7 @@ export const QUESTION_TYPES = ['SINGLE', 'MULTI', 'TEXT', 'BOOLEAN'];
 export const PLAN_ITEM_TYPES = ['TASK', 'MILESTONE'];
 const planItem = () => obj({
   temp_id: str(20), parent_temp_id: nstr(20), item_type: en(PLAN_ITEM_TYPES), title: str(200), description: str(2000), project_area: str(40),   // validated server-side (unknown → OTHER)
+  phase: { type: ['string', 'null'], enum: [...PLAN_PHASES, null] },   // batch7 B3: the fixed WBS phase node a top-level item goes under (children repeat their parent's); null → inferred from area/title
   planned_duration_days: { type: ['integer', 'null'], minimum: 0, maximum: 365 }, related_requirement_ids: arr(str(20), 20),
 });
 export const PLANNER_SCHEMAS = {

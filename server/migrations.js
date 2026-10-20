@@ -203,6 +203,7 @@ export const migrations = [
     // #7: the launch-offer seed rows (migration 47) spoke in won. Only rows the operator never edited are rewritten.
     for (const [id, from, to] of PROMO_COPY_49) await db.run('UPDATE promotions SET body = ?, updated_at = now() WHERE id = ? AND body = ?', [to, id, from]);
   } },
+  { version: 50, name: 'batch7 T3: wbs_items.system_key + uq_wbs_system_key (WBS 고정 최상위 뼈대), public_holidays + 2026–2027 seed (schema.sql) — additive; existing projects get their fixed nodes when the WBS is first opened', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

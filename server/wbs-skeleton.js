@@ -9,16 +9,18 @@
  * the next guide rows say so). Each 구현 task is linked (유형 구현) to its in-scope confirmed requirement.
  */
 import { createWbs, renumber, projectStakeholders, teamOf, todayStr } from './wbs.js';
+import { ensureStructure, nodeIdFor, wantsDm, SKELETON_SOURCE } from './wbs-structure.js';
 import { addLink } from './trace.js';
 import { syncMilestones } from './milestone-sync.js';
 import { assertWithinLimit } from './billing/limits.js';
 
 /** A key date that names the 오픈 ('서비스 오픈', 'Go-Live') becomes the go-live milestone (tagged 06 전환 및 오픈) — 완료보고서 §1 and 오픈 완료 use it. */
 export const GO_LIVE_TITLE = /오픈|go[- ]?live/i;
-export const SKELETON_SOURCE = '뼈대로 생성';
-export class WbsNotEmpty extends Error { constructor() { super('WBS에 이미 항목이 있어 뼈대를 만들 수 없습니다. 뼈대는 WBS가 비어 있을 때만 만들 수 있습니다.'); this.code = 'wbs_not_empty'; } }
+export { SKELETON_SOURCE };
+export class WbsNotEmpty extends Error { constructor() { super('WBS에 이미 작성한 항목이 있어 뼈대를 만들 수 없습니다. 뼈대는 단계 아래가 비어 있을 때만 만들 수 있습니다.'); this.code = 'wbs_not_empty'; } }
 
-const liveCount = async (db, projectId) => Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ? AND archived_at IS NULL', [projectId])).n);
+/** batch7: the fixed phase nodes are structure, so 'empty' = no user item (system_key IS NULL). */
+const liveCount = async (db, projectId) => Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND system_key IS NULL', [projectId])).n);
 const keyDatesOf = async (db, projectId) => {
   const r = await db.get('SELECT key_dates FROM project_definitions WHERE project_id = ?', [projectId]);
   try { const v = r ? JSON.parse(r.key_dates) : []; return (Array.isArray(v) ? v : []).filter((k) => k && k.title); } catch { return []; }
@@ -29,12 +31,15 @@ export async function skeletonPlan(db, project) {
   const reqs = await db.all(`SELECT id, display_id, title FROM requirements WHERE project_id = ? AND archived_at IS NULL AND scope = 'IN_SCOPE' AND status = 'CONFIRMED'
     ORDER BY sequence_number`, [project.id]);
   const yes = (k) => project[k] === 'YES';
+  // batch7 B3: one group per fixed phase node (the tasks go under the node; nothing new at the root). 안정화 is a 전환·오픈 task now.
   const groups = [
-    { key: 'ANALYSIS_DESIGN', title: '분석·설계', phase: 'ANALYSIS_DESIGN', tasks: ['상세 요구사항 분석', '화면 설계', 'DB 설계', ...(yes('has_external_integration') ? ['인터페이스 설계'] : [])].map((title) => ({ title })) },
-    { key: 'DEVELOPMENT', title: '구현', phase: 'DEVELOPMENT', tasks: reqs.length ? reqs.map((r) => ({ title: `${r.display_id} ${r.title}`.slice(0, 200), requirement_id: r.id })) : [{ title: '기능 구현' }] },
-    { key: 'TESTING', title: '시험', phase: 'TESTING', tasks: ['통합 테스트', '고객 인수 테스트(UAT)', '결함 조치'].map((title) => ({ title })) },
-    { key: 'TRANSITION', title: '전환·오픈', phase: 'TRANSITION_GO_LIVE', tasks: [...(['YES', 'TBD'].includes(project.data_migration) ? ['데이터 이관'] : []), '사용자 교육', '운영 환경 배포·오픈'].map((title) => ({ title })) },
-    { key: 'STABILIZE', title: '안정화', phase: 'TRANSITION_GO_LIVE', tasks: [{ title: '오픈 후 안정화 지원' }] },
+    { key: 'INITIATION', title: '착수', phase: 'INITIATION', plan: 'INITIATION', tasks: ['착수보고회', '사업수행계획서 작성'].map((title) => ({ title })) },
+    { key: 'REQUIREMENTS', title: '요구사항 정의', phase: 'REQUIREMENTS', plan: 'REQUIREMENTS', tasks: ['요구사항 수집·정의', '요구사항 기준선 승인'].map((title) => ({ title })) },
+    { key: 'ANALYSIS_DESIGN', title: '분석·설계', phase: 'ANALYSIS_DESIGN', plan: 'ANALYSIS_DESIGN', tasks: ['상세 요구사항 분석', '화면 설계', 'DB 설계', ...(yes('has_external_integration') ? ['인터페이스 설계'] : [])].map((title) => ({ title })) },
+    ...(wantsDm(project) ? [{ key: 'DATA_MIGRATION', title: '데이터 이관', phase: 'TRANSITION_GO_LIVE', plan: 'DATA_MIGRATION', tasks: ['이관 대상 분석·매핑', '데이터 이관·검증'].map((title) => ({ title })) }] : []),
+    { key: 'DEVELOPMENT', title: '구현', phase: 'DEVELOPMENT', plan: 'DEVELOPMENT', tasks: reqs.length ? reqs.map((r) => ({ title: `${r.display_id} ${r.title}`.slice(0, 200), requirement_id: r.id })) : [{ title: '기능 구현' }] },
+    { key: 'TESTING', title: '시험', phase: 'TESTING', plan: 'TESTING', tasks: ['통합 테스트', '고객 인수 테스트(UAT)', '결함 조치'].map((title) => ({ title })) },
+    { key: 'TRANSITION', title: '전환·오픈', phase: 'TRANSITION_GO_LIVE', plan: 'TRANSITION_GO_LIVE', tasks: ['사용자 교육', '운영 환경 배포·오픈', '오픈 후 안정화 지원'].map((title) => ({ title })) },
   ];
   const milestones = await keyDatesOf(db, project.id);
   const tasks = groups.reduce((a, g) => a + g.tasks.length, 0);
@@ -54,8 +59,9 @@ export async function createSkeleton(db, project, userId) {
   const plan = await skeletonPlan(db, project);
   await assertWithinLimit(db, project.workspace_id, 'wbs', plan.groups.reduce((a, g) => a + 1 + g.tasks.length, 0));   // batch7 #24: all or nothing
   const toLink = []; let tasks = 0;
+  await ensureStructure(db, project, userId);
   for (const g of plan.groups) {
-    const gid = await createWbs(db, project, { item_type: 'SUMMARY', title: g.title, lifecycle_phase: g.phase, history_source: SKELETON_SOURCE }, userId, { skipRenumber: true, skipGuard: true });
+    const gid = await nodeIdFor(db, project, g.plan, userId);
     for (const t of g.tasks) {
       const id = await createWbs(db, project, { item_type: 'TASK', title: t.title, lifecycle_phase: g.phase, parent_id: gid, history_source: SKELETON_SOURCE }, userId, { skipRenumber: true, skipGuard: true });
       tasks++;
@@ -82,13 +88,23 @@ export async function pendingKeyDates(db, project) {
   return kd.filter((k) => !seen.has(`${k.title}\u0000${k.date || ''}`));
 }
 
+/** The fixed node a key-date milestone belongs under by its name ('킥오프' → 착수, '요구사항 확정' → 요구사항 정의, '오픈' → 전환·오픈); null = the root. */
+export const MILESTONE_PLAN = [['TRANSITION_GO_LIVE', GO_LIVE_TITLE], ['INITIATION', /착수|킥오프|kick-?off/i], ['REQUIREMENTS', /요구사항/], ['ANALYSIS_DESIGN', /설계|분석/], ['DATA_MIGRATION', /이관/], ['DEVELOPMENT', /개발|구현/], ['TESTING', /테스트|시험|검수|UAT/i], ['TRANSITION_GO_LIVE', /전환|배포|안정화/]];
+export const milestonePlan = (title) => (MILESTONE_PLAN.find(([, re]) => re.test(String(title || ''))) || [null])[0];
+async function milestoneParent(db, project, title, userId) {
+  let plan = milestonePlan(title); if (!plan) return null;
+  if (plan === 'DATA_MIGRATION' && !wantsDm(project) && !(await db.get(`SELECT 1 FROM wbs_items WHERE project_id = ? AND system_key = 'OPT:DATA_MIGRATION' AND archived_at IS NULL`, [project.id]))) plan = 'TRANSITION_GO_LIVE';
+  return nodeIdFor(db, project, plan, userId);
+}
+
 /** One MILESTONE per pending 01 key_date at the WBS root, after everything else (duplicates skipped). Returns the new ids.
  *  A key date already behind us (before today, APP_TIMEZONE) happened — it lands COMPLETED, so day one of 03 shows no '지연'. */
 export async function milestonesFromKeyDates(db, project, userId, { source = '착수 주요 일정에서 가져옴', skipRenumber = false } = {}) {
   const ids = []; const seen = new Set(); const today = todayStr();
   for (const k of await pendingKeyDates(db, project)) {
     const key = `${k.title}\u0000${k.date || ''}`; if (seen.has(key)) continue; seen.add(key);   // the same key date twice in 01 → one milestone
-    ids.push(await createWbs(db, project, { item_type: 'MILESTONE', title: String(k.title).slice(0, 200), ...(GO_LIVE_TITLE.test(k.title) ? { lifecycle_phase: 'TRANSITION_GO_LIVE' } : {}), milestone_date: k.date || null, ...(k.date && k.date < today ? { status: 'COMPLETED', actual_end_date: k.date } : {}), history_source: source }, userId, { skipRenumber: true, skipGuard: true }));
+    const parentId = await milestoneParent(db, project, k.title, userId);   // batch7: 01 주요 일정 → the matching phase node (오픈 → 전환·오픈); no match → root end
+    ids.push(await createWbs(db, project, { item_type: 'MILESTONE', title: String(k.title).slice(0, 200), parent_id: parentId, ...(GO_LIVE_TITLE.test(k.title) ? { lifecycle_phase: 'TRANSITION_GO_LIVE' } : {}), milestone_date: k.date || null, ...(k.date && k.date < today ? { status: 'COMPLETED', actual_end_date: k.date } : {}), history_source: source }, userId, { skipRenumber: true, skipGuard: true }));
   }
   if (ids.length && !skipRenumber) await renumber(db, project.id);
   if (ids.length) await syncMilestones(db, project, userId);   // F3: a 착수보고회 already held lands 완료

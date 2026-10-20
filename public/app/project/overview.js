@@ -39,6 +39,7 @@ const progressSection = (g, p) => {
         ${raw(metric('진척 편차', varianceText(v), { sub: v === null ? '계획 진척률이 있어야 계산됩니다' : v >= 0 ? '정상' : v >= -5 ? '약간 지연' : '지연', tone: varianceTone(v) }))}
         ${raw(metric('일정 상태', sch.label, { sub: sch.detail, tone: sch.tone }))}
       </div>
+      ${raw(planned !== null ? html`<details class="vwhy" data-vwhy><summary>이유 보기 <small class="dim">— 진척 편차에 가장 크게 영향을 준 작업</small></summary><div data-vwhy-body><p class="hint">불러오는 중…</p></div></details>` : '')}
       <div class="pva">
         <div class="pva__r"><span>계획</span><span class="pbar"><i style="width:${planned ?? 0}%"></i></span><b>${pv(planned)}</b></div>
         <div class="pva__r pva__r--a"><span>실적</span><span class="pbar pbar--g"><i style="width:${actual}%"></i></span><b>${actual}%</b></div>
@@ -132,6 +133,18 @@ export async function overviewPage(id, main = $('#main')) {
     <div class="ov__row4">${raw(upcomingSection(snap, p.id))}${raw(activitySection(dash, p.id))}</div>
   </div>`;
   const aa = $('#act-all'); if (aa) aa.onclick = () => openActivity(p.id);   // Jim B2: the old header button (.wsh__act) is gone — open the panel directly
+  /* batch7 #21: '이유 보기' — the same top-10 list the AI 질의응답 gets (server/health.js varianceDrivers), no AI, loaded on first open */
+  const why = main.querySelector('[data-vwhy]');
+  if (why) why.addEventListener('toggle', async () => {
+    if (!why.open || why.dataset.loaded) return; why.dataset.loaded = '1';
+    const box = why.querySelector('[data-vwhy-body]');
+    try {
+      const v = (await api('GET', wsApi(`/${id}/health/variance`))).variance;
+      const base = html`<p class="hint">계획 ${pv(v.planned)} · 실제 ${pv(v.actual)} · 편차 ${varianceText(v.variance)} — 계획일이 있는 작업 ${v.basis.dated}/${v.basis.tasks}건 기준${v.undated ? ` · 계획일 없는 작업 ${v.undated}건` : ''}</p>`;
+      box.innerHTML = v.drivers.length ? html`${raw(base)}<ol>${raw(v.drivers.map((d0) => html`<li><a class="link mono" href="/app/projects/${p.id}/wbs?sel=${d0.id}" data-link>${d0.wbs_code}</a> ${d0.title} <small>· 계획 ${d0.planned}% · 실제 ${d0.progress}% · 종료 예정 ${d0.end ? fmtShort(d0.end) : '-'} · ${d0.owner || '담당 미지정'} · 편차 기여 ${d0.contribution}%p</small></li>`).join(''))}</ol>`
+        : html`${raw(base)}<p class="hint">계획보다 늦은 작업이 없습니다.</p>`;
+    } catch (e) { box.innerHTML = html`<p class="hint">${e.message}</p>`; delete why.dataset.loaded; }
+  });
   const more = $('#att-more');
   if (more) more.onclick = async () => { more.disabled = true; try { const all = await api('GET', wsApi(`/${id}/attention`)); const list = $('#att .ovatt__list'); if (list) list.outerHTML = attentionRows(all.items, p.id); more.remove(); } catch (e) { toast(e.message); more.disabled = false; } };
 }

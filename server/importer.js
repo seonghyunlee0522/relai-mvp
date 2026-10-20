@@ -8,6 +8,8 @@ import { ValidationError } from './validate.js';
 import { tx } from './db.js';
 import * as R from './requirements.js';
 import * as W from './wbs.js';
+import { nodeIdFor } from './wbs-structure.js';
+import { sameAsNode } from '../public/app/shared/wbs-structure.js';
 import * as Q from './testing.js';
 import { formatDisplayId } from './common.js';
 import { KINDS, normHeader, publicColumns } from './importspec.js';
@@ -431,13 +433,18 @@ export async function runImport(db, project, wid, kind, body, userId) {
       const walk = async (pi, parentId) => {
         for (const i of kids.get(pi) || []) {
           const m = validated[i].model;
+          // batch7 B3: a top-level group row that names a fixed phase ('구현', '시험', '분석·설계' …) merges into that node — its rows go under it
+          const plan = pi === -1 && !ctx.parentId && (kids.get(i) || []).length ? sameAsNode(m.title, { strict: true }) : null;
+          if (plan) { const nid = await nodeIdFor(t, project, plan, userId); if (nid) { ids.set(i, nid); merged.add(i); await walk(i, nid); continue; } }
           const id = await W.createWbs(t, project, { ...m, parent_id: parentId }, userId, { skipRenumber: true, skipGuard: true });   // the import validator already decided group/leaf rows
           ids.set(i, id); await walk(i, id);
         }
       };
+      const merged = new Set();
       await walk(-1, ctx.parentId);
       await W.renumber(t, project.id);
       for (const [i, id] of ids) {
+        if (merged.has(i)) { created.set(i, { id, wbs_code: (await t.get('SELECT wbs_code FROM wbs_items WHERE id = ?', [id])).wbs_code, merged: true }); continue; }
         for (const tok of validated[i].model.preds) await W.addDependency(t, project, { id }, ids.get(idx.get(tok)), userId);
         created.set(i, { id, wbs_code: (await t.get('SELECT wbs_code FROM wbs_items WHERE id = ?', [id])).wbs_code });
       }

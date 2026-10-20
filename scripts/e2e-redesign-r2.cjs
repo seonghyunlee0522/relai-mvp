@@ -232,8 +232,9 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   const shown = await page.$$eval('#drawer .dx', (els) => els.some((e) => e.offsetParent !== null));
   check('R2-9 WBS drawer beside the list (batch7 B1: 490px at 1440); 실적·단계·가중치·상위 항목 behind "세부 정보 더보기"', Math.abs(wd.dw - 490) <= 1 && wd.ok && wd.hid && shown, JSON.stringify({ wd, shown }));
   await shot('d-wbs-drawer.png');
+  const code0 = Number((await page.textContent('#drawer .drawer__h .mono')).trim());   // batch7: the fixed phase nodes come first, so read the code instead of assuming 2
   await page.click('#drawer .drawer__h'); await page.keyboard.press('ArrowDown'); await page.waitForTimeout(900);
-  check('R2-9 WBS: keyboard ↓ moves to the next item', /^3$/.test((await page.textContent('#drawer .drawer__h .mono')).trim()), await page.textContent('#drawer .drawer__h .mono'));
+  check('R2-9 WBS: keyboard ↓ moves to the next item', Number((await page.textContent('#drawer .drawer__h .mono')).trim()) === code0 + 1, `${code0} → ${await page.textContent('#drawer .drawer__h .mono')}`);
   await page.keyboard.press('Escape');
 
   // ---- M3 / Jim P1-1: 담당자 지정 (row or blue card) → 일정 with the unowned tasks pre-ticked + the owner bar → one owner on 10 WBS items in ≤ 4 clicks

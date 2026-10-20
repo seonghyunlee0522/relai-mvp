@@ -6,7 +6,9 @@ import { boot, setup, xlsxBase64 } from './api-helpers.js';
 
 const mk = async (A, body) => { const r = await A.c('POST', A.wbs, body); assert.equal(r.status, 201, JSON.stringify(r.json)); return r.json.item; };
 const tree = async (A) => (await A.c('GET', A.wbs)).json.items;
-const codes = (items) => items.map((i) => `${i.wbs_code}:${i.title}`);
+// batch7 B3: the fixed phase nodes (1..N) come first once the WBS has been listed; these suites build top-level items, so they read
+// the user items only, numbered as if the fixed nodes were not there.
+const codes = (items) => { const n = items.filter((i) => i.is_system).length; return items.filter((i) => !i.is_system).map((i) => `${i.wbs_code.replace(/^\d+/, (x) => String(Number(x) - n))}:${i.title}`); };
 const find = (items, title) => items.find((i) => i.title === title);
 const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
@@ -82,9 +84,11 @@ test('indent / outdent / duplicate / restore / delete policy / max depth / histo
   r = await A.c('POST', `${A.wbs}/${p3.id}/outdent`, {}); assert.deepEqual(codes(r.json.items), ['1:1', '1.1:2', '1.2:3']);
   // undo via move with the returned `from`
   r = await A.c('POST', `${A.wbs}/${p3.id}/move`, r.json.undo.from); assert.deepEqual(codes(r.json.items), ['1:1', '1.1:2', '1.1.1:3']);
-  // max depth 5: 1 > 1.1 > 1.1.1 > 1.1.1.1 > 1.1.1.1.1 ok, deeper refused
+  // max depth 6 (batch7: the fixed phase node is level 1, so 5 user levels below it): 1 > … > 1.1.1.1.1.1 ok, deeper refused
   const d4 = await mk(A, { title: '4', parent_id: p3.id }); const d5 = await mk(A, { title: '5', parent_id: d4.id });
-  assert.equal((await A.c('POST', A.wbs, { title: '6', parent_id: d5.id })).status, 400);
+  const d6 = await mk(A, { title: '6', parent_id: d5.id }); assert.ok(d6.id);
+  assert.equal((await A.c('POST', A.wbs, { title: '7', parent_id: d6.id })).status, 400);
+  await A.c('POST', `${A.wbs}/${d6.id}/archive`, {});   // keep the rest of the scenario at 5 levels
   assert.equal((await A.c('POST', `${A.wbs}/${d5.id}/indent`, {})).status, 400);               // no previous sibling anyway
   // moving a subtree that would exceed depth
   const x = await mk(A, { title: 'x' }); await mk(A, { title: 'x1', parent_id: x.id });
@@ -146,7 +150,7 @@ test('import inspect + mapping: Lv1..Lv3 layout, code layout, flat layout; progr
   r = await A.c('POST', `${A.wbs}/import/preview`, { data: fl, mapping: { title: 1 } });
   assert.deepEqual(r.json.rows.map((x) => x.values.code), ['1', '2']);
   r = await A.c('POST', `${A.wbs}/import`, { rows: r.json.rows.map((x) => ({ row: x.row, values: x.values })) }); assert.equal(r.status, 200, JSON.stringify(r.json));
-  const t = await tree(A); assert.deepEqual(codes(t), ['1:킥오프', '2:요구사항 정리']); assert.ok(t.every((i) => i.item_type === 'TASK'));
+  const t = await tree(A); assert.deepEqual(codes(t), ['1:킥오프', '2:요구사항 정리']); assert.ok(t.filter((i) => !i.is_system).every((i) => i.item_type === 'TASK'));
   // mapping without a title/lv1 column is rejected
   assert.equal((await A.c('POST', `${A.wbs}/import/preview`, { data: fl, mapping: { owner: 2 } })).status, 400);
   server.close();

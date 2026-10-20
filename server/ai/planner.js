@@ -23,10 +23,12 @@ import { SYSTEM, dataBlock, inputBlock, neutralize, AREA_LABEL } from './prompts
 import { PLANNER_SCHEMAS, PLAN_AREAS, AREA_STATUS, AREA_SOURCE, QUESTION_TYPES } from './schemas.js';
 import { projectBlock, requirementRows, wbsRows } from './context.js';
 import { commitWbs, titleSimilarity, DUPLICATE_THRESHOLD } from './features.js';
+import { PLAN_PHASES, inferPlanPhase, allocateSchedule } from '../../public/app/shared/wbs-structure.js';
+import { holidayMap } from '../calendar/workdays.js';
 
 export const PLAN_STATUSES = ['DRAFT', 'QUESTIONS_READY', 'GENERATING', 'REVIEW', 'COMMITTED', 'CANCELLED'];
 export const MAX_QUESTIONS = 8; export const MAX_OPTIONS = 8; export const MAX_FOLLOWUPS = 10; export const MAX_ITEMS = 80; export const MAX_FIX_ITEMS = 20;
-export const MAX_PLAN_DEPTH = W.MAX_DEPTH;   // the real Tree WBS rule (5); the prompt asks for 2–3
+export const MAX_PLAN_DEPTH = W.MAX_DEPTH - 1;   // batch7: items sit under a fixed phase node, so 5 user levels; the prompt asks for 2–3
 const str = (v, n = 2000) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
 const uniq = (a) => [...new Set(a)];
 const clip = (s, n) => { const t = neutralize(String(s ?? '').replace(/\s+/g, ' ').trim()); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
@@ -235,7 +237,7 @@ export function normalizeCandidates(raw, { reqs, existing, max = MAX_ITEMS, pref
     const area = PLAN_AREAS.includes(it.project_area) ? it.project_area : 'OTHER';
     if (it.project_area && area === 'OTHER' && it.project_area !== 'OTHER') warnings.push(`${temp}: 알 수 없는 영역(${str(it.project_area, 40)})을 OTHER로 바꿨습니다.`);
     items.push({ temp_id: temp, parent_temp_id: it.parent_temp_id ? str(it.parent_temp_id, 20) : null, item_type: it.item_type === 'MILESTONE' ? 'MILESTONE' : 'TASK', title: str(it.title, 200) || '(제목 없음)', description: str(it.description, 2000),
-      project_area: area, planned_duration_days: Number.isInteger(it.planned_duration_days) && it.planned_duration_days >= 0 ? Math.min(365, it.planned_duration_days) : null,
+      project_area: area, phase: PLAN_PHASES.includes(it.phase) ? it.phase : null, planned_duration_days: Number.isInteger(it.planned_duration_days) && it.planned_duration_days >= 0 ? Math.min(365, it.planned_duration_days) : null,
       related_requirement_ids: uniq((Array.isArray(it.related_requirement_ids) ? it.related_requirement_ids : []).map((x) => str(x, 20)).filter(Boolean)) });
   }
   const all = [...reserved, ...items]; const byTemp = new Map(all.map((i) => [i.temp_id, i]));
@@ -330,6 +332,7 @@ export function mergeEdits(base, edits, requirements) {
     if (e.title !== undefined) { const t = str(e.title, 200); if (!t) fields[`items.${it.temp_id}.title`] = '업무명을 입력해 주세요.'; else it.title = t; }
     if (e.description !== undefined) it.description = str(e.description, 2000);
     if (e.item_type !== undefined) it.item_type = e.item_type === 'MILESTONE' ? 'MILESTONE' : 'TASK';
+    if (e.phase !== undefined) it.phase = PLAN_PHASES.includes(e.phase) ? e.phase : null;   // batch7: the review's 단계 select (top-level items)
     if (e.planned_duration_days !== undefined) it.planned_duration_days = Number.isInteger(e.planned_duration_days) && e.planned_duration_days >= 0 ? Math.min(365, e.planned_duration_days) : null;
     if (e.parent_temp_id !== undefined) it.parent_temp_id = e.parent_temp_id ? str(e.parent_temp_id, 20) : null;
     if (e.related_requirement_ids !== undefined) { it.related_requirement_ids = uniq((Array.isArray(e.related_requirement_ids) ? e.related_requirement_ids : []).map((x) => str(x, 20)).filter((d) => reqBy.has(d))); it.requirement_ids = it.related_requirement_ids.map((d) => reqBy.get(d).id); }
@@ -437,19 +440,46 @@ export function placeFixItems(draft, fixes) {
 }
 
 /* ---------- 6. commit (idempotent, same transaction as the WBS writes) ---------- */
-export async function commitPlan(db, { plan, project, userId, items = null }) {
+/* ---------- 5b. schedule basis (batch7 #15): the project window the review spreads dates over ---------- */
+/** { start, end, source } — 프로젝트 기간 (projects.planned_*), else the first/last 01 주요 일정; nulls when neither is set. */
+export async function scheduleBasis(db, project) {
+  if (project.planned_start_date && project.planned_end_date) return { start: project.planned_start_date, end: project.planned_end_date, source: 'PROJECT' };
+  let kd = []; try { kd = JSON.parse((await db.get('SELECT key_dates FROM project_definitions WHERE project_id = ?', [project.id]))?.key_dates || '[]'); } catch { kd = []; }
+  const ds = (Array.isArray(kd) ? kd : []).map((k) => k && k.date).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''))).sort();
+  const start = project.planned_start_date || ds[0] || null; const end = project.planned_end_date || ds[ds.length - 1] || null;
+  return start && end && start < end ? { start, end, source: 'KEY_DATES' } : { start: null, end: null, source: null };
+}
+export async function planSchedule(db, project) {
+  const basis = await scheduleBasis(db, project);
+  const hol = await holidayMap(db, basis.start, basis.end ? String(Number(basis.end.slice(0, 4)) + 1) + basis.end.slice(4) : null);
+  const dm = Boolean(await db.get(`SELECT 1 FROM wbs_items WHERE project_id = ? AND system_key = 'OPT:DATA_MIGRATION' AND archived_at IS NULL`, [project.id])) || project.data_migration === 'YES';
+  return { ...basis, with_dm: dm, holidays: [...hol].map(([day, name]) => ({ day, name })) };
+}
+/** Dates for the chosen items by the shared rule (public/app/shared/wbs-structure.js allocateSchedule) — the review shows the same numbers. */
+export async function scheduleFor(db, project, chosen, schedule) {
+  if (!schedule || schedule.enabled === false) return {};
+  const s = await planSchedule(db, project); if (!s.start) return {};
+  const pw = {}; for (const [k, v] of Object.entries(schedule.phase_workdays || {})) if (PLAN_PHASES.includes(k) && Number.isInteger(v) && v > 0 && v <= 2000) pw[k] = v;
+  const r = allocateSchedule({ items: chosen.map((i) => ({ ...i, plan_phase: i.parent_temp_id ? null : inferPlanPhase(i) })), start: s.start, end: s.end, hol: new Map(s.holidays.map((h) => [h.day, h.name])), withDm: s.with_dm, phaseWorkdays: pw });
+  return r.ok ? r.dates : {};
+}
+
+export async function commitPlan(db, { plan, project, userId, items = null, schedule = null }) {
   if (plan.status === 'COMMITTED') throw new PlanError(409, 'plan_committed', '이미 WBS에 반영된 초안입니다.');
   if (plan.status !== 'REVIEW' || !plan.draft) throw new PlanError(409, 'plan_state', '검토 단계에서만 반영할 수 있습니다.');
   const draftItems = Array.isArray(items) ? mergeEdits(plan.draft.items, items, plan.draft.requirements) : plan.draft.items;
   const chosen = draftItems.filter((i) => i.selected !== false);
   if (!chosen.length) throw new ValidationError({ items: '반영할 항목을 선택해 주세요.' });
   const chosenIds = new Set(chosen.map((i) => i.temp_id));
-  const payload = chosen.map((i) => ({ temp_id: i.temp_id, parent_temp_id: i.parent_temp_id && chosenIds.has(i.parent_temp_id) ? i.parent_temp_id : null, item_type: i.item_type, title: i.title, description: i.description || '', requirement_ids: i.requirement_ids || [] }));
+  const parentOk = (i) => i.parent_temp_id && chosenIds.has(i.parent_temp_id);
+  const dates = await scheduleFor(db, project, chosen.map((i) => ({ ...i, parent_temp_id: parentOk(i) ? i.parent_temp_id : null })), schedule);
+  const payload = chosen.map((i) => ({ temp_id: i.temp_id, parent_temp_id: parentOk(i) ? i.parent_temp_id : null, item_type: i.item_type, title: i.title, description: i.description || '', requirement_ids: i.requirement_ids || [],
+    phase: i.phase, project_area: i.project_area, ...(dates[i.temp_id] || {}) }));
   return tx(db, async (t) => {
     const claimed = await t.run(`UPDATE ai_wbs_plans SET status = 'COMMITTED', committed_at = now(), updated_at = now() WHERE id = ? AND status = 'REVIEW'`, [plan.id]);
     if (!claimed || claimed.changes === 0) throw new PlanError(409, 'plan_committed', '이미 WBS에 반영된 초안입니다.');
     const r = await commitWbs(t, { project, userId, items: payload, source: { kind: 'AI_PROJECT_WBS_PLANNER', plan_id: plan.id } });
-    const result = { created: r.created.length, links: r.links, milestones: chosen.filter((i) => i.item_type === 'MILESTONE').length, delivery: chosen.filter((i) => !(i.requirement_ids || []).length && i.item_type !== 'MILESTONE').length };
+    const result = { created: r.created.length, links: r.links, dated: Object.keys(dates).length, milestones: chosen.filter((i) => i.item_type === 'MILESTONE').length, delivery: chosen.filter((i) => !(i.requirement_ids || []).length && i.item_type !== 'MILESTONE').length };
     await save(t, plan.id, { draft: { ...plan.draft, items: draftItems }, commit_result: result });
     return { ...r, plan: await getPlan(t, project, plan.id) };
   });

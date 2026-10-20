@@ -36,3 +36,24 @@ export function planShiftText(original, current) {
   const d = diffDays(original, current);
   return `계획 ${md(original)} → ${md(current)} (${d > 0 ? '+' : ''}${d}일)`;
 }
+
+/* ---------- 근무일 (batch7 B4): 토·일·공휴일을 뺀 날. `hol` = Set/Map of 'YYYY-MM-DD' (server/calendar/holidays-kr.js · GET /api/calendar/holidays) ---------- */
+/** Day of week of 'YYYY-MM-DD' (0 Sun … 6 Sat), zone-free. */
+export const dow = (ymd) => new Date(`${ymd}T00:00:00Z`).getUTCDay();
+export const isWorkday = (ymd, hol = null) => { const d = dow(ymd); return d !== 0 && d !== 6 && !(hol && hol.has(ymd)); };
+/** Workdays from s to e, both ends included (0 when e < s or a date is missing). */
+export function workdaysBetween(s, e, hol = null) {
+  if (!s || !e || e < s) return 0;
+  let n = 0; for (let d = s; d <= e; d = addDays(d, 1)) if (isWorkday(d, hol)) n++;
+  return n;
+}
+/** `d` itself when it is a workday, else the next (dir 1) or previous (dir -1) workday. */
+export function snapToWorkday(d, dir = 1, hol = null) { let x = d; let g = 0; while (!isWorkday(x, hol) && g++ < 60) x = addDays(x, dir < 0 ? -1 : 1); return x; }
+/** The workday `n` workdays after `d` (n = 0 → `d` snapped forward; negative n walks back). */
+export function addWorkdays(d, n, hol = null) {
+  let x = snapToWorkday(d, n < 0 ? -1 : 1, hol); let left = Math.abs(n); const step = n < 0 ? -1 : 1;
+  while (left > 0) { x = addDays(x, step); if (isWorkday(x, hol)) left--; }
+  return x;
+}
+/** Every workday from s to e (inclusive), in order. */
+export function workdayList(s, e, hol = null) { const out = []; if (!s || !e) return out; for (let d = s; d <= e; d = addDays(d, 1)) if (isWorkday(d, hol)) out.push(d); return out; }

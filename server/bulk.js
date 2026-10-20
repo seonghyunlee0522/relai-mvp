@@ -89,6 +89,7 @@ export async function bulkWbs(db, project, wid, body, userId) {
       if (action === 'archive') {
         w = await t.get('SELECT * FROM wbs_items WHERE id = ?', [id]);   // may have been archived with an ancestor earlier in this request
         if (w.archived_at) { if (archivedIds.includes(id)) updated++; else skipped.push({ id, reason: '이미 보관된 항목입니다.' }); continue; }
+        if (w.system_key) { skipped.push({ id, reason: '고정 단계 항목은 삭제할 수 없습니다.' }); continue; }   // batch7 B3
         archivedIds.push(...await W.archiveWbs(t, project, w, userId, { skipRenumber: true }));
         updated++; continue;
       }

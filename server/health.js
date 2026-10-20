@@ -9,7 +9,7 @@
  *
  * Thresholds live in HEALTH_RULES so they can be tuned (or made per-workspace later) without touching the rules.
  */
-import { LEAF_SQL } from './wbs.js';
+import { LEAF_SQL, scheduleFigures, plannedPercent, todayStr, projectStakeholders, DELETED_OWNER } from './wbs.js';
 const TODAY = 'CURRENT_DATE';
 const LAST = `(SELECT result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1)`;
 
@@ -153,4 +153,38 @@ export function evaluateHealth(facts) {
 
 export async function projectHealth(db, project) {
   return evaluateHealth((await healthFacts(db, project)));
+}
+
+/* ---------- 진척 편차 근거 (batch7 B9 · #21): same numbers for the AI 질의응답 context and the Overview '이유 보기' (no AI) ---------- */
+/**
+ * Why planned ≠ actual. Figures = scheduleFigures() (the Overview KPI), plus the leaf tasks that pull the actual progress below the plan
+ * the most: contribution = weight share × (plannedPercent − progress), in %p, largest first (positive only). `undated` = tasks without both dates.
+ * Pure over rows → varianceFromTasks(tasks, milestones, today); varianceDrivers(db, project, limit) loads them.
+ */
+export function varianceFromTasks(tasks, milestones = [], today = todayStr(), limit = 10) {
+  const f = scheduleFigures(tasks, milestones, today);
+  const w = (t) => (t.weight === null || t.weight === undefined ? 1 : Number(t.weight));
+  const dated = tasks.filter((t) => t.planned_start_date && t.planned_end_date);
+  const totalW = dated.reduce((a, t) => a + w(t), 0); const share = (t) => (totalW > 0 ? w(t) / totalW : 1 / (dated.length || 1));
+  const drivers = dated.map((t) => { const pp = plannedPercent(t, today); const gap = pp - (Number(t.progress) || 0);
+    return { id: t.id, wbs_code: t.wbs_code, title: t.title, planned: pp, progress: Number(t.progress) || 0, end: t.planned_end_date, owner: t.owner_name || null, contribution: Math.round(share(t) * gap * 10) / 10 }; })
+    .filter((d) => d.contribution > 0).sort((a, b) => b.contribution - a.contribution || String(a.wbs_code).localeCompare(String(b.wbs_code))).slice(0, limit);
+  return { planned: f.planned_progress, actual: f.progress, variance: f.variance, basis: f.planned_basis, undated: tasks.length - dated.length,
+    overdue_tasks: f.overdue_tasks, overdue_milestones: f.overdue_milestones, max_overdue_days: f.max_overdue_days, drivers };
+}
+export async function varianceDrivers(db, project, limit = 10) {
+  const rows = await db.all(`SELECT w.id, w.wbs_code, w.title, w.item_type, w.status, w.progress, w.weight, w.planned_start_date, w.planned_end_date, w.milestone_date, w.owner_stakeholder_id, u.name AS owner_name
+    FROM wbs_items w LEFT JOIN users u ON u.id = w.owner_user_id WHERE w.project_id = ? AND w.archived_at IS NULL AND w.system_key IS NULL
+      AND (w.item_type = 'MILESTONE' OR (w.item_type = 'TASK' AND ${LEAF_SQL('w')})) ORDER BY w.wbs_code`, [project.id]);
+  const sh = new Map((await projectStakeholders(db, project.id)).map((x) => [x.id, x.name]));
+  for (const r of rows) if (!r.owner_name && r.owner_stakeholder_id) r.owner_name = sh.get(r.owner_stakeholder_id) || DELETED_OWNER;
+  return varianceFromTasks(rows.filter((r) => r.item_type === 'TASK'), rows.filter((r) => r.item_type === 'MILESTONE'), todayStr(), limit);
+}
+const pct = (v) => (v === null || v === undefined ? '-' : `${v}%`);
+/** The '진척 요약' block of the AI context. */
+export function varianceText(v) {
+  const head = `계획 진척률 ${pct(v.planned)} · 실제 ${pct(v.actual)} · 편차 ${v.variance === null || v.variance === undefined ? '-' : `${v.variance > 0 ? '+' : ''}${v.variance}%p`}`;
+  const basis = `기준: 계획일이 있는 작업 ${v.basis.dated}/${v.basis.tasks}건 · 계획일 없는 작업 ${v.undated}건 · 지연 작업 ${v.overdue_tasks}건 · 지연 마일스톤 ${v.overdue_milestones}건 · 최대 지연 ${v.max_overdue_days}일`;
+  const list = v.drivers.length ? v.drivers.map((d) => `- ${d.wbs_code} ${d.title} · 계획 ${d.planned}% · 실제 ${d.progress}% · 종료 예정 ${d.end || '-'} · 담당 ${d.owner || '미지정'} (편차 기여 ${d.contribution}%p)`).join('\n') : '- (계획보다 늦은 작업 없음)';
+  return `## 진척 요약\n${head}\n${basis}\n편차 기여 상위 작업 (가중치 × (계획 진척 − 실제 진척) 큰 순):\n${list}`;
 }

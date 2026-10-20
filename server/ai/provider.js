@@ -12,6 +12,7 @@
  *
  * The `fake` provider is for automated tests: no network, deterministic, scriptable through setFakeProvider().
  */
+import { inferPlanPhase } from '../../public/app/shared/wbs-structure.js';
 export class AiProviderError extends Error {
   constructor(code, message, { status = null, transient = false } = {}) { super(message); this.code = code; this.status = status; this.transient = transient; }
 }
@@ -161,7 +162,7 @@ export function autoReply({ schemaName, user }) {
     const required = new Set([...areasBlk.matchAll(/^- ([A-Z_]+) \(.*?\): REQUIRED/gm)].map((m) => m[1]));
     const said = (re) => re.test(answers);
     const items = []; let n = 0; const fix = schemaName === 'wbs_plan_fix'; const px = fix ? 'AI-FIX' : 'AI-WBS';
-    const add = (title, area, parent = null, reqIds = [], type = 'TASK', dur = null) => { const id = `${px}-${++n}`; items.push({ temp_id: id, parent_temp_id: parent, item_type: type, title, description: '', project_area: area, planned_duration_days: dur, related_requirement_ids: reqIds }); return id; };
+    const add = (title, area, parent = null, reqIds = [], type = 'TASK', dur = null) => { const id = `${px}-${++n}`; items.push({ temp_id: id, parent_temp_id: parent, item_type: type, title, description: '', project_area: area, phase: inferPlanPhase({ project_area: area, title }), planned_duration_days: dur, related_requirement_ids: reqIds }); return id; };
     if (fix) {
       const missing = (user.split('missing_areas:')[1] || '').split('\n')[0]; const uncovered = [...((user.split('uncovered_requirements:')[1] || '').split('\n')[0].matchAll(/REQ-\d{3}/g))].map((m) => m[0]);
       const names = { DATA_MIGRATION: ['데이터 이관', ['이관 대상 분석', '매핑 정의', 'Final Migration']], INFRASTRUCTURE: ['인프라 구성', ['운영 환경 구성', '네트워크/방화벽 설정']], INTERFACE: ['외부 연계', ['연계 설계', '연계 개발/테스트']], TRAINING: ['교육', ['사용자 교육', '운영자 교육']], CUTOVER: ['전환', ['Cutover 리허설', 'Cutover 실행']], OPERATION_HANDOVER: ['운영 이관', ['운영 매뉴얼', '운영 인수인계']], TESTING: ['테스트', ['통합 테스트', '결함 조치']], PROJECT_MANAGEMENT: ['프로젝트 관리', ['주간보고', '이슈/리스크 관리']], ENVIRONMENT: ['환경 구성', ['개발 환경', '검증 환경']], UAT: ['UAT', ['UAT 지원']], DEPLOYMENT: ['배포', ['배포 계획', '운영 배포']], SECURITY: ['보안', ['권한 설계', '보안 점검']], DOCUMENTATION: ['산출물', ['산출물 정리']], STABILIZATION: ['안정화', ['안정화 지원']], NON_FUNCTIONAL: ['비기능', ['성능 테스트']], ANALYSIS_DESIGN: ['분석/설계', ['요구사항 분석', '화면 설계']] };

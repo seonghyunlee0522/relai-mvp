@@ -10,7 +10,7 @@ const USAGE_SQL = `
     (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status != 'ARCHIVED') AS projects,
     (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id = w.id) AS members,
     (SELECT COUNT(*) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND r.archived_at IS NULL) AS requirements,
-    (SELECT COUNT(*) FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND i.archived_at IS NULL) AS wbs,
+    (SELECT COUNT(*) FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND i.archived_at IS NULL AND i.system_key IS NULL) AS wbs,
     (SELECT COUNT(*) FROM weekly_reports wr JOIN projects p ON p.id = wr.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND wr.created_at >= date_trunc('month', now())) AS weekly_reports,
     GREATEST(w.created_at,
       COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),

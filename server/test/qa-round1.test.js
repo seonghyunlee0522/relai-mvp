@@ -126,11 +126,11 @@ test('GAP-002: archived WBS items can be listed with include_archived=1 and rest
   const A = await setup(client);
   const t = (await mk(A, { title: '삭제될 작업' })).item;
   await A.c('POST', `${A.wbs}/${t.id}/archive`, {});
-  assert.equal((await A.c('GET', A.wbs)).json.items.length, 0);
-  const all = (await A.c('GET', `${A.wbs}?include_archived=1`)).json.items;
+  assert.equal((await A.c('GET', A.wbs)).json.items.filter((i) => !i.is_system).length, 0);   // batch7: fixed phase nodes aside
+  const all = (await A.c('GET', `${A.wbs}?include_archived=1`)).json.items.filter((i) => !i.is_system);
   assert.equal(all.length, 1); assert.ok(all[0].archived_at);
   const r = await A.c('POST', `${A.wbs}/${t.id}/restore`, {}); assert.equal(r.status, 200);
-  assert.equal((await A.c('GET', A.wbs)).json.items.length, 1);
+  assert.equal((await A.c('GET', A.wbs)).json.items.filter((i) => !i.is_system).length, 1);
   server.close();
 });
 
