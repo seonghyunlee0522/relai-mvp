@@ -11,6 +11,7 @@
  * an earlier event (requirement, WBS item, issue, risk, change, acceptance); 'me' → 'u:<the sample owner>'.
  * Stakeholders are fictional people stored as text on the project (never user accounts); every RELAI owner is the user.
  *
+ * op 'deliverables' = 산출물 목록 choices ({ code: deliverable_catalog.code, level }); unlisted catalog items keep their default.
  * Edit this file, then run `npm run samples:build` (needs DATABASE_URL) and commit both files.
  */
 
@@ -34,13 +35,16 @@ const A = {
     } },
     { d: -26, t: '09:55', op: 'section', key: 'GOALS' },
     { d: -25, t: '10:20', op: 'def', body: {
-      scope_in: [{ id: 'si-1', text: '홈페이지·모바일 앱 웹 챗봇' }, { id: 'si-2', text: 'FAQ·계약 조회·서류 발급 안내 시나리오' }, { id: 'si-3', text: '상담원 연결(챗봇 → 상담 콘솔)' }, { id: 'si-4', text: '기간계(계약관리) 조회 연계' }, { id: 'si-5', text: '운영자용 시나리오 관리·통계 화면' }],
-      scope_out: [{ id: 'so-1', text: '음성(ARS) 챗봇' }, { id: 'so-2', text: '보험금 청구 접수 자동화' }, { id: 'so-3', text: '상담 콘솔 자체 교체' }],
+      environments: { devices: { PC_WEB: 'SUPPORTED', MOBILE_WEB: 'SUPPORTED', IOS_APP: 'UNSUPPORTED', ANDROID_APP: 'UNSUPPORTED' }, browsers: { CHROME: 'SUPPORTED', EDGE: 'SUPPORTED', SAFARI: 'SUPPORTED', WHALE: 'SUPPORTED' }, os: 'Windows 10 이상, macOS 13 이상, iOS 15 이상, Android 10 이상', min_resolution: '360×640 (모바일), 1280×720 (PC)', languages: '한국어 (영문 응대 제외)' },
+      scope_in: [{ id: 'si-1', text: '홈페이지와 모바일 앱 안의 웹 화면(웹뷰)으로 제공' }, { id: 'si-2', text: '고객사 클라우드 리전 안에서만 운영' }],
+      scope_out: [{ id: 'so-1', text: '음성(ARS) 채널' }, { id: 'so-2', text: '전용 모바일 앱 신규 개발' }],
       deliverables: '사업수행계획서, 요구사항 정의서, 시나리오 설계서, 화면 설계서, 테스트 결과서, 운영자 매뉴얼',
       assumptions: '고객사가 FAQ 원문과 상담 이력 샘플(최근 6개월)을 착수 후 2주 안에 제공한다.',
       constraints: '개인정보는 고객사 클라우드 리전 밖으로 나가지 않는다.',
+      initial_risks: '상담 이력 데이터 품질이 낮을 수 있음 → 착수 2주 차에 샘플을 점검하고 학습 범위를 조정한다.',
     } },
     { d: -25, t: '10:40', op: 'section', key: 'SCOPE' },
+    { d: -25, t: '10:45', op: 'deliverables', items: [{ code: 'RISK_PLAN', level: 'OPTIONAL' }, { code: 'REQ_TRACE', level: 'REQUIRED' }, { code: 'IF_SPEC', level: 'REQUIRED' }, { code: 'OPS_MANUAL', level: 'REQUIRED' }, { code: 'SOURCE', level: 'OPTIONAL' }] },
     { d: -25, t: '15:10', op: 'def', body: { stakeholders: [
       { id: 'sa-sp', org_type: 'CLIENT', org: '다온생명', department: '고객경험본부', name: '한도윤', role: '스폰서(본부장)', area: '최종 승인' },
       { id: 'sa-pm', org_type: 'CLIENT', org: '다온생명', department: '디지털채널팀', name: '서지우', role: '고객 PM', area: '요구사항·일정 협의' },
@@ -117,8 +121,9 @@ const B = {
     { d: -110, t: '10:00', op: 'def', body: {
       goal: '입고 검수·피킹 생산성을 30% 높이고 재고 정확도를 99.5%로 끌어올린다',
       success_criteria: [{ id: 'sc-1', text: '시간당 피킹 건수 30% 향상' }, { id: 'sc-2', text: '재고 정확도 99.5% 이상' }, { id: 'sc-3', text: 'ERP 재고 동기화 지연 5분 이내' }],
-      scope_in: [{ id: 'si-1', text: '입고(EDI 수신·바코드 검수)' }, { id: 'si-2', text: '적치(로케이션 추천)·피킹(웨이브)' }, { id: 'si-3', text: '출고(송장·택배사 연동)' }, { id: 'si-4', text: 'ERP 재고 동기화' }, { id: 'si-5', text: '기존 WMS 데이터 이관' }],
-      scope_out: [{ id: 'so-1', text: 'RFID 게이트' }, { id: 'so-2', text: '운송관리(TMS)' }],
+      environments: { devices: { PC_WEB: 'SUPPORTED', MOBILE_WEB: 'SUPPORTED', TABLET: 'UNSUPPORTED' }, browsers: { CHROME: 'SUPPORTED', EDGE: 'SUPPORTED', SAFARI: 'UNSUPPORTED' }, os: 'Windows 10 (사무실 PC), Android 9 이상 (현장 PDA)', min_resolution: '1280×1024 (PC), 480×800 (PDA)', languages: '한국어' },
+      scope_in: [{ id: 'si-1', text: '물류센터 내부망 전용' }, { id: 'si-2', text: '현장 바코드 PDA의 브라우저에서 동작' }],
+      scope_out: [{ id: 'so-1', text: '내부망 밖(외부) 접속' }],
       deliverables: '요구사항 정의서, 인터페이스 정의서, 이관 계획서, 테스트 결과서, 운영자 매뉴얼',
     } },
     { d: -110, t: '10:30', op: 'section', key: 'GOALS' },
@@ -266,8 +271,9 @@ const C = {
     { d: -217, t: '10:00', op: 'def', body: {
       goal: '본사·현장 결재를 하나로 묶어 결재 처리 기간을 평균 3일에서 1일로 줄인다',
       success_criteria: [{ id: 'sc-1', text: '결재 평균 처리 기간 1일 이내' }, { id: 'sc-2', text: '현장 직원 모바일 결재 사용률 70% 이상' }],
-      scope_in: [{ id: 'si-1', text: '전자결재 (기안·결재선·대결)' }, { id: 'si-2', text: '게시판·공지' }, { id: 'si-3', text: '일정·회의실 예약' }, { id: 'si-4', text: '조직도·인사 연동' }, { id: 'si-5', text: '기존 결재 문서 이관' }],
-      scope_out: [{ id: 'so-1', text: '사내 메신저' }, { id: 'so-2', text: '근태 관리' }],
+      environments: { devices: { PC_WEB: 'SUPPORTED', MOBILE_WEB: 'SUPPORTED', IOS_APP: 'UNSUPPORTED', ANDROID_APP: 'UNSUPPORTED' }, browsers: { CHROME: 'SUPPORTED', EDGE: 'SUPPORTED', WHALE: 'SUPPORTED', SAFARI: 'SUPPORTED' }, os: 'Windows 10 이상, iOS 15 이상, Android 10 이상', languages: '한국어' },
+      scope_in: [{ id: 'si-1', text: '현장 직원은 모바일 웹으로 결재' }, { id: 'si-2', text: '사내 SSO 계정으로만 접속' }],
+      scope_out: [{ id: 'so-1', text: '전용 모바일 앱' }],
       stakeholders: [
         { id: 'sc-sp', org_type: 'CLIENT', org: '한결건설', department: '경영지원본부', name: '김태호', role: '스폰서(경영지원본부장)', area: '최종 승인' },
         { id: 'sc-pm', org_type: 'CLIENT', org: '한결건설', department: '정보시스템팀', name: '이서연', role: '고객 PM', area: '요구사항·검수' },

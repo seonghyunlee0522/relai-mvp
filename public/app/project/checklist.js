@@ -27,6 +27,15 @@ export async function checklistPage(id) {
   const textMode = new Set();   // rows switched to 직접 입력 before anything is typed
   const p = g.project; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
   let actKey = qs.get('activity');
+  let dl = null;   // 07 종료 정리: 필수 산출물 제출 (batch7 #3) — GET …/deliverables, loaded when the CLOSE activity is shown
+  const loadDl = async () => { try { dl = await api('GET', wsApi(`/${id}/deliverables`)); } catch { dl = null; } };
+  /** 필수 산출물 n건 중 제출 완료 m건 + one checkbox per 필수 산출물 (제출 완료 = submitted_at, today). Only once the project chose from the list. */
+  const dlBlock = () => {
+    if (!dl || !dl.has_selection) return '';
+    const req = dl.items.filter((x) => x.level === 'REQUIRED');
+    return html`<div class="clk__dl" data-close-deliverables><p class="clk__crit"><b>필수 산출물</b> <span data-dl-count>필수 산출물 ${req.length}건 중 제출 완료 ${dl.summary.submitted}건</span></p>
+      ${raw(req.length ? html`<ul class="clk__dll" style="list-style:none;padding:0;margin:4px 0 12px;display:flex;flex-direction:column;gap:4px">${raw(req.map((x) => html`<li><label><input type="checkbox" data-dlsub="${x.key}" ${x.submitted_at ? 'checked' : ''} ${ro ? 'disabled' : ''}> ${x.name} <small class="dim">${x.phase_name}${x.submitted_at ? ` · 제출 ${x.submitted_at}` : ''}</small></label></li>`).join(''))}</ul>` : '')}</div>`;
+  };
 
   const pick = () => {
     const phases = (g.phases || []).filter((ph) => PHASES.includes(ph.phase_key));
@@ -103,6 +112,7 @@ export async function checklistPage(id) {
           <div class="clk__marks">${raw(marks)}</div>
         </header>
         <p class="clk__d">${a.description}</p>
+        ${raw(a.close ? dlBlock() : '')}
         <p class="clk__crit"><b>완료 기준</b> ${a.completion_criteria}${raw(items.length ? html` · <span class="clk__cnt">${dec ? `기록된 결정 ${items.length}건` : `체크리스트 ${done}/${items.length} 완료`}</span>` : '')}</p>
         ${raw(a.state === 'IN_PROGRESS' && a.text && !/^체크리스트/.test(a.text) ? html`<p class="clk__hint">${a.text}</p>` : '')}
         ${raw(dec ? (items.length ? html`<table class="clk__tbl" data-decisions><thead><tr><th class="clk__w-due">결정일</th><th>결정 내용</th><th class="clk__w-owner">결정자</th><th>메모</th><th class="clk__x"></th></tr></thead>
@@ -130,12 +140,18 @@ export async function checklistPage(id) {
     bind(a);
   };
 
+  await loadDl();
   const reload = async () => { [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/checklists`))]); draw(); };
   const onGoLive = (a) => a.step_key === 'GO_LIVE' && a.importance === 'REQUIRED' && (g.phases || []).some((ph) => ph.phase_key === 'TRANSITION_GO_LIVE' && ph.steps.some((x) => x.id === a.id));
   const run = async (el, fn) => { if (el) el.disabled = true; try { await fn(); } catch (e) { toast(e.message); if (el) el.disabled = false; } };
 
   const bind = (a) => {
-    main.querySelectorAll('[data-tab]').forEach((t) => { t.onclick = (e) => { e.preventDefault(); actKey = t.dataset.tab; draw(); }; });
+    main.querySelectorAll('[data-tab]').forEach((t) => { t.onclick = async (e) => { e.preventDefault(); actKey = t.dataset.tab; if (!dl) await loadDl(); draw(); }; });
+    main.querySelectorAll('[data-dlsub]').forEach((cb) => { cb.onchange = () => run(cb, async () => {
+      const x = dl.items.find((y) => y.key === cb.dataset.dlsub);
+      dl = await api('PUT', wsApi(`/${id}/deliverables`), { items: [x.custom ? { id: x.id, submitted_at: cb.checked ? todayLocal() : null } : { catalog_id: x.catalog_id, submitted_at: cb.checked ? todayLocal() : null }] });
+      draw();
+    }); });
     main.querySelectorAll('.clk__row [data-f]').forEach((inp) => {
       inp.onchange = () => run(null, async () => {
         const f = inp.dataset.f; const v = f === 'done' ? inp.checked : inp.value;

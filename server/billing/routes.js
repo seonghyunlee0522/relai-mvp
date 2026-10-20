@@ -119,7 +119,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   const b = '/api/workspaces/:wid/billing';
   const owner = [...guard, requireAction('billing')];
   const payer = [...owner, requireVerifiedEmail(fail)];   // paying or changing a subscription needs a verified e-mail (auth/account-security.js)
-  const unavailable = (res) => fail(res, 503, 'billing_unavailable', '결제 기능이 아직 준비되지 않았습니다. 운영자에게 문의해 주세요.');
+  const unavailable = (res) => fail(res, 503, 'billing_unavailable', '지금은 결제할 수 없습니다. 운영자에게 문의해 주세요.');
   const orderFail = (res, e) => fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {});
 
   const paymentsOff = (res) => fail(res, 409, 'payments_disabled', PAYMENTS_OFF_MESSAGE);

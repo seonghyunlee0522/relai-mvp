@@ -3,7 +3,7 @@
  * Both are pure JS and run inside the Vercel function. Used by the weekly report (reports.renderMarkdown) and the
  * 사업수행계획서 (charter-export.js). The source is markdown in a small subset: `#`/`##` headings, `- ` bullets (two-space
  * indent = nested), `**bold**` runs, plain lines, pipe tables (`| a | b |`, optional `|---|` row after the header) and a
- * `<!-- pagebreak -->` line. Tables render as a plain grid (header bold, equal column widths); a row never splits across pages.
+ * `<!-- pagebreak -->` line. `⟦text⟧` is a writing-guide run (grey italic) — the 사업수행계획서 prints it where a section is still empty. Tables render as a plain grid (header bold, equal column widths); a row never splits across pages.
  * `report.footer` (optional) is printed on every page next to the page number.
  */
 import { readFileSync } from 'node:fs';
@@ -28,8 +28,8 @@ const splitRow = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?
 /** Markdown subset → blocks: { type: 'h1'|'h2'|'bullet'|'para'|'blank'|'pagebreak'|'table', level, runs: [{ text, bold }], header?, rows? }. */
 export function parseReportMarkdown(markdown) {
   const runs = (s) => {
-    const out = []; const re = /\*\*(.+?)\*\*/g; let last = 0; let m;
-    while ((m = re.exec(s))) { if (m.index > last) out.push({ text: s.slice(last, m.index), bold: false }); out.push({ text: m[1], bold: true }); last = re.lastIndex; }
+    const out = []; const re = /\*\*(.+?)\*\*|⟦(.+?)⟧/g; let last = 0; let m;
+    while ((m = re.exec(s))) { if (m.index > last) out.push({ text: s.slice(last, m.index), bold: false }); out.push(m[1] !== undefined ? { text: m[1], bold: true } : { text: m[2], bold: false, guide: true }); last = re.lastIndex; }
     if (last < s.length) out.push({ text: s.slice(last), bold: false });
     return out.length ? out : [{ text: '', bold: false }];
   };
@@ -68,8 +68,8 @@ export function renderReportPdf(report) {
   const done = new Promise((res, rej) => { doc.on('end', () => res(Buffer.concat(chunks))); doc.on('error', rej); });
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const write = (runs, { size, x = doc.page.margins.left, w = width, gap = 2, forceBold = false }) => {
-    runs.forEach((r, i) => doc.font(forceBold || r.bold ? 'KR-Bold' : 'KR').fontSize(size).fillColor('#111827')
-      .text(r.text, i === 0 ? x : undefined, undefined, { width: w, continued: i < runs.length - 1, lineGap: gap }));
+    runs.forEach((r, i) => doc.font(forceBold || r.bold ? 'KR-Bold' : 'KR').fontSize(size).fillColor(r.guide ? '#667085' : '#111827')
+      .text(r.text, i === 0 ? x : undefined, undefined, { width: w, continued: i < runs.length - 1, lineGap: gap, oblique: r.guide ? 10 : false }));
   };
   const bottomY = () => doc.page.height - doc.page.margins.bottom;
   /** Plain grid: equal columns, bold shaded header; a row that does not fit moves whole to the next page (never split). */
@@ -87,7 +87,8 @@ export function renderReportPdf(report) {
         const x = x0 + j * cw;
         if (r.head) doc.rect(x, y, cw, h).fillColor('#F2F4F7').fill();
         doc.rect(x, y, cw, h).lineWidth(0.6).strokeColor('#98A2B3').stroke();
-        doc.font(r.head ? 'KR-Bold' : 'KR').fontSize(size).fillColor('#111827').text(t || '', x + pad, y + pad, { width: cw - pad * 2, lineGap: 1 });
+        const guide = /^⟦.*⟧$/s.test(t || ''); const tx = guide ? t.slice(1, -1) : t;
+        doc.font(r.head ? 'KR-Bold' : 'KR').fontSize(size).fillColor(guide ? '#667085' : '#111827').text(tx || '', x + pad, y + pad, { width: cw - pad * 2, lineGap: 1, oblique: guide ? 10 : false });
       });
       doc.x = x0; doc.y = y + h;
     }
@@ -128,10 +129,10 @@ export function renderReportPdf(report) {
 /** Word document (fonts: Malgun Gothic for East Asian text, which Word on Windows/Mac substitutes cleanly). Returns a Buffer. */
 export async function renderReportDocx(report) {
   const FONT = { ascii: 'Malgun Gothic', eastAsia: 'Malgun Gothic', hAnsi: 'Malgun Gothic', cs: 'Malgun Gothic' };
-  const runsOf = (runs, { size = 20, bold = false } = {}) => runs.map((r) => new TextRun({ text: r.text, bold: bold || r.bold, size, font: FONT }));
+  const runsOf = (runs, { size = 20, bold = false } = {}) => runs.map((r) => new TextRun({ text: r.text, bold: bold || r.bold, size, font: FONT, ...(r.guide ? { italics: true, color: '667085' } : {}) }));
   const children = [];
   const cell = (t, head, pct) => new TableCell({ width: { size: pct, type: WidthType.PERCENTAGE }, shading: head ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F2F4F7' } : undefined,
-    children: String(t || '').split('\n').map((line) => new Paragraph({ children: [new TextRun({ text: line, bold: head, size: 18, font: FONT })] })) });
+    children: String(t || '').replace(/^⟦([\s\S]*)⟧$/, '$1').split('\n').map((line) => new Paragraph({ children: [new TextRun({ text: line, bold: head, size: 18, font: FONT, ...(/^⟦[\s\S]*⟧$/.test(t || '') ? { italics: true, color: '667085' } : {}) })] })) });
   for (const b of parseReportMarkdown(report.rendered_content)) {
     if (b.type === 'blank') continue;
     if (b.type === 'pagebreak') { children.push(new Paragraph({ children: [new PageBreak()] })); continue; }

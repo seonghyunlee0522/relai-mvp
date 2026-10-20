@@ -13,6 +13,7 @@ import { mountAdminInvitationRoutes } from './auth/routes.js';
 import { funnelReport, funnelCsv } from './analytics.js';
 import { mountAdminPromotionRoutes } from './promotions.js';
 import { mountAdminFeedbackRoutes } from './feedback.js';
+import { mountAdminDeliverableRoutes } from './deliverables.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -74,6 +75,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* In-app feedback (migration 48): 의견 남기기 → 관리자 › 의견. */
   mountAdminFeedbackRoutes(app, db, { guard, wrap, fail });
+
+  /* 산출물 목록 (migration 49): the standard deliverable catalog every project picks from. */
+  mountAdminDeliverableRoutes(app, db, { guard, wrap, fail });
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 

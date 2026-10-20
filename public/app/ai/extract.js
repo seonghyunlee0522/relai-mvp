@@ -11,7 +11,7 @@ const opt = (map, cur) => Object.entries(map).map(([v, l]) => html`<option value
 
 export async function openExtractDialog({ pid, onDone }) {
   const st = await aiStatus(pid, { fresh: true });
-  const d = aiDialog({ title: 'AI로 요구사항 추출', subtitle: '회의록, 고객 인터뷰 메모, 이메일 본문, 요구사항 정의 텍스트를 붙여넣으면 요구사항 후보를 뽑아 드립니다. 파일 업로드는 아직 지원하지 않습니다.', feature: 'REQUIREMENT_EXTRACTION', status: st });
+  const d = aiDialog({ title: 'AI로 요구사항 추출', subtitle: '회의록, 고객 인터뷰 메모, 이메일 본문, 요구사항 정의 텍스트를 붙여넣으면 요구사항 후보를 뽑아 드립니다. 문서 파일이라면 내용을 복사해 붙여 넣으세요.', feature: 'REQUIREMENT_EXTRACTION', status: st });
   let candidates = [];
   const drawInput = () => {
     d.body.innerHTML = html`<label class="lbl" for="ai-text">분석할 텍스트</label>

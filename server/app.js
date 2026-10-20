@@ -16,8 +16,9 @@ import { shareMeta } from './share-meta.js';
 import { ga4For } from './ga4.js';
 import { effectiveImportance } from './activities.js';
 import * as D from './definition.js';
+import * as DL from './deliverables.js';
 import { buildProjectCharter } from './charter.js';
-import { buildPlanMarkdown, PLAN_TITLE } from './charter-export.js';
+import { buildPlanMarkdown, PLAN_TITLE, wbsTopLevel, examplePlan } from './charter-export.js';
 import { buildReqDocMarkdown, REQ_DOC_TITLE } from './req-export.js';
 import * as RB from './req-baseline.js';
 import { PDF_MIME, DOCX_MIME, renderReportPdf, renderReportDocx } from './report-export.js';
@@ -557,6 +558,15 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (r.error === 'not_found') return fail(res, 404, 'not_found', '섹션을 찾을 수 없습니다.');
     res.json({ ...(await D.loadDefinition(db, project)), guide: (await guideResponse(project)) });
   }));
+  /* ---------- 주요 산출물 (batch7 #3): standard catalog → 필수 · 선택 · 제외 per project (server/deliverables.js) ---------- */
+  app.get(`${base}/:pid/deliverables`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json((await DL.loadDeliverables(db, project)));
+  }));
+  app.put(`${base}/:pid/deliverables`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    res.json((await tx(db, async (db) => DL.saveDeliverables(db, project, req.body))));
+  }));
   /* ---------- Project Charter (read-only view of 프로젝트 정의; the same object feeds every AI request — server/charter.js) ---------- */
   app.get(`${base}/:pid/charter`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project) return;
@@ -569,10 +579,19 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (!fmt) return fail(res, 400, 'validation_error', '형식은 pdf 또는 docx만 지원합니다.', { fields: { format: 'pdf 또는 docx' } });
     const ws = await db.get('SELECT name FROM workspaces WHERE id = ?', [project.workspace_id]);
     const today = D.localToday();
-    const doc = buildPlanMarkdown(await buildProjectCharter(db, project), { workspaceName: ws ? ws.name : '', author: req.user.name || req.user.email || '', today });
+    const doc = buildPlanMarkdown(await buildProjectCharter(db, project), { workspaceName: ws ? ws.name : '', author: req.user.name || req.user.email || '', today, wbsPhases: await wbsTopLevel(db, project.id) });
     const buf = await (fmt === 'pdf' ? renderReportPdf : renderReportDocx)({ title: doc.title, rendered_content: doc.markdown, footer: doc.footer });
     const name = `${safeFileName(project.name)}_${PLAN_TITLE}_${doc.fileVersion}_${today.replace(/-/g, '')}.${fmt}`;
     res.set({ 'Content-Type': fmt === 'pdf' ? PDF_MIME : DOCX_MIME, 'Content-Disposition': `attachment; filename="project-plan.${fmt}"; filename*=UTF-8''${encodeURIComponent(name)}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+    res.end(buf);
+  }));
+  // 작성 예시 보기 (batch7 #4): a finished plan built from the 다온생명 sample — same renderer, nothing read from this project but access
+  app.get(`${base}/:pid/charter/example`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    const fmt = req.query.format === 'docx' ? 'docx' : 'pdf';
+    const doc = await examplePlan({ today: D.localToday(), catalog: await DL.listCatalog(db) });
+    const buf = await (fmt === 'pdf' ? renderReportPdf : renderReportDocx)({ title: doc.title, rendered_content: doc.markdown, footer: '작성 예시 (샘플 데이터)' });
+    res.set({ 'Content-Type': fmt === 'pdf' ? PDF_MIME : DOCX_MIME, 'Content-Disposition': `${fmt === 'pdf' ? 'inline' : 'attachment'}; filename="project-plan-example.${fmt}"; filename*=UTF-8''${encodeURIComponent(`${PLAN_TITLE}_작성예시.${fmt}`)}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
     res.end(buf);
   }));
   // 이해관계자 Excel: template + preview (rows are committed through PUT /definition by the client after review; no nested import flow)
@@ -1389,6 +1408,8 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   let appShell = null;
   const sendApp = (req, res) => { appShell ||= readFileSync(resolve(pub, 'app/index.html'), 'utf8'); res.type('html').send(appShell.replace('<!--SHARE_META-->', shareMeta(req, { path: ['/login', '/signup'].includes(req.path) ? req.path : '/' }) + ga4For(req))); };   // GA4: /login and /signup only (server/ga4.js)
   app.use('/assets', express.static(resolve(pub, 'app'), { maxAge: 0, etag: true }));
+  // RELAI 사용 방법 PDF (batch7 #25): on Vercel the CDN serves .vercel-static/docs before the function rewrite (4.5MB function limit); locally, here
+  app.use('/docs', express.static(resolve(here, '../.vercel-static/docs'), { maxAge: 0, etag: true, index: false }));
   // Landing visit: anonymous count only (no user, no IP); signed-in users and bots are not counted.
   const onLanding = (req) => (req.method === 'GET' && !req.user && !isBot(req.get('user-agent')) ? track(db, 'landing_visit') : null);
   mountLegal(app, { pub, plans: PLANS, onLanding, landingPromo: () => promoBlockHtml(db, 'landing') });   // /, /terms, /privacy, /pricing (B9)

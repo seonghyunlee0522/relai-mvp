@@ -16,6 +16,7 @@ import { projectHealth, STATUS_LABEL } from './health.js';
 import { LEAF_SQL, OWNER_NAME_SQL } from './wbs.js';
 import { accApprovalView } from './testing.js';
 import { priorGapsText } from './closing.js';
+import { loadDeliverables } from './deliverables.js';
 import { goLiveMilestone } from './golive.js';
 import { listItems } from './checklists.js';
 import { diffDays, weekKst, todayKst } from '../public/app/shared/kst-date.js';
@@ -277,7 +278,7 @@ export async function reopenReport(db, report) {
   (await db.run(`UPDATE weekly_reports SET status = 'DRAFT', updated_at = ? WHERE id = ?`, [now(), report.id])); return { ok: true };
 }
 
-/* ---------- 완료보고서 (Phase 7 US-1) ---------- */
+/* ---------- 완료보고서 (Phase 7 US-1; 2절 범위 also lists 필수 산출물 n건 중 제출 m건 since batch7 #3) ---------- */
 /* Same table, editor, DRAFT→FINAL and PDF/Word export as the weekly report; report_type = 'COMPLETION', one per project.
  * Seven rule-based sections filled from the project's own data (no AI); 7절 교훈 is three empty PM fields. */
 export const COMPLETION_SECTIONS = [['overview', '개요'], ['scope', '범위'], ['schedule', '일정'], ['quality', '품질'], ['acceptance', '검수'], ['carryover', '남은 일 (운영 이관)'], ['lessons', '교훈']];
@@ -324,9 +325,12 @@ export async function buildCompletionData(db, project, { gaps = [], goLive = nul
     ORDER BY sequence_number`, [pid]);
   const defects = await db.get(`SELECT COUNT(*) AS total, COALESCE(SUM((status IN ('RESOLVED','CLOSED'))::int), 0) AS resolved FROM issues WHERE project_id = ? AND archived_at IS NULL AND source_test_execution_id IS NOT NULL`, [pid]);
   const n = (v) => Number(v) || 0;
+  // batch7 #3: 필수 산출물 n건 중 제출 m건 (only once the project chose from the 산출물 목록)
+  const dl = await loadDeliverables(db, project);
+  const deliverables = dl.has_selection ? { required: dl.summary.required, submitted: dl.summary.submitted, items: dl.items.filter((x) => x.level === 'REQUIRED').map((x) => ({ phase: x.phase_name, name: x.name, submitted_at: x.submitted_at })) } : null;
   return {
     overview: { goal, start: project.planned_start_date, end: project.planned_end_date, open_planned: ms ? (ms.original_planned_end_date || ms.milestone_date) : null, open_actual: goLive ? goLive.date : null },
-    scope: { in_scope: n(req.in_scope), out_of_scope: n(req.out_of_scope), cr_approved: n(cr.approved), cr_implemented: n(cr.implemented) },
+    scope: { in_scope: n(req.in_scope), out_of_scope: n(req.out_of_scope), cr_approved: n(cr.approved), cr_implemented: n(cr.implemented), deliverables },
     schedule: { pushed: pushed.length, total_days: pushed.reduce((a, x) => a + (Number(x.days) || 0), 0), reasons },
     quality: { tests: n(tst.total), pass: n(tst.pass), excluded: excluded.length, excluded_list: excluded, defects: n(defects.total), defects_resolved: n(defects.resolved) },
     acceptance: acceptances,
@@ -345,7 +349,9 @@ export function completionSections(d) {
   };
   out.overview = [`- 목표: ${o.goal || '01 착수에서 목표가 기록되지 않았습니다.'}`, `- 계약 기간: ${ymdText(o.start)} ~ ${ymdText(o.end)}`, openLine()].join('\n');
   const sc = d.scope;
-  out.scope = [`- 범위 내 확정 요구사항 ${sc.in_scope}건 · 범위 밖 ${sc.out_of_scope}건`, `- 변경 요청 승인 ${sc.cr_approved}건 / 반영 ${sc.cr_implemented}건`].join('\n');
+  const dv = sc.deliverables;
+  out.scope = [`- 범위 내 확정 요구사항 ${sc.in_scope}건 · 범위 밖 ${sc.out_of_scope}건`, `- 변경 요청 승인 ${sc.cr_approved}건 / 반영 ${sc.cr_implemented}건`,
+    ...(dv ? [`- 필수 산출물 ${dv.required}건 중 제출 ${dv.submitted}건`, ...dv.items.map((x) => `  - [${x.phase}] ${x.name} — ${x.submitted_at ? `제출 ${x.submitted_at}` : '미제출'}`)] : [])].join('\n');
   const s = d.schedule;
   out.schedule = [`- 미룬 작업 ${s.pushed}건 · 최초 계획 대비 총 +${s.total_days}일`,
     ...(s.reasons.length ? ['- 주요 사유', ...s.reasons.map((r) => `  - ${r.display_id} ${r.title} · +${r.days}일 · ${r.note}`)] : ['- 기록된 미룸 사유가 없습니다.'])].join('\n');

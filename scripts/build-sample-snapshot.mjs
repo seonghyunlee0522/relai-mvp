@@ -113,6 +113,7 @@ for (const C of SAMPLE_CASES) {
     switch (e.op) {
       case 'def': await call('PUT', `${purl}/definition`, e.body); break;
       case 'section': await call('POST', `${purl}/definition/sections/${e.key}/complete`, e.body || {}); break;
+      case 'deliverables': await call('PUT', `${purl}/deliverables`, { items: e.items.map((x) => ({ catalog_id: `dlv-${x.code.toLowerCase()}`, level: x.level })) }); break;
       case 'phase': { const G = await guide(); await call('POST', `${purl}/phases/${G.phases.find((x) => x.phase_key === e.key).id}/activate`, { reason: 'NEXT' }); break; }
       case 'req': {
         const { title, description, type, priority, scope, requester_name, requester_organization } = e;

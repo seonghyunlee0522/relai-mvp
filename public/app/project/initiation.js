@@ -1,6 +1,7 @@
 /* 01 착수 helpers shared by 프로젝트 정의, Project Charter, What's Next and the phase-move dialogs (Phase 1 v2).
  *   planMenu / bindPlanMenu   "사업수행계획서 내려받기 ▾" (PDF / Word) — GET …/charter/export?format=pdf|docx
- *   approvalGateDialog        01→02 without 착수 승인: record it first, or leave a reason (soft gate, never a server block)
+ *   approvalGateDialog        01→02 without 착수 승인 (권장 since batch7 #5): 승인 기록하기 / 승인 없이 진행 — no reason asked;
+ *                             02→03 / 05→06 keep the reason (soft gate, never a server block)
  *   isMeasurable              성공 기준 quality hint rule (numbers · % · dates · 이내/이상/이하) — rule-based, not AI */
 import { $, html, raw } from '../core/dom.js';
 import { wsApi } from '../core/api.js';
@@ -11,10 +12,12 @@ import { definitionHref } from '../shared/lifecycle.js';
 
 export const planUrl = (pid, fmt) => wsApi(`/${pid}/charter/export?format=${fmt}`);
 export const planMenu = (label = '사업수행계획서 내려받기') => html`<details class="pmenu"><summary class="btn btn--secondary btn--sm">${label} ▾</summary>
-  <div class="pmenu__list" role="menu"><button type="button" role="menuitem" data-plan="pdf">PDF (.pdf)</button><button type="button" role="menuitem" data-plan="docx">Word (.docx)</button></div></details>`;
+  <div class="pmenu__list" role="menu"><button type="button" role="menuitem" data-plan="pdf">PDF (.pdf)</button><button type="button" role="menuitem" data-plan="docx">Word (.docx)</button><button type="button" role="menuitem" data-plan="example">작성 예시 보기 (PDF)</button></div></details>`;
 export function bindPlanMenu(root, pid) {
   root.querySelectorAll('[data-plan]').forEach((b) => { b.onclick = async () => {
     const d = b.closest('details'); if (d) d.open = false;
+    // 작성 예시 (batch7 #4): the sample-built plan opens in a new tab (served inline)
+    if (b.dataset.plan === 'example') { window.open(wsApi(`/${pid}/charter/example?format=pdf`), '_blank', 'noopener'); return; }
     try { await download(planUrl(pid, b.dataset.plan)); toast('사업수행계획서를 내려받았습니다.'); } catch (e) { toast(e.message); }
   }; });
 }
@@ -37,9 +40,11 @@ export { isMeasurable } from '../shared/criteria.js';
  * or to leave a reason. 01→02 (착수 결과 승인, Phase 1 US-2) and 02→03 (요구사항 기준선 승인, Phase 2 US-1) share the dialog.
  */
 export const APPROVAL_GATES = {
-  INITIATION: { step: 'APPROVAL', record: (pid) => definitionHref(pid, 'APPROVAL'),
-    title: '고객 승인 없이 요구사항 단계로 넘어가려 합니다',
-    body: '착수 결과(목표·범위·일정)를 고객이나 스폰서가 승인하지 않은 채 진행하면, 이후 요구사항과 검수 기준을 두고 다툼이 생기기 쉽습니다. 가능하면 사업수행계획서를 보내 승인을 먼저 받으세요.' },
+  // batch7 #5: 착수 승인 is 권장 — two buttons, no reason (the note still records "[승인 전 진행] 승인 없이 진행 · 날짜 · 이름")
+  INITIATION: { step: 'APPROVAL', record: (pid) => definitionHref(pid, 'APPROVAL'), noReason: true,
+    title: '착수 승인 기록 없이 요구사항 단계로 넘어갑니다',
+    body: '고객에게 공유하는 프로젝트라면 사업수행계획서로 착수 결과(목표·범위·일정) 승인을 받아 기록해 두면 이후 요구사항·검수 기준을 맞추기 쉽습니다. 내부 프로젝트라면 승인 없이 진행해도 됩니다.',
+    recordLabel: '승인 기록하기', proceedLabel: '승인 없이 진행' },
   REQUIREMENTS: { step: 'BASELINE_APPROVAL', record: (pid) => `/app/projects/${pid}/requirements?approval=1`,
     title: '고객 승인 없이 분석·설계 단계로 넘어가려 합니다',
     body: "확정한 요구사항을 고객이 승인하지 않은 채 진행하면, 설계·개발 중 '이건 요청한 적 없다/빠졌다'는 다툼이 생기기 쉽습니다. 요구사항 정의서를 보내 승인을 먼저 받으세요." },
@@ -50,6 +55,8 @@ export const APPROVAL_GATES = {
     recordLabel: '테스트 준비하러 가기', reasonLabel: '테스트 준비 없이 진행하는 이유', placeholder: '예: 고객 일정상 06 검수에서 남은 요구사항을 함께 확인', tag: '[테스트 준비 전 진행]' },
 };
 const gateTag = (gate) => gate.tag || '[승인 전 진행]';
+/** The note text when a gate asks no reason (01 착수 승인, 권장). */
+export const NO_REASON = '승인 없이 진행';
 /**
  * The phase-leaving soft gate dialog. Resolves 'record' (go to 승인 기록), { reason } (proceed, reason required) or null (cancel).
  * The caller writes the reason to the gate step note as "[승인 전 진행] 사유 · 날짜 · 이름".
@@ -59,19 +66,20 @@ export function approvalGateDialog(gate = APPROVAL_GATES.INITIATION) {
     const el = document.createElement('div'); el.className = 'scrim';
     el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="agT" data-dialog="approval-gate"><h3 id="agT">${gate.title}</h3>
       <div class="dialog__b">${gate.body}</div>
-      <div class="field"><label for="ag-in">${gate.reasonLabel || '승인 없이 진행하는 이유'} <span class="req">*</span></label><input class="input" id="ag-in" maxlength="200" placeholder="${gate.placeholder || '예: 고객 PM 휴가로 승인 회신이 다음 주 예정'}"><div class="err" id="ag-err"></div></div>
-      <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="proceed">이유 남기고 진행</button><button class="btn btn--primary" data-v="record">${gate.recordLabel || '승인 기록하러 가기'}</button></div></div>`;
+      ${raw(gate.noReason ? '' : html`<div class="field"><label for="ag-in">${gate.reasonLabel || '승인 없이 진행하는 이유'} <span class="req">*</span></label><input class="input" id="ag-in" maxlength="200" placeholder="${gate.placeholder || '예: 고객 PM 휴가로 승인 회신이 다음 주 예정'}"><div class="err" id="ag-err"></div></div>`)}
+      <div class="actions"><button class="btn btn--ghost" data-v="cancel">취소</button><span style="flex:1"></span><button class="btn btn--secondary" data-v="proceed">${gate.proceedLabel || '이유 남기고 진행'}</button><button class="btn btn--primary" data-v="record">${gate.recordLabel || '승인 기록하러 가기'}</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; }
       if (b.dataset.v === 'cancel') return done(null);
       if (b.dataset.v === 'record') return done('record');
+      if (gate.noReason) return done({ reason: NO_REASON });
       const v = $('#ag-in', el).value.trim();
       if (!v) { $('#ag-err', el).textContent = `${gate.reasonLabel || '승인 없이 진행하는 이유'}를 입력해 주세요.`; $('#ag-in', el).focus(); return; }
       done({ reason: v });
     });
     el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); if (e.key === 'Enter' && e.target.id === 'ag-in') { e.preventDefault(); el.querySelector('[data-v="proceed"]').click(); } });
-    document.body.append(el); $('#ag-in', el).focus();
+    document.body.append(el); ($('#ag-in', el) || el.querySelector('[data-v="record"]')).focus();
   });
 }
 /** "[승인 전 진행] 사유 · 2026-10-15 · 홍길동" appended to the existing note. */

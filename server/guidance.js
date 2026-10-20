@@ -23,8 +23,8 @@ const n = (v) => Number(v) || 0;
 /** One line per phase shown the first time a user enters it ("이 단계에서 하는 일"). */
 export const PHASE_INTRO = Object.fromEntries(DEFAULT_PHASES.map((p) => [p.key, { what: p.description, outputs: p.steps.filter((s) => s.importance === 'REQUIRED').map((s) => s.title) }]));
 
-/** "착수 때 제외하기로 한 것: A, B. 여기에 해당하는 요구사항은 '범위 외'로 두세요." (Charter 제외 범위; hidden when empty) */
-export const scopeOutHint = (list) => (list && list.length ? `착수 때 제외하기로 한 것: ${list.join(', ')}. 여기에 해당하는 요구사항은 '범위 외'로 두세요.` : '');
+/** "착수 때 정한 제외 환경·조건: A, B. 이 조건에만 해당하는 요구사항은 '범위 외'로 두세요." (01 환경·조건 메모의 제외 줄; hidden when empty) */
+export const scopeOutHint = (list) => (list && list.length ? `착수 때 정한 제외 환경·조건: ${list.join(', ')}. 이 조건에만 해당하는 요구사항은 '범위 외'로 두세요.` : '');   // batch7 #2: 01 제외 = 환경·조건 메모
 
 /** Phase 5 C1 — 05 guide + 커버리지 탭 head (one text, one link: 요구사항 화면 미확정 필터). */
 export const UNCONFIRMED_HREF = '/requirements?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD';   // K8: REJECTED is not 확정 대기

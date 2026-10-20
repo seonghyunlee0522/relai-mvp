@@ -18,7 +18,7 @@ export async function adminAuditPage(main = $('#main')) {
         { key: 'action', label: '작업', w: 170, render: (r) => ACTIONS[r.action] || r.action },
         { key: 'target', label: '대상', w: 200, render: (r) => html`<span class="achip achip--muted">${TARGET[r.target_type] || r.target_type}</span> <span class="mono dim" title="${r.target_id}">${r.metadata?.email || r.metadata?.name || r.target_id.slice(0, 8)}</span>` },
         { key: 'summary', label: '요약' },
-      ], d.items, { rowHref: (r) => (r.target_type === 'USER' ? `/admin/users/${r.target_id}` : r.target_type === 'WORKSPACE' ? `/admin/workspaces/${r.target_id}` : r.target_type === 'SUBSCRIPTION' ? `/admin/subscriptions/${r.target_id}` : r.target_type === 'FEEDBACK' ? `/admin/feedback/${r.target_id}` : `/admin/payments/${r.target_id}`), empty: '기록이 없습니다.' }))}
+      ], d.items, { rowHref: (r) => (r.target_type === 'USER' ? `/admin/users/${r.target_id}` : r.target_type === 'WORKSPACE' ? `/admin/workspaces/${r.target_id}` : r.target_type === 'SUBSCRIPTION' ? `/admin/subscriptions/${r.target_id}` : r.target_type === 'FEEDBACK' ? `/admin/feedback/${r.target_id}` : r.target_type === 'DELIVERABLE' ? '/admin/deliverables' : `/admin/payments/${r.target_id}`), empty: '기록이 없습니다.' }))}
       ${raw(pager(d))}
     </div>`;
     bindFilters(main, draw); bindPager(main, draw); bindRows(main, navigate);

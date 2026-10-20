@@ -6,7 +6,7 @@ import { state } from '../core/state.js';
 import { refreshFeedbackBadge } from './feedback.js';
 
 const NAV = [['/admin', '대시보드', /^\/admin\/?$/], ['/admin/users', '회원', /^\/admin\/users/], ['/admin/workspaces', '워크스페이스', /^\/admin\/workspaces/], ['/admin/invitations', '초대', /^\/admin\/invitations/], ['/admin/email-deliveries', '메일 발송', /^\/admin\/email-deliveries/], ['/admin/subscriptions', '구독', /^\/admin\/subscriptions/],
-  ['/admin/payments', '결제', /^\/admin\/payments/], ['/admin/usage', 'AI 사용량', /^\/admin\/usage/], ['/admin/funnel', '사용 분석', /^\/admin\/funnel/], ['/admin/promotions', '프로모션', /^\/admin\/promotions/], ['/admin/feedback', '의견', /^\/admin\/feedback/], ['/admin/integrations', '연동', /^\/admin\/integrations/], ['/admin/audit', '감사 로그', /^\/admin\/audit/]];
+  ['/admin/payments', '결제', /^\/admin\/payments/], ['/admin/usage', '사용량', /^\/admin\/usage/], ['/admin/deliverables', '산출물 목록', /^\/admin\/deliverables/], ['/admin/funnel', '사용 분석', /^\/admin\/funnel/], ['/admin/promotions', '프로모션', /^\/admin\/promotions/], ['/admin/feedback', '의견', /^\/admin\/feedback/], ['/admin/integrations', '연동', /^\/admin\/integrations/], ['/admin/audit', '감사 로그', /^\/admin\/audit/]];
 
 export async function adminShell(path, view) {
   if (!state.user || state.user.system_role !== 'SYSTEM_ADMIN') {

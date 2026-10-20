@@ -30,6 +30,7 @@ import { adminUsersPage, adminUserPage } from './admin/users.js';
 import { adminWorkspacesPage, adminWorkspacePage } from './admin/workspaces.js';
 import { adminSubscriptionsPage, adminSubscriptionPage, adminPaymentsPage, adminPaymentPage } from './admin/billing.js';
 import { adminUsagePage } from './admin/usage.js';
+import { adminDeliverablesPage } from './admin/deliverables.js';
 import { adminFunnelPage } from './admin/funnel.js';
 import { adminPromotionsPage } from './admin/promotions.js';
 import { adminFeedbackPage, adminFeedbackDetailPage } from './admin/feedback.js';
@@ -69,6 +70,7 @@ registerRoutes([
   [/^\/admin\/payments\/?$/, adminPaymentsPage],
   [/^\/admin\/payments\/([\w-]+)\/?$/, adminPaymentPage],
   [/^\/admin\/usage\/?$/, adminUsagePage],
+  [/^\/admin\/deliverables\/?$/, adminDeliverablesPage],
   [/^\/admin\/funnel\/?$/, adminFunnelPage],
   [/^\/admin\/promotions\/?$/, adminPromotionsPage],
   [/^\/admin\/feedback\/?$/, adminFeedbackPage],

@@ -127,9 +127,9 @@ export function mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, pro
 
   app.post(`${c}/checkout`, payer, wrap(async (req, res) => {
     if (!paymentsEnabled()) return fail(res, 409, 'payments_disabled', PAYMENTS_OFF_MESSAGE);
-    if (!provider) return fail(res, 503, 'billing_unavailable', '결제 기능이 아직 준비되지 않았습니다. 운영자에게 문의해 주세요.');
+    if (!provider) return fail(res, 503, 'billing_unavailable', '지금은 충전할 수 없습니다.');
     // AI off server-side (no provider key / AI_ENABLED=false): credits could not be spent, so no pack is sold.
-    if (!aiConfig().enabled) return fail(res, 409, 'ai_disabled', 'AI 기능 준비 중에는 크레딧을 충전할 수 없습니다.');
+    if (!aiConfig().enabled) return fail(res, 409, 'ai_disabled', '지금은 충전할 수 없습니다.');
     let order;
     try { order = await createPackOrder(db, { workspaceId: req.params.wid, userId: req.user.id, provider: provider.name, pack: req.body?.pack }); }
     catch (e) { if (e instanceof OrderError) return fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {}); throw e; }
@@ -162,7 +162,7 @@ export function mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, pro
   }));
   app.post(ar, requireAuth, wrap(async (req, res) => {
     if (!admin(req, res)) return;
-    if (!provider?.refundPartial) return fail(res, 503, 'billing_unavailable', '결제 기능이 아직 준비되지 않았습니다.');
+    if (!provider?.refundPartial) return fail(res, 503, 'billing_unavailable', '지금은 환불을 처리할 수 없습니다.');
     const reason = String(req.body?.reason || '').trim().slice(0, 100);
     if (!reason) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { reason: '환불 사유를 입력해 주세요.' } });
     if (!(await db.get('SELECT id FROM workspaces WHERE id = ?', [req.params.wid]))) return fail(res, 404, 'not_found', '워크스페이스를 찾을 수 없습니다.');

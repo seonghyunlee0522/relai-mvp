@@ -17,6 +17,7 @@ import { runAiFeature, AiError } from './service.js';
 import { SYSTEM, dataBlock, inputBlock, neutralize } from './prompts.js';
 import { extractionContext, wbsGenerationContext, changeImpactContext, assistantContext } from './context.js';
 import { humanizeCodes } from './labels.js';
+import { assertWithinLimit } from '../billing/limits.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const uniq = (a) => [...new Set(a)];
@@ -68,6 +69,7 @@ export async function extractRequirements(db, { project, wid, userId, text }) {
 export async function commitRequirements(db, { project, userId, candidates }) {
   if (!Array.isArray(candidates) || !candidates.length) throw new ValidationError({ candidates: '등록할 후보를 선택해 주세요.' });
   if (candidates.length > 40) throw new ValidationError({ candidates: '한 번에 최대 40건까지 등록할 수 있습니다.' });
+  await assertWithinLimit(db, project.workspace_id, 'requirements', candidates.length);   // batch7 #24: the whole batch fits, or nothing is created
   const parsed = candidates.map((c, i) => {
     try {
       const input = R.parseRequirement({ title: c.title, description: c.description, type: c.type, priority: c.priority, scope: c.scope, status: 'DRAFT', requester_name: c.requester_name || '', requester_organization: c.requester_organization || '' });
@@ -152,6 +154,7 @@ export async function generateWbs(db, { project, wid, userId, requirementIds }) 
 export async function commitWbs(db, { project, userId, items, source = null }) {
   if (!Array.isArray(items) || !items.length) throw new ValidationError({ items: '생성할 항목을 선택해 주세요.' });
   if (items.length > 80) throw new ValidationError({ items: '한 번에 최대 80건까지 생성할 수 있습니다.' });
+  await assertWithinLimit(db, project.workspace_id, 'wbs', items.length);   // batch7 #24: the whole batch fits, or nothing is created
   const temps = new Set(items.map((i) => str(i.temp_id)));
   const parsed = items.map((it, i) => {
     try {

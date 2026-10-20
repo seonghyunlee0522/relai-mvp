@@ -344,6 +344,18 @@ p{margin:0}
 .closing .btn--secondary{background:transparent;color:#E7ECF4;border-color:#26344D}
 .closing .btn--secondary:hover{background:rgba(255,255,255,.06)}
 
+/* 대표·임원 (batch7 #26) */
+.hero__exec{font-size:16px;color:var(--text-2);margin:-14px 0 26px;line-height:1.6}
+.exec{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:56px;align-items:center}
+.exec__l{list-style:none;margin:26px 0 0;padding:0;display:flex;flex-direction:column;gap:16px}
+.exec__l li{display:flex;flex-direction:column;gap:3px;padding-left:18px;position:relative}
+.exec__l li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:50%;background:var(--blue,#3B5BDB)}
+.exec__l b{font-size:17px;color:var(--navy)}
+.exec__l span{font-size:15px;color:var(--text-2)}
+.exec__shot{margin:0;justify-self:center;border-radius:30px;padding:9px;background:var(--navy);box-shadow:0 24px 60px rgba(16,24,40,.22),0 2px 6px rgba(16,24,40,.12);max-width:300px}
+.exec__shot img{display:block;width:100%;height:auto;border-radius:22px}
+@media (max-width:900px){.exec{grid-template-columns:1fr;gap:32px}.hero__exec{margin:0 0 20px;font-size:15px}}
+
 /* footer */
 .footer{background:#fff;border-top:1px solid var(--border);padding:44px 0}
 .footer__in{display:flex;gap:32px;align-items:center;flex-wrap:wrap}
@@ -522,6 +534,7 @@ p{margin:0}
         RELAI는 현재 단계와 다음 업무를 안내하고, 요구사항 · WBS · 테스트 · 변경 요청 데이터를 연결해 실행을 돕습니다.
       </p>
       <p class="hero__punch">현재 단계를 확인하고, 다음 할 일 하나를 끝내면 프로젝트가 앞으로 갑니다.</p>
+      <p class="hero__exec" data-hero-exec>대표·임원은 따로 보고를 받지 않아도 휴대폰에서 모든 프로젝트의 진척과 위험을 바로 확인합니다.</p>
       <div class="flowline" aria-label="프로젝트 7단계">
         <span>착수</span><i>→</i><span>요구사항 정의</span><i>→</i><span>분석·설계</span><i>→</i><span>구현</span>
         <i>→</i><span>시험</span><i>→</i><span>전환 및 오픈</span><i>→</i><span>운영 및 유지보수</span>
@@ -838,6 +851,23 @@ p{margin:0}
   </div>
 </section>
 
+<!-- EXEC (batch7 #26): only what the product really does — mobile view-only health/progress, the Friday weekly-report draft, Home's next step + delays -->
+<section class="section section--alt" id="exec">
+  <div class="wrap exec">
+    <div class="exec__copy reveal">
+      <p class="eyebrow">대표 · 임원</p>
+      <h2 class="h2">대표·임원은<br>보고를 기다리지 않습니다.</h2>
+      <p class="lead" style="margin-top:18px">스타트업·소규모 회사의 대표와 임원은 따로 보고를 받지 않아도, 팀원으로 초대받아 휴대폰에서 모든 프로젝트의 진척과 위험을 바로 확인합니다.</p>
+      <ul class="exec__l">
+        <li><b>휴대폰에서 바로 여는 건강도와 진척</b><span>모바일은 보기 전용이라 실수로 바꿀 일이 없습니다.</span></li>
+        <li><b>금요일 주간보고 자동 초안</b><span>한 주의 진척·지연·이슈를 프로젝트 데이터로 정리합니다.</span></li>
+        <li><b>홈에서 프로젝트별 다음 할 일과 지연</b><span>어느 프로젝트가 늦어지는지 한 화면에서 봅니다.</span></li>
+      </ul>
+    </div>
+    <figure class="exec__shot reveal"><img src="/img/exec-mobile-health.png" width="390" height="844" loading="lazy" alt="휴대폰에서 본 RELAI 프로젝트 건강도 화면"></figure>
+  </div>
+</section>
+
 <!-- PRICING -->
 <section class="section section--alt" id="pricing">
   <div class="wrap">
@@ -890,11 +920,11 @@ p{margin:0}
         <a href="mailto:__CONTACT_EMAIL__?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" class="btn btn--secondary btn--block" data-loc="pricing_enterprise">도입 문의</a>
       </div>
     </div>
-    <!-- AI 크레딧 가격은 server/ai/config.js featureCreditCost · server/plans.js CREDIT_PACKS와 같은 값이어야 한다 -->
+    <!-- AI 크레딧 수는 server/ai/config.js featureCreditCost와 같은 값이어야 한다. 크레딧은 사용량 단위로만 보여 준다(₩ 없음, batch7 #7) -->
     <div class="aiprice reveal" id="ai-credits">
       <p class="aiprice__t"><b>AI 크레딧</b> — 실행 전에 가격을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p>
-      <ul class="aiprice__l"><li>AI 요구사항 추출 <b>30 크레딧 (₩300)</b></li><li>AI WBS 초안 <b>50 크레딧 (₩500)</b></li><li>AI 영향 분석 <b>20 크레딧 (₩200)</b></li><li>RELAI에게 물어보기 <b>10 크레딧 (₩100)</b></li></ul>
-      <p class="aiprice__p">충전: ₩10,000 = 1,000 크레딧 · ₩30,000 = 3,000 크레딧 · ₩100,000 = 10,000 크레딧 (부가세 포함, 자동 결제 없음)</p>
+      <ul class="aiprice__l"><li>AI 요구사항 추출 <b>30 크레딧</b></li><li>AI WBS 초안 <b>50 크레딧</b></li><li>AI 영향 분석 <b>20 크레딧</b></li><li>RELAI에게 물어보기 <b>10 크레딧</b></li></ul>
+      <p class="aiprice__p">가입하면 <b>AI 크레딧 500</b>을 무료로 드립니다.</p>
     </div>
     <p class="pricing__note reveal">얼리 액세스가 끝난 뒤에는 위 플랜 가격이 적용됩니다(부가세 별도). 한도를 넘으면 기존 데이터는 그대로 두고 새 항목 추가만 제한됩니다.</p>
   </div>
@@ -926,6 +956,7 @@ p{margin:0}
         <a href="#features">주요 기능</a>
         <a href="#pricing">요금</a>
         <a href="mailto:__CONTACT_EMAIL__">문의</a>
+        <a href="/docs/relai-guide.pdf" target="_blank" rel="noopener" data-guide-pdf>사용 방법 (PDF)</a>
         <a href="/login" data-auth="login">로그인</a>
         <a href="/signup" data-auth="start">무료로 시작하기</a>
       </nav>

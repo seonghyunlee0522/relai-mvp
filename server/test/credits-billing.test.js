@@ -359,7 +359,7 @@ test('Q21-2: AI off server-side → pack checkout 409 ai_disabled with no order;
       assert.equal((await A.c('GET', `${A.purl}/ai/status`)).json.enabled, false);
       const co = await A.c('POST', `${A.cr}/checkout`, { pack: 'P10' });
       assert.equal(co.status, 409); assert.equal(co.json.error.code, 'ai_disabled');
-      assert.match(JSON.stringify(co.json), /AI 기능 준비 중에는 크레딧을 충전할 수 없습니다\./);
+      assert.match(JSON.stringify(co.json), /지금은 충전할 수 없습니다\./);
       assert.equal((await db.get(`SELECT count(*)::int AS n FROM billing_orders WHERE workspace_id = ? AND kind = 'CREDIT_PACK'`, [A.w])).n, 0);
       const s = (await A.c('GET', `${A.cr}/summary`)).json.credits;
       assert.equal(s.ai_enabled, false); assert.equal(s.balance, 500); assert.equal(s.packs.length, 3);

@@ -47,7 +47,7 @@ export async function adminWorkspacePage(id, main = $('#main')) {
       <div class="agrid2">
         ${raw(section('기본 정보', dl([['워크스페이스', html`${w.name}`], ['생성일', fmtD(w.created_at)], ['상태', chip(w.status)], ['소유자', w.owner_email ? html`<a class="link" href="/admin/users/${w.owner_id}" data-link>${w.owner_name}</a> <small class="dim mono">${w.owner_email}</small>` : '<span class="dim">없음</span>'],
           ['소유자 수', n(d.owners.length)], ['현재 플랜', html`${w.plan_label}`], ['구독', s ? html`<a class="link" href="/admin/subscriptions/${s.id}" data-link>${s.status}</a> · ${s.current_period_end ? `기간 종료 ${fmtDay(s.current_period_end)}` : ''}` : '<span class="dim">결제 미연동 — 구독 정보 없음</span>'], ['워크스페이스 ID', html`<span class="mono dim">${w.id}</span>`]])))}
-        ${raw(section('사용량 (플랜 한도 대비)', usageBars(d.usage) + '<p class="hint">한도는 plans.js의 기준값이며 현재 제품 API에서 강제되지 않습니다. 주간보고는 이번 달 생성 건수입니다.</p>'))}
+        ${raw(section('사용량 (플랜 한도 대비)', usageBars(d.usage) + (w.plan === 'EARLY' ? '<p class="hint">얼리 액세스 기간에는 한도 없이 씁니다. 기간이 끝나고 결제하지 않으면 Free 한도가 적용됩니다. 주간보고는 이번 달 생성 건수입니다.</p>' : '<p class="hint">Free 플랜 한도는 생성할 때 적용되어 넘으면 추가가 막힙니다. 주간보고는 이번 달 생성 건수입니다.</p>')))}
       </div>
       ${raw(section(`멤버 (${d.members.length})`, table([
         { key: 'name', label: '이름', w: 150, cls: 'ttl' }, { key: 'email', label: '이메일', w: 240, render: (m) => html`<span class="mono">${m.email}</span>` }, { key: 'role', label: '역할', w: 90 },

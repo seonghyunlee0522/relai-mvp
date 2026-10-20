@@ -3,7 +3,7 @@
  * (spec Phase 2 US-2). Built with the same document pieces as the 사업수행계획서 (doc-export.js → report-export.js PDF / Word).
  *
  * Fixed structure (an empty part prints a fixed sentence instead of disappearing):
- *   표지 → 개정 이력 → 1. 개요 (목표 1줄 · Charter 수행/제외 범위) → 2. 범위 내 요구사항 (ID · 제목 · 유형 · 우선순위 · 완료 조건, 유형별)
+ *   표지 → 개정 이력 → 1. 개요 (목표 1줄 · 적용 환경 · 환경·조건, batch7 #2) → 2. 범위 내 요구사항 (ID · 제목 · 유형 · 우선순위 · 완료 조건, 유형별)
  *   → 3. 범위 외 요구사항 (ID · 제목) → 4. 승인 (고객사 승인자 · 승인일 / 수행사 PM, 서명 칸 비움; 승인 전 진행 사유)
  * Version: 승인 전 v0.9 (초안) + footer "승인 전 초안" · 승인 후 v1.0 (02 has no re-approval state). Archived requirements are left out.
  */
@@ -35,7 +35,9 @@ export function buildReqDocMarkdown(c, reqs, baseline, { workspaceName = '', aut
   L.push(revisionTable(revisionRows(baseline.status, { today, approvedOn: baseline.approval && baseline.approval.date, author })));
 
   h2('1. 개요');
-  L.push(kv([['프로젝트 목표', firstLine(c.goals) || firstLine(c.successCriteria)], ['수행 범위', list(c.scope.inScope)], ['제외 범위', list(c.scope.outOfScope)],
+  // batch7 #2: 01 records 적용 환경, not features — the feature scope is §2 / §3 of this document
+  const memo = [list(c.scope.inScope), list(c.scope.outOfScope) && `제외: ${list(c.scope.outOfScope)}`].filter(Boolean).join(' · ');
+  L.push(kv([['프로젝트 목표', firstLine(c.goals) || firstLine(c.successCriteria)], ['적용 환경', (c.environments && c.environments.summary) || ''], ['환경·조건', memo],
     ['요구사항', `범위 내 ${inScope.length}건 · 범위 외 ${outScope.length}건`]]));
   if (undecided) L.push('', `범위가 결정되지 않은 요구사항 ${undecided}건은 이 문서에 포함되지 않습니다.`);
 

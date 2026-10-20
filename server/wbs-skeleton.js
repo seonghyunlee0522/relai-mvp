@@ -11,6 +11,7 @@
 import { createWbs, renumber, projectStakeholders, teamOf, todayStr } from './wbs.js';
 import { addLink } from './trace.js';
 import { syncMilestones } from './milestone-sync.js';
+import { assertWithinLimit } from './billing/limits.js';
 
 /** A key date that names the 오픈 ('서비스 오픈', 'Go-Live') becomes the go-live milestone (tagged 06 전환 및 오픈) — 완료보고서 §1 and 오픈 완료 use it. */
 export const GO_LIVE_TITLE = /오픈|go[- ]?live/i;
@@ -51,6 +52,7 @@ export async function skeletonPreview(db, project) {
 export async function createSkeleton(db, project, userId) {
   if ((await liveCount(db, project.id)) > 0) throw new WbsNotEmpty();
   const plan = await skeletonPlan(db, project);
+  await assertWithinLimit(db, project.workspace_id, 'wbs', plan.groups.reduce((a, g) => a + 1 + g.tasks.length, 0));   // batch7 #24: all or nothing
   const toLink = []; let tasks = 0;
   for (const g of plan.groups) {
     const gid = await createWbs(db, project, { item_type: 'SUMMARY', title: g.title, lifecycle_phase: g.phase, history_source: SKELETON_SOURCE }, userId, { skipRenumber: true, skipGuard: true });
