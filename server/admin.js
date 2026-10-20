@@ -12,7 +12,7 @@ import { tx } from './db.js';
 import { ValidationError } from './validate.js';
 import { DEFAULT_PLAN, PLANS } from './plans.js';
 import { workspaceUsage, workspacesNearLimit } from './usage.js';
-import { billingDashboard, workspaceSubscription } from './billing-admin.js';
+import { billingDashboard, workspaceSubscription, workspaceBillingV3 } from './billing-admin.js';
 import { EFFECTIVE_PLAN_SQL } from './billing/subscriptions.js';
 
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
@@ -151,6 +151,7 @@ export async function getWorkspace(db, id) {
     workspace: { ...shapeWorkspace(w), plan: usage.plan, plan_label: usage.plan_label },
     owners, members, projects, invitations: invitations.map((i) => (i.status === 'PENDING' && new Date(i.expires_at) < new Date() ? { ...i, status: 'EXPIRED' } : i)), origin_invitation: origin || null,
     subscription,                                   // null until Billing exists
+    billing_v3: await workspaceBillingV3(db, id),   // pricing v3 T4: plan, cycle, seats, add-ons, credit buckets, orders
     usage, activity, audit: audit.items,
     warnings: owners.length && owners.every((o) => o.status !== 'ACTIVE') ? ['모든 소유자 계정이 정지 상태입니다. 워크스페이스를 관리할 수 있는 사용자가 없습니다.'] : [],
   };

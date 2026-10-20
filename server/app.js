@@ -67,6 +67,7 @@ import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
 import { PLANS } from './plans.js';
 import { mountCreditRoutes } from './billing/credit-routes.js';
+import { mountBillingHistory } from './billing/history.js';
 import { mountServicePayReturn, mountServicePay, mountServicePayAdmin } from './service-pay.js';
 import * as SMP from './samples/index.js';
 import { analyticsMiddleware, mountAnalyticsRoutes, track, trackStage, isBot } from './analytics.js';
@@ -1437,6 +1438,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });
   mountServicePay({ app, db, wrap, fail, provider: billingProvider });   // 서비스 결제: public /pay/agent page, buyer orders, 관리자 list (before mountLegal's /pricing redirect)
   mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });    // AI credits: customer page, pack checkout, refund request, operator refund   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
+  mountBillingHistory({ app, db, guard, wrap });   // pricing v3 T4: 설정 › 플랜 · 결제 결제 내역 (read-only)
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
   const rResp = async (project, id) => { const report = (await WR.getReport(db, project.id, id)); return { report: { ...report, plain_text: WR.toPlainText(report.rendered_content) } }; };
