@@ -90,8 +90,8 @@ const ORDERS = [
 
   await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing #bl-plan');
   const bt = await page.textContent('#billing');
-  check('settings 요금제 (live T1 shape): Free, 결제 정보 없이, usage 0/1 + 1/3, credits total, Pro upgrade instead of 충전',
-    /Free/.test(bt) && /결제 정보 없이 이용 중/.test(bt) && /활성 프로젝트\s*0 \/ 1/.test(bt) && /사용자\s*1 \/ 3/.test(bt) && /사용 가능/.test(bt) && /AI 크레딧 충전은 Pro부터/.test(bt) && !(await page.$('#bl-topup')) && !(await page.$('#bl-b-plan')));
+  check('settings 요금제 (live shape): Free, 결제 정보 없이, usage 0/1 + 1/3, credits total + live buckets, Pro upgrade instead of 충전',
+    /Free/.test(bt) && /결제 정보 없이 이용 중/.test(bt) && /활성 프로젝트\s*0 \/ 1/.test(bt) && /사용자\s*1 \/ 3/.test(bt) && /사용 가능/.test(bt) && /AI 크레딧 충전은 Pro부터/.test(bt) && !(await page.$('#bl-topup')) && Boolean(await page.$('#bl-b-plan')));   // T2 buckets are live since batch7 T2 merged
   await page.waitForSelector('#bl-ledger table, #bl-ledger p', { timeout: 4000 }).catch(() => {});
   check('settings 요금제: 결제 내역 panel for the OWNER, no ₩ outside it', Boolean(await page.$('#bl-orders')) && !/₩/.test(await page.textContent('#bl-credits')));
   await tallShot(page, 'app-billing-free-desktop.png');
