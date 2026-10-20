@@ -1,7 +1,8 @@
 // Pricing v3 T4 browser check: landing #pricing (월간 default → 연간 toggle shows the annual card amount + 월 환산 + 할인), the plans page
-// (current plan badge, 선택 with payments off → SUBSCRIBE_SOON, no checkout call), 설정 › 요금제 (Billing view on the live T1 shape: Free,
+// (current plan badge, Pro/Team buttons = 정기결제 준비 중 while recurring is not approved, no checkout call), 설정 › 요금제 (Billing view on the live T1 shape: Free,
 // usage, credits total, Pro upgrade instead of 충전), and /app/settings/billing against the v3 fixture (server/test/fixtures/billing-v3.json:
-// T2 credit buckets + T3 scheduled changes filled in, merged over the live response) — desktop 1440 and phone 375, no horizontal scroll.
+// T2 credit buckets + T3 scheduled changes filled in, merged over the live response), the operator console (dashboard MRR, workspace 요금 · 한도,
+// subscriptions list) — desktop 1440 and phone 390, no horizontal scroll.
 // Not part of `npm test` (needs a running server, Playwright and psql):
 //   BASE=http://127.0.0.1:3597 SHOTS=…/relai-pricing-v3/shots DATABASE_URL=postgres://… node scripts/e2e-pricing-v3.cjs
 //   server: PAYMENTS_ENABLED unset (off), BILLING_PROVIDER=fake, SAMPLE_PROJECTS=false, AI_PROVIDER=fake
@@ -17,7 +18,6 @@ const esc = (s) => String(s).replace(/'/g, "''");
 const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, '../server/test/fixtures/billing-v3.json'), 'utf8')).billing;
 const results = [];
 const check = (name, ok, extra = '') => { results.push([name, ok]); console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${extra}`); };
-const SOON = '결제 준비 중입니다. 곧 오픈 예정이에요.';
 const ORDERS = [
   { id: 'o3', kind: 'ADDON', kind_label: '추가 이용', title: '추가 사용자 2명', amount: 774, refunded_amount: 0, status: 'PAID', status_label: '결제 완료', created_at: '2026-10-20T03:00:00Z', paid_at: '2026-10-20T03:00:00Z' },
   { id: 'o2', kind: 'CREDIT_TOPUP', kind_label: 'AI 크레딧 충전', title: 'AI 크레딧 2,000', amount: 20000, refunded_amount: 0, status: 'PAID', status_label: '결제 완료', created_at: '2026-10-12T03:00:00Z', paid_at: '2026-10-12T03:00:00Z', receipt_url: 'https://example.invalid/r/2' },
@@ -40,7 +40,7 @@ const ORDERS = [
   };
 
   // ---- landing (desktop + phone) ----
-  for (const [tag, vp, mobile] of [['desktop', { width: 1440, height: 900 }, false], ['mobile', { width: 375, height: 812 }, true]]) {
+  for (const [tag, vp, mobile] of [['desktop', { width: 1440, height: 900 }, false], ['mobile', { width: 390, height: 844 }, true]]) {
     const { ctx, page } = await mk(vp, mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {});
     await page.goto(BASE + '/#pricing'); await page.waitForSelector('#plan-cards .pcw');
     await page.evaluate(() => document.querySelectorAll('.reveal').forEach((e) => e.classList.add('is-in')));
@@ -61,6 +61,7 @@ const ORDERS = [
     check(`landing ${tag}: Free 1개 · 3명 · 최초 100 · 충전 불가`, /1개/.test(free) && /3명/.test(free) && /최초 100 크레딧/.test(free) && /불가/.test(free));
     check(`landing ${tag}: Enterprise 별도 견적 + 도입 문의`, /별도 견적/.test(await page.textContent('#plan-cards [data-plan="ENTERPRISE"]')) && Boolean(await page.$('#plan-cards [data-loc="pricing_enterprise"][href^="mailto:"]')));
     check(`landing ${tag}: VAT 포함 note + AI credits block in credits only`, /VAT 10%\) 포함/.test(await page.textContent('#plan-cards .pc-note')) && !/₩|\d원/.test(await page.textContent('#ai-credits')));
+    check(`landing ${tag}: Pro/Team buy buttons = 정기결제 준비 중 (recurring not approved), Free = 무료로 시작하기`, /정기결제 준비 중/.test(await page.textContent('#plan-cards [data-plan-soon="PRO"]')) && /정기결제 준비 중/.test(await page.textContent('#plan-cards [data-plan-soon="TEAM"]')) && !(await page.$('#plan-cards [data-loc="pricing_pro"]')) && Boolean(await page.$('#plan-cards [data-loc="pricing_free"]')));
     check(`landing ${tag}: no horizontal scroll`, await noHScroll(page));
     await page.evaluate(() => document.getElementById('pricing').scrollIntoView());
     await page.screenshot({ path: path.join(SHOTS, `landing-pricing-annual-${tag}.png`) });
@@ -84,8 +85,8 @@ const ORDERS = [
   await page.click('#plans-page [data-cycle-set="ANNUAL"]');
   check('plans: 연간 toggle → 연 288,000원', /연 288,000원/.test(await page.textContent('#plans-page [data-plan="PRO"] .pc-a')));
   await tallShot(page, 'app-plans-annual-desktop.png');
-  await page.click('#plans-page [data-plan-cta="PRO"]'); await page.waitForTimeout(300);
-  check('plans: Pro 선택 with payments off → SUBSCRIBE_SOON, no checkout call', (await page.textContent('body')).includes(SOON) && calls.length === 0);
+  check('plans: Pro/Team = 정기결제 준비 중, not clickable, no 선택 link, no checkout call', /정기결제 준비 중/.test(await page.textContent('#plans-page [data-plan-soon="PRO"]')) && Boolean(await page.$('#plans-page [data-plan-soon="TEAM"]')) && !(await page.$('#plans-page a[data-plan-cta="PRO"]')) && calls.length === 0);
+  check('plans FAQ: 해지 any time, 30일 조회·내보내기, 일할 환불, no 월간 정상가', /30일 동안 모든 프로젝트/.test(await page.textContent('#pl-faq')) && /일할 계산/.test(await page.textContent('#pl-faq')) && !/월간 정상가/.test(await page.textContent('#pl-faq')));
 
   await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing #bl-plan');
   const bt = await page.textContent('#billing');
@@ -116,17 +117,35 @@ const ORDERS = [
   await page.keyboard.press('Escape');
   await ctx.close();
 
-  const ph = await mk({ width: 375, height: 812 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const ph = await mk({ width: 390, height: 844 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await ph.page.goto(BASE + '/login');
   await ph.page.request.post(BASE + '/api/auth/login', { data: { email, password: 'passw0rd!' } });
   await fixtureRoutes(ph.page);
   await ph.page.goto(BASE + '/app/settings/billing'); await ph.page.waitForSelector('#billing-page #bl-plan', { timeout: 8000 }).catch(() => {}); await ph.page.waitForSelector('#bl-ledger table, #bl-ledger p', { timeout: 4000 }).catch(() => {});
-  check('billing mobile 375: renders, no horizontal scroll', Boolean(await ph.page.$('#bl-usage')) && await noHScroll(ph.page));
-  check('billing mobile 375: order + ledger rows show date, title and amount', await ph.page.evaluate(() => [...document.querySelectorAll('#bl-orders-tbl tbody tr, #bl-ledger-tbl tbody tr')].every((tr) => [0, 1, 2].every((i) => tr.children[i].offsetHeight > 0))));
+  check('billing mobile 390: renders, no horizontal scroll', Boolean(await ph.page.$('#bl-usage')) && await noHScroll(ph.page));
+  check('billing mobile 390: order + ledger rows show date, title and amount', await ph.page.evaluate(() => [...document.querySelectorAll('#bl-orders-tbl tbody tr, #bl-ledger-tbl tbody tr')].every((tr) => [0, 1, 2].every((i) => tr.children[i].offsetHeight > 0))));
   await tallShot(ph.page, 'app-billing-fixture-mobile.png');
   await ph.page.goto(BASE + '/app/settings'); await ph.page.waitForSelector('#billing #bl-plan', { timeout: 8000 }).catch(() => {});
   check('settings phone layout: billing view mounted, no horizontal scroll', Boolean(await ph.page.$('#billing #bl-credits')) && await noHScroll(ph.page));
   await ph.ctx.close();
+
+  // ---- operator console (read-only v3 billing views) ----
+  for (const [tag, vp, mobile] of [['desktop', { width: 1440, height: 900 }, false], ['mobile', { width: 390, height: 844 }, true]]) {
+    sql(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE email = '${esc(email)}'`);
+    const ad = await mk(vp, mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {});
+    await ad.page.goto(BASE + '/login'); await ad.page.request.post(BASE + '/api/auth/login', { data: { email, password: 'passw0rd!' } });
+    await ad.page.goto(`${BASE}/admin/workspaces/${w}`); await ad.page.waitForSelector('text=요금 · 한도 (v3)', { timeout: 8000 }).catch(() => {});
+    const at = await ad.page.textContent('body');
+    check(`admin ${tag}: workspace 요금 · 한도 (v3) — plan, seats, 활성 프로젝트 0 / 1, credits, 결제 내역`, /요금 · 한도 \(v3\)/.test(at) && /활성 프로젝트\s*0 \/ 1/.test(at) && /남은 좌석/.test(at) && /AI 크레딧\s*합계/.test(at) && /결제 내역 \(\d+\)/.test(at) && !/이용권/.test(at));
+    check(`admin ${tag}: workspace page no horizontal scroll`, await noHScroll(ad.page));
+    if (!mobile) await tallShot(ad.page, 'admin-workspace-billing-desktop.png'); else await tallShot(ad.page, 'admin-workspace-billing-mobile.png');
+    await ad.page.goto(`${BASE}/admin`); await ad.page.waitForTimeout(1200);
+    const dt = await ad.page.textContent('body');
+    check(`admin ${tag}: dashboard MRR (VAT 포함) + 유료 워크스페이스 (Pro·Team) when billing tables exist`, /MRR \(VAT 포함\)/.test(dt) && /유료 워크스페이스/.test(dt));
+    await ad.page.goto(`${BASE}/admin/subscriptions`); await ad.page.waitForTimeout(1200);
+    check(`admin ${tag}: subscriptions list renders (plan filter incl. Pro/Enterprise when implemented)`, /구독/.test(await ad.page.textContent('body')));
+    await ad.ctx.close();
+  }
 
   // ---- terms anchors ----
   const tp = await mk({ width: 1280, height: 900 });

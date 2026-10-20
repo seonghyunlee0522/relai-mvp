@@ -9,6 +9,10 @@
  */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const krw = (v) => `${Number(v || 0).toLocaleString('ko-KR')}원`;
+/** Founder 2026-10-20 (D3): paid plans open only after NicePay recurring approval; until then the buy button says this. */
+export const RECURRING_SOON = '정기결제 준비 중';
+/** Paid-plan button while checkout is closed: visible, not clickable. */
+export const soonCta = (p, cls = 'btn--sm') => `<span class="btn btn--secondary ${cls} btn--block is-disabled" aria-disabled="true" data-plan-soon="${p.key}">${RECURRING_SOON}</span>`;
 const num = (v) => Number(v || 0).toLocaleString('ko-KR');
 
 const BLURB = {
@@ -86,7 +90,7 @@ export function bindCycleToggle(root) {
 }
 
 /** Shared CSS (landing inlines it from the server; the app has the same rules in app.css). */
-export const PRICING_CSS = `.pcw[data-cycle=MONTHLY] .pc-a,.pcw[data-cycle=ANNUAL] .pc-m{display:none}
+export const PRICING_CSS = `[data-plan-soon]{opacity:.65;cursor:default;pointer-events:none}.pcw[data-cycle=MONTHLY] .pc-a,.pcw[data-cycle=ANNUAL] .pc-m{display:none}
 .pc-cycle{display:flex;gap:4px;width:max-content;max-width:100%;margin:0 auto 22px;padding:4px;border:1px solid var(--border,#e2e8f0);border-radius:999px;background:#fff}
 .pc-cycle__b{border:0;background:transparent;border-radius:999px;padding:8px 18px;font:inherit;font-size:14.5px;font-weight:600;color:var(--text-2,#475569);cursor:pointer;min-height:40px}
 .pc-cycle__b[aria-checked=true]{background:var(--navy,#0f172a);color:#fff}

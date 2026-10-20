@@ -35,7 +35,7 @@ export async function adminSubscriptionPage(id, main = $('#main')) {
     <div class="agrid2">
       ${raw(section('구독', dl([['워크스페이스', html`<a class="link" href="/admin/workspaces/${s.workspace_id}" data-link>${s.workspace_name}</a>`], ['플랜', html`${s.plan_label}`], ['상태', chip(s.status, SUB_KO[s.status] || s.status)],
         ['current_period_start', fmtD(s.current_period_start)], ['current_period_end', fmtD(s.current_period_end)], ['next_billing_at', fmtD(s.next_billing_at)], ['cancel_at_period_end', s.cancel_at_period_end ? '예' : '아니오'], ['grace_period_end', fmtD(s.grace_period_end)],
-        ['결제 주기', html`${({ MONTHLY: '월간', ANNUAL: '연간' })[s.billing_cycle] || '-'}`], ['자동 갱신', s.auto_renew ? '예' : '아니오 (이용권)'], ['추가 이용', html`사용자 ${s.extra_users ?? 0}명 · 프로젝트 ${s.extra_projects ?? 0}개`], ['갱신 동의 금액 (VAT 포함)', s.renewal_amount ? `₩${n(s.renewal_amount)}` : '-'], ['가격 버전', html`${s.price_version || 'v3'}`],
+        ['결제 주기', html`${({ MONTHLY: '월간', ANNUAL: '연간' })[s.billing_cycle] || '-'}`], ['자동 갱신', s.auto_renew ? '예' : '아니오 (해지 · 기간 종료 후 Free)'], ['추가 이용', html`사용자 ${s.extra_users ?? 0}명 · 프로젝트 ${s.extra_projects ?? 0}개`], ['갱신 동의 금액 (VAT 포함)', s.renewal_amount ? `₩${n(s.renewal_amount)}` : '-'], ['가격 버전', html`${s.price_version || 'v3'}`],
         ['결제 수단', html`${s.payment_method_summary || '-'}`], ['수정일', fmtD(s.updated_at)]])))}
       ${raw(section('구독 이벤트', d.events.length ? html`<ul class="aact">${raw(d.events.map((e) => html`<li><time>${fmtD(e.created_at)}</time><span>${e.event_type}</span></li>`).join(''))}</ul>` : '<div class="aempty">이벤트 기록이 없습니다.</div>'))}
     </div>

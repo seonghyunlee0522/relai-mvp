@@ -40,7 +40,7 @@ function billingV3Section(b) {
   const bucket = (v) => (v === null || v === undefined ? '<span class="dim">-</span>' : n(v));
   return section('요금 · 한도 (v3)', dl([
     ['플랜', html`${b.plan_label}${raw(b.cycle ? ` · ${CYCLE_KO[b.cycle] || b.cycle}` : '')}${raw(b.price_version === 'v2' ? ' <span class="achip achip--warn">v2 계약</span>' : '')}`],
-    ['상태', b.status ? html`${b.status}${raw(b.auto_renew ? ' · 자동 갱신' : ' · 이용권(자동 갱신 없음)')}${raw(b.current_period_end ? ` · ${fmtDay(b.current_period_end)}까지` : '')}` : '<span class="dim">Free</span>'],
+    ['상태', b.status ? html`${b.status}${raw(b.auto_renew ? ' · 자동 갱신' : ' · 자동 갱신 꺼짐(해지)')}${raw(b.current_period_end ? ` · ${fmtDay(b.current_period_end)}까지` : '')}` : '<span class="dim">Free</span>'],
     ['MRR (VAT 포함)', b.mrr ? `₩${n(b.mrr)}` : '-'],
     ['활성 프로젝트', `${n(b.usage.projects_active)} / ${lim(b.limits.projects)}`],
     ['사용자 (좌석)', `${n(b.usage.members)} 참여 + ${n(b.usage.pending_invites)} 초대 대기 / ${lim(b.limits.users)} · 남은 좌석 ${b.usage.seats_left === null ? '협의' : n(b.usage.seats_left)}`],

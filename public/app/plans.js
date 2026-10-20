@@ -2,7 +2,8 @@
  * The same plan cards as the landing #pricing (shared/pricing.js) built from the server catalogue (GET …/billing → catalogue),
  * so no number is typed here; 월간/연간 switch (default 월간), the current plan badge, and per card 선택 → the checkout screen
  * (/app/billing/subscribe?plan=&cycle=, T3) which shows the server quote and the 정기결제 고지 before any payment.
- * Payments off (PAYMENTS_ENABLED unset) → 선택 only answers SUBSCRIBE_SOON and calls nothing. Plan prices are shown in won, VAT
+ * Checkout closed (PAYMENTS_ENABLED unset, or NicePay recurring not approved — founder 2026-10-20, no one-time passes) → the
+ * button reads 정기결제 준비 중 and calls nothing; a stale 선택 link still only answers SUBSCRIBE_SOON. Plan prices are shown in won, VAT
  * included (a priced product list; spec §4.1); AI feature costs stay in credits (batch7 #7). */
 import { api } from './core/api.js';
 import { $, html, raw } from './core/dom.js';
@@ -10,7 +11,7 @@ import { state } from './core/state.js';
 import { navigate } from './core/router.js';
 import { toast } from './shared/dialogs.js';
 import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
-import { pricingHtml, bindCycleToggle } from './shared/pricing.js';
+import { pricingHtml, bindCycleToggle, soonCta } from './shared/pricing.js';
 
 export const SUBSCRIBE_SOON = '결제 준비 중입니다. 곧 오픈 예정이에요.';
 
@@ -19,8 +20,9 @@ const FAQ = [
   ['사용자는 어떻게 세나요?', '워크스페이스에 참여한 활성 사용자 기준이에요. 한 사람이 여러 프로젝트에 참여해도 1명이고, 초대를 보내면 수락 전까지 자리 하나를 잡아 둬요. 내보낸 사용자는 세지 않아요.'],
   ['한도를 넘으면 데이터는 어떻게 되나요?', '데이터는 삭제되지 않아요. 요금제를 낮추거나 이용 기간이 끝나 한도를 넘으면, 정리될 때까지 새 프로젝트·초대와 편집이 잠기고 조회·내보내기·완료·보관·구성원 정리는 언제든 할 수 있어요.'],
   ['AI 크레딧은 어떻게 받나요?', 'Free는 처음 한 번 100 크레딧, Pro는 매월 1,000, Team은 매월 3,000 크레딧을 받아요. 매월 받은 기본 크레딧은 그 달이 끝나면 소멸하고 이월되지 않아요. 크레딧은 워크스페이스 공용이고, 실패한 AI 요청은 차감하지 않아요.'],
-  ['AI 크레딧은 어떻게 충전하나요?', 'Pro·Team에서 10,000원 단위로 충전해요(10,000원 = 1,000 크레딧). 충전한 크레딧은 5년간 쓸 수 있고, 7일 안에는 남은 크레딧을 전액 환불받을 수 있어요. Free에서는 충전할 수 없어요.'],
-  ['연간 결제는 어떻게 다른가요?', '12개월분을 한 번에 결제하고 20% 할인돼요. AI 기본 크레딧은 연간 결제에도 매월 지급돼요. 중간에 해지하면 이용한 기간을 월간 정상가로 계산하고 나머지를 환불해요.'],
+  ['AI 크레딧은 어떻게 충전하나요?', 'Pro·Team에서 10,000원 단위로 충전해요(10,000원 = 1,000 크레딧). 충전한 크레딧은 5년간 쓸 수 있고, 쓰지 않은 충전 크레딧은 언제든 전액 환불받을 수 있어요(무료로 받은 크레딧은 환불되지 않아요). Free에서는 충전할 수 없어요.'],
+  ['연간 결제는 어떻게 다른가요?', '12개월분을 한 번에 결제하고 20% 할인돼요. AI 기본 크레딧은 연간 결제에도 매월 지급돼요. 언제든 해지할 수 있고, 남은 기간은 실제 결제 금액 기준으로 일할 계산해 위약금 없이 환불해요.'],
+  ['해지하면 어떻게 되나요?', '월간·연간 모두 언제든 해지할 수 있고 자동 갱신은 바로 멈춰요. 위약금은 없어요. 해지 후 30일 동안 모든 프로젝트 데이터를 조회하고 내보낼 수 있어요.'],
   ['추가 사용자·프로젝트는 얼마인가요?', '추가 사용자는 1명당 월 1,000원, 추가 프로젝트는 Pro 월 10,000원 · Team 월 8,000원이에요. 이용 기간 중간에 사면 남은 일수만큼만 결제하고, 결제 전에 금액과 다음 갱신 금액을 보여 드려요.'],
 ];
 
@@ -30,10 +32,12 @@ export async function plansPage(main = $('#main')) {
   try { b = (await api('GET', `/api/workspaces/${state.workspace.id}/billing`)).billing; } catch { b = null; }
   const cur = b?.plan || 'FREE';
   const owner = Boolean(b?.can_manage);
+  const open = Boolean(b?.payments_enabled && b?.flags?.recurring);
   const cta = (p) => {
     if (p.contact_sales) return '<a class="btn btn--secondary btn--sm btn--block" href="mailto:' + LEGAL.contactEmail + '?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" data-plan-cta="ENTERPRISE">도입 문의</a>';
     if (p.key === cur) return '<button class="btn btn--secondary btn--sm btn--block" disabled>사용 중</button>';
     if (p.key === 'FREE') return '';
+    if (!open) return soonCta(p);
     if (!owner) return '<p class="hint" style="margin:0">요금제 변경은 소유자만 할 수 있어요</p>';
     return html`<a class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--sm btn--block" href="/app/billing/subscribe?plan=${p.key}" data-plan-cta="${p.key}">${p.label} 선택</a>`;
   };
@@ -48,7 +52,7 @@ export async function plansPage(main = $('#main')) {
   bindCycleToggle(main);
   main.querySelectorAll('a[data-plan-cta]').forEach((a) => { if (a.dataset.planCta === 'ENTERPRISE') return; a.onclick = (e) => {
     e.preventDefault();
-    if (!b?.payments_enabled) return toast(SUBSCRIBE_SOON);
+    if (!open) return toast(SUBSCRIBE_SOON);
     const cycle = main.querySelector('.pcw')?.dataset.cycle || 'MONTHLY';
     navigate(`/app/billing/subscribe?plan=${a.dataset.planCta}&cycle=${cycle}`);
   }; });

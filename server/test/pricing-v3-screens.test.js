@@ -36,7 +36,9 @@ test('plan cards: founder numbers for 월간 and 연간, VAT 포함, 월간 defa
   assert.deepEqual(planRows(catalogue().plans[0], catalogue()).map((r) => r[0]), ['활성 프로젝트', '기본 사용자', 'AI 크레딧', 'AI 크레딧 충전']);
   // the landing wraps the same cards with its CTAs (Enterprise → 도입 문의 mail), no price typed in index.html
   const l = landingPricingHtml();
-  assert.match(l, /<style>/); assert.match(l, /data-loc="pricing_enterprise">도입 문의/); assert.match(l, /data-loc="pricing_pro"/);
+  assert.match(l, /<style>/); assert.match(l, /data-loc="pricing_enterprise">도입 문의/); // founder 2026-10-20 (D3): no one-time passes; Pro/Team buy buttons say 정기결제 준비 중 until recurring is approved
+  assert.match(l, /data-plan-soon="PRO">정기결제 준비 중/); assert.match(l, /data-plan-soon="TEAM">정기결제 준비 중/); assert.doesNotMatch(l, /data-loc="pricing_pro"/); assert.match(l, /data-loc="pricing_free"/);
+  const live = landingPricingHtml(undefined, { open: true }); assert.match(live, /data-loc="pricing_pro"/); assert.doesNotMatch(live, /data-plan-soon="/);
   const idx = readFileSync(new URL('../../public/index.html', import.meta.url), 'utf8');
   const sec = idx.slice(idx.indexOf('id="pricing"'), idx.indexOf('<!-- CLOSING -->'));
   assert.doesNotMatch(sec.replace(/<!--[\s\S]*?-->/g, ''), /\d{1,3},000원|₩/);
@@ -63,9 +65,9 @@ test('Billing page (live T1 shape): null buckets → total only; empty scheduled
   assert.ok(t.includes('AI 크레딧 충전은 Pro부터 할 수 있어요')); assert.ok(t.includes('요금제 살펴보기')); assert.ok(t.includes('결제 정보 없이 이용 중'));
   const member = billingHtml({ ...free, can_manage: false });
   assert.match(member, /id="bl-owner-only"/); assert.doesNotMatch(member, /id="bl-change"/);
-  // one-time pass (D3, no auto renewal): no 해지 button, the end date and 'Free로 전환' are shown
+  // auto renewal off (cancelled; D3: no one-time passes): no 해지 button, the end date, 'Free로 전환' and the 30-day export promise
   const pass = fixture({ auto_renew: false, next_payment_at: null, next_payment_amount: null, subscription: { ...FIX.subscription, auto_renew: false } });
-  const pt = text(billingHtml(pass)); assert.ok(pt.includes('자동 결제되지 않아요')); assert.ok(pt.includes('자동 결제되지 않는 이용권이에요')); assert.doesNotMatch(billingHtml(pass), /id="bl-cancel"/);
+  const pt = text(billingHtml(pass)); assert.ok(pt.includes('자동 결제되지 않아요')); assert.ok(pt.includes('자동 갱신이 꺼져 있어요')); assert.ok(pt.includes('30일 동안 모든 프로젝트를 조회하고 내보낼 수 있어요')); assert.doesNotMatch(pt, /이용권/); assert.doesNotMatch(billingHtml(pass), /id="bl-cancel"/);
   // over the limit after a downgrade (D6): banner says data is kept and what to reduce
   const over = text(billingHtml(fixture({ over_limit: { projects: 2, members: 0 } })));
   assert.ok(over.includes('한도를 넘었어요 — 데이터는 그대로예요.')); assert.ok(over.includes('한도 초과: 활성 프로젝트 2개.'));
