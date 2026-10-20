@@ -180,20 +180,22 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   const cov5 = (await api('GET', `${A.P}/tests/coverage`)).json.coverage.find((x) => x.id === R[5].id);
   check('US-3 AC 폼에서 요구사항 1건을 고르고 저장 → 커버리지 반영', cov5.total === 2, `total=${cov5.total}`);
 
-  /* ---------- US-2 / US-4 실행 dialog ---------- */
+  /* ---------- US-2 / US-4 실행 기록 (batch7 #20: inline in the detail, no dialog — same #rd-* handles) ---------- */
   const tc = (await api('GET', `${A.P}/tests?q=${encodeURIComponent(`${R[3].display_id} 기능 4 확인`)}`)).json.items[0];
   await page.goto(`${A.url}/tests?sel=${tc.id}`); await page.waitForSelector('#drawer #run');
   const drawerHead = await page.$eval('#drawer .dgrid .dfield span', (e) => e.textContent.trim());
   check('US-5 Drawer 맨 위 필드 = 최근 결과, 상태는 아래 일반 필드', drawerHead === '최근 결과' && (await page.$$eval('#drawer .dgrid .dfield > span', (els) => els.map((e) => e.textContent.trim()))).includes('상태'));
-  await page.click('#run'); await page.waitForSelector('[data-dialog="run"]');
+  await page.click('#run'); await page.waitForSelector('[data-runbox]');
+  check('batch7 #20 테스트 실행 = inline 실행 기록, no modal', (await page.$$('.dialog--run, [data-dialog="run"]')).length === 0 && await page.$eval('[data-runbox]', (b) => Boolean(b.closest('#drawer'))));
   const groups = await page.$$eval('#rd-who optgroup', (els) => els.map((e) => e.label));
   const maxD = await page.getAttribute('#rd-on', 'max'); const valD = await page.inputValue('#rd-on'); const who0 = await page.inputValue('#rd-who');
   check('US-4 수행자: 그룹 RELAI 사용자 / 팀원 (계정 없음) / 고객사, 기본 나 · 수행일 기본 오늘(KST), 미래 불가(max)', JSON.stringify(groups) === JSON.stringify(['RELAI 사용자', '팀원 (계정 없음)', '고객사']) && who0 === `u:${me}` && valD === T && maxD === T, `${JSON.stringify(groups)} ${who0} ${valD} ${maxD}`);
-  const runTxt = await textOf('[data-dialog="run"]', page);
+  const runTxt = await textOf('[data-runbox]', page);
   check('US-7 실행 dialog: no English UI words', !EN.test(runTxt), enOf(runTxt));
-  await page.click('[data-dialog="run"] .resq--fail'); await page.fill('#rd-actual', '저장 버튼 오류');
+  await page.click('[data-runbox] .resq--fail'); await page.fill('#rd-actual', '저장 버튼 오류');
   await page.selectOption('#rd-who', 's:sh-cl'); await page.fill('#rd-on', d(-1));
-  await page.click('[data-dialog="run"] [data-v="1"]'); await page.waitForSelector('#drawer [data-raise]');
+  await page.uncheck('#rd-issue');   // this path registers the issue afterwards from the 실행 이력 tab
+  await page.click('#run-save'); await toastText(page, /결과를 기록/); await page.click('#drawer [data-dtab="exec"]'); await page.waitForSelector('#drawer [data-raise]');
   const line1 = await page.textContent('#drawer [data-exec-line]');
   check('US-4 AC 고객사 이해관계자 · 어제 → 이력 "#1 실패 · M/D · 수행: 이수진(고객사) · 기록: 홍길동"', line1.trim() === `${md(d(-1))} · 수행: 이수진(고객사) · 기록: 홍길동`, line1);
   check('US-4 AC 미래 날짜 422', (await api('POST', `${A.P}/tests/${tc.id}/executions`, { result: 'PASS', performed_on: d(1) })).status === 422);
@@ -202,23 +204,23 @@ const EN = /\b(Tests?|Test Cases|Acceptance|Coverage|Ready|Pass|Fail|Blocked|Sta
   const iss = (await api('GET', `${A.P}/issues?source=TEST`)).json.items[0];
   check('US-7 실행 이력: 이슈로 등록 (Issue 아님)', /이슈를 등록했습니다/.test(await toastText(page, /이슈를 등록했습니다/)));
   // 체크 끄고 통과
-  await page.click('#drawer [data-dtab="info"]'); await page.click('#run'); await page.waitForSelector('[data-dialog="run"]');
-  check('재실행 dialog: 통과 전에는 이슈 체크박스 숨김', await page.$eval('#rd-resolve', (e) => e.hidden));
-  await page.click('[data-dialog="run"] .resq--pass');
+  await page.click('#drawer [data-dtab="info"]'); await page.click('#run'); await page.waitForSelector('[data-runbox]');
+  check('재실행 기록: 통과 전에는 이슈 체크박스 숨김', await page.$eval('#rd-resolve', (e) => e.hidden));
+  await page.click('[data-runbox] .resq--pass');
   const cbLabel = await page.textContent('#rd-resolve label');
   check(`US-2 통과 + 열린 이슈 → 체크박스 "${iss.display_id}도 해결로 바꾸기" (기본 체크)`, cbLabel.trim() === `${iss.display_id}도 해결로 바꾸기` && await page.isChecked('#rd-resolve input'), cbLabel);
   await page.fill('#rd-actual', '저장 정상');
   await shot('08-run-dialog-issue.png');
   await page.uncheck('#rd-resolve input');
-  await page.click('[data-dialog="run"] [data-v="1"]'); await toastText(page, /#3|#2 결과를 기록/);
+  await page.click('#run-save'); await toastText(page, /#3|#2 결과를 기록/);
   await page.goto(A.url); await page.waitForSelector('.np__list');
   const dfTxt = await npRow('결함 조치').textContent();
   check(`US-2 AC1 체크 끄고 통과 → DEFECTS 진행 중 "실패 테스트 0건 · 처리 중 결함 이슈 1건(${iss.display_id})" + 결함 이슈 보기`, new RegExp(`실패 테스트 0건 · 처리 중 결함 이슈 1건\\(${iss.display_id}\\)`).test(dfTxt) && /결함 이슈 보기/.test(dfTxt), dfTxt.replace(/\s+/g, ' ').slice(0, 200));
   check('US-2 AC1 05 필수 미완료', (await api('GET', A.P)).json.current_phase.summary.gate_met === false);
   // 체크 켬
   await page.goto(`${A.url}/tests?sel=${tc.id}`); await page.waitForSelector('#drawer #run');
-  await page.click('#run'); await page.waitForSelector('[data-dialog="run"]'); await page.click('[data-dialog="run"] .resq--pass'); await page.fill('#rd-actual', '재확인 정상');
-  await page.click('[data-dialog="run"] [data-v="1"]');
+  await page.click('#run'); await page.waitForSelector('[data-runbox]'); await page.click('[data-runbox] .resq--pass'); await page.fill('#rd-actual', '재확인 정상');
+  await page.click('#run-save');
   check('US-2 토스트에 해결 이슈 표시', new RegExp(`${iss.display_id} 해결`).test(await toastText(page, new RegExp(`${iss.display_id} 해결`))));
   const iss2 = (await api('GET', `${A.P}/issues/${iss.id}`)).json.issue;
   check(`US-2 AC2 체크 켬 → ${iss.display_id} 해결, 해결 내용 "재시험 통과 (TC #3): 재확인 정상"`, iss2.status === 'RESOLVED' && iss2.resolution === `재시험 통과 (${tc.display_id} #3): 재확인 정상`, iss2.resolution);

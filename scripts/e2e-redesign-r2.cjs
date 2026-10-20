@@ -169,7 +169,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   const dr = await page.evaluate(() => {
     const d = document.querySelector('#drawer').getBoundingClientRect(); const g = document.querySelector('#grid').getBoundingClientRect(); const v = (s) => { const e = document.querySelector(`#drawer ${s}`); return Boolean(e && e.checkVisibility()); };
     return { dw: Math.round(d.width), gRight: Math.round(g.right), dLeft: Math.round(d.left), gW: Math.round(g.width), scrim: getComputedStyle(document.querySelector('.rlayout'), '::before').display,
-      fields: ['[data-field="title"]', '[data-field="description"]', '#crit-in', '[data-field="scope"]', '[data-field="priority"]', '[data-field="owner_user_id"]'].map(v), hiddenMore: !v('[data-field="type"]'), more: v('[data-dmore] > summary'),
+      fields: ['[data-field="title"]', '[data-field="description"]', '#crit-in', '[data-field="scope"]', '[data-field="priority"]', '[data-field="owner"]'].map(v), hiddenMore: !v('[data-field="type"]'), more: v('[data-dmore] > summary'),
       foot: [...document.querySelectorAll('#drawer .drawer__f button')].map((b) => b.textContent.trim()) };
   });
   check('R2-9 requirement drawer opens beside the list at 1440 (480px, list still visible, no scrim)', dr.dw === 480 && dr.gRight <= dr.dLeft + 1 && dr.gW > 500 && dr.scrim === 'none', JSON.stringify(dr));
@@ -270,13 +270,14 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   }
 
   // ================= Jim R2+R3a acceptance fixes =================
-  // P1-2: 요구사항 분류 → 분류·우선순위 shows 유형 (and 우선순위); the drawer has 유형 at the top while the 02 분류 step is open
+  // P1-2: 요구사항 분류 → the 목록 (미분류 chip on, batch7 #13) shows 유형 (and 우선순위); the drawer has 유형 at the top while the 02 분류 step is open
   const U = (await api('POST', `${pa(P.id)}/requirements`, { title: '상담 이력 엑셀 내보내기', scope: 'IN_SCOPE', priority: 'MEDIUM' })).json.requirement;
   await go(`/app/projects/${P.id}`, '.nxp');
   const clsRow = await page.$('.np__row[data-step-key="CLASSIFY"] .np__open');
   if (clsRow) { await clsRow.click(); await settle('#grid'); } else await go(`/app/projects/${P.id}/requirements?type=UNSPECIFIED`, '#grid');
   const cc = await colsOf();
-  check('P1-2 요구사항 분류 row opens 분류·우선순위 with the 유형 and 우선순위 columns shown', Boolean(clsRow) && /type=UNSPECIFIED/.test(page.url()) && cc.includes('유형') && cc.includes('우선순위'), JSON.stringify({ row: Boolean(clsRow), url: page.url(), cc }));
+  const chipOn = await page.$eval('[data-cls="type"]', (b) => b.getAttribute('aria-pressed') === 'true').catch(() => false);   // batch7 #13: the 목록 with the 미분류 chip on (no separate tab)
+  check('P1-2 요구사항 분류 row opens the 목록 with the 미분류 chip on and the 유형 and 우선순위 columns shown', Boolean(clsRow) && /type=UNSPECIFIED/.test(page.url()) && chipOn && cc.includes('유형') && cc.includes('우선순위'), JSON.stringify({ row: Boolean(clsRow), url: page.url(), chipOn, cc }));
   await page.click(`#grid tr[data-id="${U.id}"] td.ttl`); await page.waitForSelector('#drawer:not([hidden]) .dstack'); await page.waitForTimeout(300);
   const ty = await page.evaluate(() => { const e = document.querySelector('#drawer [data-field="type"]'); return { vis: Boolean(e && e.checkVisibility()), inMore: Boolean(e && e.closest('[data-dmore]')) }; });
   check('P1-2 drawer: 유형 at the top level (not under 세부 정보 더보기) while 분류 is open', ty.vis && !ty.inMore, JSON.stringify(ty));

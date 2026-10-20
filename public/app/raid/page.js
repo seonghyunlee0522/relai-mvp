@@ -109,7 +109,7 @@ export async function raidPage(id) {
       <div class="field"><label>설명</label><textarea class="textarea" name="description" maxlength="5000" style="min-height:72px"></textarea></div>
       <div class="row2">
         <div class="field"><label>심각도</label><select class="select" name="severity">${raw(opt(SEVERITY, 'MEDIUM'))}</select></div>
-        <div class="field"><label>담당자</label><select class="select" name="owner">${raw(OP.ownerOptions(members, owners, ''))}</select></div>
+        <div class="field"><label>담당자</label>${raw(OP.ownerPicker(members, owners, '', { attrs: 'name="owner"' }))}</div>
         <div class="field"><label>발견일</label><input class="input" type="date" name="identified_at" value="${todayLocal()}"></div>
         <div class="field"><label>기한</label><input class="input" type="date" name="due_date"></div></div></div>
     <div class="drawer__f"><button class="btn btn--secondary" type="button" id="dcancel">취소</button><button class="btn btn--primary" type="submit">이슈 등록</button></div></form>`;
@@ -179,7 +179,7 @@ export async function raidPage(id) {
       <div class="dgrid">
         <div class="dfield"><span>심각도</span><div><select class="select select--sm" data-field="severity" ${ro ? 'disabled' : ''}>${raw(opt(SEVERITY, x.severity))}</select></div></div>
         <div class="dfield"><span>상태</span><div>${raw(statusSelect(ISSUE_STATUS, ISSUE_TRANSITIONS, x.status, ro))}</div></div>
-        <div class="dfield"><span>담당자</span><div><select class="select select--sm" data-field="owner" ${ro ? 'disabled' : ''}>${raw(OP.ownerOptions(members, owners, OP.ownerKey(x)))}</select>${raw(OP.noAcct(x))}${raw(OP.teamHint(owners, p.id, archived))}</div></div>
+        <div class="dfield"><span>담당자</span><div>${raw(OP.ownerPicker(members, owners, OP.ownerKey(x), { attrs: 'data-field="owner"', disabled: ro }))}${raw(OP.noAcct(x))}${raw(OP.teamHint(owners, p.id, archived))}</div></div>
         <div class="dfield"><span>발견일</span><div><input class="input input--sm" type="date" data-field="identified_at" value="${x.identified_at || ''}" ${ro ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>기한</span><div><input class="input input--sm" type="date" data-field="due_date" value="${x.due_date || ''}" ${ro ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>해결/종료</span><div class="hint" style="height:36px;display:flex;align-items:center">${x.resolved_at ? '해결 ' + fmtShort(x.resolved_at) : '-'}${x.closed_at ? ' · 종료 ' + fmtShort(x.closed_at) : ''}</div></div>
@@ -243,7 +243,7 @@ export async function raidPage(id) {
       <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${dis} aria-label="설명">${x.description}</textarea>
       <div class="dgrid">${raw(fld('상태', statusSelect(ISSUE_STATUS, ISSUE_TRANSITIONS, x.status, ro)))}
         ${raw(fld('심각도', html`<select class="select select--sm" data-field="severity" ${dis}>${raw(opt(SEVERITY, x.severity))}</select>`))}
-        ${raw(fld('담당자', html`<select class="select select--sm" data-field="owner" ${dis}>${raw(OP.ownerOptions(members, owners, OP.ownerKey(x)))}</select>${raw(OP.noAcct(x))}${raw(OP.teamHint(owners, p.id, archived))}`))}
+        ${raw(fld('담당자', html`${raw(OP.ownerPicker(members, owners, OP.ownerKey(x), { attrs: 'data-field="owner"', disabled: Boolean(dis) }))}${raw(OP.noAcct(x))}${raw(OP.teamHint(owners, p.id, archived))}`))}
         ${raw(fld('기한', html`<input class="input input--sm" type="date" data-field="due_date" value="${x.due_date || ''}" ${dis}>`))}
         ${raw(done ? res : '')}</div>
       ${raw(moreFields(fld('발견일', html`<input class="input input--sm" type="date" data-field="identified_at" value="${x.identified_at || ''}" ${dis}>`)

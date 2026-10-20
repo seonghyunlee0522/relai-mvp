@@ -175,9 +175,10 @@ const EN = /\b(Schedule|Scope|Coverage|Severity|Resolution|Owner|Blocked|Critica
 
   /* ---------- US-6 Issue 담당자 + US-5 차단됨 → 해결 ---------- */
   await page.goto(`${A.url}/issues?new=1`); await page.waitForSelector('#cf');
-  const groups = await page.$$eval('#cf select[name="owner"] optgroup', (els) => els.map((g) => [g.label, [...g.querySelectorAll('option')].map((o) => o.textContent.trim())]));
-  check('US-6 create form: Phase 3 picker (RELAI 사용자 / 팀원 (계정 없음) = 당사·협력사)', JSON.stringify(groups) === JSON.stringify([['RELAI 사용자', ['홍길동']], ['팀원 (계정 없음)', ['김피엠 · PM', '박협력 · 개발']]]), JSON.stringify(groups));
-  await page.fill('#c-title', 'API 응답 지연'); await page.selectOption('#cf select[name="severity"]', 'CRITICAL'); await page.selectOption('#cf select[name="owner"]', 's:sh-dev');
+  const groups = await page.$eval('#cf [data-opick]', (w) => JSON.parse(w.dataset.opick).groups.map((g) => [g.label, g.options.map((o) => o[1])]));   // batch7 #11: 조직·부서 → 사람
+  check('US-6 create form: shared picker (우리 팀 = 홍길동 + 당사 / 협력사; 고객사 not listed)', JSON.stringify(groups) === JSON.stringify([['우리 팀', ['홍길동', '김피엠 · PM']], ['협력사', ['박협력 · 개발']]]), JSON.stringify(groups));
+  await page.fill('#c-title', 'API 응답 지연'); await page.selectOption('#cf select[name="severity"]', 'CRITICAL');
+  await page.selectOption('#cf [data-opick-g]', '1'); await page.selectOption('#cf select[name="owner"]', 's:sh-dev');
   await page.click('#cf button[type=submit]'); await page.waitForSelector('tr[data-row]');
   const issRow = await page.textContent('tr[data-row]');
   check('US-6 list shows 박협력 + 계정 없음', /박협력/.test(issRow) && /계정 없음/.test(issRow), issRow.replace(/\s+/g, ' '));

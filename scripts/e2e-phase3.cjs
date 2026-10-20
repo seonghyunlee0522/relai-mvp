@@ -122,9 +122,11 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   /* ---------- US-1 owner picker ---------- */
   const design = tasks.find((t) => t.title === '화면 설계');
   await page.goto(`${A.url}/wbs?sel=${design.id}`); await page.waitForSelector('#drawer [data-field="owner"]');
-  const groups = await page.$$eval('#drawer [data-field="owner"] optgroup', (els) => els.map((o) => [o.label, [...o.querySelectorAll('option')].map((x) => x.textContent)]));
-  check('US-1 optgroups RELAI 사용자 / 팀원 (계정 없음); 고객사 not listed', groups.length === 2 && groups[0][0] === 'RELAI 사용자' && groups[1][0] === '팀원 (계정 없음)'
-    && JSON.stringify(groups[1][1]) === JSON.stringify(['김피엠 · PM', '최민석 · PL/아키텍트', '박협력 · 개발']), JSON.stringify(groups));
+  // batch7 #11: one shared picker — 조직·부서 first (우리 팀 = members + 당사), then the person; WBS still offers 당사·협력사 only
+  const pickGroups = (pg = page) => pg.$eval('#drawer [data-opick]', (w) => JSON.parse(w.dataset.opick).groups.map((g) => [g.label, g.options.map((o) => o[1])]));
+  const groups = await pickGroups();
+  check('US-1 picker groups 우리 팀 (홍길동 + 당사) / 협력사; 고객사 not listed', groups.length === 2 && groups[0][0] === '우리 팀' && groups[1][0] === '협력사'
+    && JSON.stringify(groups[0][1]) === JSON.stringify(['홍길동', '김피엠 · PM', '최민석 · PL/아키텍트']) && JSON.stringify(groups[1][1]) === JSON.stringify(['박협력 · 개발']), JSON.stringify(groups));
   check('US-1 no 1-stakeholder hint when the team is registered', !(await page.$('#drawer .whint')));
   await page.click('[data-dtab="dep"]');
   check('US-6 no (?) 선행관계 tooltip (fb-app: 용어 설명 removed (founder))', !(await page.$('#drawer [data-pane="dep"] .term')));
@@ -228,9 +230,9 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   check('J-A1 past key date → 완료 milestone (no 지연)', kick && kick.status === 'COMPLETED' && kick.computed_status !== 'DELAYED' && !imp.summary.overdue_milestones, JSON.stringify(kick && [kick.status, kick.computed_status]));
   await page.goto(`${C.url}/wbs?sel=${ct.id}`); await page.waitForSelector('#drawer [data-field="owner"]');
   check('J-A1 WBS: no red 지연 row / 지연 작업 chip on day one', !(await page.$('main tr.is-late')) && !(await page.$('.kchip.is-crit[data-kf="overdue"]')));
-  const cGroups = await page.$$eval('#drawer [data-field="owner"] optgroup', (els) => els.map((o) => [o.label, [...o.querySelectorAll('option')].map((x) => x.textContent)]));
-  const users = (cGroups.find((x) => x[0] === 'RELAI 사용자') || [0, []])[1]; const team = (cGroups.find((x) => x[0] === '팀원 (계정 없음)') || [0, []])[1];
-  check('J-A2 PM listed once (RELAI 사용자), not again as 팀원 (계정 없음)', users.includes('홍길동') && !team.some((t) => /홍길동/.test(t)) && team.includes('김피엠 · PM'), JSON.stringify(cGroups));
+  const cGroups = await pickGroups();
+  const our = (cGroups.find((x) => x[0] === '우리 팀') || [0, []])[1];
+  check('J-A2 PM listed once (the member 홍길동), not again as a 관계자', our.filter((t) => /홍길동/.test(t)).length === 1 && our.includes('홍길동') && our.includes('김피엠 · PM'), JSON.stringify(cGroups));
   await shot('14-accept-owner-picker.png');
 
   // J-A3: 03 activity copy (What's Next, project A in 03)

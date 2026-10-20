@@ -19,6 +19,8 @@ import { performerOptions, performerBody } from '../shared/owner-picker.js';
 import { todayKst, md } from '../shared/kst-date.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 import { carryIndex, carryTag, carryLine } from '../project/golive.js';
+import { aiStatus } from '../shared/ai.js';
+import { openTestGenDialog } from '../ai/test-gen.js';
 
 export async function testsPage(id) {
   const main = $('#main');
@@ -27,6 +29,7 @@ export async function testsPage(id) {
   const isArch = p.status === 'ARCHIVED'; const archived = isArch || isPhone();   // phone = view mode: the archived read-only path
   const desk = !isPhone(); let moreOpen = false;   // R3b: desktop detail = the R2 480px side drawer
   const { members } = await api('GET', `/api/workspaces/${state.workspace.id}/members`);
+  const ai = await aiStatus(id);   // batch7 #18: 'AI로 시나리오 만들기' only when AI is on
   const params = () => new URLSearchParams(location.search);
   const setParam = (k, v) => { const q = params(); if (v) q.set(k, v); else q.delete(k); history.replaceState(null, '', `${location.pathname}${q.toString() ? '?' + q : ''}`); };
   const tab = () => { const t = params().get('tab'); return t === 'acceptance' || t === 'coverage' ? t : 'cases'; };
@@ -99,6 +102,7 @@ export async function testsPage(id) {
         <span class="rtool__sp"></span>
         ${raw(T === 'cases' ? html`<span class="gtools"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>` : '')}
+        ${raw(T === 'cases' && ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai" id="ai-testgen" data-ai-pc title="요구사항마다 시나리오 · 테스트 계정·데이터 · 예상 결과 초안을 만듭니다">AI로 시나리오 만들기</button>' : '')}
         ${raw(archived ? '' : html`<button class="btn btn--primary btn--sm" id="add">+ ${T === 'cases' ? '테스트 추가' : '검수 만들기'}</button>`)}
       </div>
       ${raw(appliedFilters(q, FILTER_DEFS(T)))}`)}
@@ -119,7 +123,7 @@ export async function testsPage(id) {
     if (!k || archived) return emptyState({ title: '범위 내 요구사항을 확정하면 요구사항마다 테스트를 1건씩 만들어 드립니다.', cta: archived ? null : { id: 'add2', label: '테스트 추가' } });
     return html`<div class="empty" data-empty="tests"><span class="wempty__ic" aria-hidden="true">✓</span><h2>범위 내 요구사항 ${k}건에 테스트를 1건씩 만들어 드립니다.</h2>
       <button class="btn btn--primary btn--lg" id="gen">요구사항별 테스트 만들기</button>
-      <p class="tempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button></p></div>`;
+      <p class="tempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button>${raw(ai.enabled ? ' · <button type="button" class="link linkbtn" id="ai-testgen2">AI로 시나리오 만들기</button>' : '')}</p></div>`;
   };
   /** K10: no 기대 결과 anywhere (field or steps) → a grey hint in the list. */
   const noExpected = (x) => !String(x.expected_result || '').trim() && !(Array.isArray(x.steps) && x.steps.some((st) => String(st.expected || '').trim()));
@@ -261,8 +265,11 @@ export async function testsPage(id) {
       <h4 class="dh">테스트 절차 <em>${x.steps.length}</em>${raw(ro ? '' : '<button class="link linkbtn" id="steps-save" style="margin-left:auto;width:auto;font-size:12.5px" hidden>절차 저장</button>')}</h4>
       <div id="steps-wrap">${raw(stepsEditor(x.steps, ro))}</div>
       <div class="dfield" style="margin-top:10px"><span>기대 결과</span><div><textarea class="textarea" data-field="expected_result" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="기대 결과를 적어 주세요" ${ro ? 'disabled' : ''}>${x.expected_result}</textarea></div></div>
+      <div class="dfield" style="margin-top:10px" data-tc-data><span>테스트 계정·데이터</span><div><textarea class="textarea" data-field="test_data" maxlength="2000" style="min-height:44px;font-size:14px" placeholder="예) 일반 사용자 계정 1개, 청구 이력이 있는 고객 데이터" ${ro ? 'disabled' : ''}>${x.test_data || ''}</textarea>${raw(ro ? '' : '<small class="hint">비밀번호 같은 비밀값은 적지 마세요. 계정의 역할과 데이터 종류만 적습니다.</small>')}</div></div>
+      <div class="dfield" style="margin-top:10px" data-tc-env><span>대상 환경</span><div><input class="input input--sm" data-field="environment" value="${x.environment || ''}" maxlength="500" placeholder="예) PC Chrome, 모바일 Safari" ${ro ? 'disabled' : ''}></div></div>
       <div class="dsave" id="dsave"></div>
-      ${raw(ro || desk ? '' : html`<div class="decision decision--review"><p><b>이 테스트를 실행했나요?</b> 결과(통과 / 실패 / 막힘)와 실제 결과를 기록하세요. 기록은 수정되지 않고 실행 이력으로 쌓입니다.</p><div class="actions" style="margin-top:0"><button class="btn btn--primary btn--sm" id="run">테스트 실행</button></div></div>`)}
+      ${raw(ro ? '' : runBox(x))}
+      ${raw(execTimeline(x))}
       </section>
       <section data-pane="exec" ${dtab === 'exec' ? '' : 'hidden'}>
       ${raw(x.executions.length ? html`<ol class="exec">${raw(x.executions.map((e) => html`<li class="exec__i exec--${e.result.toLowerCase()}"><details ${e === last ? 'open' : ''}><summary><span class="exec__n">#${e.execution_number}</span>${raw(resBadge(e.result))}<span class="exec__who" data-exec-line>${execLine(e)}</span>
@@ -276,7 +283,7 @@ export async function testsPage(id) {
       </section>
       <section data-pane="hist" ${dtab === 'hist' ? '' : 'hidden'}>${raw(histPane(x))}</section>
     </div>
-    ${raw(desk ? deskFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, right: '<button type="button" class="btn btn--primary btn--sm" id="run" title="결과(통과 / 실패 / 막힘)를 기록합니다">테스트 실행</button>' }) : drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '테스트 보관' }))}`;
+    ${raw(desk ? deskFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, right: '<button type="button" class="btn btn--primary btn--sm" id="run" title="아래 실행 기록에 결과(통과 / 실패 / 막힘)를 입력합니다">테스트 실행</button>' }) : drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '테스트 보관' }))}`;
   };
 
   /* ---------- Phase 6 US-1: 검수 승인 = 고객 승인 기록 (공용 승인 Drawer) ---------- */
@@ -374,33 +381,42 @@ export async function testsPage(id) {
         <div class="dfield"><span>승인일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.accepted_at)}</div></div>
         <div class="dfield"><span>반려일</span><div class="hint" style="height:36px;display:flex;align-items:center">${mdT(x.rejected_at)}</div></div>`;
 
-  /** Execution dialog (US-2 · US-4): 결과 → 실제 결과 → 메모 → 수행자·수행일 → (통과 + 열린 결함 이슈) 해결 체크박스. Resolves the POST body or null. */
-  const runDialog = (x) => new Promise((resolve) => {
+  /** 실행 기록 (batch7 #20): inline in the detail — no modal. 단계별 결과 → 결과 → 실제 결과 → 수행자·수행일 → 메모 → (실패) 이슈로 등록 / (통과 + 열린 결함) 해결.
+   * The ids (#rd-*) are the ones the old dialog used, so the Phase 5 checks keep their handles. */
+  const runBox = (x) => {
     const open = x.executions.filter((e) => e.issue_id && !['RESOLVED', 'CLOSED'].includes(e.issue_status));
     const me = state.user ? `u:${state.user.id}` : ''; const today = todayKst();
-    const el = document.createElement('div'); el.className = 'scrim';
-    el.innerHTML = html`<div class="dialog dialog--run" role="dialog" aria-modal="true" aria-labelledby="rdT" data-dialog="run"><h3 id="rdT">${x.display_id} 테스트 실행</h3>
-      <div class="dialog__b">${x.title}${raw(x.expected_result ? html`<p class="hint" style="margin:6px 0 0;white-space:pre-line">기대 결과: ${x.expected_result}</p>` : '')}</div>
+    const steps = (x.steps || []).filter((st) => st.instruction);
+    return html`<section class="runbox" id="runbox" data-runbox aria-labelledby="rbT" style="margin-top:16px;padding:12px;border:1px solid var(--line, #e3e6ea);border-radius:10px">
+      <h4 class="dh" id="rbT" style="margin-top:0">실행 기록 <small class="dim" style="font-weight:500;letter-spacing:0;text-transform:none">기록은 수정되지 않고 실행 이력으로 쌓입니다</small></h4>
+      ${raw(steps.length ? html`<div class="field" data-run-steps><span class="lbl">단계별 결과</span><ol class="steps" style="margin:4px 0 0">${raw(steps.map((st, i) => html`<li data-run-step="${i}" style="display:flex;gap:8px;align-items:center"><span class="steps__n">${i + 1}</span><span style="flex:1;min-width:0">${st.instruction}${raw(st.expected ? html`<small class="dim" style="display:block">예상: ${st.expected}</small>` : '')}</span>
+        <label style="white-space:nowrap"><input type="radio" name="rs-${i}" value="PASS"> 통과</label><label style="white-space:nowrap"><input type="radio" name="rs-${i}" value="FAIL"> 실패</label></li>`).join(''))}</ol></div>` : '')}
       <div class="field"><span class="lbl">결과 <span class="req">*</span></span><div class="resq">${raw(['PASS', 'FAIL', 'BLOCKED'].map((r) => html`<label class="resq__o resq--${r.toLowerCase()}"><input type="radio" name="result" value="${r}"><b>${RESULT[r]}</b><small>${r === 'PASS' ? '기대한 대로 동작' : r === 'FAIL' ? '기대와 다르게 동작' : '환경 문제 등으로 수행 불가'}</small></label>`).join(''))}</div><div class="err" id="rd-err"></div></div>
-      <div class="field"><label for="rd-actual">실제 결과</label><textarea class="textarea" id="rd-actual" maxlength="2000" style="min-height:64px" placeholder="실제로 어떻게 동작했는지 (실패면 꼭 적어 주세요)"></textarea></div>
-      <div class="field"><label for="rd-note">메모</label><input class="input" id="rd-note" maxlength="1000" placeholder="환경, 데이터, 참고 사항"></div>
+      <div class="field"><label for="rd-actual">실제 결과</label><textarea class="textarea" id="rd-actual" maxlength="2000" style="min-height:56px" placeholder="실제로 어떻게 동작했는지 (실패면 꼭 적어 주세요)"></textarea></div>
       <div class="prow"><div class="field"><label for="rd-who">수행자</label><select class="select" id="rd-who">${raw(performerOptions(members, performers, me))}</select></div>
         <div class="field"><label for="rd-on">수행일</label><input class="input" type="date" id="rd-on" value="${today}" max="${today}"><div class="err" id="rd-on-err"></div></div></div>
+      <div class="field"><label for="rd-note">메모</label><input class="input" id="rd-note" maxlength="1000" placeholder="환경, 데이터, 참고 사항"></div>
+      <label class="rd-issue" id="rd-issue-wrap" hidden style="display:flex;gap:6px;align-items:center;margin:4px 0"><input type="checkbox" id="rd-issue" checked> 실패 내용을 이슈로 등록 (담당자·연결된 요구사항/WBS 복사)</label>
       ${raw(open.length ? html`<div class="rd-resolve" id="rd-resolve" hidden>${raw(open.map((e) => html`<label><input type="checkbox" data-resolve="${e.issue_id}" checked> ${e.issue_display_id}도 해결로 바꾸기</label>`).join(''))}</div>` : '')}
-      <div class="actions"><button class="btn btn--secondary" data-v="0">취소</button><button class="btn btn--primary" data-v="1">결과 기록</button></div></div>`;
-    const done = (v) => { el.remove(); resolve(v); };
-    const box = $('#rd-resolve', el);
-    el.querySelectorAll('input[name=result]').forEach((r) => r.onchange = () => { if (box) box.hidden = r.value !== 'PASS' || !r.checked; });
-    el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; }
-      if (b.dataset.v === '0') return done(null);
-      const r = el.querySelector('input[name=result]:checked'); if (!r) { $('#rd-err', el).textContent = '결과를 선택해 주세요.'; return; }
-      const on = $('#rd-on', el).value;
-      if (on && on > today) { $('#rd-on-err', el).textContent = '수행일은 오늘 이후 날짜로 정할 수 없습니다.'; return; }
-      const resolve_issue_ids = r.value === 'PASS' ? [...el.querySelectorAll('[data-resolve]:checked')].map((c) => c.dataset.resolve) : [];
-      done({ result: r.value, actual_result: $('#rd-actual', el).value.trim(), note: $('#rd-note', el).value.trim(), ...performerBody($('#rd-who', el).value), performed_on: on || today, resolve_issue_ids }); });
-    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });
-    document.body.append(el); el.querySelector('input[name=result]').focus();
-  });
+      <div class="actions" style="margin-top:8px"><button type="button" class="btn btn--primary btn--sm" id="run-save">결과 기록</button></div>
+    </section>`;
+  };
+  /** 실행 이력 타임라인 right under the form: the last 3 runs (all of them on the 실행 이력 tab). */
+  const execTimeline = (x) => (x.executions.length ? html`<div class="runlog" data-runlog style="margin-top:12px"><h4 class="dh">최근 실행 <em>${x.executions.length}</em>${raw(x.executions.length > 3 ? '<button type="button" class="link linkbtn" data-goto-exec style="margin-left:auto;width:auto;font-size:12.5px">전체 이력 →</button>' : '')}</h4>
+    <ol class="exec">${raw(x.executions.slice(0, 3).map((e) => html`<li class="exec__i exec--${e.result.toLowerCase()}" data-runlog-i><span class="exec__n">#${e.execution_number}</span>${raw(resBadge(e.result))}<span class="exec__who">${execLine(e)}</span>${raw(e.step_results ? html`<small class="dim"> · 단계 ${e.step_results.filter((r) => r.result === 'PASS').length}/${e.step_results.length} 통과</small>` : '')}
+      ${raw(e.issue_display_id ? html` · <a class="link mono" href="/app/projects/${p.id}/issues?sel=${e.issue_id}" data-link data-runlog-issue>${e.issue_display_id}</a>` : '')}${raw(e.actual_result ? html`<p class="hint" style="margin:2px 0 0">${e.actual_result}</p>` : '')}</li>`).join(''))}</ol></div>` : '');
+  /** Reads the inline form → the POST body, or null after showing what is missing. */
+  const readRun = (box) => {
+    const today = todayKst();
+    $('#rd-err', box).textContent = ''; $('#rd-on-err', box).textContent = '';
+    const r = box.querySelector('input[name=result]:checked'); if (!r) { $('#rd-err', box).textContent = '결과를 선택해 주세요.'; box.querySelector('input[name=result]').focus(); return null; }
+    const on = $('#rd-on', box).value;
+    if (on && on > today) { $('#rd-on-err', box).textContent = '수행일은 오늘 이후 날짜로 정할 수 없습니다.'; return null; }
+    const step_results = [...box.querySelectorAll('[data-run-step]')].map((li) => { const c = li.querySelector('input:checked'); return c ? { index: Number(li.dataset.runStep), result: c.value } : null; }).filter(Boolean);
+    const resolve_issue_ids = r.value === 'PASS' ? [...box.querySelectorAll('[data-resolve]:checked')].map((c) => c.dataset.resolve) : [];
+    return { result: r.value, actual_result: $('#rd-actual', box).value.trim(), note: $('#rd-note', box).value.trim(), ...performerBody($('#rd-who', box).value), performed_on: on || today, resolve_issue_ids,
+      ...(step_results.length ? { step_results } : {}), raise_issue: r.value === 'FAIL' && $('#rd-issue', box).checked };
+  };
 
   /* US-1: 요구사항별 테스트 만들기 — confirm with a short preview list, then one POST (409 when nothing is left) */
   const openGenerate = async () => {
@@ -454,6 +470,7 @@ export async function testsPage(id) {
     }
     for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; draftSteps = []; draftReqs = []; setParam('sel', ''); setParam('new', '1'); draw(); $('#c-title').focus(); }; }
     const gb = $('#gen'); if (gb) gb.onclick = openGenerate;
+    for (const k of ['ai-testgen', 'ai-testgen2']) { const b = $('#' + k); if (b) b.onclick = () => openTestGenDialog({ pid: id, onDone: async () => { await load(); draw(); } }); }
     const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = () => openImport({ kind: 'tests', base: tApi(), onDone: async () => { await load(); draw(); } });
     const cs = $('#colst'); if (cs) cs.onchange = () => { showStatus = cs.checked; try { localStorage.setItem(COLST, showStatus ? '1' : '0'); } catch {} draw(); };
     main.querySelectorAll('[data-exclude]').forEach((b) => b.onclick = async (e) => { e.stopPropagation(); const r = cov.find((x) => x.id === b.dataset.exclude); const reason = await exclusionDialog(r); if (reason) await setExclusion(r.id, reason); });
@@ -523,11 +540,22 @@ export async function testsPage(id) {
       drawer.querySelectorAll('#steps input').forEach((i) => i.oninput = markDirty);
     };
     if (saveBtn) { rebind(); saveBtn.onclick = () => save('steps', readSteps(drawer)); }
-    const run = $('#run');
-    if (run) run.onclick = async () => {
-      const r = await runDialog(x); if (!r) return;
-      try { const d = await api('POST', tApi(`/${x.id}/executions`), r); dtab = 'exec'; await apply(d); toast(`실행 #${d.execution.execution_number} 결과를 기록했습니다.${d.execution.resolved && d.execution.resolved.length ? ` ${d.execution.resolved.join(', ')} 해결` : ''}`); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); }
-    };
+    // batch7 #20: 테스트 실행 = go to the inline 실행 기록 (info tab) and focus the first input — no modal
+    const run = $('#run'); const box = $('#runbox');
+    if (run) run.onclick = () => { if (dtab !== 'info') { const t = dr.querySelector('[data-dtab="info"]'); if (t) t.click(); } const b = $('#runbox'); if (!b) return; b.scrollIntoView({ block: 'start', behavior: 'smooth' }); const f = b.querySelector('[data-run-step] input, input[name=result]'); if (f) f.focus({ preventScroll: true }); };
+    if (box) {
+      const sync = () => { const v = (box.querySelector('input[name=result]:checked') || {}).value; const iw = $('#rd-issue-wrap', box); if (iw) iw.hidden = v !== 'FAIL'; const rb = $('#rd-resolve', box); if (rb) rb.hidden = v !== 'PASS'; };
+      box.querySelectorAll('input[name=result]').forEach((r) => { r.onchange = sync; });
+      box.querySelectorAll('[data-run-step] input').forEach((r) => { r.onchange = () => { const all = [...box.querySelectorAll('[data-run-step]')]; const picked = all.map((li) => (li.querySelector('input:checked') || {}).value); if (box.querySelector('input[name=result]:checked') || picked.some((v) => !v)) return;
+        const want = picked.includes('FAIL') ? 'FAIL' : 'PASS'; const o = box.querySelector(`input[name=result][value=${want}]`); if (o) { o.checked = true; sync(); } }; });   // every step answered → suggest the overall result (still editable)
+      $('#run-save', box).onclick = async (e) => {
+        const body = readRun(box); if (!body) return; const btn = e.currentTarget; btn.disabled = true;
+        try { const d = await api('POST', tApi(`/${x.id}/executions`), body); await apply(d);
+          toast(`실행 #${d.execution.execution_number} 결과를 기록했습니다.${d.execution.issue_display_id ? ` ${d.execution.issue_display_id} 이슈 등록` : ''}${d.execution.resolved && d.execution.resolved.length ? ` ${d.execution.resolved.join(', ')} 해결` : ''}`); }
+        catch (err) { btn.disabled = false; const m = err.fields ? Object.values(err.fields)[0] : err.message; if (err.fields && err.fields.performed_on) $('#rd-on-err', box).textContent = m; toast(m); }
+      };
+    }
+    const ge = dr.querySelector('[data-goto-exec]'); if (ge) ge.onclick = () => { const t = dr.querySelector('[data-dtab="exec"]'); if (t) t.click(); };
     main.querySelectorAll('[data-raise]').forEach((b) => b.onclick = async () => {
       if (!(await confirmDialog({ title: '실패 결과를 이슈로 등록할까요?', body: `${x.display_id}의 제목·실제 결과·담당자와 연결된 요구사항/WBS를 복사해 새 이슈를 만듭니다. 같은 실행 기록에서는 한 번만 등록됩니다.`, confirm: '이슈로 등록' }))) return;
       try { const d = await api('POST', tApi(`/${x.id}/executions/${b.dataset.raise}/issue`), {}); toast(`${d.issue.display_id} 이슈를 등록했습니다.`); await apply(d); }
