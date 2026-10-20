@@ -21,6 +21,7 @@ test('#6 no "not yet" copy in user-facing strings', () => {
   for (const f of files) codeLines(readFileSync(f, 'utf8')).forEach((l, i) => {
     if (!/아직 지원|준비 중입니다|곧 제공|coming soon/i.test(l)) return;
     if (relative(root, f) === 'public/app/plans.js' && /^export const SUBSCRIBE_SOON = /.test(l.trim())) return;   // founder-mandated wording (T5)
+    if (relative(root, f) === 'server/billing/service-orders.js' && /^export const RECURRING_SOON = /.test(l.trim())) return;   // founder-mandated wording (서비스 결제 월 구독, 2026-10-20)
     bad.push(`${relative(root, f)}:${i + 1} ${l.trim().slice(0, 120)}`);
   });
   assert.deepEqual(bad, []);
