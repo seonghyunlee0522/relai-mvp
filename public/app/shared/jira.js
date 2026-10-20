@@ -33,7 +33,7 @@ export function jiraPaneHtml(d, it, { ro = false } = {}) {
       <div class="jsum"><div><span>하위 작업 연결 지라</span><b>${s.total}</b></div><div><span>완료</span><b>${s.done}</b></div><div><span>진행 중</span><b>${s.in_progress}</b></div><div><span>할 일</span><b>${s.todo}</b></div><div class="jsum__r"><span>지라 실행률</span><b>${s.rate === null ? '-' : s.rate + '%'}</b><small>WBS 진행률과 별개</small></div></div>
       <h4 class="dh">지라 에픽 <em>${epics.length}</em><small class="dim" style="margin-left:8px;font-weight:500;letter-spacing:0;text-transform:none">계층 연결용 · 실행률에는 포함되지 않습니다</small></h4>
       ${raw(epics.length ? html`<ol class="jlist">${raw(epics.map((l) => issueRow(l, ro)).join(''))}</ol>` : '<p class="hint">연결된 에픽이 없습니다.</p>')}
-      ${raw(ro || !m.group_issue_type_name && !epics.length ? '' : '')}${raw(ro ? '' : html`<div class="actions" style="margin-top:8px"><button type="button" class="btn btn--secondary btn--sm" data-jlink-add="EPIC">이 상위 작업을 지라 에픽과 연결</button></div>`)}
+      ${raw(ro || !m.group_issue_type_name && !epics.length ? '' : '')}${raw(ro || it.system_key ? '' : html`<div class="actions" style="margin-top:8px"><button type="button" class="btn btn--secondary btn--sm" data-jlink-add="EPIC">이 상위 작업을 지라 에픽과 연결</button></div>`)}
       <p class="hint">실행 이슈는 하위 작업에 연결합니다. 상위 작업의 진행률·상태는 기존처럼 하위 작업을 합산합니다.</p>`;
   }
   return html`${raw(head)}

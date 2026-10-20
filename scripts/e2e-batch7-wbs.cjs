@@ -99,8 +99,7 @@ const isWorkday = (d, hol) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay()
     /* ---------- B. 데이터 이관 switch ---------- */
     const B = await mkProject('데이터 이관 프로젝트');
     await page.goto(`${B.url}/wbs`); await page.waitForSelector('.gtable--wbs tr.is-sys');
-    await page.click('[data-tmore]').catch(() => {});
-    await page.waitForSelector('#dm-sw', { state: 'attached' });
+    await page.waitForSelector('.wempty #dm-sw');   // no item yet → the switch sits on the empty card (the ⋯ menu has it once the toolbar shows)
     await page.$eval('#dm-sw', (el) => { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); });
     await page.waitForFunction(() => [...document.querySelectorAll('.wtitle__t')].some((x) => x.textContent.trim() === '데이터 이관'));
     const rowsB = await rowsText();
@@ -149,8 +148,8 @@ const isWorkday = (d, hol) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay()
     check('D0 mock AI draft generated (phase in the strict schema)', gen.status === 200, JSON.stringify(gen.json).slice(0, 200));
     for (const [w, h, tag] of [[2560, 1440, '2560'], [1440, 900, '1440']]) {
       await page.setViewportSize({ width: w, height: h });
-      await page.goto(`${D.url}/wbs`); await page.waitForSelector('#ai-wbs-pc');
-      await page.click('#ai-wbs-pc'); await page.waitForSelector('.dialog'); await page.click('.dialog .btn--primary:has-text("이어서 진행")');
+      await page.goto(`${D.url}/wbs`); await page.waitForSelector('#ai-wbs2');
+      await page.click('#ai-wbs2'); await page.waitForSelector('.dialog'); await page.click('.dialog .btn--primary:has-text("이어서 진행")');
       await page.waitForSelector('[data-wps] .wpr');
       const m = await page.evaluate(() => { const dlg = document.querySelector('.dialog--ai-sheet').getBoundingClientRect(); const tree = document.querySelector('.wps__tree');
         const rows = [...document.querySelectorAll('.wpr')]; return { dw: dlg.width, dh: dlg.height, sw: tree.scrollWidth, cw: tree.clientWidth, maxRow: Math.max(...rows.map((r) => r.getBoundingClientRect().height)), n: rows.length, heads: [...document.querySelectorAll('.wph__t')].map((x) => x.textContent.trim()) }; });
@@ -162,7 +161,7 @@ const isWorkday = (d, hol) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay()
       await page.click('[data-close]').catch(() => {}); await page.waitForTimeout(200);
     }
     // commit through the UI with dates (1440)
-    await page.goto(`${D.url}/wbs`); await page.waitForSelector('#ai-wbs-pc'); await page.click('#ai-wbs-pc'); await page.waitForSelector('.dialog .btn--primary:has-text("이어서 진행")'); await page.waitForTimeout(300);
+    await page.goto(`${D.url}/wbs`); await page.waitForSelector('#ai-wbs2'); await page.click('#ai-wbs2'); await page.waitForSelector('.dialog .btn--primary:has-text("이어서 진행")'); await page.waitForTimeout(300);
     await page.click('.dialog .btn--primary:has-text("이어서 진행")'); await page.waitForSelector('[data-wps] .wpr');
     const sched = (await c('GET', `${D.P}/ai/wbs-plans/${plan.id}/schedule`)).json;
     check('D4 schedule basis = project window', sched.start === '2026-11-02' && sched.end === '2027-03-31');

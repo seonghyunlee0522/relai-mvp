@@ -344,7 +344,8 @@ export async function wbsPage(id) {
     return html`<div class="wempty" data-tour-id="wbs-empty"><span class="wempty__ic" aria-hidden="true">▤</span><h2>${v === 'gantt' ? lead : bodyText}</h2>
       ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="skel">WBS 뼈대 만들기</button></div>
         ${raw(ghost && !hasNodes() ? html`<div class="wempty__add"><input class="input" data-ghost maxlength="200" placeholder="${ghost.item_type === 'MILESTONE' ? '마일스톤 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off" aria-label="첫 작업 이름"></div>` : '')}
-        <p class="wempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button> · ${raw(ai.enabled ? '<button type="button" class="link linkbtn" id="ai-wbs2">AI 초안</button>' : '<span class="dim" title="AI 기능이 설정되지 않았습니다.">AI 초안(사용 불가)</span>')}</p>`)}</div>`;
+        <p class="wempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button> · ${raw(ai.enabled ? '<button type="button" class="link linkbtn" id="ai-wbs2">AI 초안</button>' : '<span class="dim" title="AI 기능이 설정되지 않았습니다.">AI 초안(사용 불가)</span>')}</p>
+        ${raw(hasNodes() ? html`<p class="wempty__alt"><label class="toggle" title="분석·설계 다음에 '데이터 이관' 단계를 둡니다. 프로젝트 특성 '데이터 이관'도 함께 바뀝니다."><input type="checkbox" id="dm-sw" ${dmNode() ? 'checked' : ''}> 데이터 이관 단계</label></p>` : '')}`)}</div>`;
   };
   /** 뼈대 확인 dialog: a short list (그룹명 + 건수) instead of a sentence; [취소] [만들기]. */
   const openSkeleton = async () => {
@@ -429,7 +430,7 @@ export async function wbsPage(id) {
     g.wbs = summary;
     // Phase 3 (US-2, J3): 0 items → the empty state only (no toolbar table, no blank row, no 총 N건). 직접 추가 opens one input inside it.
     // batch7: no user item yet → the empty card (뼈대 primary) above the fixed phase nodes
-    const body = !hasUser() ? html`${raw(emptyWbs(v))}${raw(hasNodes() && v === 'list' ? grid.html() : '')}`
+    const body = !hasUser() ? html`${raw(emptyWbs(v))}${raw(hasNodes() && v === 'list' && !archived ? grid.html() : '')}`
       : v === 'gantt' ? html`<div class="rtable-wrap wbs-wrap">${raw(rows.length ? gantt(rows) : emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '보기 조건을 바꾸거나 필터를 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }))}</div>`
       : grid.html();
     main.innerHTML = html`<div class="page page--wide">

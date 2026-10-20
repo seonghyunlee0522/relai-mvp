@@ -114,6 +114,7 @@ function assertRole(w, role) {
   if (w.item_type === 'MILESTONE') throw new ValidationError({ wbs_item_id: '마일스톤에는 지라 이슈를 연결하지 않습니다. 실제 실행 작업(하위 작업)에 연결하세요.' });
   if (role === 'EXECUTION' && w.is_group) throw new ValidationError({ wbs_item_id: '하위 작업이 있는 항목(상위 작업)에는 실행 이슈를 직접 연결하지 않습니다. 하위 작업에 연결하거나 상위 작업을 지라 에픽과 연결하세요.' });
   if (role === 'EPIC' && !w.is_group) throw new ValidationError({ wbs_item_id: '에픽 연결은 하위 작업이 있는 상위 작업에만 할 수 있습니다.' });
+  if (role === 'EPIC' && w.system_key) throw new ValidationError({ wbs_item_id: '고정 단계 항목은 에픽 연결 대상이 아닙니다. 그 아래 상위 작업을 에픽과 연결하세요.' });   // batch7 B3.2
 }
 async function requireMapping(db, project) {
   const m = await getMapping(db, project.id);

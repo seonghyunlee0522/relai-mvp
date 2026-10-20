@@ -32,7 +32,7 @@ jira_issue_snapshots(link ↔ summary/issue_type/status_id/status_name/status_ca
 integration_events(연결+payload_hash unique) · integration_sync_runs(trigger MANUAL|WEBHOOK|SCHEDULED, status, counts) · integration_webhooks(external_webhook_id, expires_at) · integration_activity(feed)
 
 ## 정책
-* 연결 대상: **Leaf TASK** (is_group=false, item_type≠MILESTONE). Group은 EPIC role만(선택), 마일스톤은 불가. SUMMARY는 enum이 아니라 is_group으로 판단.
+* 연결 대상: **Leaf TASK** (is_group=false, item_type≠MILESTONE). Group은 EPIC role만(선택), 마일스톤은 불가. SUMMARY는 enum이 아니라 is_group으로 판단. batch7: WBS 고정 최상위 단계(system_key)는 EPIC 대상에서 제외(서버 400, 화면 버튼 없음).
 * 1 Jira Issue → 1 WBS (live link partial unique). 이미 연결된 Issue는 검색 결과에 "연결됨 · WBS x.y"로 표시되고 선택 불가.
 * 실행률 = Done statusCategory / EXECUTION 링크. Group = 하위 Leaf 합(1 issue → 1 WBS이므로 자연 dedup), Epic 제외. **WBS progress/computed_status와 분리.**
 * Auto complete(매핑 옵션, 기본 OFF): Leaf TASK + EXECUTION ≥1 + 전부 Done → updateWbs(COMPLETED/100) + history JIRA_AUTO_COMPLETED(source=jira_sync). Group 미적용.
