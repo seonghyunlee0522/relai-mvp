@@ -330,7 +330,7 @@ export async function definitionPage(id, slug = '') {
     const methods = METHODS.filter(([k]) => k !== 'KICKOFF' || !kick || kick.status !== 'SKIPPED');
     const pd = m.project_dates;
     const nOrg = (t) => (d.stakeholders || []).filter((x) => x.org_type === t).length;
-    return html`${raw(s && s.reapproval ? '<div class="notice notice--crit">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 다시 승인받은 뒤 <b>다시 확인 완료</b>를 누릅니다.</div>' : '')}
+    return html`${raw(s && s.reapproval ? '<div class="notice notice--warn">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 다시 승인받은 뒤 <b>다시 승인 완료</b>를 누릅니다.</div>' : '')}
       ${raw(s && s.bypass ? html`<div class="notice notice--soft">승인 전 진행 — ${s.bypass.reason === NO_REASON ? NO_REASON : `사유: ${s.bypass.reason}`} (${[s.bypass.date, s.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
       <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(planMenu())}</div>
         <dl><div><dt>목표</dt><dd>${d.goal || (d.success_criteria[0] && d.success_criteria[0].text) || '작성되지 않음'}</dd></div>

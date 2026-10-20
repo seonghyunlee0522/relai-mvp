@@ -46,5 +46,7 @@
 .wd__chip summary::-webkit-details-marker{display:none}
 .wd__chip .pmenu__list{min-width:120px}
 .def__example{font-weight:600}
+/* 재승인 권장 (batch7 #5): amber, not red — 착수 승인 is 권장 */
+.chx__badge.is-warn{background:var(--warn-bg);color:var(--warn-fg)}
 
 @media (max-width:767px){.envg{grid-template-columns:1fr}.envf__t{grid-template-columns:1fr}.dl__i{flex-wrap:wrap}}

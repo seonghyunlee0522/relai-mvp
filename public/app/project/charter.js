@@ -121,7 +121,7 @@ export function charterParts(c, { ro, def }) {
   /* ---------- 8. 착수보고회 · 착수 결과 승인 (Phase 1 v2) ---------- */
   const k = c.kickoff; const a = c.approval;
   const fmtDT = (v) => (!v ? '' : `${fmtDate(v.slice(0, 10))}${v.length > 10 ? ` ${v.slice(11, 16)}` : ''}`);
-  const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">승인됨</span>' : a.status === 'REAPPROVAL' ? '<span class="chx__badge is-crit">확인 필요 · 재승인 필요</span>' : '<span class="chx__badge">미승인</span>';
+  const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">승인됨</span>' : a.status === 'REAPPROVAL' ? '<span class="chx__badge is-warn">확인 필요 · 재승인 권장</span>' : '<span class="chx__badge">미승인</span>';
   const approvalInner = !a ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수 결과 승인 ${raw(apvState)}</h3>
     ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — ${a.bypass.reason === NO_REASON ? NO_REASON : `사유: ${a.bypass.reason}`} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
       : html`<dl class="chx__kvs">${raw(kv('승인자', a.approver ? `${a.approver.name}${a.approver.title ? ` ${a.approver.title}` : ''}` : ''))}${raw(kv('승인일', a.date ? fmtDate(a.date) : ''))}${raw(kv('승인 방법', a.method_label))}${raw(kv('근거', a.evidence))}</dl>
@@ -134,8 +134,12 @@ export function charterParts(c, { ro, def }) {
   return { empty, block, kv, goals, scope, stake, shTable, governance, time, acr, ops, gate, kickInner, approvalInner };
 }
 
+/** 01 styles shared with the 정의 screen (적용 환경 · 산출물 표, 재승인 권장 badge — batch7 T2). */
+const CSS_HREF = '/assets/project/definition-scope.css';
+const loadCss = () => { if (document.querySelector(`link[href="${CSS_HREF}"]`)) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CSS_HREF; document.head.append(l); };
+
 export async function charterPage(id) {
-  const main = $('#main');
+  const main = $('#main'); loadCss();
   const [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/charter`))]);
   const p = g.project; const c = r.charter; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
   document.title = `프로젝트 개요 — ${p.name} — RELAI`;
