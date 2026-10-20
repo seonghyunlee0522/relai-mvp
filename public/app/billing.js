@@ -97,11 +97,14 @@ function actionsPanel(b) {
   const f = b.flags || {};
   const s = b.subscription;
   const canCancel = paid && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && s.auto_renew && !s.cancel_at_period_end;
+  const canRefund = paid && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && Boolean(b.refund_quote_url);
   const btns = [
     html`<a class="btn btn--primary btn--sm" id="bl-change" href="/app/billing/plans" data-link>${b.plan === 'FREE' ? '요금제 살펴보기' : '요금제 변경'}</a>`,
     paid && f.addons ? html`<a class="btn btn--secondary btn--sm" id="bl-addon" href="/app/billing/subscribe?addon=1" data-link>사용자 · 프로젝트 추가</a>` : '',
     paid || b.plan === 'ENTERPRISE' ? html`<a class="btn btn--secondary btn--sm" id="bl-topup" href="/app/settings/credits#cr-buy" data-link>AI 크레딧 충전</a>` : '',
     canCancel ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel" data-phone-ok>해지</button>` : '',
+    // 이용약관 제11조 2항: end now + unused days refunded (also after a period-end cancel); shown only when the server sends refund_quote_url
+    canRefund ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel-refund" data-phone-ok>지금 해지하고 환불</button>` : '',
   ].filter(Boolean).join('');
   const free = b.plan === 'FREE' ? html`<p class="bl-upsell" id="bl-free-topup">AI 크레딧 충전은 Pro부터 할 수 있어요. <a class="link" href="/app/billing/plans" data-link>Pro로 업그레이드</a>하면 매월 1,000 크레딧과 충전을 이용할 수 있어요.</p>` : '';
   // D3 (founder 2026-10-20): no one-time passes — a paid plan without auto renewal has been cancelled
@@ -138,8 +141,21 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
   const cancel = el.querySelector('#bl-cancel');
   if (cancel) cancel.onclick = async () => {
     const end = day(b.subscription?.current_period_end);
-    if (!(await confirmDialog({ title: `${b.plan_label} 구독을 해지할까요?`, body: `${end}까지 ${b.plan_label}를 그대로 쓰고, 이후 Free로 바뀌어요. 자동 갱신은 바로 멈추고 위약금은 없어요. 남은 기간을 일할 계산해 환불받으려면 이용약관의 환불 기준에 따라 요청하세요. 데이터는 삭제되지 않고 해지 후 30일 동안 조회·내보내기를 할 수 있어요.`, confirm: '해지', danger: true }))) return;
-    try { await api('POST', `/api/workspaces/${wid}/billing/cancel`, {}); toast('해지가 예약됐어요.'); await mountBilling(el, { wid }); } catch (e) { toast(e.message); }
+    if (!(await confirmDialog({ title: `${b.plan_label} 구독을 해지할까요?`, body: `${end}까지 ${b.plan_label}를 그대로 쓰고, 이후 Free로 바뀌어요. 자동 갱신은 바로 멈추고 위약금은 없어요. 지금 끝내고 남은 기간을 일할 환불받으려면 "지금 해지하고 환불"을 쓰세요. 데이터는 삭제되지 않고 해지 후 30일 동안 조회·내보내기를 할 수 있어요.`, confirm: '해지', danger: true }))) return;
+    try { await api('POST', b.cancel_url || `/api/workspaces/${wid}/billing/cancel`, {}); toast('해지가 예약됐어요.'); await mountBilling(el, { wid }); } catch (e) { toast(e.message); }
+  };
+  const refund = el.querySelector('#bl-cancel-refund');
+  if (refund) refund.onclick = async () => {
+    let q;
+    try { q = (await api('GET', b.refund_quote_url)).refund; } catch (e) { toast(e.message); return; }
+    const lines = (q.lines || []).map((l) => html`<li>${l.label || '결제'} ${krw(l.paid)} · 남은 ${n(l.days)}/${n(l.period_days)}일 → <b>${krw(l.amount)}</b></li>`).join('');
+    const bodyHtml = html`<p>${b.plan_label} 이용이 지금 끝나고 Free로 바뀌어요. 남은 기간을 일할 계산해 <b id="bl-refund-total">${krw(q.total)}</b>을 환불해요${q.withdrawal ? ' (청약철회)' : ''}. 위약금은 없어요.</p>
+      ${raw(lines ? html`<ul class="bl-list">${raw(lines)}</ul>` : '')}<p class="hint">이번 기간의 기본 AI 크레딧은 소멸해요. 데이터는 해지 후 30일 동안 조회·내보내기를 할 수 있어요.</p>`;
+    if (!(await confirmDialog({ title: '지금 해지하고 환불받을까요?', bodyHtml, confirm: '해지하고 환불', danger: true }))) return;
+    try {
+      const r = await api('POST', `/api/workspaces/${wid}/billing/cancel`, { refund: true });
+      toast(r.cancel?.refund_total ? `해지했어요. ${krw(r.cancel.refund_total)} 환불을 진행해요.` : '해지했어요.'); await mountBilling(el, { wid });
+    } catch (e) { toast(e.message); }
   };
   el.querySelectorAll('[data-sched-cancel]').forEach((btn) => { btn.onclick = async () => {
     const c = b.scheduled[Number(btn.dataset.schedCancel)];

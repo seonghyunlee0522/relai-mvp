@@ -71,6 +71,11 @@ test('Billing page (live T1 shape): null buckets → total only; empty scheduled
   // over the limit after a downgrade (D6): banner says data is kept and what to reduce
   const over = text(billingHtml(fixture({ over_limit: { projects: 2, members: 0 } })));
   assert.ok(over.includes('한도를 넘었어요 — 데이터는 그대로예요.')); assert.ok(over.includes('한도 초과: 활성 프로젝트 2개.'));
+  // 지금 해지하고 환불 (terms 제11조 2항): offered with refund_quote_url, also after a period-end cancel; never without the URL or for members
+  assert.match(billingHtml(fixture()), /id="bl-cancel-refund"/);
+  assert.match(billingHtml(fixture({ cancel_at_period_end: true, cancel_url: null, subscription: { ...FIX.subscription, cancel_at_period_end: true } })), /id="bl-cancel-refund"/);
+  assert.doesNotMatch(billingHtml(fixture({ refund_quote_url: null })), /id="bl-cancel-refund"/);
+  assert.doesNotMatch(billingHtml(fixture({ can_manage: false })), /id="bl-cancel-refund"/);
   // a scheduled change without cancel_url (T3 not live) is listed but not cancellable
   assert.doesNotMatch(billingHtml(fixture({ scheduled: [{ kind: 'CYCLE', to: 'ANNUAL', effective_at: '2026-11-20' }] })), /data-sched-cancel/);
 });

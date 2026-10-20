@@ -8,6 +8,9 @@
   "auto_renew": true,
   "next_payment_at": "2026-11-20T00:00:00+09:00",
   "next_payment_amount": 32000,
+  "cancel_at_period_end": false,
+  "cancel_url": "/api/workspaces/W/billing/cancel",
+  "refund_quote_url": "/api/workspaces/W/billing/refund-quote",
   "limits": {
    "projects": 3,
    "users": 17

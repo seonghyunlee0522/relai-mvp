@@ -140,8 +140,15 @@ const noHScroll = (page) => page.evaluate(() => document.documentElement.scrollW
     await m.shot('07-billing-375.png');
     const rq = await m.api('GET', `/api/workspaces/${m.W}/billing/refund-quote`);
     check('refund quote: 청약철회 within 7 days, ≤ 288,000', rq.json.refund.withdrawal === true && rq.json.refund.total > 0 && rq.json.refund.total <= 288000, JSON.stringify(rq.json.refund));
-    const c = await m.api('POST', `/api/workspaces/${m.W}/billing/cancel`, { refund: true });
-    check('cancel + refund: FREE now, refund DONE (partial cancel)', c.status === 200 && c.json.billing.plan === 'FREE' && sql(`SELECT status FROM subscription_refunds WHERE workspace_id = '${q(m.W)}'`) === 'DONE', JSON.stringify(c.json?.cancel || c.json));
+    // 지금 해지하고 환불 (terms 제11조 2항) on the phone: quote in the confirm, one click + one confirm
+    await m.page.click('#bl-cancel-refund'); await m.page.waitForSelector('#bl-refund-total', { timeout: 8000 }).catch(() => {});
+    const shown = Number(((await m.page.textContent('#bl-refund-total').catch(() => '')) || '').replace(/\D/g, ''));
+    check('375px: 지금 해지하고 환불 dialog shows the server refund total', shown === rq.json.refund.total, `${shown} vs ${rq.json.refund.total}`);
+    await m.shot('07b-refund-confirm-375.png');
+    await m.page.click('.dialog [data-v="1"]');
+    await m.page.waitForFunction(() => !document.querySelector('#bl-cancel-refund'), null, { timeout: 8000 }).catch(() => {});
+    const b = (await m.api('GET', `/api/workspaces/${m.W}/billing`)).json.billing;
+    check('cancel + refund: FREE now, refund DONE (partial cancel)', b.plan === 'FREE' && sql(`SELECT status FROM subscription_refunds WHERE workspace_id = '${q(m.W)}'`) === 'DONE' && Boolean(b.data_retention_until), JSON.stringify({ plan: b.plan, refunds: b.refunds }));
     check('375px: no page errors', !m.errors.length, m.errors.join(' | '));
     await m.ctx.close();
   }
