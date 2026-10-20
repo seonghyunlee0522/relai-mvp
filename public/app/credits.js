@@ -1,20 +1,23 @@
 /* 설정 › AI 크레딧 (AI-credits-only billing §4): one wallet per workspace, readable by every member, bought by the OWNER.
  * Balance (purchased / free), this + last month, per feature, the price list, packs, and the full usage log with month / project /
  * user filters and a CSV (the monthly statement). Credits are a usage unit here (batch7 #7): no won amounts on this page except
- * the 충전 팩 buttons themselves, which only exist while payments are on. Payments off → no 충전 area at all, one 문의하기 link (#6). */
+ * the 충전 팩 buttons (the priced product list the NicePay merchant review needs, with 결제 수단 신용카드). Payments off → the packs
+ * still show, but a click only says SUBSCRIBE_SOON and calls nothing; the 문의하기 link stays (#6). */
 import { api } from './core/api.js';
 import { $, html, raw, fmtDT } from './core/dom.js';
 import { state } from './core/state.js';
 import { toast, confirmDialog } from './shared/dialogs.js';
 import { isPhone, pcLine } from './core/device.js';
 import { loadPromos, promoHtml } from './shared/promo.js';
-import { LEGAL } from './shared/legal-info.js';
+import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
+import { SUBSCRIBE_SOON } from './plans.js';
 
 const n = (v) => Number(v || 0).toLocaleString('ko-KR');
-const krw = (v) => `₩${n(v)}`;
 const signed = (v) => (v > 0 ? `+${n(v)}` : v < 0 ? `−${n(-v)}` : '0');
+/** Price-table names on this page (a NicePay review screen: no 'test' wording); the feature itself keeps its name elsewhere. */
+const PRICE_LABEL = { TEST_GENERATION: 'AI 검증 시나리오 만들기' };
 const day = (iso) => (iso ? fmtDT(iso).slice(0, 10) : '');
-const CHECKOUT_MSG = { success: '결제가 완료되었습니다. 크레딧이 충전되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다.', fake: '테스트 결제 화면입니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
+const CHECKOUT_MSG = { success: '결제가 완료되었습니다. 크레딧이 충전되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다.', fake: '모의 결제로 처리했습니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
 
 export async function creditsPage(main = $('#main')) {
   document.title = 'AI 크레딧 — RELAI';
@@ -53,15 +56,16 @@ export async function creditsPage(main = $('#main')) {
   };
   const prices = () => html`<div class="panel" style="margin-top:16px"><div class="panel__h">AI 기능별 크레딧</div><div class="panel__b">
     <table class="rtable cr-price"><thead><tr><th>기능</th><th class="num">크레딧</th></tr></thead><tbody>
-    ${raw(s.prices.map((p) => html`<tr><td>${p.label}</td><td class="num">${n(p.credits)}</td></tr>`).join(''))}</tbody></table>
+    ${raw(s.prices.map((p) => html`<tr><td>${PRICE_LABEL[p.feature] || p.label}</td><td class="num">${n(p.credits)}</td></tr>`).join(''))}</tbody></table>
     <p class="hint" style="margin-top:8px">한 번 실행할 때마다 정해진 크레딧만 차감합니다. 실행 전에 가격을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p></div></div>`;
   const buy = () => html`<div class="panel" style="margin-top:16px" id="cr-buy"><div class="panel__h">크레딧 충전</div><div class="panel__b">
     ${raw(!s.can_buy ? '<p class="hint">충전과 환불 요청은 워크스페이스 소유자가 할 수 있습니다.</p>'
       : isPhone() ? '<p class="hint" data-phone-pay>결제는 PC에서 할 수 있습니다.</p>'
-        : html`<div class="cr-packs">${raw(s.packs.map((p) => html`<button type="button" class="cr-pack" data-pack="${p.key}"><b>${krw(p.amount)}</b><span>${n(p.credits)} 크레딧</span><small>공급가액 ${krw(p.supply)} + 부가세 ${krw(p.vat)}</small></button>`).join(''))}</div>
-          ${raw(state.user?.email_verified === false ? '<p class="hint">이메일 인증 후 충전할 수 있습니다.</p>' : '')}`)}
+        : html`<div class="cr-packs">${raw(s.packs.map((p) => html`<button type="button" class="cr-pack" data-pack="${p.key}"><b>${n(p.amount)}원</b><span>AI 크레딧 ${n(p.credits)}</span><small>공급가액 ${n(p.supply)}원 + 부가세 ${n(p.vat)}원</small></button>`).join(''))}</div>
+          <p class="cr-method" id="cr-method"><span class="dim">결제 수단</span> <label><input type="radio" name="cr-method" value="card" checked> 신용카드</label> <small class="dim">· 상품을 누르면 나이스페이먼츠 결제창이 열립니다</small></p>
+          ${raw(state.user?.email_verified === false && !payOff() ? '<p class="hint">이메일 인증 후 충전할 수 있습니다.</p>' : '')}`)}
     <p class="hint" style="margin-top:10px">무료 크레딧을 먼저 쓰고 구매한 크레딧은 그다음에 씁니다. 구매한 크레딧은 ${s.purchased_valid_years}년간 유효하며 자동 결제되지 않습니다.
-      환불: 구매 후 ${s.refund_policy.full_days}일 안에 쓰지 않은 상품은 전액, 그 밖의 미사용 구매 크레딧은 수수료 ${s.refund_policy.fee_pct}%를 뺀 금액을 돌려 드립니다. 무료 크레딧은 환불되지 않습니다.${s.sandbox ? ' (테스트 결제 환경)' : ''}</p>
+      환불: 구매 후 ${s.refund_policy.full_days}일 안에 쓰지 않은 상품은 전액, 그 밖의 미사용 구매 크레딧은 수수료 ${s.refund_policy.fee_pct}%를 뺀 금액을 돌려 드립니다. 무료 크레딧은 환불되지 않습니다.${s.sandbox ? ' (샌드박스 결제 환경)' : ''}</p>
     ${raw(s.can_buy && s.refundable > 0 && !isPhone() ? html`<p style="margin-top:8px"><button type="button" class="link linkbtn" id="cr-refund">환불 요청</button> <small class="dim">환불 가능한 미사용 구매 크레딧 ${n(s.refundable)}</small></p>` : '')}</div></div>`;
   const opt = (v, label, cur) => html`<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${label}</option>`;
   const log = () => {
@@ -83,8 +87,10 @@ export async function creditsPage(main = $('#main')) {
   const draw = () => {
     main.innerHTML = html`<div class="page page--narrow page--credits">${raw(head())}
       ${raw(html`<div class="cr-promo">${raw(promoHtml(promos, { placement: 'credits', until: s.plan === 'EARLY' ? day(s.early_access_until) : null }))}</div>`)}
-      ${raw(summary())}${raw(payOff() || (s.can_buy && !isPhone() && (s.ai_enabled === false || !s.provider_available)) ? '' : buy())}${raw(prices())}${raw(log())}</div>`;
+      ${raw(summary())}${raw(s.can_buy && !isPhone() && (s.ai_enabled === false || (!payOff() && !s.provider_available)) ? '' : buy())}${raw(prices())}${raw(log())}
+      ${raw(legalFooterHtml(LEGAL))}</div>`;
     main.querySelectorAll('[data-pack]').forEach((b) => b.onclick = async () => {
+      if (payOff()) return toast(SUBSCRIBE_SOON);   // payments off: the product list shows, no checkout call
       if (state.user?.email_verified === false) return toast('이메일 인증 후 충전할 수 있습니다.');
       b.disabled = true;
       try { const r = await api('POST', `/api/workspaces/${wid}/credits/checkout`, { pack: b.dataset.pack }); location.href = r.checkout_url; }

@@ -3595,3 +3595,22 @@ html.is-phone .actrow{grid-template-columns:44px minmax(0,1fr)}html.is-phone .ac
 .tg-tbl th{width:132px;text-align:left;vertical-align:top;font-weight:600;padding:4px 8px 4px 0}
 .tg-tbl td{padding:4px 0}
 .tg-steps{margin:0;padding-left:18px}
+
+/* NicePay merchant review path: plans products, 구독 · 카드 등록 page (/app/billing/subscribe), credit-pack 결제 수단 */
+.pl-packs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.pl-pack{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:10px;padding:14px 16px;color:inherit;text-decoration:none;background:var(--surface,#fff)}
+.pl-pack:hover{border-color:var(--primary,#2563eb)}
+.pl-pack span{font-size:18px;font-weight:700}
+.sub-form{max-width:720px}
+.sub-info dd{margin-bottom:6px}
+.sub-amount{font-size:18px}
+.sub-card .field{margin-bottom:14px;display:flex;flex-direction:column;gap:4px;max-width:420px}
+.sub-card label{font-weight:600}
+.sub-card .req,.sub-agree .req{color:var(--danger,#d92d20);font-style:normal}
+.sub-exp{display:flex;gap:8px}.sub-exp .select{width:120px}
+.sub-pw{width:96px}
+.field__err{color:var(--danger,#d92d20);min-height:0}
+.sub-terms{margin-bottom:10px}.sub-terms summary{cursor:pointer;color:var(--text-2)}.sub-terms ol{margin:8px 0 6px 18px;padding:0;font-size:13px;line-height:1.6;color:var(--text-2)}
+.sub-agree{display:flex;gap:8px;align-items:flex-start;margin:8px 0}
+.sub-pay{min-width:240px}
+.cr-method{margin:10px 0 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.cr-method label{display:inline-flex;gap:4px;align-items:center;font-weight:600}

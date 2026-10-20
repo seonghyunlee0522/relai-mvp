@@ -8,6 +8,7 @@ import { formDialog, inviteStatusChip, emailStatusChip } from './shared/forms.js
 import { usageBars, fmtDay } from './admin/ui.js';
 import { addSamples, deleteAllSamples } from './project/samples.js';
 import { phoneFeedback } from './feedback.js';
+import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
 
 const qp0 = () => new URLSearchParams(location.search);
 const unverified = () => state.user?.email_verified === false;   // server refuses checkout/invitations until the e-mail is verified
@@ -76,11 +77,8 @@ export async function settingsPage(main = $('#main')) {
       <p class="hint" style="margin-top:6px">워크스페이스 ${won(co.base_monthly)}/월 (소유자 ${co.included_users}명 포함) + 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월</p>
       <p class="hint" id="bill-quote" style="margin-top:8px">금액 계산 중…</p>
       <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay"${raw(unverified() ? ' disabled' : '')}>결제하기</button>${raw(unverified() ? verifyHint('bill-verify') : '')}</div>
-      <p class="hint">가격은 부가세 별도이며 결제 시 부가세 10%가 더해집니다. 현재 멤버 수(${co.min_users}명) 이상으로 구매해 주세요 · 자동 결제되지 않습니다.${co.sandbox ? ' (테스트 결제 환경)' : ''}</p>
-      ${raw(co.recurring_available && !extend ? html`<details style="margin-top:10px"><summary class="link">카드 등록 후 자동 결제(정기결제)로 구독</summary><div class="inline-form" style="gap:8px;flex-wrap:wrap;margin-top:8px">
-        <input class="input input--sm" name="number" placeholder="카드번호" autocomplete="cc-number" inputmode="numeric"><input class="input input--sm" name="expiry" placeholder="MM/YY" autocomplete="cc-exp" style="width:80px">
-        <input class="input input--sm" name="id_no" placeholder="생년월일 6자리 / 사업자번호" inputmode="numeric"><input class="input input--sm" name="password2" type="password" placeholder="비밀번호 앞 2자리" maxlength="2" style="width:130px">
-        <button class="btn btn--secondary btn--sm" type="button" id="bill-recurring">카드 등록 · 결제</button></div><p class="hint">카드 정보는 결제사(NicePay)로만 전달되고 RELAI에 저장되지 않습니다.</p></details>` : '')}
+      <p class="hint">가격은 부가세 별도이며 결제 시 부가세 10%가 더해집니다. 현재 멤버 수(${co.min_users}명) 이상으로 구매해 주세요 · 자동 결제되지 않습니다.${co.sandbox ? ' (샌드박스 결제 환경)' : ''}</p>
+      ${raw(!extend ? '<p style="margin-top:10px"><a class="link" href="/app/billing/subscribe" data-link id="bill-recurring-link">신용카드를 등록하고 매월 자동 결제(정기결제)로 구독하기 →</a></p>' : '')}
     </form>`;
   };
   const bindBuy = () => {
@@ -97,14 +95,9 @@ export async function settingsPage(main = $('#main')) {
     };
     f.cycle.onchange = refresh; f.users.oninput = refresh; refresh();
     f.onsubmit = async (e) => { e.preventDefault(); if (unverified()) return toast(VERIFY_HINT); const b = $('#bill-pay'); b.disabled = true; try { const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, val()); location.href = r.checkout_url; } catch (err) { b.disabled = false; toast(err.message); } };
-    const rb = $('#bill-recurring'); if (rb) rb.onclick = async () => {
-      rb.disabled = true;
-      try { billing = (await api('POST', `/api/workspaces/${wid}/billing/recurring`, { ...val(), card: { number: f.number.value, expiry: f.expiry.value, id_no: f.id_no.value, password2: f.password2.value } })).billing; toast('정기결제를 시작했습니다.'); draw(members0); }
-      catch (err) { rb.disabled = false; toast(Object.values(err.fields || {})[0] || err.message); }
-    };
   };
   let members0 = [];
-  const CHECKOUT_MSG = { success: '결제가 완료되었습니다. Team 플랜이 적용되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다. 다시 시도하거나 운영자에게 문의해 주세요.', fake: '테스트 결제 화면입니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
+  const CHECKOUT_MSG = { success: '결제가 완료되었습니다. Team 플랜이 적용되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다. 다시 시도하거나 운영자에게 문의해 주세요.', fake: '모의 결제로 처리했습니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
   if (qp0().get('checkout')) { toast(CHECKOUT_MSG[qp0().get('checkout')] || '결제를 처리하고 있습니다. 잠시 후 플랜이 반영됩니다.'); history.replaceState(null, '', '/app/settings#billing'); }
   // Pending invitations (OWNER/ADMIN only) — Phase 13
   let invites = []; const loadInvites = async () => { if (!perm.member_manage) return; try { invites = (await api('GET', `/api/workspaces/${wid}/invitations`)).all.filter((i) => i.status === 'PENDING' || i.status === 'EXPIRED').slice(0, 50); } catch { invites = []; } };
@@ -183,7 +176,7 @@ export async function settingsPage(main = $('#main')) {
     if (!isPhone()) {
       main.innerHTML = html`<div class="page page--narrow page--guide page--settings"><div class="page__head"><div><h1>설정</h1></div></div>
       <nav class="stabs stabs--settings" aria-label="설정 메뉴">${raw(TABS.map(([k, l]) => html`<a class="stabs__i ${k === tab ? 'is-active' : ''}" href="/app/settings?tab=${k}" data-set-tab="${k}" ${raw(k === tab ? 'aria-current="page"' : '')}>${l}</a>`).join(''))}</nav>
-      <section class="stab-body" data-tab="${tab}">${raw(deskBody(members))}</section></div>`;
+      <section class="stab-body" data-tab="${tab}">${raw(deskBody(members))}</section>${raw(legalFooterHtml(LEGAL))}</div>`;
       main.querySelectorAll('[data-set-tab]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tab = a.dataset.setTab; history.replaceState(null, '', `/app/settings?tab=${tab}`); draw(members); });
     } else {
       main.innerHTML = html`<div class="page page--narrow page--guide"><div class="page__head"><div><h1>설정</h1>${raw(pcLine())}</div></div>

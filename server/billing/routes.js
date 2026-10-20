@@ -12,7 +12,7 @@ import { aiConfig } from '../ai/config.js';
 import express from 'express';
 import { rateLimiter } from '../security.js';
 import { requireAction, can } from '../authz.js';
-import { PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, CREDIT_PRICE_KRW, PURCHASED_VALID_YEARS } from '../plans.js';
+import { PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, CREDIT_PRICE_KRW, PURCHASED_VALID_YEARS, CREDIT_PACKS } from '../plans.js';
 import { workspaceUsage } from '../usage.js';
 import { writeAudit } from '../admin.js';
 import { emailConfig } from '../email/config.js';
@@ -104,8 +104,9 @@ main{max-width:460px;margin:48px auto;padding:0 16px}.card{background:#fff;borde
 h1{font-size:20px;margin:0 0 16px}table{width:100%;border-collapse:collapse;font-size:14.5px}th{text-align:left;color:#667085;font-weight:500;padding:6px 0}td{text-align:right;padding:6px 0}
 .total td,.total th{border-top:1px solid #EEF1F6;padding-top:12px;font-size:16px;color:#101828}button{width:100%;margin-top:20px;padding:13px;border:0;border-radius:8px;background:#2E51C4;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
 .note{font-size:12.5px;color:#667085;margin-top:14px;line-height:1.5}.err{color:#B42318;font-size:14px;margin-top:12px;min-height:1em}a{color:#2E51C4}</style></head>
-<body><main><div class="card"><h1>${esc(order.goods_name)}</h1>${sandbox ? '<p class="note">테스트(샌드박스) 결제입니다. 실제 청구되지 않습니다.</p>' : ''}<table>
+<body><main><div class="card"><h1>${esc(order.goods_name)}</h1>${sandbox ? '<p class="note">샌드박스 결제입니다. 실제로 청구되지 않습니다.</p>' : ''}<table>
 ${rows}
+${row('결제 수단', '신용카드')}
 <tr class="total"><th>결제 금액</th><td><b>${esc(won(order.amount))}</b></td></tr></table>
 <button id="pay" type="button">${esc(won(order.amount))} 결제하기</button><p class="err" id="err" role="alert"></p>
 <p class="note">${esc(note)} <a href="${back}">결제 취소하고 돌아가기</a></p></div></main>
@@ -132,7 +133,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const canPurchase = paymentsEnabled() && plan !== 'EARLY' && (plan === 'FREE' || (subscription && !subscription.auto_renew));
     const early = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
     return { billing: { plan, plan_label: PLANS[plan].label, subscription, early_access_until: early?.early_access_until || null, usage: await workspaceUsage(db, wid, plan),
-      plans: catalogue(), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
+      plans: catalogue(), credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
       checkout: { can_purchase: Boolean(canPurchase), cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
         base_monthly: PLANS.TEAM.base_monthly, included_users: PLANS.TEAM.included_users, extra_user_monthly: PLANS.TEAM.extra_user_monthly,
         min_users: await minUsers(db, wid), max_users: MAX_USERS, founding_eligible: await foundingEligible(db, wid), founding: FOUNDING_OFFER, vat_rate: VAT_RATE, prices_exclude_vat: true,

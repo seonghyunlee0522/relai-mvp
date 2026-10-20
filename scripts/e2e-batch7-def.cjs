@@ -159,7 +159,8 @@ const docxText = (file) => execFileSync('unzip', ['-p', file, 'word/document.xml
     check(`#7 payments off: no ₩ / 원) on ${nm}`, !/₩|원\)/.test(t), (t.match(/.{0,30}(₩|원\)).{0,30}/) || [''])[0]);
     check(`#6 no 준비 중입니다 / 아직 지원 on ${nm}`, !/준비 중입니다|아직 지원/.test(t));
   }
-  check('#6 credits page (payments off): no 충전 area, one 문의하기 link', !(await (async () => { await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary'); return page.$('#cr-buy'); })()) && Boolean(await page.$('[data-credit-contact] a[href^="mailto:"]')));
+  // NicePay merchant review (2026-10-20): the credit packs stay listed as priced products while payments are off; a click only says 결제 준비 중.
+  check('#6 credits page (payments off): packs listed (no checkout), one 문의하기 link', await (async () => { await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary'); return (await page.$$('[data-pack]')).length === 3; })() && Boolean(await page.$('[data-credit-contact] a[href^="mailto:"]')));
 
   /* ---------- #26 랜딩 대표·임원 ---------- */
   await page.goto(BASE + '/'); await page.waitForTimeout(400);
