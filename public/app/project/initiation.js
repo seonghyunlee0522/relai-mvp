@@ -55,7 +55,6 @@ export const APPROVAL_GATES = {
     recordLabel: '테스트 준비하러 가기', reasonLabel: '테스트 준비 없이 진행하는 이유', placeholder: '예: 고객 일정상 06 검수에서 남은 요구사항을 함께 확인', tag: '[테스트 준비 전 진행]' },
 };
 const gateTag = (gate) => gate.tag || '[승인 전 진행]';
-/** The note text when a gate asks no reason (01 착수 승인, 권장). */
 export const NO_REASON = '승인 없이 진행';
 /**
  * The phase-leaving soft gate dialog. Resolves 'record' (go to 승인 기록), { reason } (proceed, reason required) or null (cancel).
