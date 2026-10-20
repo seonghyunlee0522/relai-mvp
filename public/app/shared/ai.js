@@ -17,6 +17,8 @@ export const confChip = (c) => html`<span class="hchip hchip--sm ${(CONF[c] || C
 /** "예상 30 크레딧 · 잔액 4,230 크레딧" — price and balance come from the server (feature config + account), never hard-coded here.
  * Credits are a usage unit on every user screen: no won amount (batch7 #7).
  * The click is the consent (AI-credits-only billing §5). Amber below the low-balance threshold; at 0 / below the price the button is disabled with [크레딧 충전]. */
+/** Home header: the workspace's remaining balance (owner and member alike) — never an offer like '… 무료 제공' (P2, Jim prod 10-21 #2). */
+export const homeCreditLine = (c) => `AI 크레딧 잔액 ${Number((c && c.balance) || 0).toLocaleString('ko-KR')}`;
 export const CREDITS_URL = '/app/settings/credits';
 export const PLANS_URL = '/app/billing/plans';   // batch7 T5 upsell target (payments off)
 const fmt = (v) => Number(v).toLocaleString('ko-KR');
@@ -46,7 +48,7 @@ export function aiErrorMessage(e) {
 }
 /**
  * Large AI dialog shell: title row (with the 초안/후보 badge + credit line), scrollable body, sticky footer.
- * Returns { el, body, foot, close, busy(on, label) }. Esc / scrim click close unless `busy`.
+ * Returns { el, body, foot, close, setGuard(fn), busy(on, label) }. Esc / scrim click close unless `busy` (or the guard says no).
  */
 export function aiDialog({ title, subtitle = '', feature, status, size = 'lg' }) {
   const el = document.createElement('div'); el.className = 'scrim scrim--ai';
@@ -55,14 +57,21 @@ export function aiDialog({ title, subtitle = '', feature, status, size = 'lg' })
       <div class="aid__hr">${raw(creditLine(status, feature))}<button type="button" class="drawer__x" data-close aria-label="닫기">×</button></div></div>
     <div class="aid__b"></div>
     <div class="aid__f"></div></div>`;
-  let busy = false;
-  const close = () => { if (busy) return; el.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  let busy = false; let guard = null; let guarding = false;
+  /** `guard` (setGuard) runs before every close (×, 취소/닫기, Esc, scrim) and may keep the dialog open by resolving false —
+   *  P2 (Jim prod 10-21 #9): a paid result is never thrown away without asking. close({ force: true }) skips it (after 등록). */
+  const close = async ({ force = false } = {}) => {
+    if (busy || guarding) return false;
+    if (guard && !force) { guarding = true; let ok = false; try { ok = await guard(); } finally { guarding = false; } if (!ok) return false; }
+    el.remove(); document.removeEventListener('keydown', onKey); return true;
+  };
+  const onKey = (e) => { if (e.key === 'Escape' && !guarding) close(); };
   document.addEventListener('keydown', onKey);
   el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-close]')) close(); });
   document.body.append(el);
   return {
     el, body: $('.aid__b', el), foot: $('.aid__f', el), close,
+    setGuard(fn) { guard = fn || null; },
     /** After a charged run: the header credit line shows the new balance (it was the balance when the dialog opened). */
     setBalance(bal) { if (typeof bal !== 'number' || !status?.credits) return; const hr = $('.aid__hr', el); const old = $('.ai-credit', hr); if (!old) return; old.outerHTML = creditLine({ ...status, credits: { ...status.credits, available: bal } }, feature); },
     busy(on, label = 'AI가 분석하는 중입니다…') { busy = on; el.classList.toggle('is-busy', on); let o = $('.aid__busy', el); if (on) { if (!o) { o = document.createElement('div'); o.className = 'aid__busy'; $('.dialog', el).append(o); } o.innerHTML = html`<span class="spin"></span><span>${label}</span>`; } else if (o) o.remove(); },

@@ -14,12 +14,14 @@ import { newWorkspaceHome } from './list.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 import { pickJosa } from '../shared/josa.js';
+import { wsLabel } from '../shared/workspace-name.js';
+import { homeCreditLine } from '../shared/ai.js';
 import { upcomingList, activityList } from './next.js';
 import { isSample, sampleChip, readOnlyChip, deleteAllSamples } from './samples.js';
 import { loadPromos, promoHtml } from '../shared/promo.js';
 
 /** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
-const wsName = (v) => String(v || '').replace(/ Workspace$/, ' 워크스페이스');
+const wsName = (v) => wsLabel(v);
 const canManage = () => state.workspace && state.workspace.role !== 'MEMBER';
 const n = (v) => Number(v) || 0;
 const ATT_TYPE = { ISSUE: '이슈', RISK: '리스크', TEST: '테스트', CHANGE: '변경', WBS: 'WBS', ACCEPTANCE: '검수', REQUIREMENT: '요구사항' };
@@ -189,11 +191,11 @@ export async function homePage(main = $('#main')) {
   // while the 시작하기 card shows, it is the one notice: its 다음 할 일 already says what '오늘 할 일 n건' would (P1b)
   const sumText = real.length ? (startCard ? '' : homeSummary(real)) : realDone ? html`<b>진행 중인 직접 만든 프로젝트가 없습니다.</b> 완료된 프로젝트 ${realDone}개는 아래에 있습니다. <b>+ 새 프로젝트</b>로 다음 프로젝트를 시작하세요.` : startCard ? '' : '<b>아직 직접 만든 프로젝트가 없습니다.</b> 샘플 프로젝트를 둘러본 뒤 <b>+ 새 프로젝트</b>로 실제 프로젝트를 시작하세요.';
   main.innerHTML = html`<div class="page page--guide home">
-    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${raw(desk && live.length ? html`진행 중인 프로젝트 ${live.length}개 · ` : '')}${wsName(state.workspace.name)}<span id="home-credits"></span></p>${raw(any ? pcLine() : '')}</div>
+    <div class="page__head"><div><h1>${state.user.name}님, 안녕하세요</h1><p>${raw(desk && real.length ? html`진행 중인 프로젝트 ${real.length}개 · ` : '')}${wsName(state.workspace.name)}<span id="home-credits"></span></p>${raw(any ? pcLine() : '')}</div>
       ${raw(any && canManage() && !isPhone() ? `<a class="btn ${real.length ? 'btn--secondary' : 'btn--primary'}" href="/app/projects/new" data-link data-tour-id="create-project">+ 새 프로젝트</a>` : '')}</div>
     ${raw(sampleBanner)}
     ${raw(startCard)}
-    ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)} 워크스페이스에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
+    ${raw(live.length && !canManage() ? html`<p class="home__member">${wsName(state.workspace.name)}에 참여 중입니다. 프로젝트를 선택해 진행 상황을 확인하세요. <a class="link" href="/app/projects/${live[0].id}/wbs?owner=${state.user.id}" data-link>내 업무 보기</a></p>` : '')}
     ${raw(live.length && desk ? html`${raw(sumText || sampleTail ? html`<p class="hsum" data-home-summary>${raw(sumText)}${raw(sampleTail)}</p>` : '')}
         <div class="hdash"><section class="hgrid__sec" aria-labelledby="hgT"><h2 id="hgT" class="sr-only">프로젝트 현황</h2><div class="hgrid">${raw(live.map((c) => dCard(c, blue(c))).join(''))}</div></section>${raw(homeSide(live))}</div>`
       : live.length ? html`${raw(phoneTiles(live))}<section class="hgrid__sec" aria-labelledby="hgT"><div class="hgrid__h"><h2 id="hgT">프로젝트 현황</h2>${raw(summaryLine(live))}</div>
@@ -209,7 +211,7 @@ export async function homePage(main = $('#main')) {
   // AI credits at a glance (AI-credits-only billing): balance, linked to 설정 › AI 크레딧. Never blocks Home.
   api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
     const el = $('#home-credits', main); if (!el) return;
-    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>AI 크레딧 ${c.balance.toLocaleString('ko-KR')}${c.purchased_remaining === 0 && c.free_remaining > 0 ? ' 무료 제공' : ''}</a><span class="home__promo"></span>`;
+    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>${homeCreditLine(c)}</a><span class="home__promo"></span>`;
     // the offer next to the balance comes from 관리자 › 프로모션 (placement home)
     loadPromos('home').then((list) => { const p = promoHtml(list, { placement: 'home', variant: 'line' }); const slot = $('.home__promo', el); if (slot && p) slot.innerHTML = ` · ${p}`; });
   }).catch(() => {});

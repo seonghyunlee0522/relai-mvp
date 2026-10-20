@@ -11,12 +11,13 @@ import { $, html, raw, esc } from './core/dom.js';
 import { state } from './core/state.js';
 import { confirmDialog, toast } from './shared/dialogs.js';
 import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
+import { wsLabel } from './shared/workspace-name.js';
 
 const n = (v) => Number(v || 0).toLocaleString('ko-KR');
 const krw = (v) => `${n(v)}원`;
 const day = (iso) => { if (!iso) return '-'; const d = new Date(iso); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`; };
 /** '요금테스트님의 워크스페이스' stays as is; '한빛' → '한빛 워크스페이스'. */
-const wsName = (name) => (/(workspace|워크스페이스)$/i.test(String(name || '').trim()) ? name : `${name} 워크스페이스`);
+const wsName = wsLabel;
 const CYCLE = { MONTHLY: '월간', ANNUAL: '연간' };
 /* 구독 해지 · Free 전환 정책 (founder 2026-10-21). Text comes from the server (billing.cancel_policy = email/templates.js FREE_POLICY / FREE_KEEP). */
 const POLICY_FALLBACK = { free: '구독이 끝나 Free 플랜이 되면 생성일이 가장 최근인 프로젝트 1개만 계속 편집할 수 있고, 나머지 프로젝트는 자동으로 조회 전용이 됩니다(편집할 프로젝트는 선택할 수 없습니다).',

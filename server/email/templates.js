@@ -9,20 +9,23 @@ const shell = (title, inner, support) => `<!doctype html><html lang="ko"><body s
 </table></td></tr></table></body></html>`;
 const button = (href, label) => `<p style="margin:20px 0"><a href="${esc(href)}" style="display:inline-block;background:#1B4FD8;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px">${esc(label)}</a></p><p style="font-size:12px;color:#667085;word-break:break-all">버튼이 열리지 않으면 링크를 복사해 브라우저에 붙여넣으세요:<br>${esc(href)}</p>`;
 
+/** '홍길동님의 워크스페이스' stays as is; '한빛' → '한빛 워크스페이스' (never '… 워크스페이스 워크스페이스'; Jim prod 10-21 P2 #1). */
+export const wsLabel = (name) => { const v = String(name || '').trim().replace(/ ?Workspace$/i, ' 워크스페이스').trim(); return /워크스페이스$/.test(v) ? v : `${v} 워크스페이스`; };
 export function platformInviteEmail({ workspaceName, inviteeName, link, expiresAt, support }) {
-  const subject = `[RELAI] ${workspaceName} 워크스페이스 생성 초대`;
+  const subject = `[RELAI] ${wsLabel(workspaceName)} 생성 초대`;
   const until = new Date(expiresAt).toLocaleDateString('ko-KR');
-  const html = shell('RELAI 사용을 시작하도록 초대되었습니다', `<p>${inviteeName ? `${esc(inviteeName)}님, ` : ''}<b>${esc(workspaceName)}</b> 워크스페이스를 RELAI에서 생성하고 프로젝트 관리를 시작하세요.</p>
-    <p>아래 버튼을 눌러 Google 계정 또는 이메일로 가입하면 <b>${esc(workspaceName)}</b> 워크스페이스가 만들어지고 회원님이 소유자가 됩니다.</p>${button(link, '초대 확인하고 시작하기')}<p style="font-size:13px;color:#667085">이 초대는 ${until}까지 유효하며, 초대받은 이메일 계정으로만 수락할 수 있습니다.</p>`, support);
+  const html = shell('RELAI 사용을 시작하도록 초대되었습니다', `<p>${inviteeName ? `${esc(inviteeName)}님, ` : ''}<b>${esc(wsLabel(workspaceName))}</b>를 RELAI에서 생성하고 프로젝트 관리를 시작하세요.</p>
+    <p>아래 버튼을 눌러 Google 계정 또는 이메일로 가입하면 <b>${esc(wsLabel(workspaceName))}</b>가 만들어지고 회원님이 소유자가 됩니다.</p>${button(link, '초대 확인하고 시작하기')}<p style="font-size:13px;color:#667085">이 초대는 ${until}까지 유효하며, 초대받은 이메일 계정으로만 수락할 수 있습니다.</p>`, support);
   const text = `RELAI 사용을 시작하도록 초대되었습니다.\n\n워크스페이스: ${workspaceName}\n\n아래 링크에서 가입 또는 로그인 후 초대를 수락하세요 (${until}까지 유효):\n${link}\n`;
   return { subject, html, text };
 }
 export function memberInviteEmail({ workspaceName, inviterName, roleLabel, link, expiresAt, support }) {
-  const subject = `[RELAI] ${workspaceName} 워크스페이스에 초대되었습니다`;
+  const ws = wsLabel(workspaceName);
+  const subject = `[RELAI] ${ws}에 초대되었습니다`;
   const until = new Date(expiresAt).toLocaleDateString('ko-KR');
-  const html = shell(`${workspaceName} 워크스페이스에 초대되었습니다`, `<p><b>${esc(inviterName || '워크스페이스 관리자')}</b>님이 <b>${esc(workspaceName)}</b> 워크스페이스에 초대했습니다.</p>
+  const html = shell(`${ws}에 초대되었습니다`, `<p><b>${esc(inviterName || '워크스페이스 관리자')}</b>님이 <b>${esc(ws)}</b>에 초대했습니다.</p>
     <p>역할: <b>${esc(roleLabel)}</b></p>${button(link, '초대 확인')}<p style="font-size:13px;color:#667085">이 초대는 ${until}까지 유효하며, 초대받은 이메일 계정으로 가입하거나 로그인해야 수락할 수 있습니다.</p>`, support);
-  const text = `${inviterName || '워크스페이스 관리자'}님이 ${workspaceName} 워크스페이스에 초대했습니다.\n역할: ${roleLabel}\n\n초대 확인 (${until}까지 유효):\n${link}\n`;
+  const text = `${inviterName || '워크스페이스 관리자'}님이 ${ws}에 초대했습니다.\n역할: ${roleLabel}\n\n초대 확인 (${until}까지 유효):\n${link}\n`;
   return { subject, html, text };
 }
 export function passwordResetEmail({ link, minutes, support }) {
@@ -43,7 +46,7 @@ export function verifyEmailEmail({ name, link, hours, support }) {
 export function renewalReminderEmail({ workspaceName, periodEnd, seats, link, support }) {
   const until = new Date(periodEnd).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
   const subject = `[RELAI] ${workspaceName} Team 플랜 이용 기간이 ${until}에 끝납니다`;
-  const html = shell('Team 플랜 이용 기간이 곧 끝납니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 Team 플랜${seats ? `(사용자 ${esc(seats)}명)` : ''} 이용 기간이 <b>${esc(until)}</b>에 끝납니다.</p>
+  const html = shell('Team 플랜 이용 기간이 곧 끝납니다', `<p><b>${esc(wsLabel(workspaceName))}</b>의 Team 플랜${seats ? `(사용자 ${esc(seats)}명)` : ''} 이용 기간이 <b>${esc(until)}</b>에 끝납니다.</p>
     <p>자동 결제되지 않는 상품이라 연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다. 데이터는 삭제되지 않으며 새 항목 추가만 제한됩니다.</p>${link ? button(link, '이용 기간 연장하기') : ''}
     <p style="font-size:13px;color:#667085">연장은 워크스페이스 소유자가 설정 › 플랜 · 결제에서 할 수 있습니다. 남은 기간은 그대로 이어집니다.</p>`, support);
   const text = `${workspaceName} 워크스페이스의 Team 플랜 이용 기간이 ${until}에 끝납니다.\n연장하지 않으면 기간 종료 후 Free 플랜 한도가 적용됩니다(데이터는 유지).\n${link ? `\n연장하기: ${link}\n` : ''}`;
@@ -56,7 +59,7 @@ const credits = (n) => `${Number(n).toLocaleString('ko-KR')} 크레딧`;
 
 export function lowBalanceEmail({ workspaceName, balance, threshold, link, support }) {
   const subject = `[RELAI] ${workspaceName} AI 크레딧 잔액이 ${credits(threshold)} 아래로 내려갔습니다`;
-  const html = shell('AI 크레딧 잔액이 얼마 남지 않았습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 AI 크레딧 잔액이 <b>${esc(credits(balance))} (${esc(krw(balance * 10))})</b>입니다.</p>
+  const html = shell('AI 크레딧 잔액이 얼마 남지 않았습니다', `<p><b>${esc(wsLabel(workspaceName))}</b>의 AI 크레딧 잔액이 <b>${esc(credits(balance))} (${esc(krw(balance * 10))})</b>입니다.</p>
     <p>잔액이 0이 되면 AI 기능(요구사항 추출, WBS 초안, 영향 분석, 질문)을 쓸 수 없습니다. 다른 기능은 그대로 쓸 수 있습니다.</p>${link ? button(link, '크레딧 충전하기') : ''}
     <p style="font-size:13px;color:#667085">충전은 워크스페이스 소유자가 설정 › AI 크레딧에서 할 수 있습니다. 이 안내는 충전 후 다시 ${esc(credits(threshold))} 아래로 내려갈 때만 다시 보내 드립니다.</p>`, support);
   const text = `${workspaceName} 워크스페이스의 AI 크레딧 잔액이 ${credits(balance)} (${krw(balance * 10)})입니다.\n잔액이 0이 되면 AI 기능을 쓸 수 없습니다.\n${link ? `\n충전하기: ${link}\n` : ''}`;
@@ -81,7 +84,7 @@ export function paymentFailedEmail({ workspaceName, planLabel, amount, attempt, 
   const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 자동 결제에 실패했습니다`;
   const next = final ? `더 이상 자동으로 결제를 시도하지 않습니다. ${graceEnd ? `${kDate(graceEnd)}까지` : '유예 기간 동안'} 결제 수단을 바꿔 다시 구독하지 않으면 Free 플랜 한도가 적용됩니다.`
     : `${nextAttemptAt ? `${kDate(nextAttemptAt)}에` : '곧'} 다시 결제를 시도합니다(${attempt}/${max + 1}회째 실패). 그동안 플랜은 그대로 이용할 수 있습니다.`;
-  const html = shell('자동 결제에 실패했습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜 갱신 결제 <b>${esc(wonKr(amount))}</b>(VAT 포함)가 승인되지 않았습니다.</p>
+  const html = shell('자동 결제에 실패했습니다', `<p><b>${esc(wsLabel(workspaceName))}</b>의 ${esc(planLabel)} 플랜 갱신 결제 <b>${esc(wonKr(amount))}</b>(VAT 포함)가 승인되지 않았습니다.</p>
     <p>${esc(next)}</p><p>데이터는 삭제되지 않습니다.</p>${link ? button(link, '결제 정보 확인하기') : ''}`, support);
   const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜 갱신 결제 ${wonKr(amount)}(VAT 포함)가 승인되지 않았습니다.\n${next}\n${link ? `\n확인하기: ${link}\n` : ''}`;
   return { subject, html, text };
@@ -90,7 +93,7 @@ export function paymentFailedEmail({ workspaceName, planLabel, amount, attempt, 
 /** 증액 사전 고지 (전자상거래법 §13⑥): the renewal amount rises; the owner must consent or auto-renewal stops. */
 export function priceIncreaseEmail({ workspaceName, planLabel, oldAmount, newAmount, effectiveAt, link, support }) {
   const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 갱신 금액 변경 안내 — 동의가 필요합니다`;
-  const html = shell('갱신 금액 변경 안내', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜 다음 갱신(<b>${esc(kDate(effectiveAt))}</b>) 금액이 <b>${esc(wonKr(oldAmount))} → ${esc(wonKr(newAmount))}</b>(VAT 포함)로 바뀝니다.</p>
+  const html = shell('갱신 금액 변경 안내', `<p><b>${esc(wsLabel(workspaceName))}</b>의 ${esc(planLabel)} 플랜 다음 갱신(<b>${esc(kDate(effectiveAt))}</b>) 금액이 <b>${esc(wonKr(oldAmount))} → ${esc(wonKr(newAmount))}</b>(VAT 포함)로 바뀝니다.</p>
     <p>설정 › 플랜 · 결제에서 동의하면 바뀐 금액으로 갱신됩니다. 동의하지 않으면 추가 결제 없이 자동 갱신이 중단되고, 이미 결제한 기간이 끝날 때까지 이용합니다. 언제든 해지할 수 있습니다.</p>${link ? button(link, '변경 내용 확인하기') : ''}`, support);
   const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜 다음 갱신(${kDate(effectiveAt)}) 금액이 ${wonKr(oldAmount)} → ${wonKr(newAmount)}(VAT 포함)로 바뀝니다.\n동의하지 않으면 자동 갱신이 중단됩니다(추가 결제 없음).\n${link ? `\n확인하기: ${link}\n` : ''}`;
   return { subject, html, text };
@@ -99,7 +102,7 @@ export function priceIncreaseEmail({ workspaceName, planLabel, oldAmount, newAmo
 /** The renewal was not charged because the higher amount was not consented: auto-renewal stopped. */
 export function renewalBlockedEmail({ workspaceName, planLabel, amount, agreed, periodEnd, link, support }) {
   const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 자동 갱신이 중단되었습니다`;
-  const html = shell('자동 갱신이 중단되었습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 다음 갱신 금액 ${esc(wonKr(amount))}이(가) 동의한 금액 ${esc(wonKr(agreed))}보다 커서 결제하지 않았습니다.</p>
+  const html = shell('자동 갱신이 중단되었습니다', `<p><b>${esc(wsLabel(workspaceName))}</b>의 다음 갱신 금액 ${esc(wonKr(amount))}이(가) 동의한 금액 ${esc(wonKr(agreed))}보다 커서 결제하지 않았습니다.</p>
     <p>자동 갱신을 중단했습니다. ${periodEnd ? `${esc(kDate(periodEnd))}까지` : '결제한 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 계속 이용하려면 새 금액을 확인하고 다시 구독해 주세요.</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
   const text = `${workspaceName} 워크스페이스의 다음 갱신 금액 ${wonKr(amount)}이(가) 동의한 금액 ${wonKr(agreed)}보다 커서 결제하지 않았고 자동 갱신을 중단했습니다.\n${link ? `\n열기: ${link}\n` : ''}`;
   return { subject, html, text };
@@ -117,7 +120,7 @@ export function freeTransitionEmail({ workspaceName, planLabel, limit = 1, edita
     editable.length ? `계속 편집할 수 있는 프로젝트 (최근 생성 ${limit}개): ${names(editable)}` : '',
     readOnly.length ? `조회 전용으로 바뀐 프로젝트 ${readOnly.length}개: ${names(readOnly)}` : '',
   ].filter(Boolean);
-  const html = shell('Free 플랜으로 전환되었습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜 이용 기간이 끝나 Free 플랜으로 전환되었습니다.</p>
+  const html = shell('Free 플랜으로 전환되었습니다', `<p><b>${esc(wsLabel(workspaceName))}</b>의 ${esc(planLabel)} 플랜 이용 기간이 끝나 Free 플랜으로 전환되었습니다.</p>
     <p>${esc(FREE_POLICY)}</p>${lines.length ? `<ul>${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}<p>${esc(FREE_KEEP)}</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
   const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜 이용 기간이 끝나 Free 플랜으로 전환되었습니다.\n${FREE_POLICY}\n${lines.map((l) => `- ${l}`).join('\n')}\n${FREE_KEEP}\n${link ? `\n열기: ${link}\n` : ''}`;
   return { subject, html, text };
@@ -132,7 +135,7 @@ export function cancelEmail({ workspaceName, planLabel, immediate, periodEnd, re
   const lines = refundLines.map((l) => `<li>${esc(l.label || '결제')}: ${esc(wonKr(l.amount))} (미사용 ${esc(l.days)}/${esc(l.period_days)}일${l.kind === 'WITHDRAWAL' ? ', 청약철회' : ''})</li>`).join('');
   void retentionUntil;   // TODO(retention-legal, research/relai-retention-legal.md): personal-data retention periods are set after the legal review — never here
   const keep = `${FREE_POLICY} ${FREE_KEEP}`;
-  const html = shell('구독 해지 안내', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜: ${esc(what)}</p>${lines ? `<ul>${lines}</ul>` : ''}<p>${esc(keep)}</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
+  const html = shell('구독 해지 안내', `<p><b>${esc(wsLabel(workspaceName))}</b>의 ${esc(planLabel)} 플랜: ${esc(what)}</p>${lines ? `<ul>${lines}</ul>` : ''}<p>${esc(keep)}</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
   const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜: ${what}\n${refundLines.map((l) => `- ${l.label || '결제'}: ${wonKr(l.amount)} (미사용 ${l.days}/${l.period_days}일)`).join('\n')}\n${keep}\n${link ? `\n열기: ${link}\n` : ''}`;
   return { subject, html, text };
 }
