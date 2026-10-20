@@ -139,7 +139,7 @@ const docxText = (file) => execFileSync('unzip', ['-p', file, 'word/document.xml
   check('#23 admin menu label 사용량 (not AI 사용량)', /사용량/.test(nav) && !/AI 사용량/.test(nav));
   const mainT = await page.textContent('main');
   check('#23 usage table: AI 크레딧 + 플랜 한도 header groups', /AI 크레딧/.test(mainT) && /플랜 한도/.test(mainT));
-  check('#23 early access reads 얼리 액세스 · 무제한', /얼리 액세스 · 무제한/.test(mainT));
+  check('#23 early access is on FREE limits (T5): no 무제한, plan 무료', !/얼리 액세스 · 무제한/.test(mainT) && /무료/.test(mainT));
   await shot('06-admin-usage.png');
 
   /* ---------- #25 사용 방법 PDF ---------- */

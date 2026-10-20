@@ -22,7 +22,7 @@ export function upsellCopy(err) {
   if (l.seats) return { title: '구매한 사용자 수를 모두 쓰고 있어요', body: html`<p>${err?.message || ''}</p>` };
   return { title: '무료 플랜 한도에 도달했어요', body: html`<p>${err?.message || '현재 플랜의 한도에 도달했어요.'}</p>
     ${raw(l.dimension ? html`<p class="dim" style="margin-top:8px" data-upsell-usage>${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중</p>` : '')}
-    <p class="dim" style="margin-top:8px">지금까지 만든 내용은 모두 그대로 있어요. 유료 플랜에서는 한도 없이 계속 추가할 수 있어요.</p>` };
+    <p class="dim" style="margin-top:8px">지금까지 만든 내용은 모두 그대로 있어요. 플랜을 살펴보고 필요할 때 바꿔 보세요.</p>` };
 }
 
 export async function showUpgradePrompt(err) {

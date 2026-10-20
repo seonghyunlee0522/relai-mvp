@@ -1,5 +1,5 @@
 /* 사용량 (batch7 #23): every workspace's AI runs and credits over the last 30 days (column group 'AI 크레딧 (30일)'), then plan-limit use
- * (group '플랜 한도 (Free만)'; 얼리 액세스 = '얼리 액세스 · 무제한'). ≥80 % warning, ≥90 % attention. */
+ * (group '플랜 한도 (Free만)'; early access is on FREE limits since 2026-10-20). ≥80 % warning, ≥90 % attention. */
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { adminApi, bindFilters, bindPager, bindRows, chip, errorBlock, head, n, pager, qs, rel, sel, table } from './ui.js';
@@ -15,7 +15,7 @@ export async function adminUsagePage(main = $('#main')) {
       <div class="atool"><input class="input input--sm" data-f="q" type="search" placeholder="워크스페이스 검색" value="${q.q || ''}">
         ${raw(sel('sort', '정렬: AI 실행 (30일)', { projects: '정렬: 프로젝트 사용률', requirements: '정렬: 요구사항 사용률', wbs: '정렬: WBS 사용률', activity: '정렬: 최근 활동' }, q.sort))}</div>
       ${raw(table([
-        { key: 'name', label: '워크스페이스', w: 240, cls: 'ttl', render: (r) => html`${r.name}${raw(r.status !== 'ACTIVE' ? ' ' + chip(r.status) : '')}` }, { key: 'plan_label', label: '플랜', w: 150, render: (r) => (r.plan === 'EARLY' ? '얼리 액세스 · 무제한' : html`${r.plan_label}`) },
+        { key: 'name', label: '워크스페이스', w: 240, cls: 'ttl', render: (r) => html`${r.name}${raw(r.status !== 'ACTIVE' ? ' ' + chip(r.status) : '')}` }, { key: 'plan_label', label: '플랜', w: 150, render: (r) => html`${r.plan_label}` },   // early access is on FREE limits since 2026-10-20 (no 무제한 row)
         { key: 'ai_runs', label: 'AI 실행 (30일)', w: 120, render: (r) => html`<b>${n(r.ai.runs_30d)}</b>${raw(r.ai.failed_30d ? html` <small class="txt-bad">실패 ${n(r.ai.failed_30d)}</small>` : '')}` },
         { key: 'ai_credits', label: '크레딧 사용 (30일)', w: 130, render: (r) => n(r.ai.credits_30d) },
         { key: 'ai_balance', label: '크레딧 잔액', w: 110, render: (r) => n(r.ai.balance) },
