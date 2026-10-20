@@ -108,6 +108,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await fresh.fill('#purge-confirm', '삭제');
   check('admin 테스트 계정 정리: typing 삭제 enables the button; the dry run deleted nothing', (await fresh.$eval('#purge-go', (b) => !b.disabled)) && sql('SELECT COUNT(*) FROM users') === usersBefore);
   await fresh.screenshot({ path: `${SHOTS}/admin-purge-1440.png`, fullPage: true });
+  await fresh.goto(`${BASE}/admin/promotions`); await fresh.waitForSelector('#promo-tbl', { timeout: 10000 }).catch(() => {});   // back to 프로모션 for the steps below
   const bad = await api('POST', '/api/admin/promotions', { title: 'x', placements: ['nope'], link_url: 'javascript:alert(1)' }, fresh);
   check('admin API validates placements and link scheme (422)', bad.status === 422 && bad.json.error.fields.placements && bad.json.error.fields.link_url, JSON.stringify(bad.json));
   const lp = await newPage(PC);
