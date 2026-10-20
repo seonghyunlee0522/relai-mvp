@@ -13,7 +13,7 @@ export const LEGAL = {
   address: '경기도 성남시 수정구 위례동로 135, 8층 801-a-6호(창곡동, 신성위캐슬타워)',
   mailOrderNo: '제 2026-성남수정-0767 호', // 통신판매업 신고번호
   contactEmail: 'enj.shlee@gmail.com',  // 고객 문의 + 개인정보 보호책임자 연락처
-  contactPhone: '',                     // optional; shown only when set
+  contactPhone: '010-2021-2338',        // 전자상거래법 · NicePay 심사 필수 (founder's public business line, docreel.kr footer)
   privacyOfficer: { name: '이성현', title: '대표' },
   effectiveDate: '2026-10-15',          // 시행일 of /privacy (and of /terms unless termsEffectiveDate is set) (YYYY-MM-DD)
   termsEffectiveDate: '2026-10-20',     // 이용약관 v2026-10-20: early access retired, Free plan described (founder decision 2026-10-20)
