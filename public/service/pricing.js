@@ -4,6 +4,10 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const pay = $('#pay'); const form = $('#sp-form'); const msg = $('#sp-msg'); const submit = $('#sp-submit');
 const SOON = '월 구독은 준비 중입니다.';
+// Checkout opens only when the server says so (SERVICE_PAY_ENABLED + provider). The button ships disabled, so the form
+// can never be submitted natively (no GET/POST of buyer or card fields without this script).
+const OPEN = pay.dataset.open === '1';
+if (OPEN) submit.disabled = false;
 let selected = pay.dataset.selected;
 const isMonthly = () => selected === 'agent-monthly';
 
@@ -12,7 +16,7 @@ function select(key) {
   $$('.sp-card').forEach((c) => { const on = c.dataset.product === key; c.classList.toggle('is-on', on); const b = $('[data-pick]', c); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '선택됨' : (c.dataset.plan === 'monthly' ? '월 구독 선택' : '1회 결제 선택'); });
   $$('[data-sum]').forEach((s) => { s.hidden = s.dataset.sum !== key; });
   $('#sp-cardf').hidden = !isMonthly();
-  submit.textContent = isMonthly() ? submit.dataset.labelMonthly : submit.dataset.labelOnce;
+  submit.textContent = !OPEN ? submit.dataset.labelClosed : isMonthly() ? submit.dataset.labelMonthly : submit.dataset.labelOnce;
   setMsg('');
   const c = $(`.sp-card[data-product="${key}"]`);
   try { history.replaceState(null, '', `/pricing?plan=${c.dataset.plan}&product=agent`); } catch { /* ignore */ }
@@ -60,7 +64,7 @@ const loadSdk = (url) => new Promise((resolve, reject) => {
 
 let busy = false;
 form.addEventListener('submit', async (e) => {
-  e.preventDefault(); if (busy) return;
+  e.preventDefault(); if (busy || !OPEN) return;
   setMsg('');
   // 월 구독 before NicePay opens recurring billing: say so and call nothing (no order, no card data sent).
   if (isMonthly() && pay.dataset.recurring !== '1') { setErrors({}); setMsg(SOON, true); return; }
@@ -77,5 +81,5 @@ form.addEventListener('submit', async (e) => {
     await loadSdk(j.sdk_url).catch(() => { throw new Error('결제창을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); });
     window.AUTHNICE.requestPay({ ...j.pay, fnError: (res) => { setMsg((res && (res.errorMsg || res.msg)) || '결제가 취소되었습니다.'); } });
   } catch (err) { setMsg(err.message || '결제를 시작하지 못했습니다.'); }
-  finally { busy = false; submit.disabled = false; }
+  finally { busy = false; submit.disabled = !OPEN; }
 });

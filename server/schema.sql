@@ -1517,7 +1517,7 @@ CREATE TABLE IF NOT EXISTS service_orders (
   terms_version           TEXT NOT NULL,
   privacy_version         TEXT NOT NULL,
   consented_at            timestamptz NOT NULL DEFAULT now(),
-  status                  TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PAID','FAILED','REFUNDED')),
+  status                  TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVING','PAID','FAILED','REFUNDED')),   -- APPROVING: claimed by one return request (mig 55)
   provider_tid            TEXT,
   payment_method_summary  TEXT,
   receipt_url             TEXT,

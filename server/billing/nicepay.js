@@ -150,9 +150,13 @@ export function createNicepayProvider({ env = process.env, fetch: fetchImpl = gl
       return p;
     },
 
-    /** returnUrl handler core: verify the window result, approve, return the normalized paid event. */
-    async completeReturn({ form, order }) {
+    /**
+     * returnUrl handler core: verify the window result, approve, return the normalized paid event.
+     * `claim` (optional) runs after verification and before approval; when it returns false nothing is approved and null is returned.
+     */
+    async completeReturn({ form, order, claim = null }) {
       const { tid } = this.verifyReturn(form, order);
+      if (claim && !(await claim(tid))) return null;
       return eventFromPayment(await this.approve({ tid, order }));
     },
 

@@ -25,6 +25,7 @@
 | `NICEPAY_SECRET_KEY` | nicepay | NicePay 시크릿 키. 서명 검증·Basic 인증·카드정보 암호화에 사용. 로그·응답에 절대 노출하지 않는다 |
 | `NICEPAY_MODE` | nicepay | `live`면 `api.nicepay.co.kr`, 그 외(기본)는 `sandbox-api.nicepay.co.kr`. 키 접두사(S/R)와 모드가 다르면 결제가 비활성화된다(부팅은 정상) |
 | `NICEPAY_RECURRING_ENABLED` | | `true`면 정기결제(빌키) 경로를 연다. 기본 `false` (NicePay 정기결제 심사 완료 전까지) |
+| `SERVICE_PAY_ENABLED` | | `/pricing` 서비스 결제(로그인 없는 구매) 스위치. 값이 정확히 `true`이고 NicePay Provider가 설정됐을 때만 결제가 열린다. 그 외(미설정 포함)에는 페이지만 보이고 버튼은 '결제 준비 중'. **Preview는 `false`**(운영 DB를 공유하고 키가 같으면 실제 카드가 결제된다), Production은 대표 승인 뒤에만 `true` |
 | `NICEPAY_SDK_URL` | | 결제창 JS SDK URL 재정의(기본 `https://pay.nicepay.co.kr/v1/js/`) |
 | `CRON_SECRET` | 결제 운영 | `GET /api/billing/cron/daily` 인증(`Authorization: Bearer …`, Vercel Cron이 자동 첨부). 미설정 시 503 |
 | `FAKE_BILLING_SECRET` | | fake Provider Webhook HMAC 키(개발/테스트용) |
@@ -102,6 +103,8 @@ DATABASE_URL=postgres://…/relai node scripts/migrate-sqlite-to-postgres.js --s
 - 일반결제는 자동 갱신 없음(`auto_renew=false`): `current_period_end`만 연장(남은 기간에 이어서), 기간이 끝나면 FREE. 만료 7일 전 OWNER에게 연장 안내 메일(`GET /api/billing/cron/daily`, Vercel Cron 매일 00:00 UTC).
 - TEAM 멤버 한도 = 구매 사용자 수(소유자 포함, `subscriptions.seats` = 1 + 추가 사용자).
 - 정기결제(빌키): `NICEPAY_RECURRING_ENABLED=true`일 때만. 카드정보는 AES 암호화(encData)로 NicePay에만 전달하고 저장하지 않는다. 빌키는 `INTEGRATION_ENCRYPTION_KEY`로 암호화해 `subscriptions.billing_key_enc`에만 둔다. 갱신 청구는 같은 cron, 실패 시 PAST_DUE + 7일 유예, 하루 1회 재시도. OWNER 해지 시 빌키 삭제.
+- 서비스 결제(`/pricing`, `service_orders`): 금액은 서버 카탈로그만. 결제창 결과 POST는 검증 뒤 주문을 `PENDING → APPROVING`으로 선점(조건부 UPDATE)한 요청 하나만 승인한다. 두 번째 POST는 승인·실패 처리·환불을 하지 않고 현재 상태(확인 중/완료)를 보여 준다. 반영 실패 시 자동 환불, 환불까지 실패하면 `failure_code=refund_failed` + `SUPPORT_EMAIL`(없으면 사업자 문의 메일)로 운영자 알림(`email_deliveries` type `SERVICE_PAY_ALERT`), 구매자에게는 '결제 확인 중 문제가 생겼습니다. 영업일 1일 안에 연락드립니다'. 웹훅 금액 불일치는 해당 tid 자동 환불 + 알림. 일일 cron: 24시간 지난 PENDING 주문 삭제, 30분 넘게 APPROVING인 주문은 `approval_unknown`으로 닫고 알림(늦게 온 paid 웹훅은 그대로 반영), 실패한 영수증 메일 7일간 재시도. 주문 생성 제한: IP당 20건/시간, 이메일당 5건/시간. 관리자 목록 조회마다 감사 로그 `SERVICE_ORDERS_VIEW`.
+- **PCI 범위(정기결제를 열기 전 결정)**: `/pricing` 월 구독과 `/app/billing/subscribe`는 카드번호·비밀번호 앞 2자리를 RELAI 서버로 받아 NicePay용으로 암호화한다. 저장·로그는 하지 않지만 카드 데이터가 RELAI 서버를 지나므로 PCI DSS 범위(SAQ D 수준)에 들어간다. `NICEPAY_RECURRING_ENABLED`를 켜기 전에 NicePay 호스팅 빌키 발급 창(카드 데이터가 RELAI를 거치지 않음)으로 바꾸는 것을 우선 검토하고, 못 바꾸면 해당 라우트의 요청 본문 로깅이 꺼져 있는지(Vercel·APM·에러 리포터) 확인한다. 카드 입력란에는 `name` 속성이 없어 기본 폼 전송에 실리지 않는다.
 - 환불: `POST /api/billing/admin/payments/:id/refund {reason}`(SYSTEM_ADMIN) → NicePay 전체 취소 → 결제 REFUNDED, 이용 기간에서 해당 주문 개월 수 차감(남는 기간이 없으면 즉시 CANCELED). Audit `REFUND_PAYMENT`.
 - OWNER 해지(`requestCancel`)는 Provider 호출을 DB 트랜잭션 밖에서 한다(확인 → provider.cancel → 잠금·재확인·전이).
 - NicePay 웹훅은 `200 text/html "OK"`로 응답해야 성공 처리된다(`provider.webhookAck`).

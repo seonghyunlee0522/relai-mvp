@@ -29,6 +29,8 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   check('결제 전 확인해주세요 + 문의 + 사업자 정보 + 약관 links', /결제 전 확인해주세요/.test(body) && /551-25-02019/.test(body) && /통신판매업 신고번호/.test(body) && Boolean(await page.$('footer a[href="/terms"]')) && Boolean(await page.$('footer a[href="/privacy"]')));
   check('no sample/test/샘플/테스트 words', !/sample|test|샘플|테스트/i.test(body), (body.match(/.{0,20}(sample|test|샘플|테스트).{0,20}/i) || [''])[0]);
   check('no console/page errors on load', errors.length === 0, errors.join(' | '));
+  check('checkout open: pay button enabled by pricing.js, form method=post, card inputs have no name', !(await page.$eval('#sp-submit', (b) => b.disabled))
+    && (await page.$eval('#sp-form', (f) => f.method)) === 'post' && (await page.$$eval('[id^="card_"]', (xs) => xs.every((x) => !x.name))));
   await shot('01-pricing-desktop.png');
 
   // 2) validation: consents required, nothing called
@@ -99,6 +101,14 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   const adm = await page.innerText('#svc-orders').catch(() => '');
   check('관리자 › 결제 › 서비스 결제: buyer name, email, amount, status', /서비스 결제/.test(adm) && /김하늘/.test(adm) && /buyer@example.com/.test(adm) && /400,000/.test(adm) && /결제 완료/.test(adm), adm.slice(0, 300));
   await shot('09-admin-payments.png');
+  check('관리자 view writes a SERVICE_ORDERS_VIEW audit row', Number(sql(`SELECT count(*) FROM admin_audit_logs WHERE action='SERVICE_ORDERS_VIEW' AND admin_user_id='${uid}'`)) >= 1);
+
+  // closed state (CLOSED_BASE: a second server started with E2E_CLOSED=1): page renders, button disabled '결제 준비 중'
+  if (process.env.CLOSED_BASE) {
+    await page.goto(`${process.env.CLOSED_BASE}/pricing?plan=once&product=agent`);
+    check('closed: page renders, button disabled 결제 준비 중', (await page.$eval('#sp-submit', (b) => b.disabled)) && /결제 준비 중/.test(await page.innerText('#sp-submit')));
+    await shot('10-pricing-closed.png');
+  }
 
   await browser.close();
   const fails = results.filter(([, ok]) => !ok); console.log(`\n${results.length - fails.length}/${results.length} passed`);

@@ -7,6 +7,8 @@ import { openDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { createNicepayProvider, windowSignature, paymentSignature } from '../server/billing/nicepay.js';
 
+process.env.SERVICE_PAY_ENABLED ??= 'true';   // checkout is opt-in (payment review P1-1); E2E_CLOSED=1 renders the closed page
+if (process.env.E2E_CLOSED === '1') process.env.SERVICE_PAY_ENABLED = 'false';
 const CLIENT = 'S2_e2eclient'; const SECRET = 'abcdefghijklmnopqrstuvwxyz012345';
 const port = Number(process.env.PORT || 3131);
 const tids = new Map();   // tid → orderId (the window binds them, as NicePay does)

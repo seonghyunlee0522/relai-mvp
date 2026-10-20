@@ -6,7 +6,7 @@
  *                                           verify → approve → apply → 303 to /app/settings?checkout=success|failed|canceled#billing
  *   mountBillingRoutes  — workspace-scoped: GET …/billing (any member), GET …/billing/quote, POST …/billing/checkout|cancel|recurring
  *     (OWNER: POLICY.billing); GET /api/billing/nicepay/pay/:orderId (the order's buyer); POST /api/billing/admin/payments/:id/refund
- *     (SYSTEM_ADMIN); GET /api/billing/cron/daily (CRON_SECRET: renewal reminders, renewal charges, monthly AI credit grants).
+ *     (SYSTEM_ADMIN); GET /api/billing/cron/daily (CRON_SECRET: renewal reminders, renewal charges, monthly AI credit grants, 서비스 결제 cleanup).
  */
 import { aiConfig } from '../ai/config.js';
 import express from 'express';
@@ -23,7 +23,7 @@ import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, foun
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices } from './cron.js';
 import { grantDueMonthlyCredits } from './ai-grants.js';
-import { applyServiceEvent } from './service-orders.js';
+import { applyServiceEvent, serviceOrdersDaily } from './service-orders.js';
 
 const catalogue = () => Object.values(PLANS).filter((p) => p.key !== 'EARLY').map((p) => ({ key: p.key, label: p.label, base_monthly: p.contact_sales ? null : (p.base_monthly ?? 0),
   included_users: p.included_users ?? null, extra_user_monthly: p.extra_user_monthly ?? null, contact_sales: Boolean(p.contact_sales), limits: p.limits, ai_credits_monthly: p.ai_credits_monthly ?? 0 }));
@@ -60,7 +60,7 @@ export function mountBillingWebhook(app, db, { provider, fail }) {
       try { ev = await provider.handleWebhook({ rawBody, headers: req.headers }); }
       catch (e) { if (e instanceof BillingError) return fail(res, e.status, e.code, e.message); throw e; }
       // 서비스 결제 orders (/pricing, service_orders) are applied there; everything else is in-app billing.
-      const out = (await applyServiceEvent(db, provider.name, ev)) ?? await processWebhookEvent(db, provider.name, ev);
+      const out = (await applyServiceEvent(db, provider.name, ev, { refunder: provider })) ?? await processWebhookEvent(db, provider.name, ev);
       if (provider.webhookAck) return provider.webhookAck(res, out);
       res.json({ received: true, ...out });
     } catch (e) { next(e); }
@@ -243,6 +243,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const secret = String(process.env.CRON_SECRET || '');
     if (!secret) return fail(res, 503, 'cron_unconfigured', 'CRON_SECRET is not set');
     if (!safeEqual(req.get('authorization'), `Bearer ${secret}`)) return fail(res, 401, 'unauthenticated', '인증이 필요합니다.');
-    res.json({ reminders: await sendRenewalReminders(db), renewals: await chargeDueRenewals(db, provider), ai_credits: await grantDueMonthlyCredits(db), early_access: await sendEarlyAccessNotices(db) });
+    res.json({ reminders: await sendRenewalReminders(db), renewals: await chargeDueRenewals(db, provider), ai_credits: await grantDueMonthlyCredits(db), early_access: await sendEarlyAccessNotices(db),
+      service_orders: await serviceOrdersDaily(db) });
   }));
 }
