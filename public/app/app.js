@@ -24,6 +24,7 @@ import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
 import { creditsPage } from './credits.js';
 import { plansPage } from './plans.js';
+import { billingPage } from './billing.js';   // 설정 › 플랜 · 결제 (pricing v3 T4)
 import { subscribePage } from './subscribe.js';   // 구독 · 카드 등록 (NicePay 정기결제)
 import { sampleGuidePage } from './project/sample-guide.js';   // RELAI 가이드 · 샘플로 보기
 import './shared/upgrade.js';   // 402 plan_limit_reached → upgrade prompt (Phase 10)
@@ -63,6 +64,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/issues\/?$/, raidPage],
   [/^\/app\/projects\/([\w-]+)\/tests\/?$/, testsPage],
   [/^\/app\/settings\/?$/, settingsPage],
+  [/^\/app\/settings\/billing\/?$/, billingPage],     // 워크스페이스 Billing (pricing v3 T4)
   [/^\/app\/settings\/credits\/?$/, creditsPage],      // 설정 › AI 크레딧 (AI-credits-only billing)
   [/^\/app\/billing\/plans\/?$/, plansPage],          // 플랜 · 구독 (batch7 T5: every limit / credit upsell lands here)
   [/^\/app\/billing\/subscribe\/?$/, subscribePage],  // 구독하기 → 카드 등록 · 정기결제 동의 (NicePay review path)

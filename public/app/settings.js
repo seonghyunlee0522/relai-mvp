@@ -5,17 +5,16 @@ import { state } from './core/state.js';
 import { confirmDialog, toast } from './shared/dialogs.js';
 import { relTime } from './shared/jira.js';
 import { formDialog, inviteStatusChip, emailStatusChip } from './shared/forms.js';
-import { usageBars, fmtDay } from './admin/ui.js';
 import { addSamples, deleteAllSamples } from './project/samples.js';
 import { phoneFeedback } from './feedback.js';
 import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
+import { mountBilling } from './billing.js';
 
 const qp0 = () => new URLSearchParams(location.search);
 const unverified = () => state.user?.email_verified === false;   // server refuses checkout/invitations until the e-mail is verified
 const VERIFY_HINT = '이메일 인증 후 사용할 수 있습니다.';
 /** K24: the disabled 결제하기 / 멤버 초대 hint carries its own `인증 메일 다시 받기` (the top banner can be hidden). */
 const verifyHint = (id, style = '') => html`<span class="hint" id="${id}"${raw(style ? ` style="${style}"` : '')}>${VERIFY_HINT} <button type="button" class="link linkbtn" data-verify-again>인증 메일 다시 받기</button></span>`;
-const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
 const ROLE = { OWNER: '소유자', ADMIN: '관리자', MEMBER: '멤버' };
 const ROLE_DESC = { OWNER: '모든 기능 · 멤버/설정/결제 관리', ADMIN: '프로젝트 생성·관리 · 멤버/설정 관리 (결제 불가)', MEMBER: '프로젝트 업무 수행 (멤버/설정/결제 불가)' };
 
@@ -24,14 +23,7 @@ export async function settingsPage(main = $('#main')) {
   const wid = state.workspace.id;
   let integ; const [{ workspace }, { members }, integ0] = await Promise.all([api('GET', `/api/workspaces/${wid}`), api('GET', `/api/workspaces/${wid}/members`), api('GET', `/api/workspaces/${wid}/integrations`).catch(() => null)]);
   integ = integ0; const perm = isPhone() ? { ...workspace.permissions, member_manage: false, workspace_settings: false, integration_manage: false } : workspace.permissions; const me = state.user.id;   // phone = view mode: no member / workspace / Jira management
-  // Plan & billing (Phase 10): plan, usage against limits, OWNER-only purchase (cycle × users, server-quoted, VAT excluded) / cancel.
-  let billing = null; const loadBilling = async () => { try { billing = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch { billing = null; } };
-  await loadBilling();
-  // Account lifecycle: login methods, password state, what would block 회원 탈퇴.
-  let credits = null; try { credits = (await api('GET', `/api/workspaces/${wid}/credits/summary`)).credits; } catch { credits = null; }
-  const creditsCard = () => !credits ? '' : html`<div class="panel" style="margin-top:20px" id="ai-credits"><div class="panel__h">AI 크레딧<a class="btn btn--secondary btn--sm" href="/app/settings/credits" data-link>${credits.payments_enabled === false ? '자세히' : '자세히 · 충전'}</a></div><div class="panel__b">
-    <p style="margin:0"><b class="${credits.low ? 'is-warn' : ''}">잔액 ${credits.balance.toLocaleString('ko-KR')} 크레딧</b> <small class="dim">구매 ${credits.purchased_remaining.toLocaleString('ko-KR')} · 무료 ${credits.free_remaining.toLocaleString('ko-KR')}</small></p>
-    <p class="hint" style="margin-top:6px">이번 달 사용 ${credits.this_month.used.toLocaleString('ko-KR')} 크레딧 · 사용 내역은 모든 멤버가 볼 수 있습니다.</p></div></div>`;
+  // Plan & billing: the 요금제 tab mounts the v3 Billing view (billing.js, pricing v3 T4) — it loads its own data.
   // 샘플 프로젝트 (OWNER / ADMIN): how many of the 3 examples this workspace has — 추가 brings back the missing ones, 삭제 removes all
   let samples = 0; const loadSamples = async () => { try { samples = (await api('GET', `/api/workspaces/${wid}/projects?include_archived=1`)).projects.filter((p) => p.sample_key).length; } catch { samples = 0; } };
   await loadSamples();
@@ -40,64 +32,8 @@ export async function settingsPage(main = $('#main')) {
     <div class="actions" style="margin-top:14px"><button class="btn btn--secondary btn--sm" id="samples-add"${raw(samples >= 3 ? ' disabled title="샘플 프로젝트가 모두 있습니다."' : '')}>샘플 프로젝트 추가</button>${raw(samples ? '<button class="btn btn--ghost btn--sm is-danger" id="samples-delete">샘플 프로젝트 삭제</button>' : '')}</div></div></div>`);
   let account = null; const loadAccount = async () => { try { account = (await api('GET', '/api/me/account')).account; } catch { account = null; } };
   await loadAccount();
-  const SUB_STATUS = { ACTIVE: ['chip--done', '이용 중'], PAST_DUE: ['chip--fail', '결제 실패'], CANCELED: ['chip--muted', '해지됨'], EXPIRED: ['chip--muted', '만료'] };
-  const billingCard = () => {
-    if (!billing) return '';
-    const s = billing.subscription; const co = billing.checkout || {};
-    const st = s && SUB_STATUS[s.status];
-    const lines = !s ? '' : html`<dl class="info" style="margin-top:14px"><dt>구독 상태</dt><dd><span class="chip ${st?.[0] || ''}">${st?.[1] || s.status}</span>${raw(s.cancel_at_period_end && s.status === 'ACTIVE' ? ' <small class="dim">해지 예약 — 기간 종료 후 무료 플랜으로 전환</small>' : '')}</dd>
-      ${raw(s.current_period_end ? html`<dt>이용 기간</dt><dd>${fmtDay(s.current_period_end)}까지</dd>` : '')}
-      ${raw(s.status === 'PAST_DUE' && s.grace_period_end ? html`<dt>유예 기간</dt><dd>${fmtDay(s.grace_period_end)}까지 결제수단을 확인해 주세요. 이후 무료 플랜 한도가 적용됩니다.</dd>` : '')}
-      ${raw(s.seats ? html`<dt>사용자</dt><dd>${s.seats}명 <small class="dim">(소유자 포함)</small>${raw(s.billing_cycle ? html` <small class="dim">· ${s.billing_cycle === 'ANNUAL' ? '연간 선결제' : '1개월'}</small>` : '')}</dd>` : '')}
-      ${raw(s.status === 'ACTIVE' && !s.auto_renew ? '<dt>자동 결제</dt><dd>없음 <small class="dim">— 기간 종료 7일 전에 연장 안내 메일을 보내 드립니다</small></dd>' : '')}
-      ${raw(s.payment_method_summary ? html`<dt>결제 수단</dt><dd>${s.payment_method_summary}</dd>` : '')}</dl>`;
-    const canCancel = billing.can_manage && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && !s.cancel_at_period_end;
-    const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 워크스페이스 소유자만 할 수 있습니다.</p>'
-      : html`${raw(co.can_purchase && billing.provider_available ? buyForm() : '')}<div class="actions" style="margin-top:14px">${raw(canCancel && s.auto_renew ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
-`;
-    // v1: payments off (PAYMENTS_ENABLED) → no purchase form; the plan line, usage bars and a link to the plans page (batch7 T5)
-    const plansLink = html`<div class="actions" style="margin-top:14px"><a class="btn btn--secondary btn--sm" href="/app/billing/plans" data-link id="plans-link">플랜 살펴보기</a></div>`;
-    if (billing.payments_enabled === false) return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan_label}</span></div><div class="panel__b">
-      ${raw(planLimits())}${raw(usageBars(billing.usage))}${raw(lines)}${raw(canCancel && s.auto_renew ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button></div>' : billing.plan === 'FREE' ? plansLink : '')}</div></div>`;
-    return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan_label}</span></div><div class="panel__b">
-      ${raw(planLimits())}${raw(usageBars(billing.usage))}${raw(lines)}${raw(actions)}${raw(billing.plan === 'FREE' ? plansLink : '')}</div></div>`;
-  };
-  /** 현재 플랜 · 한도 (batch7 #24): one line '프로젝트 1/2 · 요구사항 23/50 …' above the bars. Early access is on FREE limits since 2026-10-20. */
-  const planLimits = () => {
-    const u = ((billing.usage && billing.usage.dims) || []).filter((x) => x.limit !== null && x.limit !== undefined);
-    return u.length ? html`<p class="plan-lim" id="plan-limits">현재 플랜 · 한도: ${u.map((x) => `${x.label} ${x.used}/${x.limit}`).join(' · ')}</p>` : '';
-  };
-  /** Purchase form: cycle × users (owner included) → server quote (VAT excluded prices, founding discount) → NicePay payment window. */
-  const buyForm = () => {
-    const co = billing.checkout; const extend = billing.plan !== 'FREE';
-    return html`<form id="bill-buy" class="panel__sub" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-soft)">
-      <p style="margin:0 0 10px;font-weight:600">${extend ? 'Team 이용 기간 연장' : 'Team 플랜 구매'} ${raw(co.founding_eligible ? html`<span class="chip chip--active">파운딩 고객 ${co.founding.pct}% 할인 · 첫 1년</span>` : '')}</p>
-      <div class="inline-form" style="gap:8px;flex-wrap:wrap"><select class="select select--sm" name="cycle">${raw(co.cycles.map((c) => html`<option value="${c.key}">${c.label}${c.discount_pct ? ` · ${c.discount_pct}% 할인` : ''}</option>`).join(''))}</select>
-        <label class="dim" style="display:flex;align-items:center;gap:6px">사용자 수 (소유자 포함) <input class="input input--sm" name="users" type="number" min="${co.min_users}" max="${co.max_users}" step="1" value="${Math.max(co.min_users, billing.subscription?.seats || 0)}" style="width:84px"></label></div>
-      <p class="hint" style="margin-top:6px">워크스페이스 ${won(co.base_monthly)}/월 (소유자 ${co.included_users}명 포함) + 사용자 추가 1명당 ${won(co.extra_user_monthly)}/월</p>
-      <p class="hint" id="bill-quote" style="margin-top:8px">금액 계산 중…</p>
-      <div class="actions" style="margin-top:10px"><button class="btn btn--primary btn--sm" id="bill-pay"${raw(unverified() ? ' disabled' : '')}>결제하기</button>${raw(unverified() ? verifyHint('bill-verify') : '')}</div>
-      <p class="hint">가격은 부가세 별도이며 결제 시 부가세 10%가 더해집니다. 현재 멤버 수(${co.min_users}명) 이상으로 구매해 주세요 · 자동 결제되지 않습니다.${co.sandbox ? ' (샌드박스 결제 환경)' : ''}</p>
-      ${raw(!extend ? '<p style="margin-top:10px"><a class="link" href="/app/billing/subscribe" data-link id="bill-recurring-link">신용카드를 등록하고 매월 자동 결제(정기결제)로 구독하기 →</a></p>' : '')}
-    </form>`;
-  };
-  const bindBuy = () => {
-    const f = $('#bill-buy'); if (!f) return;
-    const val = () => ({ plan: 'TEAM', cycle: f.cycle.value, users: Number(f.users.value) });
-    const q = $('#bill-quote'); let seq = 0;
-    const refresh = async () => {
-      const my = ++seq; const v = val();
-      try {
-        const { quote: x } = await api('GET', `/api/workspaces/${wid}/billing/quote?cycle=${v.cycle}&users=${v.users}`); if (my !== seq) return;
-        q.innerHTML = html`(${won(x.base_monthly)} + 추가 ${x.extra_users}명 × ${won(x.extra_user_monthly)}) = ${won(x.monthly_amount)}/월 × ${x.months}개월 = ${won(x.list_amount)}${raw(x.discount_amount ? html` − 할인 ${won(x.discount_amount)}` : '')} + 부가세 ${won(x.vat_amount)} → <b>${won(x.amount)}</b>`;
-        $('#bill-pay').disabled = unverified();
-      } catch (e) { if (my !== seq) return; q.textContent = e.fields?.users || e.message; $('#bill-pay').disabled = true; }
-    };
-    f.cycle.onchange = refresh; f.users.oninput = refresh; refresh();
-    f.onsubmit = async (e) => { e.preventDefault(); if (unverified()) return toast(VERIFY_HINT); const b = $('#bill-pay'); b.disabled = true; try { const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, val()); location.href = r.checkout_url; } catch (err) { b.disabled = false; toast(err.message); } };
-  };
   let members0 = [];
-  const CHECKOUT_MSG = { success: '결제가 완료되었습니다. Team 플랜이 적용되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다. 다시 시도하거나 운영자에게 문의해 주세요.', fake: '모의 결제로 처리했습니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
+  const CHECKOUT_MSG = { success: '결제가 완료되었습니다. 요금제가 적용되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다. 다시 시도하거나 운영자에게 문의해 주세요.', fake: '모의 결제로 처리했습니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
   if (qp0().get('checkout')) { toast(CHECKOUT_MSG[qp0().get('checkout')] || '결제를 처리하고 있습니다. 잠시 후 플랜이 반영됩니다.'); history.replaceState(null, '', '/app/settings#billing'); }
   // Pending invitations (OWNER/ADMIN only) — Phase 13
   let invites = []; const loadInvites = async () => { if (!perm.member_manage) return; try { invites = (await api('GET', `/api/workspaces/${wid}/invitations`)).all.filter((i) => i.status === 'PENDING' || i.status === 'EXPIRED').slice(0, 50); } catch { invites = []; } };
@@ -151,7 +87,7 @@ export async function settingsPage(main = $('#main')) {
       <div class="panel"><div class="panel__h"><span>팀원 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em>${raw(perm.member_manage ? html` <small class="dim" style="font-weight:400;margin-left:6px">초대 대기 ${invites.filter((i) => i.status === 'PENDING').length}건</small>` : '')}</span></div>
       ${raw(teamTable(members))}
       ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="이미 가입한 사용자 이메일" required style="flex:1;max-width:480px"><select class="select select--sm" name="role" aria-label="역할"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">바로 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '<p class="hint" style="padding:0 20px 14px">팀원 초대·역할 변경은 워크스페이스 소유자·관리자만 할 수 있습니다.</p>')}</div>`;
-    if (tab === 'plan') return html`${raw(tabHead(label, purpose))}${raw(billingCard())}${raw(creditsCard())}`;
+    if (tab === 'plan') return html`${raw(tabHead(label, purpose))}<div id="billing" class="bl-wrap"></div>`;
     if (tab === 'integrations') return html`${raw(tabHead(label, purpose))}${raw(jiraCard() || '<p class="dim">연결할 수 있는 도구가 없습니다.</p>')}`;
     const ownerWs = workspace.role === 'OWNER';
     return html`${raw(tabHead(label, purpose))}
@@ -192,7 +128,7 @@ export async function settingsPage(main = $('#main')) {
         <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
         <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
         ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>' : '')}</div></div>
-      ${raw(billingCard())}${raw(creditsCard())}
+      <div id="billing" class="bl-wrap"></div>
       <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
         <div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
         <tbody>${raw(members.map((m) => html`<tr>
@@ -203,10 +139,10 @@ export async function settingsPage(main = $('#main')) {
         ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
       </div>${raw(inviteTable())}${raw(isPhone() ? '' : jiraCard())}${raw(isPhone() ? phoneFeedback() + '<button type="button" class="btn btn--secondary phone-logout" data-logout data-phone-ok>로그아웃</button>' : '')}</div>`;
     }
-    members0 = members; bindBuy();
+    members0 = members;
+    const br = $('#billing'); if (br) mountBilling(br, { wid });
     const sa = $('#samples-add'); if (sa) sa.onclick = async () => { sa.disabled = true; if (await addSamples()) { await loadSamples(); draw(members); } else sa.disabled = false; };
     const sx = $('#samples-delete'); if (sx) sx.onclick = async () => { if (await deleteAllSamples()) { await loadSamples(); draw(members); } };
-    const bc = $('#bill-cancel'); if (bc) bc.onclick = async () => { if (!(await confirmDialog({ title: 'Team 구독을 해지할까요?', body: '현재 이용 기간이 끝날 때까지 Team 플랜을 그대로 쓰고, 이후 무료 플랜 한도가 적용됩니다. 데이터는 삭제되지 않습니다.', confirm: '해지 예약', danger: true }))) return; try { billing = (await api('POST', `/api/workspaces/${wid}/billing/cancel`, {})).billing; toast('해지를 예약했습니다.'); draw(members); } catch (e) { toast(e.message); } };
     if (location.hash === '#billing') $('#billing')?.scrollIntoView({ block: 'start' });
     const ib = $('#invite-btn'); if (ib) ib.onclick = async () => {
       const roles = [['MEMBER', '멤버 — 프로젝트 업무 수행']]; if (workspace.role === 'OWNER') roles.push(['ADMIN', '관리자 — 프로젝트·멤버·설정 관리']);

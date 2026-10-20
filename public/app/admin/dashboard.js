@@ -13,7 +13,7 @@ export async function adminDashboardPage(main = $('#main')) {
     { label: '전체 프로젝트', value: n(k.projects), sub: '보관 제외' },
     { label: '최근 7일 가입', value: n(k.signups_7d), sub: `오늘 ${n(k.signups_today)}`, href: '/admin/users?since=7d' },
   ];
-  if (b) cards.push({ label: 'Team 워크스페이스', value: n(k.team_workspaces), href: '/admin/subscriptions?status=ACTIVE' }, { label: 'MRR', value: k.mrr === null ? '가격 미설정' : `₩${n(k.mrr)}` });
+  if (b) cards.push({ label: '유료 워크스페이스 (Pro·Team)', value: n(k.team_workspaces), href: '/admin/subscriptions?status=ACTIVE' }, { label: 'MRR (VAT 포함)', value: k.mrr === null ? '가격 미설정' : `₩${n(k.mrr)}` });
   if (b) cards.push({ label: '결제 실패 (7일)', value: n(k.payment_failed_7d), tone: k.payment_failed_7d ? 'bad' : '', href: '/admin/payments?status=FAILED' }, { label: '결제 연체', value: n(k.past_due), tone: k.past_due ? 'warn' : '', href: '/admin/subscriptions?status=PAST_DUE' });
   const pct = (x) => (f.registered ? Math.round((x / f.registered) * 100) : 0);
   const funnel = [['가입', f.registered], ['워크스페이스 생성', f.workspace_created], ['프로젝트 생성', f.project_created], ...(b ? [['결제', f.paid]] : [])];

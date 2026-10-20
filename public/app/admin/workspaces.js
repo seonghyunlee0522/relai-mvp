@@ -33,6 +33,23 @@ export async function adminWorkspacesPage(main = $('#main')) {
   await draw();
 }
 
+const CYCLE_KO = { MONTHLY: '월간', ANNUAL: '연간' };
+/** 요금 · 한도 (pricing v3, read-only): effective plan, cycle, seats used / pending / left, active projects, add-ons, credit buckets. */
+function billingV3Section(b) {
+  const lim = (v) => (v === null || v === undefined ? '협의' : n(v));
+  const bucket = (v) => (v === null || v === undefined ? '<span class="dim">-</span>' : n(v));
+  return section('요금 · 한도 (v3)', dl([
+    ['플랜', html`${b.plan_label}${raw(b.cycle ? ` · ${CYCLE_KO[b.cycle] || b.cycle}` : '')}${raw(b.price_version === 'v2' ? ' <span class="achip achip--warn">v2 계약</span>' : '')}`],
+    ['상태', b.status ? html`${b.status}${raw(b.auto_renew ? ' · 자동 갱신' : ' · 자동 갱신 꺼짐(해지)')}${raw(b.current_period_end ? ` · ${fmtDay(b.current_period_end)}까지` : '')}` : '<span class="dim">Free</span>'],
+    ['MRR (VAT 포함)', b.mrr ? `₩${n(b.mrr)}` : '-'],
+    ['활성 프로젝트', `${n(b.usage.projects_active)} / ${lim(b.limits.projects)}`],
+    ['사용자 (좌석)', `${n(b.usage.members)} 참여 + ${n(b.usage.pending_invites)} 초대 대기 / ${lim(b.limits.users)} · 남은 좌석 ${b.usage.seats_left === null ? '협의' : n(b.usage.seats_left)}`],
+    ['추가 이용', `사용자 ${n(b.addons.extra_users)}명 · 프로젝트 ${n(b.addons.extra_projects)}개`],
+    ['AI 크레딧', html`합계 ${n(b.credits.total)} · 기본 ${raw(bucket(b.credits.plan))} · 가입/프로모션 ${raw(bucket(b.credits.promo))} · 유상 ${raw(bucket(b.credits.purchased))}`],
+    ['한도 초과', b.over_limit ? html`<span class="achip achip--bad">초과</span> 프로젝트 ${n(b.over_limit.projects)} · 사용자 ${n(b.over_limit.members)}` : '<span class="dim">없음</span>'],
+  ]) + '<p class="hint">완료·보관 프로젝트는 활성 프로젝트에 넣지 않습니다. 초대 대기는 좌석을 차지합니다. 데이터는 한도를 넘어도 삭제되지 않습니다.</p>');
+}
+
 export async function adminWorkspacePage(id, main = $('#main')) {
   const draw = async () => {
     const [d, ai] = await Promise.all([adminApi(`workspaces/${id}`), adminApi(`workspaces/${id}/ai`).catch(() => null)]);
@@ -47,8 +64,12 @@ export async function adminWorkspacePage(id, main = $('#main')) {
       <div class="agrid2">
         ${raw(section('기본 정보', dl([['워크스페이스', html`${w.name}`], ['생성일', fmtD(w.created_at)], ['상태', chip(w.status)], ['소유자', w.owner_email ? html`<a class="link" href="/admin/users/${w.owner_id}" data-link>${w.owner_name}</a> <small class="dim mono">${w.owner_email}</small>` : '<span class="dim">없음</span>'],
           ['소유자 수', n(d.owners.length)], ['현재 플랜', html`${w.plan_label}`], ['구독', s ? html`<a class="link" href="/admin/subscriptions/${s.id}" data-link>${s.status}</a> · ${s.current_period_end ? `기간 종료 ${fmtDay(s.current_period_end)}` : ''}` : '<span class="dim">결제 미연동 — 구독 정보 없음</span>'], ['워크스페이스 ID', html`<span class="mono dim">${w.id}</span>`]])))}
-        ${raw(section('사용량 (플랜 한도 대비)', usageBars(d.usage) + '<p class="hint">무료 플랜 한도는 생성할 때 적용되어 넘으면 추가가 막힙니다(기존 데이터는 유지). 주간보고는 이번 달 생성 건수입니다.</p>'))}
+        ${raw(d.billing_v3 ? billingV3Section(d.billing_v3) : section('사용량 (플랜 한도 대비)', usageBars(d.usage)))}
       </div>
+      ${raw(d.billing_v3 ? section(`결제 내역 (${d.billing_v3.orders.length})`, table([
+        { key: 'created_at', label: '일시', w: 150, render: (o) => fmtD(o.paid_at || o.created_at) }, { key: 'title', label: '내용', w: 220, cls: 'ttl', render: (o) => html`${o.title} <small class="dim">${o.kind_label}</small>` },
+        { key: 'amount', label: '금액 (VAT 포함)', w: 130, cls: 'num', render: (o) => `₩${n(o.amount)}${o.refunded_amount ? ` (환불 ₩${n(o.refunded_amount)})` : ''}` }, { key: 'status_label', label: '상태', w: 100 },
+      ], d.billing_v3.orders, { empty: '결제 내역이 없습니다.', id: 'atbl-orders' })) : '')}
       ${raw(section(`멤버 (${d.members.length})`, table([
         { key: 'name', label: '이름', w: 150, cls: 'ttl' }, { key: 'email', label: '이메일', w: 240, render: (m) => html`<span class="mono">${m.email}</span>` }, { key: 'role', label: '역할', w: 90 },
         { key: 'status', label: '계정 상태', w: 90, render: (m) => chip(m.status) }, { key: 'joined_at', label: '가입일', w: 110, render: (m) => fmtDay(m.joined_at) },

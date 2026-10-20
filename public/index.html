@@ -364,7 +364,7 @@ p{margin:0}
 
 .reveal{opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s}
 .reveal.is-in{opacity:1;transform:none}
-/* pricing — prices and limits mirror server/plans.js (VAT excluded) */
+/* pricing v3 — the plan cards and their CSS are injected by server/legal.js from server/plans.js catalogue() (VAT included) */
 .pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,360px));gap:20px;justify-content:center}
 @media (max-width:1020px){.pgrid{grid-template-columns:minmax(0,420px)}}
 .plan__s{margin-top:-10px;font-size:13px;color:var(--muted)}
@@ -544,7 +544,7 @@ p{margin:0}
         <a href="#preview" class="btn btn--secondary" data-loc="hero_how">어떻게 작동하나요?</a>
       </div>
       <p class="hero__note">회원가입 후 바로 시작할 수 있습니다.</p>
-      <p class="hero__mnote"><span>무료 플랜으로 시작</span><span>AI 크레딧 500 제공</span><span>설치 없이 웹에서</span></p>
+      <p class="hero__mnote"><span>무료 플랜으로 시작</span><span>AI 크레딧 100 제공</span><span>설치 없이 웹에서</span></p>
       <div class="mshot" id="mpreview" aria-label="RELAI 지금 할 일 화면 예시">
         <div class="mshot__s">
           <div class="mshot__top"><b>A사 상담 시스템 구축</b><span class="mshot__q">?</span></div>
@@ -873,61 +873,19 @@ p{margin:0}
   <div class="wrap">
     <div class="head-block center reveal">
       <p class="eyebrow">요금</p>
-      <h2 class="h2">작게 시작하고,<br>팀이 커지면 유료 플랜으로.</h2>
-      <p class="lead" style="margin-top:18px">무료 플랜으로 프로젝트를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 유료 플랜으로 한도 없이 사용하세요.</p>
+      <h2 class="h2">작게 시작하고,<br>팀이 커지면 Pro · Team으로.</h2>
+      <p class="lead" style="margin-top:18px">Free로 프로젝트 하나를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 필요한 플랜을 고르세요. 요금은 워크스페이스 단위로, 활성 프로젝트와 사용자 수 기준입니다.</p>
     </div>
     <!-- 프로모션은 관리자 › 프로모션(placement landing)에서 바꾼다 — server/promotions.js가 요청마다 채운다 -->
     <div class="pricing__promo reveal" id="free-plan"><!--PROMO:landing--></div>
-    <!-- 한도는 server/plans.js FREE_LIMITS와 같은 값이어야 한다. 결제가 열리기 전에는 유료 플랜 가격 대신 '가격 안내 예정'(앱 /app/billing/plans와 같은 문구, batch7 T5) -->
-    <div class="pgrid reveal">
-      <div class="plan">
-        <div class="plan__n">무료</div>
-        <div class="plan__p" data-price="FREE">무료</div>
-        <p class="plan__d">작은 프로젝트로 RELAI의 흐름을 경험해 보세요.</p>
-        <ul>
-          <li>진행 중 프로젝트 2개</li>
-          <li>멤버 3명</li>
-          <li>요구사항 50개 · WBS 100개</li>
-          <li>주간보고 월 8건</li>
-          <li>지금 할 일 · 7단계 안내 전체</li>
-          <li>AI 크레딧 500 (워크스페이스당 1회)</li>
-        </ul>
-        <a href="/signup" class="btn btn--secondary btn--block" data-auth="start" data-loc="pricing_free">무료로 시작하기</a>
-      </div>
-      <div class="plan plan--team">
-        <div class="plan__n">유료 플랜</div>
-        <div class="plan__p" data-price="TEAM">가격 안내 예정</div>
-        <p class="plan__s">워크스페이스 단위 · 결제를 준비하고 있어요</p>
-        <p class="plan__d">여러 프로젝트와 팀을 한 워크스페이스에서 운영하는 팀을 위한 플랜.</p>
-        <ul>
-          <li>프로젝트 · 요구사항 · WBS 무제한</li>
-          <li>주간보고 무제한</li>
-          <li>필요한 만큼 사용자 추가 (최소 인원 없음)</li>
-          <li>무료 플랜의 모든 기능</li>
-          <li>매달 AI 크레딧 제공</li>
-        </ul>
-        <a href="/signup" class="btn btn--primary btn--block" data-auth="start" data-loc="pricing_team">무료로 시작하기</a>
-      </div>
-      <div class="plan">
-        <div class="plan__n">Enterprise</div>
-        <div class="plan__p" data-price="ENTERPRISE">영업 문의</div>
-        <p class="plan__s">조직 규모·요구사항에 맞춘 견적</p>
-        <p class="plan__d">여러 조직과 대규모 프로젝트를 운영하는 기업을 위한 플랜.</p>
-        <ul>
-          <li>유료 플랜의 모든 기능</li>
-          <li>계약·세금계산서 기반 결제</li>
-          <li>도입 지원 · 운영 문의 우선 대응</li>
-        </ul>
-        <a href="mailto:__CONTACT_EMAIL__?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" class="btn btn--secondary btn--block" data-loc="pricing_enterprise">도입 문의</a>
-      </div>
-    </div>
-    <!-- AI 크레딧 수는 server/ai/config.js featureCreditCost와 같은 값이어야 한다. 크레딧은 사용량 단위로만 보여 준다(₩ 없음, batch7 #7) -->
+    <!-- 요금 카드는 server/legal.js가 server/plans.js catalogue()로 채운다 (public/app/shared/pricing.js, pricing v3). 가격을 여기에 적지 않는다. -->
+    <div class="reveal" id="plan-cards"><!--PRICING:landing--></div>
+    <!-- AI 크레딧 수는 server/ai/config.js featureCreditCost와 같은 값이어야 한다. 기능 비용은 크레딧으로만 보여 준다(₩ 없음, batch7 #7) -->
     <div class="aiprice reveal" id="ai-credits">
-      <p class="aiprice__t"><b>AI 크레딧</b> — 실행 전에 가격을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p>
+      <p class="aiprice__t"><b>AI 크레딧</b> — 실행 전에 필요한 크레딧을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p>
       <ul class="aiprice__l"><li>AI 요구사항 추출 <b>30 크레딧</b></li><li>AI WBS 초안 <b>50 크레딧</b></li><li>AI 영향 분석 <b>20 크레딧</b></li><li>RELAI에게 물어보기 <b>10 크레딧</b></li></ul>
-      <p class="aiprice__p">워크스페이스마다 <b>AI 크레딧 500</b>을 무료로 드립니다.</p>
+      <p class="aiprice__p">크레딧은 워크스페이스 공용입니다. Free는 처음 한 번 <b>AI 크레딧 100</b>, Pro는 매월 1,000, Team은 매월 3,000 크레딧을 드리고, Pro·Team은 필요한 만큼 추가로 충전할 수 있습니다.</p>
     </div>
-    <p class="pricing__note reveal">유료 플랜 가격은 결제가 열리기 전에 먼저 안내해 드립니다. 한도를 넘어도 기존 데이터는 그대로 두고 새 항목 추가만 제한됩니다.</p>
   </div>
 </section>
 
@@ -1125,6 +1083,12 @@ new IntersectionObserver(function(en){
 }, {threshold:.3}).observe(document.getElementById('contact'));
 
 })();
+</script>
+<script>
+/* 요금 월간/연간 전환 (pricing v3): data-cycle만 바꾼다 — 금액은 서버가 두 주기 모두 렌더링했다 */
+(function(){var w=document.querySelector('#plan-cards .pcw');if(!w)return;var bs=w.querySelectorAll('[data-cycle-set]');
+for(var i=0;i<bs.length;i++)bs[i].addEventListener('click',function(e){var b=e.currentTarget;w.setAttribute('data-cycle',b.getAttribute('data-cycle-set'));
+for(var j=0;j<bs.length;j++)bs[j].setAttribute('aria-checked',String(bs[j]===b));if(window.gtag)try{gtag('event','pricing_cycle',{cycle:b.getAttribute('data-cycle-set')});}catch(_){}});})();
 </script>
 <script>
 (function(){
