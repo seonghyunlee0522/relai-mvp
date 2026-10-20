@@ -35,7 +35,8 @@ export async function subscribePage(main = $('#main')) {
   try { b = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch { b = null; }
   if (main.dataset.subRender !== token) return;
   const plans = (b?.catalogue?.plans || b?.plans || []).filter((p) => ['PRO', 'TEAM'].includes(p.key));
-  const sel = { plan: ['PRO', 'TEAM'].includes(qs.get('plan')) ? qs.get('plan') : 'PRO', cycle: qs.get('cycle') === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY', extra_users: 0, extra_projects: 0 };
+  const qn = (k) => Math.max(0, Math.min(200, Math.floor(Number(qs.get(k)) || 0)));
+  const sel = { plan: ['PRO', 'TEAM'].includes(qs.get('plan')) ? qs.get('plan') : 'PRO', cycle: qs.get('cycle') === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY', extra_users: qn('extra_users'), extra_projects: qn('extra_projects') };
   const open = Boolean(b?.flags?.checkout_open);
   const owner = b ? b.can_manage !== false : true;
   const subscribed = Boolean(b && ['PRO', 'TEAM'].includes(b.plan) && b.auto_renew);
@@ -51,7 +52,7 @@ export async function subscribePage(main = $('#main')) {
   const planRadio = (p) => html`<label class="sub-plan"><input type="radio" name="plan" value="${p.key}"${raw(p.key === sel.plan ? ' checked' : '')}>
     <span><b>${p.label}</b> <small class="dim">활성 프로젝트 ${p.included?.projects} · 사용자 ${p.included?.users}명 · 매월 AI 크레딧 ${n(p.credits?.monthly)}</small></span></label>`;
   const stepper = (name, text) => html`<label class="sub-step"><span>${text}</span><span class="sub-step__ctl"><button type="button" class="btn btn--secondary btn--sm" data-step="${name}" data-d="-1" aria-label="${text} 줄이기">−</button>
-    <input class="input input--sm" name="${name}" type="number" inputmode="numeric" min="0" max="200" step="1" value="0" aria-label="${text}"><button type="button" class="btn btn--secondary btn--sm" data-step="${name}" data-d="1" aria-label="${text} 늘리기">+</button></span></label>`;
+    <input class="input input--sm" name="${name}" type="number" inputmode="numeric" min="0" max="200" step="1" value="${sel[name]}" aria-label="${text}"><button type="button" class="btn btn--secondary btn--sm" data-step="${name}" data-d="1" aria-label="${text} 늘리기">+</button></span></label>`;
 
   main.innerHTML = html`<div class="page page--narrow page--subscribe" id="subscribe-page">
     <div class="page__head"><div><a class="link" href="/app/billing/plans" data-link>← 플랜</a><h1 style="margin-top:4px">${TITLE[mode]}</h1>
@@ -101,9 +102,12 @@ export async function subscribePage(main = $('#main')) {
     ${raw(legalFooterHtml())}
   </div>`;
 
-  const f = $('#sub-form', main);
+  // Everything below works on THIS render's page: a stale render (router re-entry) must never write a quote into the live page,
+  // or the screen would show one amount while the live form pays another.
+  const root = $('#subscribe-page', main);
+  const f = $('#sub-form', root);
   let current = null; let seq = 0;
-  const showErr = (fields = {}) => main.querySelectorAll('[data-err]').forEach((el) => { el.textContent = fields[el.dataset.err] || ''; });
+  const showErr = (fields = {}) => root.querySelectorAll('[data-err]').forEach((el) => { el.textContent = fields[el.dataset.err] || ''; });
   const readSel = () => {
     sel.plan = f.querySelector('input[name=plan]:checked')?.value || sel.plan;
     sel.cycle = f.querySelector('input[name=cycle]:checked')?.value || sel.cycle;
@@ -112,16 +116,19 @@ export async function subscribePage(main = $('#main')) {
   };
   const renderQuote = (q, d) => {
     const lines = q.lines.map((l) => html`<tr><th>${l.label}${l.qty > 1 ? ` × ${l.qty}` : ''}</th><td>${n(l.amount)}원</td></tr>`).join('');
-    $('#sub-quote', main).innerHTML = html`<table class="sub-lines">${raw(lines)}
+    $('#sub-quote', root).innerHTML = html`<table class="sub-lines">${raw(lines)}
       <tr class="sub-total"><th>지금 결제 금액 <small class="dim">VAT 포함</small></th><td><b class="sub-amount" id="sub-amount">${n(q.total)}원</b></td></tr></table>
       <p class="dim sub-limits">결제 후 한도: 활성 프로젝트 ${q.limits_after?.projects ?? '-'}개 · 사용자 ${q.limits_after?.users ?? '-'}명</p>`;
-    $('#sub-disclosure-items', main).innerHTML = d.items.map((i) => html`<dt>${i.label}</dt><dd>${i.value}</dd>`).join('');
-    if (modeOpen) $('#sub-pay-amount', main).textContent = `${n(q.total)}원 결제하고 ${mode === 'ADDON' ? '추가' : mode === 'UPGRADE' ? '업그레이드' : '구독 시작'}`;
+    $('#sub-disclosure-items', root).innerHTML = d.items.map((i) => html`<dt>${i.label}</dt><dd>${i.value}</dd>`).join('');
+    if (modeOpen) $('#sub-pay-amount', root).textContent = `${n(q.total)}원 결제하고 ${mode === 'ADDON' ? '추가' : mode === 'UPGRADE' ? '업그레이드' : '구독 시작'}`;
   };
   const refresh = async () => {
     readSel(); const my = ++seq;
+    // the choice lives in the URL too: a re-render (phone rotation across 768px, router re-entry) restores it instead of resetting to 0
+    const u = new URL(location.href); for (const k of ['plan', 'cycle', 'extra_users', 'extra_projects']) u.searchParams.set(k, sel[k]);
+    if (u.href !== location.href && root.isConnected) history.replaceState(history.state, '', u.href);
     try {
-      if (mode === 'ADDON' && !sel.extra_users && !sel.extra_projects) { $('#sub-quote', main).innerHTML = '<p class="dim">추가할 사용자 또는 프로젝트 수를 정해 주세요.</p>'; $('#sub-disclosure-items', main).innerHTML = ''; current = null; return; }
+      if (mode === 'ADDON' && !sel.extra_users && !sel.extra_projects) { $('#sub-quote', root).innerHTML = '<p class="dim">추가할 사용자 또는 프로젝트 수를 정해 주세요.</p>'; $('#sub-disclosure-items', root).innerHTML = ''; current = null; return; }
       const r = await api('GET', mode === 'ADDON' ? `/api/workspaces/${wid}/billing/quote?kind=ADDON&extra_users=${sel.extra_users}&extra_projects=${sel.extra_projects}`
         : mode === 'UPGRADE' ? `/api/workspaces/${wid}/billing/quote?kind=UPGRADE&plan=TEAM`
           : `/api/workspaces/${wid}/billing/quote?plan=${sel.plan}&cycle=${sel.cycle}&extra_users=${sel.extra_users}&extra_projects=${sel.extra_projects}`);
@@ -129,11 +136,11 @@ export async function subscribePage(main = $('#main')) {
       current = r; renderQuote(r.quote, r.disclosure); showErr({});
     } catch (err) {
       if (my !== seq) return;
-      current = null; $('#sub-quote', main).innerHTML = html`<p class="field__err">${Object.values(err.fields || {})[0] || err.message}</p>`;
+      current = null; $('#sub-quote', root).innerHTML = html`<p class="field__err">${Object.values(err.fields || {})[0] || err.message}</p>`;
     }
   };
   f.addEventListener('change', (e) => { if (['plan', 'cycle', 'extra_users', 'extra_projects'].includes(e.target.name)) refresh(); });
-  main.querySelectorAll('[data-step]').forEach((btn) => { btn.onclick = () => { const i = f[btn.dataset.step]; i.value = Math.max(0, Math.min(200, (Number(i.value) || 0) + Number(btn.dataset.d))); refresh(); }; });
+  root.querySelectorAll('[data-step]').forEach((btn) => { btn.onclick = () => { const i = f[btn.dataset.step]; i.value = Math.max(0, Math.min(200, (Number(i.value) || 0) + Number(btn.dataset.d))); refresh(); }; });
   if (f.number) f.number.oninput = () => { f.number.value = f.number.value.replace(/[^\d]/g, '').replace(/(\d{4})(?=\d)/g, '$1-').slice(0, 19); };
   const clearCard = () => { if (!f.number) return; f.number.value = ''; f.mm.value = ''; f.yy.value = ''; f.id_no.value = ''; f.password2.value = ''; };
   refresh();
@@ -147,7 +154,7 @@ export async function subscribePage(main = $('#main')) {
     if (Object.keys(fields).length) return;
     if (!modeOpen) { clearCard(); return toast(open ? '이 변경은 아직 열리지 않았어요.' : NOT_OPEN); }   // not open: no request is sent
     if (!current) return toast('금액을 다시 불러온 뒤 시도해 주세요.');
-    const btn = $('#sub-pay', main); btn.disabled = true;
+    const btn = $('#sub-pay', root); btn.disabled = true;
     try {
       const consent = { agree: true, disclosure_hash: current.disclosure.hash };
       if (mode === 'ADDON') { await api('POST', `/api/workspaces/${wid}/billing/addons`, { extra_users: sel.extra_users, extra_projects: sel.extra_projects, ...consent }); toast('추가했습니다. 한도가 바로 늘었어요.'); }
