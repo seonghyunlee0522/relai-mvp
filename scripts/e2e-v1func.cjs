@@ -39,8 +39,12 @@ const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: '
   await page.screenshot({ path: `${SHOTS}/01-plan.png` });
   await page.goto(`${BASE}/app/settings/credits`); await page.waitForSelector('#cr-summary', { timeout: 8000 });
   const cr = await page.evaluate(() => ({ packs: document.querySelectorAll('[data-pack]').length, buy: Boolean(document.querySelector('#cr-buy')), top: Boolean(document.querySelector('#cr-buy-top')), bal: document.querySelector('#cr-balance')?.textContent || '', charge: /크레딧 충전/.test(document.querySelector('#main').textContent) }));
-  check('AI 크레딧: no pack buttons, no 충전 panel / top button; balance still shown', cr.packs === 0 && !cr.buy && !cr.top && !cr.charge && /크레딧/.test(cr.bal), JSON.stringify(cr));
+  // NicePay review (122c3ee): the 3 packs stay listed with payments off (priced products), no top button, a click says 결제 준비 중 and buys nothing
+  check('AI 크레딧: 3 packs listed, no top 충전 button; balance still shown', cr.packs === 3 && cr.buy && !cr.top && /크레딧/.test(cr.bal), JSON.stringify(cr));
   await page.screenshot({ path: `${SHOTS}/02-credits.png` });
+  await page.click('[data-pack]');
+  const soon = await page.locator('.toast', { hasText: '결제 준비 중' }).first().textContent({ timeout: 3000 }).catch(() => '');
+  check('AI 크레딧: pack click says 결제 준비 중, stays on the page', /결제 준비 중/.test(soon) && /\/app\/settings\/credits/.test(page.url()), page.url());
   const co = await api('POST', `/api/workspaces/${w}/credits/checkout`, { pack: 'S' });
   check('credit checkout refused: 409 payments_disabled', co.status === 409 && co.json?.error?.code === 'payments_disabled', JSON.stringify(co));
   await page.setViewportSize({ width: 375, height: 800 });
