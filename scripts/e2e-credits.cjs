@@ -72,10 +72,10 @@ const q = (s) => String(s).replace(/'/g, "''");
   check('Home: AI 크레딧 500 무료 제공 (no ₩), no 얼리 액세스 offer', /AI 크레딧 500 무료 제공/.test(home) && !/₩/.test(home) && !/얼리 액세스/.test(home), home);
   await shot('01-home.png');
   await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing', { timeout: 8000 });
-  const plan = await text('#billing .panel__h');
+  const plan = await text('#bl-plan');   // pricing v3 T4: 설정 › 요금제 is the Billing view (현재 요금제 panel)
   // batch7 T5: early access is on the Free plan → chip 무료 + 플랜 살펴보기 (with payments on the Team purchase form may show, as on any Free workspace)
-  check('AC1 settings: 플랜 = 무료/Free (v3 label; early access is on the Free plan since batch7 T5) + 플랜 살펴보기', /플랜 · 결제\s*(무료|Free)/.test(plan) && !/얼리 액세스/.test(plan) && Boolean(await page.$('#plans-link')), plan);
-  check('settings: AI 크레딧 panel (잔액 500 크레딧, no ₩ — batch7 #7)', /잔액 500 크레딧/.test(await text('#ai-credits')) && !/₩/.test(await text('#ai-credits')));
+  check('AC1 settings: 플랜 = 무료/Free (v3 label; early access is on the Free plan since batch7 T5) + 플랜 살펴보기', /요금제\s*(무료|Free)/.test(plan) && !/얼리 액세스/.test(plan) && Boolean(await page.$('#bl-change')), plan);
+  check('settings: AI 크레딧 panel (사용 가능 500, no ₩ — batch7 #7)', /사용 가능\s*500/.test(await text('#bl-credits')) && !/₩/.test(await text('#bl-credits')));
   await shot('02-settings.png');
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary', { timeout: 8000 });
   check('AC2 credits page: balance 500 (₩5,000) = 무료 500', /500 크레딧/.test(await text('#cr-balance')) && /무료 500 · 구매 0/.test(await text('#cr-summary')));
@@ -218,7 +218,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   const landing = await page.textContent('#pricing');
   // batch7 #7: the AI block reads credits only — no won per credit, no won per feature
   const aiBlock = await page.textContent('#pricing #ai-credits');
-  check('landing: 무료 플랜 card (no 얼리 액세스 / 12개월, b7-fix) + AI price block in credits only', /무료 플랜/.test(landing) && !/얼리 액세스|12개월/.test(landing) && /AI 요구사항 추출\s*30 크레딧/.test(landing) && /AI 크레딧\s*500\s*을 무료로/.test(landing) && !/1 크레딧 =/.test(landing) && !/크레딧 \(₩/.test(landing) && !/₩/.test(aiBlock), aiBlock.replace(/\s+/g, ' ').slice(0, 200));
+  check('landing: Free plan card + v3 copy Free 100 once (no 얼리 액세스 / 12개월, b7-fix) + AI price block in credits only', /Free/.test(landing) && !/얼리 액세스|12개월 무료|무료 12개월|12개월간 무료/.test(landing) && /AI 요구사항 추출\s*30 크레딧/.test(landing) && /Free는 처음 한 번 AI 크레딧 100/.test(landing) && !/1 크레딧 =/.test(landing) && !/크레딧 \(₩/.test(landing) && !/₩/.test(aiBlock), aiBlock.replace(/\s+/g, ' ').slice(0, 200));
   await page.locator('#pricing').screenshot({ path: `${SHOTS}/12-landing-pricing-375.png` });
 
   await browser.close();
