@@ -25,7 +25,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   const loaded = async (sel = '#main') => { await page.waitForSelector(sel, { timeout: 10000 }).catch(() => {}); await page.waitForFunction(() => { const t = document.querySelector('#main')?.textContent || ''; return t.length > 100 && !/불러오는 중/.test(t); }, null, { timeout: 10000 }).catch(() => {}); await page.waitForTimeout(400); };
   const here = () => { const x = new URL(page.url()); return x.pathname + x.search; };
   const st = () => page.evaluate(() => ({ tab: document.querySelector('.stabs__i.is-active')?.textContent.trim() || '', secs: [...document.querySelectorAll('.defsec h2')].map((x) => x.textContent.trim()),
-    drawer: document.querySelector('#wdrawer #wdT')?.textContent.trim() || '', y: Math.round(window.scrollY), body: (document.querySelector('.defsecs, .pv') || {}).textContent || '' }));
+    drawer: (document.querySelector('#wdrawer #wdT')?.firstChild?.textContent || '').trim(), y: Math.round(window.scrollY), body: (document.querySelector('.defsecs, .pv') || {}).textContent || '' }));
 
   const email = `uxp1-${Date.now()}@relai.test`;
   const s = await api('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '김점검', email, password: 'passw0rd!' });
@@ -70,7 +70,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   const U = `/app/projects/${by.early.id}/definition`;
   const tabs = await page.$$eval('.stabs__i', (els) => els.map((e) => e.textContent.trim()));
   check('AC1 7 tabs in order', tabs.join('|') === '개요|목표·범위|관계자|상위 일정|운영 방식|착수보고회|착수 승인', tabs.join('|'));
-  const EXPECT = [['목표·범위', 'goals', ['프로젝트 목표 정의', '프로젝트 범위 정리']], ['관계자', 'stakeholders', ['관계자 / 조직 확인']], ['상위 일정', 'milestones', ['상위 일정 / 마일스톤 확인']],
+  const EXPECT = [['목표·범위', 'goals', ['프로젝트 목표 정의', '수행 범위 · 적용 환경 정리']], ['관계자', 'stakeholders', ['관계자 / 조직 확인']], ['상위 일정', 'milestones', ['상위 일정 / 마일스톤 확인']],
     ['운영 방식', 'operations', ['프로젝트 운영 방식 확인']], ['착수보고회', 'kickoff', ['착수보고회 준비·개최']], ['착수 승인', 'approval', ['착수 결과 승인(고객·스폰서)']], ['개요', '', []]];
   let prevBody = (await st()).body;
   for (const [label, slug, secs] of EXPECT) {
@@ -90,7 +90,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.screenshot({ path: `${SHOTS}/p11-goals-drawer.png` });
   await page.click('#wd-close'); await page.waitForTimeout(300);
   const y2 = (await st()).y;
-  check('AC2 drawer open/close keeps the page scroll', y0 > 100 && y1 === y0 && y2 === y0 && d1 === '프로젝트 범위 정리', JSON.stringify({ y0, y1, y2, d1 }));
+  check('AC2 drawer open/close keeps the page scroll', y0 > 100 && y1 === y0 && y2 === y0 && d1 === '수행 범위 · 적용 환경 정리', JSON.stringify({ y0, y1, y2, d1 }));
   check('AC4 drawer open/close never adds history (address = same tab)', here() === `${U}/goals`, here());
   await page.click('.stabs__i:text-is("관계자")'); await loaded('.defsec');
   check('AC2 another tab starts at the top', (await st()).y === 0, String((await st()).y));
@@ -101,7 +101,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.goto(`${BASE}${V}`); await loaded('.pv');
   await page.click('.pv__row[data-row="SCOPE"]'); await loaded('.defsec'); await page.waitForSelector('#wdrawer');
   let x = await st();
-  check('AC3 list row 프로젝트 범위 정리 → 목표·범위 tab + 범위 drawer', x.tab === '목표·범위' && x.drawer === '프로젝트 범위 정리' && here().startsWith(`${V}/goals`), `${here()} ${JSON.stringify({ tab: x.tab, drawer: x.drawer })}`);
+  check('AC3 list row 수행 범위 · 적용 환경 정리 → 목표·범위 tab + 범위 drawer', x.tab === '목표·범위' && x.drawer === '수행 범위 · 적용 환경 정리' && here().startsWith(`${V}/goals`), `${here()} ${JSON.stringify({ tab: x.tab, drawer: x.drawer })}`);
   await page.click('.stabs__i:text-is("관계자")'); await loaded('.defsec'); await page.waitForSelector('#wdrawer');
   x = await st();
   check('AC1 unfinished task tab opens its drawer', x.drawer === '관계자 / 조직 확인', x.drawer);
@@ -122,7 +122,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.click('#wdrawer [data-wact="save"]'); await page.waitForTimeout(800);
   check('AC6 임시저장 still works', /임시저장/.test(await page.textContent('#wd-stat')), await page.textContent('#wd-stat'));
   const nx = await page.textContent('#wdrawer .wd__next').catch(() => '');
-  check('AC1 drawer offers 다음 업무 (same tab → 프로젝트 범위 정리)', /다음 업무: 프로젝트 범위 정리/.test(nx), nx);
+  check('AC1 drawer offers 다음 업무 (same tab → 수행 범위 · 적용 환경 정리)', /다음 업무: 수행 범위 · 적용 환경 정리/.test(nx), nx);
   await page.click('#wdrawer [data-wact="complete"]'); await page.waitForTimeout(1000);
   x = await st();
   check('AC6 완료 처리 closes the drawer and the block shows 완료', !x.drawer && /완료/.test(await page.textContent('[data-defsec="GOALS"] .defsec__st')), JSON.stringify(x.drawer));
@@ -191,7 +191,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await page.goto(`${BASE}${V}?activity=SCOPE&field=deliverables`); await page.waitForSelector('#wdrawer [data-field="deliverables"]');
   const flash = await page.evaluate(() => document.querySelector('#wdrawer [data-field="deliverables"]').classList.contains('is-target'));
   x = await st();
-  check('AC5 /definition?activity=SCOPE&field=deliverables → 목표·범위 tab, 범위 drawer, field flashes', new URL(page.url()).pathname === `${V}/goals` && x.tab === '목표·범위' && x.drawer === '프로젝트 범위 정리' && flash, `${here()} ${JSON.stringify({ tab: x.tab, drawer: x.drawer, flash })}`);
+  check('AC5 /definition?activity=SCOPE&field=deliverables → 목표·범위 tab, 범위 drawer, field flashes', new URL(page.url()).pathname === `${V}/goals` && x.tab === '목표·범위' && x.drawer === '수행 범위 · 적용 환경 정리' && flash, `${here()} ${JSON.stringify({ tab: x.tab, drawer: x.drawer, flash })}`);
   await page.screenshot({ path: `${SHOTS}/p11-old-link-field.png` });
   await page.goto(`${BASE}/app/projects/${by.early.id}/charter`); await loaded('.chx');
   const ctas = await page.$$eval('a.chx__cta, .chr__miss a', (els) => els.map((e) => e.getAttribute('href')));

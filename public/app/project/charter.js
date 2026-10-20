@@ -54,7 +54,7 @@ export function charterParts(c, { ro, def }) {
       ${raw(dl.map((x) => html`<tr><td>${x.phase}</td><td class="chx__nm">${x.name}</td><td>${x.level_label}</td></tr>`).join(''))}</tbody></table></div>`
     : c.deliverables ? body(c.deliverables)
       : empty('주요 산출물이 아직 정해지지 않았습니다.', '표준 산출물 목록에서 필수·선택을 고르면 사업수행계획서 표와 종료 점검에 그대로 쓰입니다.', def('SCOPE', 'deliverables'), '산출물 고르기 →');
-  const scope = section('3', 'scope', '적용 환경 · 산출물', '결과물이 동작해야 할 환경과 납품할 산출물을 기준으로 테스트와 WBS에 빠진 것이 없는지 검토합니다. 기능 범위는 요구사항의 범위(IN/OUT)로 판단합니다.', html`
+  const scope = section('3', 'scope', '적용 환경 · 산출물', '결과물이 동작해야 할 환경과 납품할 산출물을 기준으로 테스트와 WBS에 빠진 것이 없는지 검토합니다. 기능 범위는 요구사항마다 정한 범위(범위 내 · 범위 외)로 판단합니다.', html`
     <div class="chx__blk"><h3 class="chx__lbl">적용 환경</h3>${raw(envTable)}</div>
     ${raw(memo ? html`<div class="chx__blk"><h3 class="chx__lbl">환경·조건</h3>${raw(body(memo))}</div>` : '')}
     <div class="chx__blk"><h3 class="chx__lbl">주요 산출물${raw(dl.length ? html` <small>필수 ${dl.filter((x) => x.level === 'REQUIRED').length}건</small>` : '')}</h3>${raw(dlBlock)}</div>`);
