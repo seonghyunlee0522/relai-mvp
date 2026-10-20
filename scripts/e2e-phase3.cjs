@@ -65,7 +65,8 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
     await page.goto(`${A.url}/wbs${q}`); await page.waitForSelector('.wempty');
     const prim = await page.$$eval('main .btn--primary', (els) => els.filter((e) => e.offsetParent).map((e) => e.textContent.trim()));
     check(`US-2 empty WBS${q}: the only primary is WBS 뼈대 만들기`, prim.length === 1 && prim[0] === 'WBS 뼈대 만들기', JSON.stringify(prim));
-    check(`J3 empty WBS${q}: no table, no blank row, no 총 N건`, !(await page.$('main table')) && !(await page.$('.gfoot')) && !(await page.$('[data-ghost]')));
+    // batch7 B3: the table now shows the 6 fixed phase nodes (no user row, no blank row); the toolbar waits for the first item
+    check(`J3 empty WBS${q}: only the 7 fixed phase nodes (이관 있음), no blank row, no toolbar`, (await page.$$eval('main table tbody tr', (trs) => trs.length === 7 && trs.every((tr) => tr.classList.contains('is-sys')))) && !(await page.$('[data-ghost]')) && !(await page.$('[data-rtool-r2]')));
     check(`US-2 empty WBS${q}: no Jira banner`, !/Jira를 사용하고 있나요/.test(await page.textContent('main')));
   }
   const emptyTxt = await page.textContent('.wempty');
@@ -74,8 +75,8 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   check('US-2 no (?) glossary tooltip next to the button (fb-app: 용어 설명 removed (founder))', terms0.length === 0, JSON.stringify(terms0));
   await shot('02-wbs-empty.png');
   // 직접 추가 opens one input inside the empty state; Esc closes it — still no 총 N건
-  await page.click('#add2'); await page.waitForSelector('.wempty [data-ghost]');
-  check('직접 추가 → input inside the empty state (no table)', !(await page.$('main table')) && !(await page.$('.gfoot')));
+  await page.click('#add2'); await page.waitForSelector('tr.is-ghost [data-ghost]');
+  check('직접 추가 → a new row under the current phase node (03 → 분석·설계)', await page.$eval('tr.is-ghost', (tr) => tr.previousElementSibling?.textContent.includes('분석·설계')));
   await page.keyboard.press('Escape'); await page.waitForTimeout(200);
   // Gantt tab with 0 items
   await page.goto(`${A.url}/wbs?view=gantt`); await page.waitForSelector('.wempty');
@@ -92,23 +93,23 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
   await page.goto(A.url); await page.waitForSelector('.rg .btn--primary'); await page.click('.rg .btn--primary');
   await page.waitForSelector('.dialog .skel');
   const rows = await page.$$eval('.dialog .skel li', (els) => els.map((e) => `${e.querySelector('span').textContent} ${e.querySelector('b').textContent}`.replace(/\s+/g, ' ').trim()));
-  check('US-2 dialog list: 분석·설계 3 / 구현 15 (자동 연결) / 시험 3 / 전환·오픈 3 / 안정화 1 / 마일스톤 3',
-    JSON.stringify(rows) === JSON.stringify(['분석·설계 3', '구현 15 (요구사항 15건 자동 연결)', '시험 3', '전환·오픈 3', '안정화 1', '마일스톤 3']), JSON.stringify(rows));
+  check('US-2 dialog list (batch7: one row per fixed phase): 착수 2 / 요구사항 정의 2 / 분석·설계 3 / 데이터 이관 2 / 구현 15 (자동 연결) / 시험 3 / 전환·오픈 3 / 마일스톤 3',
+    JSON.stringify(rows) === JSON.stringify(['착수 2', '요구사항 정의 2', '분석·설계 3', '데이터 이관 2', '구현 15 (요구사항 15건 자동 연결)', '시험 3', '전환·오픈 3', '마일스톤 3']), JSON.stringify(rows));
   check('US-2 dialog note + [취소] [만들기]', /만든 뒤 자유롭게 고치거나 지울 수 있습니다\. 일정과 담당자는 직접 채웁니다 — 다음 가이드가 안내합니다\./.test(await page.textContent('.dialog')) && (await page.textContent('.dialog [data-v="1"]')).trim() === '만들기');
   await shot('05-skeleton-dialog.png');
   await page.click('.dialog [data-v="1"]');
   const t1 = await toastText();
-  check('US-2 toast 작업 28건을 만들었습니다', /작업 28건을 만들었습니다/.test(t1), t1);
+  check('US-2 toast 작업 33건을 만들었습니다 (batch7: + 착수 · 요구사항 정의 tasks)', /작업 33건을 만들었습니다/.test(t1), t1);
   await page.waitForSelector('main table');
   const foot = (await page.textContent('.gfoot')).replace(/\s+/g, ' ');
   const visibleRows = await page.$$eval('main tbody tr', (els) => els.length);
-  check('US-2 first group open, others folded', visibleRows === 1 + 3 + 4 + 3, String(visibleRows));
+  check('US-2 first three phases open (tasks + their 주요 일정), others folded', visibleRows === 7 + 3 + 3 + 3, String(visibleRows));
   const chipTotal = (await page.textContent('.kchip[data-kf=""] b, [data-cstf=""] b')).trim();   // R2: 전체 is the first status segment
   check('K11 총 N건 = the 전체 항목 chip (folded rows counted)', new RegExp(`총 ${chipTotal}건`).test(foot), `${foot} · chip ${chipTotal}`);
   await shot('06-wbs-after-skeleton.png');
   const tree = (await api('GET', `${A.P}/wbs`)).json;
   const tasks = tree.items.filter((i) => i.item_type === 'TASK');
-  check('US-2 33 items (5 groups + 25 tasks + 3 milestones), all tasks tagged', tree.items.length === 33 && tasks.length === 25 && tasks.every((t) => t.lifecycle_phase), String(tree.items.length));
+  check('US-2 40 rows (7 fixed nodes + 30 tasks + 3 milestones), all tasks tagged', tree.items.length === 40 && tasks.length === 30 && tasks.every((t) => t.lifecycle_phase), String(tree.items.length));
   let g = (await api('GET', A.P)).json;
   const st = (k) => g.phases.find((x) => x.phase_key === 'ANALYSIS_DESIGN').steps.find((x) => x.step_key === k).state;
   check('US-2 REQ_TRACE 완료 (15 links)', st('REQ_TRACE') === 'COMPLETED');
@@ -176,8 +177,8 @@ const KEY_DATES = [{ title: '킥오프', date: '2026-11-03' }, { title: '요구�
     const b = { owner: 's:sh-dev' }; if (!t.planned_start_date) Object.assign(b, { planned_start_date: '2026-11-02', planned_end_date: '2026-12-31' });
     await api('PATCH', `${A.P}/wbs/${t.id}`, b);
   }
-  const testGroup = items2.find((x) => x.title === '시험' && x.depth === 0);
-  await api('POST', `${A.P}/wbs/${testGroup.id}/archive`, {});
+  const testGroup = items2.find((x) => x.system_key === 'PHASE:TESTING');   // batch7: the node stays (409 on delete) — remove its tasks
+  for (const t of items2.filter((x) => x.parent_id === testGroup.id)) await api('POST', `${A.P}/wbs/${t.id}/archive`, {});
   await page.goto(A.url); await page.waitForSelector('.rg');
   const warns = await page.$$eval('.rg__warn', (els) => els.map((e) => [e.textContent.replace('!', '').trim(), (e.querySelector('a') || {}).getAttribute ? e.querySelector('a').getAttribute('href') : null]));
   check('US-2/3 guide: 실행 계획이 준비되었습니다 + move stays primary', /실행 계획이 준비되었습니다/.test(await page.textContent('.rg__title')) && Boolean(await page.$('.rg [data-move-next]')));

@@ -121,6 +121,16 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
     check('AI WBS Planner 보완: testing item under 테스트, clean title "성능 테스트"', titleOf(fBy['AI-FIX-1']?.parent_temp_id) === '테스트' && titleOf('AI-FIX-1') === '성능 테스트', JSON.stringify(fBy['AI-FIX-1']));
     check('AI WBS Planner 보완: requirement item under 기능 개발, clean title', titleOf(fBy['AI-FIX-2']?.parent_temp_id) === '기능 개발' && titleOf('AI-FIX-2') === '결제 요구사항 구현', JSON.stringify(fBy['AI-FIX-2']));
     check('AI WBS Planner 보완: no fix item at top level', fItems.filter((i) => i.fix && !i.parent_temp_id).length === 0);
+    // batch7 #15/#16: commit with 날짜 자동 배분 → items under the fixed phase nodes ('테스트' work under 시험), every date a workday inside 2026-11-01 ~ 2027-02-28
+    // (a second workspace, so the plan above stays active for the resume checks in the browser part)
+    const S2 = await seed(srv.base, 'b7'); const pl2 = (await S2.c('POST', `${S2.PP}/ai/wbs-plans`, { all: true })).json.plan; await S2.c('POST', `${S2.PP}/ai/wbs-plans/${pl2.id}/generate`, {});
+    const sch = (await S2.c('GET', `${S2.PP}/ai/wbs-plans/${pl2.id}/schedule`)).json || {};
+    const cm = await S2.c('POST', `${S2.PP}/ai/wbs-plans/${pl2.id}/commit`, { schedule: { enabled: true, phase_workdays: {} } });
+    const wb = (await S2.c('GET', `${S2.PP}/wbs`)).json?.items || []; const hol = new Set((sch.holidays || []).map((h) => h.day));
+    const node = (k) => wb.find((i) => i.system_key === k); const under = (it, k) => { let x = it; while (x && x.parent_id) { if (x.parent_id === node(k)?.id) return true; x = wb.find((y) => y.id === x.parent_id); } return false; };
+    const ds = wb.filter((i) => !i.is_system).flatMap((i) => [i.planned_start_date, i.planned_end_date, i.milestone_date]).filter(Boolean);
+    check('AI WBS Planner 반영: 201, every item under a fixed phase node, 통합 테스트 under 시험', cm.status === 201 && wb.filter((i) => !i.is_system).every((i) => i.parent_id) && under(wb.find((i) => i.title === '통합 테스트'), 'PHASE:TESTING'), JSON.stringify(cm.json?.error || ''));
+    check('AI WBS Planner 반영: dates spread on workdays inside the project window', ds.length > 5 && ds.every((d) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay(); return w && w !== 6 && !hol.has(d) && d >= sch.start && d <= sch.end; }), ds.slice(0, 6).join(','));
 
     for (const [label, script, code, http] of [['429 (twice)', ['429', '429'], 'AI_PROVIDER_ERROR', 502], ['timeout', ['hang'], 'AI_TIMEOUT', 504], ['invalid JSON (twice)', ['invalid_json', 'invalid_json'], 'AI_INVALID_OUTPUT', 502]]) {
       const before = await bal(); mock.script = [...script];

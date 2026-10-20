@@ -44,6 +44,17 @@ async function adoptable(db, project, node) {
 
 /** Make sure the project's fixed nodes exist. Cheap when they do (one query). Returns { created, adopted }. */
 export async function ensureStructure(db, project, userId) {
+  if (project.sample_key && !(await db.get('SELECT 1 FROM wbs_items WHERE project_id = ? AND system_key IS NOT NULL LIMIT 1', [project.id]))) {
+    await structureSample(db, project, userId);
+    const r = await ensureStructureCore(db, project, userId);
+    const withDm = Boolean(await db.get('SELECT 1 FROM wbs_items WHERE project_id = ? AND system_key = ? AND archived_at IS NULL', [project.id, DM_KEY]));
+    const moves = (await outsideItems(db, project.id)).map((it) => ({ id: it.id, key: suggestFor(it, { withDm }) })).filter((m) => m.key);
+    if (moves.length) await applyTidy(db, project, moves, userId, { source: '샘플 단계 구조' });
+    return r;
+  }
+  return ensureStructureCore(db, project, userId);
+}
+async function ensureStructureCore(db, project, userId) {
   const have = new Set((await liveSystem(db, project.id)).map((r) => r.system_key));
   const want = FIXED_NODES.filter((n) => !n.optional || showsDm(project) || have.has(n.key));
   const missing = want.filter((n) => !have.has(n.key));
@@ -60,6 +71,22 @@ export async function ensureStructure(db, project, userId) {
   }
   if (created || adopted) await renumber(db, project.id);
   return { created, adopted };
+}
+
+/** Sample projects (server/samples, demo data the user never typed): their top-level groups already carry the phase names, so on first open
+ *  each same-name group becomes the fixed node and the rest (착수보고 milestone, 안정화) goes under its suggested node — no banner, no empty nodes. */
+async function structureSample(db, project, userId) {
+  const top = await outsideItems(db, project.id);
+  const live = new Set((await liveSystem(db, project.id)).map((r) => r.system_key));
+  let changed = 0;
+  for (const n of FIXED_NODES) {
+    if (live.has(n.key)) continue;
+    const g = top.find((x) => x.title === n.title && x.item_type !== 'MILESTONE' && !x.system_key);
+    if (!g) continue;
+    await db.run(`UPDATE wbs_items SET system_key = ?, item_type = 'SUMMARY', updated_at = ? WHERE id = ? AND system_key IS NULL`, [n.key, new Date().toISOString(), g.id]);
+    g.system_key = n.key; live.add(n.key); changed++;
+  }
+  return changed;
 }
 
 /** Id of the node for plan phase `plan` (DATA_MIGRATION turns the optional node on). Falls back to 구현 for an unknown phase. */
@@ -118,9 +145,9 @@ export async function tidyPreview(db, project) {
     nodes: FIXED_NODES.filter((n) => !n.optional || withDm).map((n) => ({ key: n.key, title: n.title })) };
 }
 /** moves: [{ id, key }] — key null/'' = 그대로 두기. One transaction (caller). Returns how many moved. */
-export async function applyTidy(db, project, moves, userId) {
+export async function applyTidy(db, project, moves, userId, { source = TIDY_SOURCE } = {}) {
   if (!Array.isArray(moves)) throw new ValidationError({ moves: '정리할 항목을 보내 주세요.' });
-  await ensureStructure(db, project, userId);
+  await ensureStructureCore(db, project, userId);
   let moved = 0;
   for (const m of moves) {
     if (!m || !m.key) continue;
@@ -129,7 +156,7 @@ export async function applyTidy(db, project, moves, userId) {
     if (!it) continue;   // already moved / archived meanwhile
     const parentId = await nodeIdFor(db, project, node.plan, userId);
     await moveWbs(db, project, it, { parent_id: parentId, sequence: 9999 }, userId);
-    await addWbsHistory(db, it.id, 'MOVED', { field: 'source', newValue: TIDY_SOURCE }, userId);
+    await addWbsHistory(db, it.id, 'MOVED', { field: 'source', newValue: source }, userId);
     moved++;
   }
   await renumber(db, project.id);

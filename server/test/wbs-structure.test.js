@@ -114,3 +114,25 @@ test('데이터 이관 switch: on → node 4 + trait YES, numbers shift; off wit
   r = await A.c('POST', `${A.wbs}/structure/data-migration`, { on: true }); assert.equal(sys(r.json.items).length, 7);
   server.close();
 });
+
+test('sample projects: on first open the same-name groups become the fixed nodes and the rest is placed — no empty nodes, no banner', async () => {
+  const { server, client } = await boot();
+  process.env.SAMPLE_PROJECTS = 'true';
+  const c = client();
+  const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '김하늘', email: 'smp@x.com', password: 'passw0rd!' });
+  process.env.SAMPLE_PROJECTS = 'false';
+  const w = s.json.workspaces[0].id;
+  const projects = (await c('GET', `/api/workspaces/${w}/projects`)).json.projects.filter((p) => p.sample_key);
+  assert.ok(projects.length >= 2);
+  for (const p of projects) {
+    const before = (await c('GET', `/api/workspaces/${w}/projects/${p.id}`)).json;
+    const r = (await c('GET', `/api/workspaces/${w}/projects/${p.id}/wbs`)).json;
+    const nodes = r.items.filter((i) => i.is_system);
+    assert.ok(nodes.length >= 6, p.sample_key);
+    assert.equal(r.outside_count, 0, `${p.sample_key}: nothing left outside the phases`);
+    const user = r.items.filter((i) => !i.is_system);
+    if (user.length) assert.ok(nodes.some((n) => n.children_count > 0), 'the sample work sits under the nodes');
+    assert.equal(r.summary.tasks, before.wbs?.tasks ?? r.summary.tasks, 'task counts unchanged by the structure (adopted groups stop counting as items)');
+  }
+  server.close();
+});

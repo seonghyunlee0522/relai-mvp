@@ -1,0 +1,61 @@
+/* batch7 T3 — WBS fixed phase nodes, 단계 구조 정리, AI WBS planner review sheet (#15 #16). Loaded after app.css; tokens from app.css. */
+
+/* ---------- WBS grid: fixed phase rows ---------- */
+.gtable--wbs tr.is-sys > td { background: var(--bg-tint); }
+.gtable--wbs tr.is-sys .wtitle__t { font-weight: 700; }
+.wtitle--sys .wsys { margin-left: 6px; padding: 0 6px; border: 1px solid var(--border-blue); border-radius: 999px; font-size: 11px; line-height: 18px; color: var(--text-2, #475467); background: #fff; }
+.wsuggest.wtidy { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wtidy .linkbtn { width: auto; }
+.wtidy b { font-weight: 700; }
+.tmenu__sw { display: flex; align-items: center; gap: 6px; padding: 6px 10px; }
+.tidyt { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.tidyt th, .tidyt td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); text-align: left; font-size: 13px; }
+.tidyt th { color: var(--text-2, #475467); font-weight: 600; }
+.dialog.dialog--wide { max-width: min(760px, 96vw); }
+
+/* ---------- AI WBS planner: full sheet ---------- */
+.dialog.dialog--ai-sheet { width: min(1440px, calc(100vw - 48px)); max-width: min(1440px, calc(100vw - 48px)); height: calc(100vh - 48px); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
+.dialog--ai-sheet .aid__b, .dialog--ai-sheet .dialog__b { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.wps { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; min-height: 0; margin-top: 8px; }
+.wps__tree { border: 1px solid var(--border); border-radius: var(--r-lg, 10px); overflow: auto; max-height: calc(100vh - 290px); min-width: 0; }
+.wps__side { border: 1px solid var(--border); border-radius: var(--r-lg, 10px); padding: 14px; background: var(--bg-alt); overflow: auto; max-height: calc(100vh - 290px); }
+.wps__side h4 { margin: 0 0 10px; font-size: 14px; word-break: keep-all; }
+.wps__side .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.wps__side .field > span { font-size: 12px; color: var(--text-2, #475467); }
+.wps__empty p { margin: 6px 0 0; }
+
+/* phase head: band colour per phase, task count, period, editable workdays */
+.wph { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 6px; background: var(--bg-tint); border-top: 1px solid var(--border); border-left: 4px solid var(--phase, var(--border-strong)); }
+.wph:first-child { border-top: 0; }
+.wph__t { font-size: 14px; white-space: nowrap; }
+.wph__n { color: var(--text-2, #475467); white-space: nowrap; }
+.wph__sp { flex: 1; }
+.wph__per { font-size: 12px; color: var(--text-2, #475467); white-space: nowrap; cursor: help; }
+.wph__d { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.wph__d input { width: 56px; }
+.wph--initiation { --phase: #7C8DB5; } .wph--requirements { --phase: #5B7CFA; } .wph--analysis_design { --phase: #2F9E8F; } .wph--data_migration { --phase: #B7791F; }
+.wph--development { --phase: #3B6FE0; } .wph--testing { --phase: #9F5BD8; } .wph--transition_go_live { --phase: #D9480F; }
+
+/* one-line rows with 1px vertical guides per level */
+.wpr { display: grid; grid-template-columns: 26px 18px 52px minmax(0, 1fr) 150px 84px; align-items: center; gap: 6px; height: 36px; padding: 0 10px 0 calc(10px + var(--l, 0) * 20px); border-top: 1px solid var(--border-soft); background: #fff; opacity: .62; cursor: pointer;
+  background-image: repeating-linear-gradient(to right, var(--border) 0 1px, transparent 1px 20px); background-size: calc(var(--l, 0) * 20px) 100%; background-repeat: no-repeat; background-position: 18px 0; }
+.wpr.is-sel { opacity: 1; }
+.wpr.is-cur { box-shadow: inset 3px 0 0 var(--blue, #3B6FE0); background-color: var(--bg-alt); }
+.wpr.is-grp .wpr__t { font-weight: 600; }
+.wpr.is-fix { background-color: var(--ok-bg, #EAF7EF); }
+.wpr__ck { display: flex; align-items: center; justify-content: center; }
+.wpr__tog { width: 18px; height: 18px; padding: 0; border: 0; background: none; color: var(--text-2, #475467); cursor: pointer; font-size: 13px; line-height: 18px; }
+.wpr__code { font-size: 12px; color: var(--text-2, #475467); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wpr__t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wpr__in { width: 100%; }
+.wpr__per { font-size: 12px; color: var(--text-2, #475467); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.wpr__chip { display: flex; justify-content: flex-end; overflow: hidden; }
+.wpr__chip .chip { white-space: nowrap; }
+@media (max-width: 900px) { .wps { grid-template-columns: 1fr; } .wpr { grid-template-columns: 26px 18px 44px minmax(0, 1fr) 110px; } .wpr__chip { display: none; } }
+
+/* ---------- Overview: 진척 편차 '이유 보기' (#21) ---------- */
+.vwhy { margin-top: 10px; }
+.vwhy summary { cursor: pointer; color: var(--blue, #3B6FE0); font-size: 13px; }
+.vwhy ol { margin: 8px 0 0; padding-left: 18px; }
+.vwhy li { margin: 4px 0; font-size: 13px; }
+.vwhy small { color: var(--text-2, #475467); }

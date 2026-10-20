@@ -220,7 +220,7 @@ function computeProgress(node, kids) {
   if (node.item_type === 'MILESTONE') return node.status === 'COMPLETED' ? 100 : 0;
   const children = (kids.get(node.id) || []).filter((c) => c.item_type !== 'MILESTONE');
   if (node.item_type !== 'SUMMARY' && !children.length) return node.progress;
-  if (!children.length) return 0;
+  if (!children.length) { const ms = (kids.get(node.id) || []); return ms.length && ms.every((m) => m.status === 'COMPLETED') ? 100 : 0; }   // batch7: a group holding only milestones (a phase node with 킥오프) is done when they are
   const w = (c) => (c.weight === null || c.weight === undefined ? 1 : Number(c.weight));
   const totalW = children.reduce((a, c) => a + w(c), 0);
   const vals = children.map((c) => [computeProgress(c, kids), totalW > 0 ? w(c) : 1]);
