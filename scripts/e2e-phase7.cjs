@@ -71,7 +71,7 @@ const STEP = (g, key) => g.phases.flatMap((p) => p.steps).find((s) => s.step_key
     for (let i = 0; i < 4; i += 1) {
       const dlg = await pg.waitForSelector('.scrim .dialog', { timeout: 2500 }).catch(() => null);
       if (!dlg) return;
-      if (await pg.$('[data-dialog="approval-gate"]')) { await pg.fill('#ag-in', '고객 회신 대기 중, 다음 주 회신 예정'); await pg.click('[data-dialog="approval-gate"] [data-v="proceed"]'); }
+      if (await pg.$('[data-dialog="approval-gate"]')) { if (await pg.$('#ag-in')) await pg.fill('#ag-in', '고객 회신 대기 중, 다음 주 회신 예정'); await pg.click('[data-dialog="approval-gate"] [data-v="proceed"]'); }
       else await pg.click('.scrim .dialog [data-v="1"]');
       await pg.waitForTimeout(250);
     }

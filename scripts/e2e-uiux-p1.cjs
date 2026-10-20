@@ -119,13 +119,12 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   const dlg = await page.$('.scrim .dialog');
   check('AC6 leaving with unsaved input asks first', Boolean(dlg) && new URL(page.url()).pathname === `${V}/goals`, here());
   if (dlg) { await page.click('.scrim [data-v="0"]').catch(() => {}); await page.waitForTimeout(300); }
-  await page.click('#wdrawer [data-wact="save"]'); await page.waitForTimeout(800);
-  check('AC6 임시저장 still works', /임시저장/.test(await page.textContent('#wd-stat')), await page.textContent('#wd-stat'));
-  const nx = await page.textContent('#wdrawer .wd__next').catch(() => '');
+  const nx = await page.textContent('#wdrawer .wd__next', { timeout: 3000 }).catch(() => '');
   check('AC1 drawer offers 다음 업무 (same tab → 수행 범위 · 적용 환경 정리)', /다음 업무: 수행 범위 · 적용 환경 정리/.test(nx), nx);
-  await page.click('#wdrawer [data-wact="complete"]'); await page.waitForTimeout(1000);
+  // batch7 #10: one 저장 button (no 임시저장) — saving a section that has what it needs completes it and closes the drawer
+  await page.click('#wdrawer [data-wact="save"]'); await page.waitForTimeout(1200);
   x = await st();
-  check('AC6 완료 처리 closes the drawer and the block shows 완료', !x.drawer && /완료/.test(await page.textContent('[data-defsec="GOALS"] .defsec__st')), JSON.stringify(x.drawer));
+  check('AC6 저장 of a ready section completes it: drawer closes and the block shows 완료', !x.drawer && /완료/.test(await page.textContent('[data-defsec="GOALS"] .defsec__st')), JSON.stringify(x.drawer));
   await page.click('[data-edit="SCOPE"]'); await page.waitForSelector('#wdrawer');
   const nx2 = await page.textContent('#wdrawer .wd__next');
   await page.click('#wdrawer .wd__next a'); await loaded('.defsec');
