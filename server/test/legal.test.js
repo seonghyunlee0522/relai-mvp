@@ -5,7 +5,7 @@ import { boot } from './api-helpers.js';
 import { setEmailProvider } from '../email/service.js';
 import { fakeEmailProvider } from '../email/provider.js';
 import { setGoogleProvider, fakeGoogleProvider } from '../auth/google.js';
-import { LEGAL } from '../../public/app/shared/legal-info.js';
+import { LEGAL, koDate } from '../../public/app/shared/legal-info.js';
 import { renderDoc } from '../legal.js';
 
 process.env.APP_BASE_URL = 'https://relai.test'; process.env.EMAIL_PROVIDER = 'fake'; process.env.GOOGLE_PROVIDER = 'fake';
@@ -66,12 +66,25 @@ test('public legal pages: /terms /privacy /pricing and the landing footer, no dr
       assert.ok(!/생년월일[^·]*\d{4}|19\d\d[.-]\d\d[.-]\d\d/.test(h.replace(/생년월일\(또는 사업자등록번호\)|생년월일 6자리/g, '')), `${path} shows a birth date`);
     }
     const terms = (await c('GET', '/terms', undefined, { raw: true })).buf.toString('utf8');
-    assert.match(terms, /이용약관/); assert.match(terms, /20,000원/); assert.match(terms, /2026년 10월 20일부터 시행/); assert.match(terms, /버전 2026-10-20/);
-    // b7-fix P0-1: early access retired — no 12-month / unlimited promise; the Free plan (2 projects, 100 credits once — pricing v3) is described
-    assert.doesNotMatch(terms, /얼리 액세스|12개월 동안 요금 없이|Team 요금제와 같은 한도/);
-    assert.match(terms, /무료 플랜\(Free 요금제\)/); assert.match(terms, /진행 중 프로젝트 2개/); assert.match(terms, /무료 크레딧 100 크레딧을 한 번 지급/);   // pricing v3: Free 최초 100
+    assert.match(terms, /이용약관/); assert.match(terms, new RegExp(`${koDate(LEGAL.termsEffectiveDate)}부터 시행`)); assert.match(terms, new RegExp(`버전 ${LEGAL.termsVersion}`));
+    // pricing v3 (founder spec 2026-10-20, VAT 포함): the terms table carries exactly the founder's numbers
+    for (const s of ['월 30,000원', '연 288,000원', '월 24,000원 환산', '월 80,000원', '연 768,000원', '월 64,000원 환산', '최초 100 크레딧(1회)', '매월 1,000 크레딧', '매월 3,000 크레딧',
+      '월 1,000원', '연 9,600원(월 800원)', '월 10,000원', '연 96,000원(월 8,000원)', '월 8,000원', '연 76,800원(월 6,400원)', '부가가치세 10%를 포함', '10,000원 단위', '1 크레딧은 10원']) assert.ok(terms.includes(s), `terms lacks ${s}`);
+    // legal-review §10: no v2 wording (VAT 별도, Team 20,000 + 5,000/인, Free 2 projects / 500 credits, 정상가 + 위약금 10%)
+    assert.doesNotMatch(terms, /얼리 액세스|12개월 동안 요금 없이|부가가치세 별도|20,000원|5,000원|진행 중 프로젝트 2개|500 크레딧|위약금\(잔여 금액의 10%\)/);
+    for (const id of ['billing', 'credits', 'recurring', 'refund']) assert.match(terms, new RegExp(`id="${id}"`));   // anchors the pricing note / checkout link to
+    assert.match(terms, /간주동의|제4항은 이용요금의 증액/); assert.match(terms, /종전 금액으로 결제하거나 정기결제를 해지/); assert.match(terms, /환불액은 209,096원/);
+    // founder decisions 2026-10-20: no one-time passes, prorated refunds with no deduction, purchased credits refundable in full, 30-day export after cancel
+    assert.match(terms, /이용권은 판매하지 않습니다/); assert.match(terms, /정기결제 준비 중/); assert.doesNotMatch(terms, /이용권 결제|10%를 공제|잔여 금액의 10%|월간 정상가로 다시 계산하여/);
+    assert.match(terms, /일할 계산하여 환불하며, 위약금이나 수수료를 공제하지 않습니다/); assert.match(terms, /월간 정상가로 다시 계산하지 않습니다/);
+    assert.match(terms, /유효기간\(충전일부터 5년\) 안에서는 사용하지 않은 유상 크레딧에 해당하는 금액 전액을 공제 없이 환불/); assert.match(terms, /무상으로 지급한 크레딧과 이미 사용한 크레딧은 환불하지 않습니다/);
+    assert.match(terms, /자동 갱신은 즉시 중단/); assert.match(terms, /구독 해지 후 최소 30일 동안 워크스페이스의 모든 프로젝트 데이터를 조회하고 내보낼 수/); assert.match(terms, /법정 청약철회권\(제12조\)을 먼저 적용/);
     const privacy = (await c('GET', '/privacy', undefined, { raw: true })).buf.toString('utf8');
-    for (const v of ['Vercel Inc.', '나이스페이먼츠', 'Resend', 'Neon', 'Anthropic', 'Google LLC', `개인정보 보호책임자: ${LEGAL.privacyOfficer.name}`]) assert.ok(privacy.includes(v), v);
+    for (const v of ['Vercel Inc.', '나이스페이먼츠', 'Resend', 'Neon', 'Anthropic', 'Google LLC', `개인정보 보호책임자: ${LEGAL.privacyOfficer.name}`, '결제·정기결제 동의 기록', '이메일 주소의 해시값', '부분 취소']) assert.ok(privacy.includes(v), v);
+    // landing #pricing is rendered from the server catalogue (no price typed in index.html)
+    const home = (await c('GET', '/', undefined, { raw: true })).buf.toString('utf8');
+    for (const s of ['30,000원', '연 288,000원', '72,000원 할인(20%)', '80,000원', '연 768,000원', '192,000원 할인(20%)', '별도 견적', 'data-cycle="MONTHLY"', '도입 문의']) assert.ok(home.includes(s), `landing lacks ${s}`);
+    assert.doesNotMatch(home, /<!--PRICING:landing-->/);
     const p = await c('GET', '/pricing'); assert.equal(p.status, 302); assert.equal(p.location, '/#pricing');
     const sp = await c('GET', '/pay/agent', undefined, { raw: true }); assert.equal(sp.status, 200); assert.match(sp.buf.toString('utf8'), /서비스 결제/);   // 서비스 결제 page moved to /pay/agent (founder 2026-10-20), kept closed
   } finally { server.close(); }
@@ -81,4 +94,5 @@ test('renderDoc: headings, nested lists, tables, links are escaped', () => {
   const h = renderDoc('## 제1조 <x>\n1. a [b](/terms)\n   - c\n\n| h1 | h2 |\n|---|---|\n| **d** | e |\n\npara');
   assert.match(h, /<h2 id="s1">제1조 &lt;x&gt;<\/h2>/); assert.match(h, /<ol><li>a <a href="\/terms">b<\/a><ul><li>c<\/li><\/ul><\/li><\/ol>/);
   assert.match(h, /<th>h1<\/th>/); assert.match(h, /<td><b>d<\/b><\/td>/); assert.match(h, /<p>para<\/p>/);
+  assert.match(renderDoc('## A {#refund}\n## B'), /<h2 id="refund">A<\/h2>\n<h2 id="s2">B<\/h2>/);
 });

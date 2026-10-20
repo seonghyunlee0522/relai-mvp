@@ -1,70 +1,59 @@
-/* 플랜 · 구독 (batch7 T5 paywall): where every plan-limit / AI-credit upsell lands (/app/billing/plans).
- * 무료 vs Team 플랜 cards, a limit table built from the server catalogue (server/plans.js via GET …/billing, so numbers never drift),
- * the AI 크레딧 충전 products and an FAQ. NicePay merchant review: this is the product list, so it shows prices in won, VAT included
- * (overrides batch7 #7 on this page, the card page and the credit packs). 구독하기 opens the card page (/app/billing/subscribe);
- * no checkout call is ever made from here. */
+/* 플랜 (/app/billing/plans, pricing v3 T4): where every plan-limit / AI-credit upsell lands.
+ * The same plan cards as the landing #pricing (shared/pricing.js) built from the server catalogue (GET …/billing → catalogue),
+ * so no number is typed here; 월간/연간 switch (default 월간), the current plan badge, and per card 선택 → the checkout screen
+ * (/app/billing/subscribe?plan=&cycle=, T3) which shows the server quote and the 정기결제 고지 before any payment.
+ * Checkout closed (PAYMENTS_ENABLED unset, or NicePay recurring not approved — founder 2026-10-20, no one-time passes) → the
+ * button reads 정기결제 준비 중 and calls nothing; a stale 선택 link still only answers SUBSCRIBE_SOON. Plan prices are shown in won, VAT
+ * included (a priced product list; spec §4.1); AI feature costs stay in credits (batch7 #7). */
 import { api } from './core/api.js';
 import { $, html, raw } from './core/dom.js';
 import { state } from './core/state.js';
+import { navigate } from './core/router.js';
+import { toast } from './shared/dialogs.js';
 import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
+import { pricingHtml, bindCycleToggle, soonCta } from './shared/pricing.js';
 
 export const SUBSCRIBE_SOON = '결제 준비 중입니다. 곧 오픈 예정이에요.';
-const n = (v) => Number(v || 0).toLocaleString('ko-KR');
-const vat = (v) => Math.round(Number(v || 0) * 1.1);
-const lim = (v, unit = '') => (v === null || v === undefined ? '무제한' : `${n(v)}${unit}`);
 
 const FAQ = [
-  ['한도를 넘으면 지금까지 만든 데이터는 어떻게 되나요?', '그대로 남아 있고 계속 보고 고칠 수 있어요. 한도를 넘는 새 항목을 추가할 때만 안내가 나와요. 데이터는 삭제되거나 읽기 전용으로 바뀌지 않아요.'],
-  ['이미 만든 프로젝트가 한도보다 많으면요?', '무료 플랜 한도를 넘는 프로젝트와 항목도 모두 그대로 있어요. 한도 안으로 줄어들 때까지 새로 추가하는 것만 막혀요.'],
-  ['AI 크레딧은 어떻게 받나요?', '워크스페이스마다 무료 크레딧이 한 번 제공돼요(프로젝트별이 아니라 워크스페이스 전체 기준). 유료 플랜에서는 매달 크레딧이 추가로 제공됩니다. AI 실행에 실패하면 크레딧은 차감되지 않아요.'],
-  ['처음 제공되는 예시 프로젝트도 한도에 포함되나요?', '아니요. 예시 프로젝트와 WBS의 고정 단계(착수·요구사항 정의 등)는 사용량과 한도에 포함되지 않아요.'],
-  ['Team 플랜은 어떻게 결제하나요?', '구독하기에서 신용카드를 등록하면 첫 달 이용료가 바로 결제되고, 이후 매월 같은 날 자동으로 결제돼요. 설정 › 플랜 · 결제에서 언제든 해지할 수 있고, 해지해도 결제한 기간이 끝날 때까지 쓸 수 있어요.'],
-  ['AI 크레딧은 어떻게 충전하나요?', 'AI 크레딧 충전 상품(1만 원 · 3만 원 · 10만 원)을 신용카드로 한 번 결제하면 바로 충전돼요. 자동 결제되지 않고, 쓰지 않은 구매 크레딧은 환불 규정에 따라 환불받을 수 있어요.'],
+  ['활성 프로젝트는 어떻게 세나요?', '준비·진행·보류 상태의 프로젝트만 한도에 들어가요. 완료하거나 보관한 프로젝트는 세지 않고, 계속 보고 내보낼 수 있어요. 보관을 풀거나 다시 진행할 때 한도를 확인해요.'],
+  ['사용자는 어떻게 세나요?', '워크스페이스에 참여한 활성 사용자 기준이에요. 한 사람이 여러 프로젝트에 참여해도 1명이고, 초대를 보내면 수락 전까지 자리 하나를 잡아 둬요. 내보낸 사용자는 세지 않아요.'],
+  ['한도를 넘으면 데이터는 어떻게 되나요?', '데이터는 삭제되지 않아요. 요금제를 낮추거나 이용 기간이 끝나 한도를 넘으면, 정리될 때까지 새 프로젝트·초대와 편집이 잠기고 조회·내보내기·완료·보관·구성원 정리는 언제든 할 수 있어요.'],
+  ['AI 크레딧은 어떻게 받나요?', 'Free는 처음 한 번 100 크레딧, Pro는 매월 1,000, Team은 매월 3,000 크레딧을 받아요. 매월 받은 기본 크레딧은 그 달이 끝나면 소멸하고 이월되지 않아요. 크레딧은 워크스페이스 공용이고, 실패한 AI 요청은 차감하지 않아요.'],
+  ['AI 크레딧은 어떻게 충전하나요?', 'Pro·Team에서 10,000원 단위로 충전해요(10,000원 = 1,000 크레딧). 충전한 크레딧은 5년간 쓸 수 있고, 쓰지 않은 충전 크레딧은 언제든 전액 환불받을 수 있어요(무료로 받은 크레딧은 환불되지 않아요). Free에서는 충전할 수 없어요.'],
+  ['연간 결제는 어떻게 다른가요?', '12개월분을 한 번에 결제하고 20% 할인돼요. AI 기본 크레딧은 연간 결제에도 매월 지급돼요. 언제든 해지할 수 있고, 남은 기간은 실제 결제 금액 기준으로 일할 계산해 위약금 없이 환불해요.'],
+  ['해지하면 어떻게 되나요?', '월간·연간 모두 언제든 해지할 수 있고 자동 갱신은 바로 멈춰요. 위약금은 없어요. 해지 후 30일 동안 모든 프로젝트 데이터를 조회하고 내보낼 수 있어요.'],
+  ['추가 사용자·프로젝트는 얼마인가요?', '추가 사용자는 1명당 월 1,000원, 추가 프로젝트는 Pro 월 10,000원 · Team 월 8,000원이에요. 이용 기간 중간에 사면 남은 일수만큼만 결제하고, 결제 전에 금액과 다음 갱신 금액을 보여 드려요.'],
 ];
 
 export async function plansPage(main = $('#main')) {
   document.title = '플랜 — RELAI';
   let b = null;
   try { b = (await api('GET', `/api/workspaces/${state.workspace.id}/billing`)).billing; } catch { b = null; }
-  const plans = b?.plans || [];
-  const free = plans.find((p) => p.key === 'FREE')?.limits || { projects: 2, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 };
-  const team = plans.find((p) => p.key === 'TEAM') || {};
-  const tl = team.limits || {};
-  const starter = b?.starter_credits ?? 500;
   const cur = b?.plan || 'FREE';
-  // Price (NicePay review: a priced product): the catalogue price with VAT, owner included; each extra user on top.
-  const teamPrice = `월 ${n(vat(team.base_monthly ?? 20000))}원 <small class="dim">(부가세 포함)</small>`;
-  const teamDesc = `소유자 1명 포함 · 사용자 추가 1명당 월 ${n(vat(team.extra_user_monthly ?? 5000))}원 · 매월 자동 결제(정기결제) · 언제든 해지`;
-  const packs = b?.credit_packs || [{ key: 'P10', amount: 10000, credits: 1000 }, { key: 'P30', amount: 30000, credits: 3000 }, { key: 'P100', amount: 100000, credits: 10000 }];
-  const rows = [
-    ['진행 중 프로젝트', lim(free.projects, '개'), lim(tl.projects, '개')],
-    ['멤버 (소유자 포함)', lim(free.members, '명'), '구매한 사용자 수만큼'],
-    ['요구사항', lim(free.requirements, '건'), lim(tl.requirements, '건')],
-    ['WBS 항목', lim(free.wbs, '개'), lim(tl.wbs, '개')],
-    ['주간보고 (한 달)', lim(free.weekly_reports, '건'), lim(tl.weekly_reports, '건')],
-    ['AI 크레딧', `워크스페이스당 ${n(starter)} (1회)`, team.ai_credits_monthly ? `매달 ${n(team.ai_credits_monthly)}` : '매달 제공'],
-    ['7단계 가이드 · 문서 · 보고서', '모두 사용', '모두 사용'],
-    ['지라 연동 · 엑셀 가져오기/내보내기', '사용', '사용'],
-  ];
-  const card = (key, name, price, desc, cta) => html`<div class="pl-card ${cur === key ? 'is-current' : ''}" data-plan="${key}">
-    <div class="pl-card__h"><b>${name}</b>${raw(cur === key ? '<span class="chip chip--active">현재 플랜</span>' : '')}</div>
-    <p class="pl-card__price">${raw(price)}</p><p class="dim">${desc}</p><div class="actions" style="margin-top:12px">${raw(cta)}</div></div>`;
-  main.innerHTML = html`<div class="page page--narrow page--plans" id="plans-page">
-    <div class="page__head"><div><a class="link" href="/app/settings#billing" data-link>← 설정</a><h1 style="margin-top:4px">플랜</h1>
-      <p class="dim" style="margin-top:4px">무료로 시작하고, 팀이 커지면 유료 플랜으로 한도 없이 쓰세요.</p></div></div>
-    <div class="pl-cards">
-      ${raw(card('FREE', '무료', '무료', `프로젝트 ${lim(free.projects, '개')}까지 · AI 크레딧 ${n(starter)} 제공`, cur === 'FREE' ? '<button class="btn btn--secondary btn--sm" disabled>사용 중</button>' : ''))}
-      ${raw(card('TEAM', 'Team 플랜', teamPrice, `프로젝트·요구사항·WBS·주간보고 한도 없음 · 매달 AI 크레딧 ${n(team.ai_credits_monthly || 1000)} · ${teamDesc}`, cur === 'TEAM' ? '<button class="btn btn--secondary btn--sm" disabled>사용 중</button>' : '<a class="btn btn--primary btn--sm" id="pl-subscribe" data-subscribe href="/app/billing/subscribe" data-link>구독하기</a>'))}
-    </div>
-    <div class="panel" style="margin-top:20px" id="pl-credits"><div class="panel__h">AI 크레딧 충전 <small class="dim">· 신용카드 1회 결제, 자동 결제 없음</small></div><div class="panel__b">
-      <div class="pl-packs">${raw(packs.map((p) => html`<a class="pl-pack" href="/app/settings/credits#cr-buy" data-link data-plan-pack="${p.key}"><b>AI 크레딧 ${n(p.credits)}</b><span>${n(p.amount)}원</span><small class="dim">부가세 포함</small></a>`).join(''))}</div>
-      <p class="hint" style="margin-top:8px">1 크레딧 = 10원 · 구매한 크레딧은 5년간 쓸 수 있고, 쓰지 않은 크레딧은 환불 규정에 따라 환불받을 수 있어요.</p></div></div>
-    <p class="hint" style="margin-top:8px">기업 맞춤(Enterprise)은 별도로 문의해 주세요.</p>
-    <div class="panel" style="margin-top:20px" id="pl-compare"><div class="panel__h">기능 · 한도 비교</div>
-      <div class="rtable-wrap--in"><table class="rtable pl-table" style="margin:0"><thead><tr><th>항목</th><th>무료</th><th>Team 플랜</th></tr></thead><tbody>
-      ${raw(rows.map(([k, f, t]) => html`<tr><td>${k}</td><td>${f}</td><td>${t}</td></tr>`).join(''))}</tbody></table></div></div>
+  const owner = Boolean(b?.can_manage);
+  const open = Boolean(b?.payments_enabled && b?.flags?.recurring);
+  const cta = (p) => {
+    if (p.contact_sales) return '<a class="btn btn--secondary btn--sm btn--block" href="mailto:' + LEGAL.contactEmail + '?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" data-plan-cta="ENTERPRISE">도입 문의</a>';
+    if (p.key === cur) return '<button class="btn btn--secondary btn--sm btn--block" disabled>사용 중</button>';
+    if (p.key === 'FREE') return '';
+    if (!open) return soonCta(p);
+    if (!owner) return '<p class="hint" style="margin:0">요금제 변경은 소유자만 할 수 있어요</p>';
+    return html`<a class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--sm btn--block" href="/app/billing/subscribe?plan=${p.key}" data-plan-cta="${p.key}">${p.label} 선택</a>`;
+  };
+  main.innerHTML = html`<div class="page page--plans" id="plans-page">
+    <div class="page__head"><div><a class="link" href="/app/settings?tab=plan" data-link>← 플랜 · 결제</a><h1 style="margin-top:4px">요금제</h1>
+      <p class="dim" style="margin-top:4px">워크스페이스 단위 요금제예요. 활성 프로젝트와 사용자 수, AI 크레딧으로 고르세요.</p></div></div>
+    <div id="pl-cards">${raw(b?.catalogue ? pricingHtml(b.catalogue, { current: cur, cta }) : '<p class="hint">요금 정보를 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p>')}</div>
     <div class="panel" style="margin-top:20px" id="pl-faq"><div class="panel__h">자주 묻는 질문</div><div class="panel__b">
       ${raw(FAQ.map(([q, a]) => html`<details class="pl-faq"><summary>${q}</summary><p class="dim">${a}</p></details>`).join(''))}</div></div>
     ${raw(legalFooterHtml(LEGAL))}
   </div>`;
+  bindCycleToggle(main);
+  main.querySelectorAll('a[data-plan-cta]').forEach((a) => { if (a.dataset.planCta === 'ENTERPRISE') return; a.onclick = (e) => {
+    e.preventDefault();
+    if (!open) return toast(SUBSCRIBE_SOON);
+    const cycle = main.querySelector('.pcw')?.dataset.cycle || 'MONTHLY';
+    navigate(`/app/billing/subscribe?plan=${a.dataset.planCta}&cycle=${cycle}`);
+  }; });
 }
