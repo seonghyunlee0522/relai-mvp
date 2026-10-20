@@ -86,7 +86,7 @@ export async function creditsPage(main = $('#main')) {
   const draw = () => {
     main.innerHTML = html`<div class="page page--narrow page--credits">${raw(head())}
       ${raw(html`<div class="cr-promo">${raw(promoHtml(promos, { placement: 'credits' }))}</div>`)}
-      ${raw(summary())}${raw(s.can_buy && !isPhone() && (s.ai_enabled === false || (!payOff() && !s.provider_available)) ? '' : buy())}${raw(prices())}${raw(log())}
+      ${raw(summary())}${raw((payOff() && isPhone()) || (s.can_buy && !isPhone() && (s.ai_enabled === false || (!payOff() && !s.provider_available))) ? '' : buy())}${raw(prices())}${raw(log())}
       ${raw(legalFooterHtml(LEGAL))}</div>`;
     main.querySelectorAll('[data-pack]').forEach((b) => b.onclick = async () => {
       if (payOff()) return toast(SUBSCRIBE_SOON);   // payments off: the product list shows, no checkout call
