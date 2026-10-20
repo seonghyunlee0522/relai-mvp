@@ -190,10 +190,11 @@ export function createNicepayProvider({ env = process.env, fetch: fetchImpl = gl
       return eventFromPayment(await this.refundTid({ tid: order.provider_tid, orderId: order.id, reason }));
     },
     /** Partial cancel of `amount` on a paid order (AI credit pack refund). Returns { cancelled_tid, balance_amount }. */
-    async refundPartial({ order, amount, reason }) {
+    async refundPartial({ order, amount, reason, cancelOrderId = null }) {
       if (!order?.provider_tid) throw new BillingError(409, 'not_refundable', '환불할 결제가 없습니다.');
       if (!(Number.isInteger(amount) && amount > 0 && amount <= Number(order.amount))) throw new BillingError(400, 'bad_amount', '환불 금액이 올바르지 않습니다.');
-      const p = await this.refundTid({ tid: order.provider_tid, orderId: order.id, reason, cancelAmt: amount });
+      // A new orderId per partial cancel (T2, nicepay-capabilities #5): NicePay rejects a second cancel under the same orderId.
+      const p = await this.refundTid({ tid: order.provider_tid, orderId: cancelOrderId || order.id, reason, cancelAmt: amount });
       return { cancelled_tid: p.cancelledTid || null, balance_amount: p.balanceAmt ?? null };
     },
     async netCancel(orderId) {

@@ -67,9 +67,9 @@ export function createFakeProvider({ secret = process.env.FAKE_BILLING_SECRET ||
     /** Full refund → normalized payment.refunded (same shape as NicePay's). */
     async refund({ order, reason }) { calls.refund.push({ order_id: order.id, amount: Number(order.amount), reason }); return { id: `cancelled:${order.provider_tid}`, type: 'payment.refunded', order_id: order.id, refund_tid: order.provider_tid, payload: {} }; },
     /** Partial cancel (AI credit pack refund). `failNextRefund` makes the next call throw (tests). */
-    async refundPartial({ order, amount, reason }) {
+    async refundPartial({ order, amount, reason, cancelOrderId = null }) {
       if (this.failNextRefund) { const m = this.failNextRefund; this.failNextRefund = null; throw new BillingError(402, 'refund_failed', m); }
-      calls.refund.push({ order_id: order.id, amount, reason, partial: true }); return { cancelled_tid: `fake_cancel_${randomUUID()}`, balance_amount: Number(order.amount) - amount };
+      calls.refund.push({ order_id: order.id, amount, reason, partial: true, cancel_order_id: cancelOrderId }); return { cancelled_tid: `fake_cancel_${randomUUID()}`, balance_amount: Number(order.amount) - amount };
     },
     /** Test helper: a signed webhook delivery { body (string), headers }. */
     signedEvent(type, data = {}, id = `evt_${randomUUID()}`) {

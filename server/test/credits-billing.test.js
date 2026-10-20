@@ -23,6 +23,9 @@ process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.A
 for (const k of ['DEV_INITIAL_AI_CREDITS', 'AI_INITIAL_TRIAL_CREDITS', 'AI_USER_MINUTE_LIMIT', 'AI_DAILY_LIMIT', 'EARLY_ACCESS_CUTOFF', 'EARLY_ACCESS_LAUNCH', 'AI_LOW_BALANCE_CREDITS',
   'AI_CREDIT_COST_REQUIREMENT_EXTRACTION', 'AI_CREDIT_COST_WBS_GENERATION', 'AI_CREDIT_COST_CHANGE_IMPACT', 'AI_CREDIT_COST_PROJECT_QA']) delete process.env[k];
 process.env.SUPPORT_EMAIL = 'support@relai.test';
+// Pricing v3 (T2): this v2-era suite keeps its 500-credit starter amount and per-workspace claim; the v3 rules (Free 100 once per
+// owner / e-mail, buckets, plan-gated top-up) are covered in credits-v3.test.js.
+process.env.AI_INITIAL_TRIAL_CREDITS = '500'; process.env.AI_FREE_CLAIM_SCOPE = 'workspace';
 
 const DAY = 86400e3;
 const answer = () => ({ data: { answer: 'ok', references: [], warnings: [] }, usage: { input_tokens: 100, output_tokens: 50 } });
@@ -59,8 +62,12 @@ async function owner(env, email = 'owner@x.com', name = '김하늘') {
 const ledger = (db, w) => db.all('SELECT * FROM credit_ledger WHERE workspace_id = ? ORDER BY created_at, seq', [w]);
 const balance = async (db, w) => Number((await db.get('SELECT balance FROM workspace_credit_accounts WHERE workspace_id = ?', [w])).balance);
 const mails = (db, type) => db.all('SELECT recipient, workspace_id FROM email_deliveries WHERE type = ? ORDER BY created_at', [type]);
+/** v3: a paid PRO period (no monthly grant written) so the workspace may top up. */
+const proPlan = (db, w) => db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, auto_renew, current_period_start, current_period_end)
+  VALUES (?, ?, 'PRO', 'ACTIVE', 'fake', false, now(), now() + interval '30 days') ON CONFLICT (workspace_id) DO NOTHING`, [`s_pro_${w}`, w]);
 /** OWNER buys a pack; the fake provider's signed "paid" webhook carries the order id and the amount. */
 async function buy(env, A, pack = 'P10', { amount = null, tid = null, eventId } = {}) {
+  await proPlan(env.db, A.w);   // v3: only PRO / TEAM may top up
   const co = await A.c('POST', `${A.cr}/checkout`, { pack });
   assert.equal(co.status, 201, JSON.stringify(co.json));
   const o = co.json.order;
@@ -83,8 +90,11 @@ test('prices (AC3 table), packs (VAT included split) and refund maths are exact'
   // within 7 days and untouched → 100%; newest pack first
   const both = refundQuote({ credits: 1500, packs: [fresh, old], unused: 4000, now });
   assert.deepEqual(both.allocations.map((a) => [a.order_id, a.credits, a.amount, a.full]), [['o2', 1000, 10000, true], ['o1', 500, 4500, false]]);
-  // a fresh pack partly used (unused 600 of 1000) is not a 청약철회 → fee applies
-  assert.equal(refundQuote({ credits: 600, packs: [fresh], unused: 600, now }).allocations[0].amount, 5400);
+  // v3 (D5): a fresh top-up partly used (unused 600 of 1000) is still refunded in full; the v2 rule charged the fee
+  assert.equal(refundQuote({ credits: 600, packs: [fresh], unused: 600, now }).allocations[0].amount, 6000);
+  assert.equal(refundQuote({ credits: 600, packs: [fresh], unused: 600, now, rule: 'v2' }).allocations[0].amount, 5400);
+  // RELAI at fault → no fee even after 7 days
+  assert.equal(refundQuote({ credits: 2000, packs: [old], unused: 3000, now, noFee: true }).amount, 20000);
   // more than the unused purchased credits → refused
   assert.throws(() => refundQuote({ credits: 3001, packs: [old], unused: 3000, now }), (e) => e.code === 'exceeds_refundable');
   assert.throws(() => refundQuote({ credits: 0, packs: [old], unused: 3000, now }), (e) => e.code === 'validation_error');
@@ -196,6 +206,11 @@ test('AC5: OWNER buys ₩10,000 → order 9,091 + 909 → +1,000 PURCHASE with r
   const M = await addMember(env.client, A, 'member@x.com', '이수진');
   await db.run('UPDATE users SET email_verified_at = now() WHERE id = ?', [M.uid]);
   assert.equal((await M.c('POST', `${A.cr}/checkout`, { pack: 'P10' })).status, 403);
+  // v3: FREE cannot top up — 402 before any order row
+  const free = await A.c('POST', `${A.cr}/checkout`, { pack: 'P10' });
+  assert.equal(free.status, 402); assert.equal(free.json.error.code, 'AI_TOPUP_PLAN_REQUIRED');
+  assert.equal((await db.get('SELECT COUNT(*) AS n FROM billing_orders WHERE workspace_id = ?', [A.w])).n, 0);
+  await proPlan(db, A.w);
   assert.equal((await A.c('POST', `${A.cr}/checkout`, { pack: 'P7' })).status, 400);
   const { order, event, res } = await buy(env, A, 'P10');
   assert.equal(order.amount, 10000); assert.equal(order.supply_amount, 9091); assert.equal(order.vat_amount, 909); assert.equal(order.credits, 1000);
@@ -217,8 +232,8 @@ test('AC5: OWNER buys ₩10,000 → order 9,091 + 909 → +1,000 PURCHASE with r
   assert.equal(t.res.json.ignored, true); assert.equal(t.res.json.reason, 'amount_mismatch');
   assert.equal((await db.get('SELECT status FROM billing_orders WHERE id = ?', [t.order.id])).status, 'FAILED');
   assert.equal(await balance(db, A.w), 1500);
-  assert.equal((await db.get('SELECT COUNT(*) AS n FROM subscriptions WHERE workspace_id = ?', [A.w])).n, 0);
-  assert.equal(await effectivePlan(db, A.w), 'FREE');
+  const subs = await db.all('SELECT id, plan, status FROM subscriptions WHERE workspace_id = ?', [A.w]);   // the top-up never touches the subscription
+  assert.deepEqual(subs.map((x) => [x.id, x.plan, x.status]), [[`s_pro_${A.w}`, 'PRO', 'ACTIVE']]);
   // the operator's full-payment refund must not be used for packs (it would not take the credits back)
   const admin = env.client(); const sa = await admin('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'ops@x.com', password: 'passw0rd!' });
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [sa.json.user.id]);

@@ -230,6 +230,10 @@ export const migrations = [
     await db.run(`UPDATE billing_orders SET price_version = 'v2' WHERE price_version IS NULL AND kind IN ('ONE_TIME','RECURRING_FIRST','RECURRING_RENEWAL')`);
   } },
   { version: 61, name: 'Pricing v3 T1: idx_projects_ws_active (active = DRAFT/ACTIVE/ON_HOLD, samples excluded; schema.sql, index only)', up() {} },
+  { version: 62, name: 'Pricing v3 T2: AI credit buckets (workspace_credit_accounts plan / promo / purchased + plan_expires_at, credit_ledger d_* + type EXPIRY), free_credit_claims, workspaces.enterprise_topup (schema.sql, additive). Data: balances split without changing any total (purchased = unused purchased, rest = promo, plan = 0); owners who already got a starter grant are recorded as Free-claimed. Idempotent', async up(db) {
+    const { backfillCreditBuckets } = await import('./ai/credits.js');
+    await backfillCreditBuckets(db);
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

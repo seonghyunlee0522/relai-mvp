@@ -14,6 +14,8 @@ import { setFakeProvider } from '../ai/provider.js';
 process.env.PLAN_LIMITS = 'on';
 process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.AI_MODEL = '';
 for (const k of ['DEV_INITIAL_AI_CREDITS', 'AI_INITIAL_TRIAL_CREDITS', 'EARLY_ACCESS_CUTOFF', 'EARLY_ACCESS_LAUNCH', 'AI_CREDIT_COST_PROJECT_QA']) delete process.env[k];
+// Pricing v3 (T2): this batch7 suite keeps the 500-per-workspace starter (migration 52); v3 Free 100 rules are in credits-v3.test.js.
+process.env.AI_INITIAL_TRIAL_CREDITS = '500'; process.env.AI_FREE_CLAIM_SCOPE = 'workspace';
 
 const ws = (w) => `/api/workspaces/${w}`;
 const starterRows = (db, w) => db.all(`SELECT amount, reference_id FROM credit_ledger WHERE workspace_id = ? AND type IN ('PROMOTION','PLAN_GRANT') ORDER BY seq`, [w]);

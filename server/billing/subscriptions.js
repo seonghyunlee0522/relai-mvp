@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { PLANS, DEFAULT_PLAN, FOUNDING_OFFER, EARLY_ACCESS } from '../plans.js';
 import { grantMonthlyCredits } from './ai-grants.js';
-import { applyPackEvent } from './credit-packs.js';
+import { applyPackEvent, isCreditOrder } from './credit-packs.js';
 
 export const STATUSES = ['ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED'];
 export const GRACE_DAYS = 7;
@@ -183,7 +183,7 @@ export async function processWebhookEvent(db, provider, ev) {
       if (ev.order_id) {
         order = await db.get('SELECT * FROM billing_orders WHERE id = ? FOR UPDATE', [String(ev.order_id)]);
         // AI credit packs never touch the subscription: amount check → PURCHASE ledger row (billing/credit-packs.js).
-        if (order?.kind === 'CREDIT_PACK') return finish(await applyPackEvent(db, provider, order, ev, ins.id), { workspace_id: order.workspace_id, id: null });
+        if (isCreditOrder(order)) return finish(await applyPackEvent(db, provider, order, ev, ins.id), { workspace_id: order.workspace_id, id: null });
         const checked = checkOrder(order, ev);
         if (checked.ignore) {
           if (checked.fail) await db.run(`UPDATE billing_orders SET status = 'FAILED', failure_code = ?, updated_at = now() WHERE id = ? AND status = 'PENDING'`, [checked.ignore, order.id]);

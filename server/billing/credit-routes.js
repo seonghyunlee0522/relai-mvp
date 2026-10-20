@@ -1,11 +1,12 @@
 /**
  * AI credits — the customer page (설정 › AI 크레딧) and the operator refund (AI-credits-only billing §4–§6).
- *   GET  /api/workspaces/:wid/credits/summary           any member: balance (purchased / free), this + last month, per feature, prices, packs
+ *   GET  /api/workspaces/:wid/credits/summary           any member: balance + buckets (plan / promo / purchased), this + last month, per feature, prices, top-up rules
  *   GET  /api/workspaces/:wid/credits/ledger            any member: ?month=YYYY-MM&project=&user= → every ledger row + failed runs at 0
  *   GET  /api/workspaces/:wid/credits/ledger.csv        same rows as CSV (UTF-8 BOM, Excel opens Korean) = the monthly statement
- *   POST /api/workspaces/:wid/credits/checkout          OWNER, verified e-mail: { pack } → CREDIT_PACK order → provider checkout
+ *   POST /api/workspaces/:wid/credits/checkout          OWNER, verified e-mail, plan PRO / TEAM (ENTERPRISE by contract): { amount } (or v2 { pack })
+ *                                                       → CREDIT_TOPUP order → provider checkout; FREE → 402 AI_TOPUP_PLAN_REQUIRED, no order row
  *   POST /api/workspaces/:wid/credits/refund-request    OWNER: e-mails support (no self-serve refund in this round)
- *   GET|POST /api/billing/admin/workspaces/:wid/credit-refund   SYSTEM_ADMIN: quote | refund { credits, reason } (+ audit)
+ *   GET|POST /api/billing/admin/workspaces/:wid/credit-refund   SYSTEM_ADMIN: quote | refund { credits, reason, no_fee } (+ audit)
  * Every amount is integer credits in the database; ₩ = credits × CREDIT_PRICE_KRW is computed here, never stored twice.
  */
 import { requireAction, can } from '../authz.js';
@@ -14,12 +15,12 @@ import { writeAudit } from '../admin.js';
 import { sendEmail } from '../email/service.js';
 import { emailConfig } from '../email/config.js';
 import { creditRefundRequestEmail } from '../email/templates.js';
-import { CREDIT_PACKS, CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS, PLANS, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, splitVat } from '../plans.js';
+import { CREDIT_PACKS, CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS, PLANS, PLANS_URL, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, TOPUP_STEP_KRW, TOPUP_MAX_KRW, splitVat } from '../plans.js';
 import { FEATURE_LABEL, featureCreditCost, aiConfig } from '../ai/config.js';
-import { getBalance, balanceSplit } from '../ai/credits.js';
+import { getBalance, bucketBalances } from '../ai/credits.js';
 import { effectivePlan } from './subscriptions.js';
 import { OrderError, publicOrder } from './orders.js';
-import { createPackOrder, refundableCredits, refundQuoteFor, refundCredits } from './credit-packs.js';
+import { createTopupOrder, packQuote, topupEligibility, refundableCredits, refundQuoteFor, refundCredits, refundRule, TOPUP_PRESETS } from './credit-packs.js';
 import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE } from './provider.js';
 
 const TZ = () => process.env.APP_TIMEZONE || 'Asia/Seoul';
@@ -31,7 +32,7 @@ const prevMonth = (m) => { const [y, mo] = m.split('-').map(Number); return mo =
 const MONTH_SQL = (col) => `${col} >= ((?::text || '-01')::date)::timestamp AT TIME ZONE ? AND ${col} < (((?::text || '-01')::date) + interval '1 month')::timestamp AT TIME ZONE ?`;
 const monthParams = (m) => [m, TZ(), m, TZ()];
 
-export const KIND_LABEL = { PURCHASE: '충전', PROMOTION: '무료 크레딧', PLAN_GRANT: 'Team 플랜 월간 지급', ADMIN_GRANT: '운영자 지급', REFUND: '환불', ADJUSTMENT: '조정', AI_FAILED: '실패 (차감 없음)', AI_UNCHARGED: '차감 없음' };
+export const KIND_LABEL = { PURCHASE: '충전', PROMOTION: '무료 크레딧', PLAN_GRANT: '플랜 월간 지급', EXPIRY: '기본 크레딧 소멸', ADMIN_GRANT: '운영자 지급', REFUND: '환불', ADJUSTMENT: '조정', AI_FAILED: '실패 (차감 없음)', AI_UNCHARGED: '차감 없음' };
 const shortLabel = (f) => String(FEATURE_LABEL[f] || f || '').replace(/^AI /, '');
 
 /** Credits used (AI_USAGE) in a month, total and per feature. */
@@ -45,18 +46,21 @@ async function monthUsage(db, wid, month) {
 }
 
 export async function creditSummary(db, wid, { role = null, provider = null } = {}) {
-  const [bal, split, plan] = await Promise.all([getBalance(db, wid), balanceSplit(db, wid), effectivePlan(db, wid)]);
+  const [bal, b, plan, topup] = await Promise.all([getBalance(db, wid), bucketBalances(db, wid), effectivePlan(db, wid), topupEligibility(db, wid)]);
   const { m } = await db.get(`SELECT to_char(now() AT TIME ZONE ?, 'YYYY-MM') AS m`, [TZ()]);
   const w = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
   const owner = can(role, 'billing');
   return {
     credit_price_krw: CREDIT_PRICE_KRW, balance: bal.balance, balance_krw: won(bal.balance), available: bal.available, reserved: bal.reserved,
-    purchased_remaining: split.purchased_remaining, free_remaining: split.free_remaining,
+    purchased_remaining: b.purchased, free_remaining: b.total - b.purchased,
+    buckets: { plan: b.plan, plan_expires_at: b.plan_expires_at, promo: b.promo, purchased: b.purchased },
+    plan_monthly_credits: PLANS[plan].credits?.monthly || 0,
+    topup: { allowed: topup.allowed, reason: topup.reason, step: TOPUP_STEP_KRW, min: TOPUP_STEP_KRW, max: TOPUP_MAX_KRW, presets: TOPUP_PRESETS, upgrade_url: PLANS_URL },
     low_balance_threshold: LOW_BALANCE_CREDITS, low: bal.available < LOW_BALANCE_CREDITS, empty: bal.available <= 0,
     this_month: await monthUsage(db, wid, m), last_month: await monthUsage(db, wid, prevMonth(m)),
     prices: CHARGED.map((f) => ({ feature: f, label: shortLabel(f), credits: featureCreditCost(f), krw: won(featureCreditCost(f)) })),
     packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount, ...splitVat(p.amount) })),
-    starter_credits: aiConfig().trialCredits, purchased_valid_years: PURCHASED_VALID_YEARS, refund_policy: { full_days: REFUND_FULL_DAYS, fee_pct: REFUND_FEE_PCT },
+    starter_credits: aiConfig().trialCredits, purchased_valid_years: PURCHASED_VALID_YEARS, refund_policy: { full_days: REFUND_FULL_DAYS, fee_pct: REFUND_FEE_PCT, rule: refundRule() },
     can_buy: owner, ai_enabled: aiConfig().enabled, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), sandbox: provider?.mode === 'sandbox', refundable: owner ? await refundableCredits(db, wid) : null,
     plan, plan_label: PLANS[plan].label, early_access_until: w?.early_access_until || null,
   };
@@ -130,8 +134,17 @@ export function mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, pro
     if (!provider) return fail(res, 503, 'billing_unavailable', '지금은 충전할 수 없습니다.');
     // AI off server-side (no provider key / AI_ENABLED=false): credits could not be spent, so no pack is sold.
     if (!aiConfig().enabled) return fail(res, 409, 'ai_disabled', '지금은 충전할 수 없습니다.');
+    // Plan gate before any order row (spec §2.2: Free cannot buy credits; ENTERPRISE only by contract).
+    const elig = await topupEligibility(db, req.params.wid);
+    if (!elig.allowed) {
+      return fail(res, 402, 'AI_TOPUP_PLAN_REQUIRED', elig.reason === 'contract_required' ? 'Enterprise 크레딧 충전은 계약에 따라 운영자가 열어 드립니다.' : 'Pro 이상 요금제에서 AI 크레딧을 충전할 수 있습니다.',
+        { plan: elig.plan, upgrade: { url: PLANS_URL } });
+    }
     let order;
-    try { order = await createPackOrder(db, { workspaceId: req.params.wid, userId: req.user.id, provider: provider.name, pack: req.body?.pack }); }
+    try {
+      const amount = req.body?.amount !== undefined ? req.body.amount : req.body?.pack !== undefined ? packQuote(req.body.pack).amount : undefined;
+      order = await createTopupOrder(db, { workspaceId: req.params.wid, userId: req.user.id, provider: provider.name, amount });
+    }
     catch (e) { if (e instanceof OrderError) return fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {}); throw e; }
     const workspace = await db.get('SELECT id, name FROM workspaces WHERE id = ?', [req.params.wid]);
     const out = await provider.createCheckout({ workspace, plan: null, order, customer: { id: req.user.id, email: req.user.email, name: req.user.name },
@@ -157,7 +170,7 @@ export function mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, pro
     if (!admin(req, res)) return;
     const refundable = await refundableCredits(db, req.params.wid);
     if (!req.query.credits) return res.json({ refundable });
-    try { res.json({ refundable, quote: await refundQuoteFor(db, req.params.wid, Number(req.query.credits)) }); }
+    try { res.json({ refundable, quote: await refundQuoteFor(db, req.params.wid, Number(req.query.credits), { noFee: req.query.no_fee === 'true' }) }); }
     catch (e) { if (e instanceof OrderError) return fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {}); throw e; }
   }));
   app.post(ar, requireAuth, wrap(async (req, res) => {
@@ -167,14 +180,14 @@ export function mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, pro
     if (!reason) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { reason: '환불 사유를 입력해 주세요.' } });
     if (!(await db.get('SELECT id FROM workspaces WHERE id = ?', [req.params.wid]))) return fail(res, 404, 'not_found', '워크스페이스를 찾을 수 없습니다.');
     let out;
-    try { out = await refundCredits(db, provider, { wid: req.params.wid, credits: Number(req.body?.credits), reason, adminUserId: req.user.id }); }
+    try { out = await refundCredits(db, provider, { wid: req.params.wid, credits: Number(req.body?.credits), reason, adminUserId: req.user.id, noFee: req.body?.no_fee === true }); }
     catch (e) {
       if (e instanceof OrderError) return fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {});
       if (e instanceof BillingError) return fail(res, e.status, e.code, e.message);
       throw e;
     }
     await writeAudit(db, { adminUserId: req.user.id, action: 'CREDIT_REFUND', targetType: 'WORKSPACE', targetId: req.params.wid,
-      metadata: { reason, credits: out.credits, amount: out.amount, orders: out.allocations.map((a) => ({ order_id: a.order_id, credits: a.credits, amount: a.amount, full: a.full, manual: a.manual })), failed: out.failed } });
+      metadata: { reason, no_fee: req.body?.no_fee === true, credits: out.credits, amount: out.amount, orders: out.allocations.map((a) => ({ order_id: a.order_id, credits: a.credits, amount: a.amount, full: a.full, manual: a.manual })), failed: out.failed } });
     res.status(out.failed.length && !out.credits ? 502 : 200).json({ refunded: out.credits > 0, ...out, balance: (await getBalance(db, req.params.wid)).balance });
   }));
 }

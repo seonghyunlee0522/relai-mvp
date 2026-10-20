@@ -24,11 +24,13 @@ import { countUsage, workspaceLimits, overLimit } from './limits.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices } from './cron.js';
 import { grantDueMonthlyCredits } from './ai-grants.js';
+import { isCreditOrder } from './credit-packs.js';
+import { bucketBalances } from '../ai/credits.js';
 import { applyServiceEvent, serviceOrdersDaily } from './service-orders.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
-const settingsUrl = (status, reason, order = null) => (order?.kind === 'CREDIT_PACK'
+const settingsUrl = (status, reason, order = null) => (isCreditOrder(order)
   ? `/app/settings/credits?checkout=${status}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`
   : `/app/settings?checkout=${status}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}#billing`);
 
@@ -92,7 +94,7 @@ export function mountBillingWebhook(app, db, { provider, fail }) {
 function payPage({ order, params, sdkUrl, sandbox }) {
   const json = JSON.stringify(params).replace(/</g, '\\u003c');
   const row = (k, v, strong) => `<tr><th>${esc(k)}</th><td>${strong ? `<b>${esc(v)}</b>` : esc(v)}</td></tr>`;
-  const pack = order.kind === 'CREDIT_PACK';
+  const pack = isCreditOrder(order);
   const back = pack ? '/app/settings/credits' : '/app/settings#billing';
   const rows = pack ? `${row('AI 크레딧', `${Number(order.credits).toLocaleString('ko-KR')} 크레딧 (1 크레딧 = ₩${CREDIT_PRICE_KRW})`)}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`
     : `${row('사용자', `${order.seats}명 (소유자 포함)`)}${row('월 이용료', `${won(order.unit_price)} / 월`)}${row('이용 기간', order.months === 12 ? '12개월 (연간 선결제)' : '1개월')}${row('정가', won(order.list_amount))}
@@ -143,7 +145,8 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const addons = { extra_users: paid ? Number(row?.extra_users || 0) : 0, extra_projects: paid ? Number(row?.extra_projects || 0) : 0 };
     const counts = await countUsage(db, wid);
     const over = await overLimit(db, wid);
-    const account = await db.get('SELECT balance FROM workspace_credit_accounts WHERE workspace_id = ?', [wid]);
+    // T2: bucket view (ai/credits.js bucketBalances) — total = plan + promo + purchased; plan expires at plan_expires_at.
+    const creditBuckets = async (w) => { const c = await bucketBalances(db, w); return { total: c.total, plan: c.plan, plan_expires_at: c.plan_expires_at, promo: c.promo, purchased: c.purchased, available: c.available }; };
     // One-time purchases can be extended at any time; a renewing (recurring) subscription cannot be bought twice.
     const canPurchase = paymentsEnabled() && (plan === 'FREE' || (subscription && !subscription.auto_renew));
     const early = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
@@ -152,7 +155,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
       next_payment_at: renews ? subscription.next_billing_at || subscription.current_period_end : null,
       next_payment_amount: renews ? (row?.price_version === 'v2' ? row?.renewal_amount ?? null : renewalAmount(plan, cycle, addons.extra_users, addons.extra_projects)) : null,
       limits, usage: { ...(await workspaceUsage(db, wid, plan)), ...counts, seats_left: limits.users === null ? null : Math.max(0, limits.users - counts.members - counts.pending_invites) },
-      addons, scheduled: [], credits: { total: account ? Number(account.balance) : 0, plan: null, plan_expires_at: null, promo: null, purchased: null },
+      addons, scheduled: [], credits: await creditBuckets(wid),
       catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null, price_version: row?.price_version || null,
       subscription, early_access_until: early?.early_access_until || null,
       plans: planCatalogue().plans, credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits,
@@ -249,7 +252,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (!pay) return fail(res, 404, 'not_found', '결제 내역을 찾을 수 없습니다.');
     const order = pay.provider === provider.name ? await getOrder(db, pay.moid) : null;
     if (!order || pay.status !== 'PAID' || order.status !== 'PAID') return fail(res, 409, 'not_refundable', '환불할 수 있는 결제가 아닙니다.');
-    if (order.kind === 'CREDIT_PACK') return fail(res, 409, 'use_credit_refund', 'AI 크레딧 결제는 워크스페이스 › AI 크레딧 환불로 처리합니다 (미사용 크레딧만 환불).');
+    if (isCreditOrder(order)) return fail(res, 409, 'use_credit_refund', 'AI 크레딧 결제는 워크스페이스 › AI 크레딧 환불로 처리합니다 (미사용 크레딧만 환불).');
     let ev;
     try { ev = await provider.refund({ order, reason }); }
     catch (e) { if (e instanceof BillingError) return fail(res, e.status, e.code, e.message); throw e; }

@@ -65,7 +65,10 @@ export function aiConfig(env = process.env) {
     dailyLimit: Math.max(0, envInt('AI_DAILY_LIMIT', 300)),            // per workspace per day (0 = unlimited)
     userMinuteLimit: Math.max(0, envInt('AI_USER_MINUTE_LIMIT', 10)),  // per user per minute (0 = unlimited)
     devInitialCredits: Math.max(0, envInt('DEV_INITIAL_AI_CREDITS', 0)),      // dev/test only; when > 0 it REPLACES the production trial grant
-    trialCredits: Math.max(0, envInt('AI_INITIAL_TRIAL_CREDITS', 500)),       // production: one-time starter grant (500 = ₩5,000) when a workspace's account is first created (0 = none)
+    trialCredits: Math.max(0, envInt('AI_INITIAL_TRIAL_CREDITS', 100)),       // production: Free 최초 100 (pricing v3) when a workspace's account is first created (0 = none)
+    // D7: who the Free 100 is "once" for. 'owner' (default) = once per owner account and per e-mail hash (free_credit_claims) as well as
+    // per workspace; 'workspace' = once per workspace only.
+    freeClaimScope: String(env.AI_FREE_CLAIM_SCOPE || 'owner').toLowerCase() === 'workspace' ? 'workspace' : 'owner',
     maxOutputTokens: Math.max(256, envInt('AI_MAX_OUTPUT_TOKENS', 4_000)),
     disabledReason: !flag ? 'AI_ENABLED=false' : !provider ? 'AI_PROVIDER 미설정' : !apiKey ? 'Provider API Key 미설정' : null,
   };

@@ -144,17 +144,17 @@ import { runAiFeature, AiError } from '../ai/service.js';
 const ledgerSum = async (db, wid) => (await db.get('SELECT COALESCE(SUM(amount), 0) AS s, (SELECT balance_after FROM credit_ledger WHERE workspace_id = ? ORDER BY created_at DESC, seq DESC LIMIT 1) AS last FROM credit_ledger WHERE workspace_id = ?', [wid, wid]));
 const consistent = async (db, wid) => { const acc = await account(db, wid); const l = await ledgerSum(db, wid); assert.equal(acc.balance, l.s, 'balance == sum(ledger)'); assert.equal(acc.balance, l.last ?? 0, 'balance == last balance_after'); assert.ok(acc.balance >= 0); };
 
-test('initial grant policy: production starter credits (PROMOTION 500, once) vs DEV_INITIAL (PLAN_GRANT, replaces trial); re-touching an account never grants again; trial can be 0', async () => {
+test('initial grant policy: production starter credits (PROMOTION 100 = v3 Free once) vs DEV_INITIAL (PLAN_GRANT, replaces trial); re-touching an account never grants again; trial can be 0', async () => {
   const { db, server, client } = await boot();
   delete process.env.DEV_INITIAL_AI_CREDITS; delete process.env.AI_INITIAL_TRIAL_CREDITS;
   const P = await setup(client, 'prod@x.com');
   let led = await ledgerOf(db, P.w);
-  assert.equal(led.length, 1); assert.equal(led[0].type, 'PROMOTION'); assert.equal(led[0].amount, 500); assert.equal(led[0].reason, '무료 시작 크레딧'); assert.equal(led[0].reference_id, 'AI_INITIAL_TRIAL_CREDITS');
-  assert.equal((await status(P)).credits.balance, 500);
+  assert.equal(led.length, 1); assert.equal(led[0].type, 'PROMOTION'); assert.equal(led[0].amount, 100); assert.equal(led[0].reason, '무료 시작 크레딧'); assert.equal(led[0].reference_id, 'AI_INITIAL_TRIAL_CREDITS');
+  assert.equal((await status(P)).credits.balance, 100);
   // re-reads / explicit ensureAccount with any policy → no second grant
   await ensureAccount(db, P.w); await ensureAccount(db, P.w, { devInitial: 500, trial: 999 }); await status(P);
   process.env.DEV_INITIAL_AI_CREDITS = '500'; await status(P);
-  led = await ledgerOf(db, P.w); assert.equal(led.length, 1); assert.equal((await account(db, P.w)).balance, 500); assert.equal((await account(db, P.w)).lifetime_granted, 500);
+  led = await ledgerOf(db, P.w); assert.equal(led.length, 1); assert.equal((await account(db, P.w)).balance, 100); assert.equal((await account(db, P.w)).lifetime_granted, 100);
   // DEV_INITIAL set → PLAN_GRANT only, trial NOT added on top
   const D = await setup(client, 'dev@x.com');
   led = await ledgerOf(db, D.w); assert.equal(led.length, 1); assert.equal(led[0].type, 'PLAN_GRANT'); assert.equal(led[0].amount, 500); assert.equal((await account(db, D.w)).balance, 500);
@@ -165,10 +165,15 @@ test('initial grant policy: production starter credits (PROMOTION 500, once) vs 
   const r = await Z.c('POST', `${Z.purl}/ai/ask`, { question: '잔액 0에서 질문' }); assert.equal(r.status, 402);
   // concurrent first touch of a brand-new account (no signup path) → exactly one grant
   process.env.AI_INITIAL_TRIAL_CREDITS = '100';
-  const wid = (await db.get(`INSERT INTO workspaces (id, name, owner_id) VALUES (gen_random_uuid()::text, 'raw', ?) RETURNING id`, [P.uid])).id;
+  // D7: a 2nd workspace of an owner who already claimed the Free 100 gets nothing
+  const again = (await db.get(`INSERT INTO workspaces (id, name, owner_id) VALUES (gen_random_uuid()::text, 'raw', ?) RETURNING id`, [P.uid])).id;
+  await ensureAccount(db, again); assert.equal((await ledgerOf(db, again)).length, 0);
+  process.env.AI_FREE_CLAIM_SCOPE = 'workspace';   // the per-workspace switch (D7 alternative)
+  const wid = (await db.get(`INSERT INTO workspaces (id, name, owner_id) VALUES (gen_random_uuid()::text, 'raw2', ?) RETURNING id`, [P.uid])).id;
   await Promise.all([1, 2, 3, 4].map(() => ensureAccount(db, wid)));
   assert.equal((await ledgerOf(db, wid)).length, 1); assert.equal((await account(db, wid)).balance, 100);
-  for (const w of [P.w, D.w, Z.w, wid]) await consistent(db, w);
+  delete process.env.AI_FREE_CLAIM_SCOPE;
+  for (const w of [P.w, D.w, Z.w, wid, again]) await consistent(db, w);
   process.env.DEV_INITIAL_AI_CREDITS = '100'; delete process.env.AI_INITIAL_TRIAL_CREDITS;
   server.close();
 });
