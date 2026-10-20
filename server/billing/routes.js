@@ -23,6 +23,7 @@ import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, foun
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices } from './cron.js';
 import { grantDueMonthlyCredits } from './ai-grants.js';
+import { applyServiceEvent } from './service-orders.js';
 
 const catalogue = () => Object.values(PLANS).filter((p) => p.key !== 'EARLY').map((p) => ({ key: p.key, label: p.label, base_monthly: p.contact_sales ? null : (p.base_monthly ?? 0),
   included_users: p.included_users ?? null, extra_user_monthly: p.extra_user_monthly ?? null, contact_sales: Boolean(p.contact_sales), limits: p.limits, ai_credits_monthly: p.ai_credits_monthly ?? 0 }));
@@ -58,7 +59,8 @@ export function mountBillingWebhook(app, db, { provider, fail }) {
       let ev;
       try { ev = await provider.handleWebhook({ rawBody, headers: req.headers }); }
       catch (e) { if (e instanceof BillingError) return fail(res, e.status, e.code, e.message); throw e; }
-      const out = await processWebhookEvent(db, provider.name, ev);
+      // 서비스 결제 orders (/pricing, service_orders) are applied there; everything else is in-app billing.
+      const out = (await applyServiceEvent(db, provider.name, ev)) ?? await processWebhookEvent(db, provider.name, ev);
       if (provider.webhookAck) return provider.webhookAck(res, out);
       res.json({ received: true, ...out });
     } catch (e) { next(e); }

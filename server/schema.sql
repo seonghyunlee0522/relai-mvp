@@ -1496,3 +1496,36 @@ ALTER TABLE requirements ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;
 ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS step_results TEXT;
 ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS test_data TEXT NOT NULL DEFAULT '';
 ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS environment TEXT NOT NULL DEFAULT '';
+
+/* Migration 54 — RELAI service payments (standalone /pricing page, founder 2026-10-20). Buyers have no RELAI account or workspace,
+ * so these orders live beside billing_orders (whose workspace_id is NOT NULL). The amount comes from the fixed catalogue in
+ * server/billing/service-orders.js, never from the client. No card data or billing key is stored here. */
+CREATE TABLE IF NOT EXISTS service_orders (
+  id                      TEXT PRIMARY KEY,                -- NicePay orderId
+  product                 TEXT NOT NULL,                   -- catalogue key (agent-once | agent-monthly)
+  kind                    TEXT NOT NULL CHECK (kind IN ('ONE_TIME','RECURRING')),
+  provider                TEXT NOT NULL,
+  goods_name              TEXT NOT NULL,
+  amount                  INTEGER NOT NULL,                -- charged, VAT included
+  supply_amount           INTEGER NOT NULL,
+  vat_amount              INTEGER NOT NULL,
+  months                  INTEGER NOT NULL DEFAULT 1,
+  buyer_name              TEXT NOT NULL,
+  buyer_company           TEXT NOT NULL DEFAULT '',
+  buyer_email             TEXT NOT NULL,
+  buyer_phone             TEXT NOT NULL,
+  terms_version           TEXT NOT NULL,
+  privacy_version         TEXT NOT NULL,
+  consented_at            timestamptz NOT NULL DEFAULT now(),
+  status                  TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PAID','FAILED','REFUNDED')),
+  provider_tid            TEXT,
+  payment_method_summary  TEXT,
+  receipt_url             TEXT,
+  failure_code            TEXT,
+  failure_message         TEXT,
+  receipt_email_sent_at   timestamptz,
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  paid_at                 timestamptz,
+  updated_at              timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_service_orders_created ON service_orders (created_at DESC);

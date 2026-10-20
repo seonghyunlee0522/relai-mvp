@@ -67,6 +67,7 @@ import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
 import { PLANS } from './plans.js';
 import { mountCreditRoutes } from './billing/credit-routes.js';
+import { mountServicePayReturn, mountServicePay, mountServicePayAdmin } from './service-pay.js';
 import * as SMP from './samples/index.js';
 import { analyticsMiddleware, mountAnalyticsRoutes, track, trackStage, isBot } from './analytics.js';
 
@@ -86,6 +87,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.set('trust proxy', 1);
   // Billing webhook first: raw body for signature checks, outside JSON parsing / CSRF / auth (docs/production-readiness.md §8).
   mountBillingWebhook(app, db, { provider: billingProvider, fail: (res, status, code, message) => res.status(status).json({ error: { code, message } }) });
+  mountServicePayReturn(app, db, { provider: billingProvider });   // 서비스 결제 (/pricing): NicePay window result, cross-site form POST
   // 64 KB for every JSON body except the Excel import endpoints (base64 xlsx), which parse their own larger body after auth.
   const smallJson = express.json({ limit: '64kb' });
   app.use((req, res, next) => (req.method === 'POST' && BIG_JSON_PATH.test(req.path) ? next() : smallJson(req, res, next)));
@@ -286,6 +288,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
 
   /* ---------- admin console API (operator role only; see admin-routes.js) ---------- */
+  mountServicePayAdmin({ app, db, wrap, fail, requireAuth });   // 관리자 › 결제 › 서비스 결제 (before the /api/admin/* catch-all)
   mountAdminRoutes(app, db, { requireAuth, wrap, fail });
   mountPublicPromotionRoutes(app, db, { wrap });   // GET /api/promotions?placement= (public; migration 47)
   mountAnalyticsRoutes(app, db, { requireAuth, wrap });
@@ -1402,6 +1405,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountMaintenanceRoutes({ app, db, wrap, fail });                                        // GET /api/cron/purge (Vercel cron)
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
   mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });
+  mountServicePay({ app, db, wrap, fail, provider: billingProvider });   // 서비스 결제: public /pricing page, buyer orders, 관리자 list (before mountLegal's /pricing redirect)
   mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });    // AI credits: customer page, pack checkout, refund request, operator refund   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };

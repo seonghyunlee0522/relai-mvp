@@ -2,6 +2,7 @@
  * Sensitive provider data never reaches this UI: the API whitelists columns and masks transaction ids. */
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
+import { serviceOrdersSection } from './service-orders.js';
 import { adminApi, bindFilters, bindPager, bindRows, chip, dl, errorBlock, fmtD, fmtDay, head, n, pager, qs, sel, section, table } from './ui.js';
 const SUB_KO = { ACTIVE: '이용 중', PAST_DUE: '결제 연체', CANCELED: '해지', TRIALING: '체험 중' };
 const PAY_KO = { PAID: '결제 완료', FAILED: '실패', PENDING: '대기', REFUNDED: '환불' };
@@ -53,8 +54,9 @@ export async function adminPaymentsPage(main = $('#main')) {
         { key: 'created_at', label: '일시', w: 150, render: (p) => fmtD(p.created_at) }, { key: 'workspace_name', label: '워크스페이스', w: 220, cls: 'ttl' }, { key: 'plan', label: '플랜', w: 70 },
         { key: 'amount', label: '금액', w: 110, cls: 'num', render: money }, { key: 'status', label: '상태', w: 100, render: (p) => chip(p.status, PAY_KO[p.status] || p.status) }, { key: 'provider', label: '결제사', w: 100 },
         { key: 'provider_result_code', label: '결과 코드', w: 100 }, { key: 'provider_tid_masked', label: 'TID (일부 가림)', w: 170, render: (p) => html`<span class="mono">${p.provider_tid_masked || '-'}</span>` },
-      ], d.items, { rowHref: (p) => `/admin/payments/${p.id}` }))}${raw(pager(d))}`)}</div>`;
+      ], d.items, { rowHref: (p) => `/admin/payments/${p.id}` }))}${raw(pager(d))}`)}<div id="svc-orders"></div></div>`;
     bindFilters(main, draw); bindPager(main, draw); bindRows(main, navigate);
+    serviceOrdersSection(main.querySelector('#svc-orders'));   // 서비스 결제 (/pricing), shown with or without in-app billing
   };
   await draw();
 }

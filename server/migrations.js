@@ -216,6 +216,7 @@ export const migrations = [
     }
     for (const [id, title] of PROMO_OFF_53) await db.run('UPDATE promotions SET active = false, updated_at = now() WHERE id = ? AND title = ? AND active', [id, title]);
   } },
+  { version: 54, name: 'RELAI service payments: service_orders (standalone /pricing page; buyer info, server-side catalogue amount; schema.sql, additive)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
