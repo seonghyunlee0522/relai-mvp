@@ -74,7 +74,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   await page.goto(BASE + '/app/settings?tab=plan'); await page.waitForSelector('#billing', { timeout: 8000 });
   const plan = await text('#billing .panel__h');
   // batch7 T5: early access is on the Free plan → chip 무료 + 플랜 살펴보기 (with payments on the Team purchase form may show, as on any Free workspace)
-  check('AC1 settings: 플랜 = 무료 (early access is on the Free plan since batch7 T5) + 플랜 살펴보기', /플랜 · 결제\s*무료/.test(plan) && !/얼리 액세스/.test(plan) && Boolean(await page.$('#plans-link')), plan);
+  check('AC1 settings: 플랜 = 무료/Free (v3 label; early access is on the Free plan since batch7 T5) + 플랜 살펴보기', /플랜 · 결제\s*(무료|Free)/.test(plan) && !/얼리 액세스/.test(plan) && Boolean(await page.$('#plans-link')), plan);
   check('settings: AI 크레딧 panel (잔액 500 크레딧, no ₩ — batch7 #7)', /잔액 500 크레딧/.test(await text('#ai-credits')) && !/₩/.test(await text('#ai-credits')));
   await shot('02-settings.png');
   await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary', { timeout: 8000 });
@@ -112,6 +112,21 @@ const q = (s) => String(s).replace(/'/g, "''");
   const ask = await api('POST', `${PP}/ai/ask`, { question: '이번 주 할 일은?' });
   check('AC4 question charged exactly 10 (balance 460)', ask.status === 200 && ask.json.run.credit_cost === 10 && ask.json.run.balance === 460);
 
+  // Payments off (PAYMENTS_ENABLED unset/false): even a PRO workspace cannot top up — 409 payments_disabled, no order, no pay button; the run stops here.
+  if ((await api('GET', `${CR}/summary`)).json.credits.payments_enabled === false) {
+    sql(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, auto_renew, billing_cycle, current_period_start, current_period_end) VALUES ('s_${q(W)}', '${q(W)}', 'PRO', 'ACTIVE', 'fake', false, 'MONTHLY', now(), now() + interval '30 days')`);
+    const co = await api('POST', `${CR}/checkout`, { amount: 10000 });
+    check('payments off: PRO checkout 409 payments_disabled', co.status === 409 && co.json?.error?.code === 'payments_disabled', JSON.stringify(co.json).slice(0, 160));
+    check('payments off: no CREDIT_TOPUP order created', sql(`SELECT count(*) FROM billing_orders WHERE workspace_id = '${q(W)}' AND kind IN ('CREDIT_PACK','CREDIT_TOPUP')`) === '0');
+    await page.goto(BASE + '/app/settings/credits'); await page.waitForSelector('#cr-summary', { timeout: 8000 });
+    // the 충전 panel still shows on a PC; [결제하고 충전] only toasts SUBSCRIBE_SOON and makes no checkout call
+    const pay = await page.$('#cr-pay'); if (pay) { await pay.click(); await page.waitForTimeout(600); }
+    check('payments off: [결제하고 충전] makes no order', sql(`SELECT count(*) FROM billing_orders WHERE workspace_id = '${q(W)}' AND kind IN ('CREDIT_PACK','CREDIT_TOPUP')`) === '0', pay ? 'button shown' : 'no button');
+    await shot('03-payments-off.png');
+    await browser.close();
+    const fails = results.filter(([, ok]) => !ok); log(`\n${results.length - fails.length}/${results.length} PASS (payments off)`);
+    process.exit(fails.length ? 1 : 0);
+  }
   // AC5 (v3): FREE cannot top up → PRO period (psql), then buy ₩10,000 through the amount chips (fake checkout) → signed paid webhook → +1,000 with receipt
   check('v3: FREE checkout 402 AI_TOPUP_PLAN_REQUIRED', (await api('POST', `${CR}/checkout`, { amount: 10000 })).status === 402);
   sql(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, auto_renew, billing_cycle, current_period_start, current_period_end) VALUES ('s_${q(W)}', '${q(W)}', 'PRO', 'ACTIVE', 'fake', false, 'MONTHLY', now(), now() + interval '30 days')`);
