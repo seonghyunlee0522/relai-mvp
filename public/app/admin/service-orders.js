@@ -2,7 +2,9 @@
 import { html, raw } from '../core/dom.js';
 import { adminApi, chip, errorBlock, fmtD, n, section, table } from './ui.js';
 
-const KO = { PAID: '결제 완료', PENDING: '대기', FAILED: '실패', REFUNDED: '환불' };
+const KO = { PAID: '결제 완료', PENDING: '대기', APPROVING: '승인 중', FAILED: '실패', REFUNDED: '환불' };
+// Failure codes where money may still be held: an operator must check NICEPAY (the server also e-mails SUPPORT_EMAIL).
+const ACT = { refund_failed: '환불 실패 — 확인 필요', amount_mismatch: '금액 불일치', approval_unknown: '승인 확인 필요' };
 export async function serviceOrdersSection(el) {
   if (!el) return;
   let d; try { d = await adminApi('service-orders', { size: 50 }); } catch (e) { el.innerHTML = errorBlock(e); return; }
@@ -10,7 +12,7 @@ export async function serviceOrdersSection(el) {
     { key: 'created_at', label: '일시', w: 150, render: (o) => fmtD(o.created_at) }, { key: 'goods_name', label: '상품', w: 220, cls: 'ttl' },
     { key: 'buyer_name', label: '구매자', w: 140, render: (o) => html`${o.buyer_name}${raw(o.buyer_company ? html`<br><small>${o.buyer_company}</small>` : '')}` },
     { key: 'buyer_email', label: '이메일', w: 200 }, { key: 'buyer_phone', label: '연락처', w: 130 },
-    { key: 'amount', label: '금액', w: 110, cls: 'num', render: (o) => `₩${n(o.amount)}` }, { key: 'status', label: '상태', w: 100, render: (o) => chip(o.status, KO[o.status] || o.status) },
+    { key: 'amount', label: '금액', w: 110, cls: 'num', render: (o) => `₩${n(o.amount)}` }, { key: 'status', label: '상태', w: 150, render: (o) => html`${raw(chip(o.status, KO[o.status] || o.status))}${raw(ACT[o.failure_code] ? html`<br><small class="warn">${ACT[o.failure_code]}</small>` : '')}` },
     { key: 'id', label: '주문번호', w: 230, render: (o) => html`<span class="mono">${o.id}</span>` }, { key: 'provider_tid_masked', label: 'TID (일부 가림)', w: 170, render: (o) => html`<span class="mono">${o.provider_tid_masked || '-'}</span>` },
   ], d.items, { id: 'svc-orders-tbl', empty: '서비스 결제 주문이 없습니다.' }));
 }
