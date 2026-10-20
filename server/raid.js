@@ -172,7 +172,7 @@ export async function getRisk(db, project, id) {
   if (!x) return null;
   return { ...x, links: (await linksOf(db, 'RISK', id)), history: (await history(db, 'RISK', id)) };
 }
-const history = async (db, type, id) => (await db.all(`SELECT h.*, u.name AS changed_by_name FROM raid_history h LEFT JOIN users u ON u.id = h.changed_by
+const history = async (db, type, id) => (await db.all(`SELECT h.*, COALESCE(u.name, CASE WHEN h.withdrawn_actor THEN '탈퇴한 사용자' END) AS changed_by_name FROM raid_history h LEFT JOIN users u ON u.id = h.changed_by
   WHERE h.entity_type = ? AND h.entity_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [type, id]));
 
 /* ---------- writes (caller wraps in tx) ---------- */

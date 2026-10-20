@@ -20,7 +20,7 @@ const now = () => new Date().toISOString();
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const addHistory = async (db, type, id, action, { field = null, oldValue = null, newValue = null } = {}, userId, ts = now()) =>
   (await db.run('INSERT INTO qa_history (id, entity_type, entity_id, action_type, field_name, old_value, new_value, changed_by, changed_at) VALUES (?,?,?,?,?,?,?,?,?)', [randomUUID(), type, id, action, field, oldValue, newValue, userId, ts]));
-const history = async (db, type, id) => (await db.all(`SELECT h.*, u.name AS changed_by_name FROM qa_history h LEFT JOIN users u ON u.id = h.changed_by WHERE h.entity_type = ? AND h.entity_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [type, id]));
+const history = async (db, type, id) => (await db.all(`SELECT h.*, COALESCE(u.name, CASE WHEN h.withdrawn_actor THEN '탈퇴한 사용자' END) AS changed_by_name FROM qa_history h LEFT JOIN users u ON u.id = h.changed_by WHERE h.entity_type = ? AND h.entity_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [type, id]));
 
 const ORG_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 const stakeholdersOf = async (db, projectId) => { const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]); try { const v = r ? JSON.parse(r.stakeholders) : []; return Array.isArray(v) ? v : []; } catch { return []; } };
@@ -172,7 +172,7 @@ export async function getTest(db, project, id) {
       CASE l.target_type WHEN 'REQUIREMENT' THEN (SELECT title FROM requirements x WHERE x.id = l.target_id) ELSE (SELECT title FROM wbs_items x WHERE x.id = l.target_id) END AS title,
       CASE l.target_type WHEN 'REQUIREMENT' THEN (SELECT archived_at FROM requirements x WHERE x.id = l.target_id) ELSE (SELECT archived_at FROM wbs_items x WHERE x.id = l.target_id) END AS archived_at
     FROM test_links l WHERE l.test_case_id = ? ORDER BY l.target_type, code`, [id]));
-  const executions = (await db.all(`SELECT e.*, u.name AS executed_by_name, pu.name AS performer_user_name, (SELECT display_id FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_display_id,
+  const executions = (await db.all(`SELECT e.*, COALESCE(u.name, CASE WHEN e.executed_by IS NULL THEN '탈퇴한 사용자' END) AS executed_by_name, pu.name AS performer_user_name, (SELECT display_id FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_display_id,
       (SELECT id FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_id, (SELECT status FROM issues i WHERE i.source_test_execution_id = e.id AND i.archived_at IS NULL) AS issue_status
     FROM test_executions e LEFT JOIN users u ON u.id = e.executed_by LEFT JOIN users pu ON pu.id = e.performer_user_id WHERE e.test_case_id = ? ORDER BY e.execution_number DESC`, [id]));
   // US-4: 수행자 이해관계자 → "이름(고객사)" from 01 (no FK; a deleted one shows as 삭제된 수행자)
@@ -405,7 +405,7 @@ export async function saveAcceptanceApproval(db, project, acc, body, userId, ts 
   return view;
 }
 export async function getAcceptance(db, project, id) {
-  const a = (await db.get(`SELECT ${ACC_COLS}, u.name AS created_by_name FROM acceptances a LEFT JOIN users u ON u.id = a.created_by WHERE a.project_id = ? AND a.id = ?`, [project.id, id]));
+  const a = (await db.get(`SELECT ${ACC_COLS}, COALESCE(u.name, '탈퇴한 사용자') AS created_by_name FROM acceptances a LEFT JOIN users u ON u.id = a.created_by WHERE a.project_id = ? AND a.id = ?`, [project.id, id]));
   if (!a) return null;
   const reqs = [];
   for (const r of await db.all(`SELECT l.id AS link_id, r.id, r.display_id, r.title, r.status, r.scope, r.archived_at FROM acceptance_links l JOIN requirements r ON r.id = l.target_id WHERE l.acceptance_id = ? AND l.target_type = 'REQUIREMENT' ORDER BY r.sequence_number`, [id]))

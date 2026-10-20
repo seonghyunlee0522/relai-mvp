@@ -15,11 +15,11 @@ export const LEGAL = {
   contactEmail: 'enj.shlee@gmail.com',  // 고객 문의 + 개인정보 보호책임자 연락처
   contactPhone: '010-2021-2338',        // 전자상거래법 · NicePay 심사 필수 (founder's public business line, docreel.kr footer)
   privacyOfficer: { name: '이성현', title: '대표' },
-  effectiveDate: '2026-10-15',          // 시행일 of /privacy (and of /terms unless termsEffectiveDate is set) (YYYY-MM-DD)
+  effectiveDate: '2026-10-20',          // 시행일 of /privacy (and of /terms unless termsEffectiveDate is set) (YYYY-MM-DD). v2026-10-20: 탈퇴 시 계정 자체 삭제, 보관 기록·기간 명시 (mig 56)
   termsEffectiveDate: '2026-10-20',     // 이용약관 v2026-10-20: early access retired, Free plan described (founder decision 2026-10-20)
   /** Version recorded with each signup consent. Bump when the text of /terms or /privacy changes. */
   termsVersion: '2026-10-20',
-  privacyVersion: '2026-10-15',
+  privacyVersion: '2026-10-20',
   dbLocation: '해외 클라우드 데이터센터(리전 확인 후 고지)',         // 국외 이전 표: Neon 프로젝트 리전의 국가 (Neon console → Project settings → Region). Vercel functions run in sin1 (vercel.json)
   courtSeat:'수원지방법원 성남지원',     // 관할: 회사 소재지(성남시 수정구) 관할 법원
 };

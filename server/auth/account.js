@@ -15,9 +15,9 @@
  *
  * Account deletion: refused while the user is the only OWNER of a workspace that has other members (transfer OWNER or remove
  * them first), while a workspace that would be deleted still has a paid subscription running, and for operators (SYSTEM_ADMIN).
- * Workspaces where the user is the only member are deleted with the account (same rules as workspace deletion). The users row is
- * kept as a pseudonymous tombstone (status DEACTIVATED, e-mail/name replaced, password and sign-in methods removed) because work
- * items keep `created_by`; personal data is gone at once. login_records stay for their legal 3 months.
+ * Workspaces where the user is the only member are deleted with the account (same rules as workspace deletion). The users row
+ * itself is DELETED (migration 56, server/auth/user-delete.js): work records keep a NULL author shown as '탈퇴한 사용자', personal
+ * rows go, legally retained records (login 3 months, complaints 3 years, payments and consent 5 years) stay detached under a pseudonym.
  *
  * Workspace deletion: soft delete (status CLOSED, deleted_at) — members lose access at once, pending invitations are revoked, the
  * Jira connection is disconnected. After PURGE_DAYS the purge job removes every project and workspace-scoped row; the workspaces
@@ -32,11 +32,12 @@ import { requireOwner } from '../authz.js';
 import { effectivePlan, getSubscription } from '../billing/subscriptions.js';
 import { disconnect } from '../integrations/service.js';
 import { tx } from '../db.js';
+import { WITHDRAWN_USER_NAME, hardDeleteUser, purgeRetained } from './user-delete.js';
 
 export const REAUTH_MINUTES = 10;
 export const PURGE_DAYS = 30;
 export const LOGIN_RECORD_MONTHS = 3;
-export const DELETED_USER_NAME = '탈퇴한 사용자';
+export const DELETED_USER_NAME = WITHDRAWN_USER_NAME;
 export const DELETED_WORKSPACE_NAME = '삭제된 워크스페이스';
 
 /** One row per successful sign-in (접속 일시, IP 주소). Purged after LOGIN_RECORD_MONTHS by purgeAccountData(). */
@@ -154,13 +155,8 @@ export function mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, se
       for (const w of plan.shared) {   // another OWNER remains: hand the owner pointer over
         if (w.owner_id === user.id) await db.run(`UPDATE workspaces SET owner_id = (SELECT user_id FROM workspace_members WHERE workspace_id = ? AND role = 'OWNER' AND user_id <> ? ORDER BY created_at LIMIT 1) WHERE id = ?`, [w.id, user.id, w.id]);
       }
-      await db.run('DELETE FROM workspace_members WHERE user_id = ? AND workspace_id IN (SELECT id FROM workspaces WHERE status <> ?)', [user.id, 'CLOSED']);
-      for (const t of ['sessions', 'auth_tokens', 'user_identities', 'user_onboarding', 'user_feature_guides', 'integration_oauth_states']) await db.run(`DELETE FROM ${t} WHERE user_id = ?`, [user.id]);
-      await db.run('DELETE FROM email_deliveries WHERE related_user_id = ?', [user.id]);
-      await db.run(`UPDATE admin_audit_logs SET metadata = metadata - 'email' - 'name' WHERE target_type = 'USER' AND target_id = ?`, [user.id]);
-      await db.run(`UPDATE users SET email = ?, name = ?, password_hash = NULL, email_verified_at = NULL, last_login_at = NULL, status = 'DEACTIVATED', deleted_at = now() WHERE id = ?`,
-        [`deleted-${user.id}@deleted.invalid`, DELETED_USER_NAME, user.id]);
       await writeAudit(db, { adminUserId: user.id, action: 'ACCOUNT_DELETED', targetType: 'USER', targetId: user.id, metadata: { workspaces_deleted: plan.solo.map((w) => w.id), method: user.password_hash ? 'PASSWORD' : 'RECENT_LOGIN' }, actorKind: 'USER' });
+      await hardDeleteUser(db, user.id);   // the users row goes; every reference is handled there (mig 56)
       return { deleted: plan.solo.map((w) => ({ id: w.id, name: w.name })) };
     });
     if (out.blockers) return fail(res, 409, 'account_delete_blocked', out.blockers[0].message, { blockers: out.blockers });
@@ -194,7 +190,7 @@ export function mountAccountRoutes({ app, db, wrap, fail, guard, requireAuth, se
 const WORKSPACE_TABLES = ['projects', 'ai_wbs_plans', 'ai_runs', 'credit_ledger', 'workspace_credit_accounts', 'integration_oauth_states', 'integration_connections',
   'user_onboarding', 'email_deliveries', 'invitations', 'workspace_members'];
 
-/** Purge step for /api/cron/purge: login records past 3 months, workspaces deleted more than PURGE_DAYS ago (batch). */
+/** Purge step for /api/cron/purge: login records past 3 months, workspaces deleted more than PURGE_DAYS ago (batch), retained records of withdrawn accounts past their period (purgeRetained). */
 export async function purgeAccountData(db, { batch = 20 } = {}) {
   const lr = await db.get(`WITH d AS (DELETE FROM login_records WHERE created_at < now() - (?::int * interval '1 month') RETURNING 1) SELECT COUNT(*) AS n FROM d`, [LOGIN_RECORD_MONTHS]);
   const due = await db.all(`SELECT id FROM workspaces WHERE status = 'CLOSED' AND purged_at IS NULL AND deleted_at < now() - (?::int * interval '1 day') ORDER BY deleted_at LIMIT ?`, [PURGE_DAYS, batch]);
@@ -207,5 +203,5 @@ export async function purgeAccountData(db, { batch = 20 } = {}) {
       await db.run(`UPDATE admin_audit_logs SET metadata = metadata - 'name' WHERE target_type = 'WORKSPACE' AND target_id = ?`, [id]);
     });
   }
-  return { login_records: Number(lr.n), workspaces_purged: due.length };
+  return { login_records: Number(lr.n), workspaces_purged: due.length, ...(await purgeRetained(db)) };
 }

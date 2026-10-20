@@ -1529,3 +1529,49 @@ CREATE TABLE IF NOT EXISTS service_orders (
   updated_at              timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_service_orders_created ON service_orders (created_at DESC);
+/* Migration 56 — 회원 탈퇴 = the users row is DELETED (founder 2026-10-20), server/auth/user-delete.js. Additive only: NOT NULL
+ * relaxed where a work record outlives its author, new nullable columns, one new table. Code that predates 56 still writes every
+ * column it wrote before.
+ *   Work records in shared workspaces: author column → NULL, shown as '탈퇴한 사용자'. History / activity rows, whose NULL actor also
+ *   means "system" (Jira sync), mark the withdrawn case with withdrawn_actor.
+ *   Legally retained records (login_records 3개월, feedback 3년 as 불만·분쟁 기록, billing_orders 5년, admin_audit_logs redacted) keep
+ *   no users FK value: user column → NULL, withdrawn_ref = the pseudonym of that withdrawal (account_withdrawals.ref).
+ *   account_withdrawals: 계약·동의 기록 (약관/개인정보 동의 시각·버전) kept 5 years after the withdrawal, no name / e-mail. */
+ALTER TABLE workspaces ALTER COLUMN owner_id DROP NOT NULL;
+ALTER TABLE projects ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE requirements ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE wbs_items ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE change_requests ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE issues ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE risks ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE test_cases ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE acceptances ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE weekly_reports ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE comments ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE admin_audit_logs ALTER COLUMN admin_user_id DROP NOT NULL;
+ALTER TABLE requirement_history ADD COLUMN IF NOT EXISTS withdrawn_actor boolean NOT NULL DEFAULT false;
+ALTER TABLE wbs_history ADD COLUMN IF NOT EXISTS withdrawn_actor boolean NOT NULL DEFAULT false;
+ALTER TABLE change_request_history ADD COLUMN IF NOT EXISTS withdrawn_actor boolean NOT NULL DEFAULT false;
+ALTER TABLE raid_history ADD COLUMN IF NOT EXISTS withdrawn_actor boolean NOT NULL DEFAULT false;
+ALTER TABLE qa_history ADD COLUMN IF NOT EXISTS withdrawn_actor boolean NOT NULL DEFAULT false;
+ALTER TABLE phase_transitions ADD COLUMN IF NOT EXISTS withdrawn_actor boolean NOT NULL DEFAULT false;
+ALTER TABLE integration_activity ADD COLUMN IF NOT EXISTS withdrawn_actor boolean NOT NULL DEFAULT false;
+ALTER TABLE login_records ADD COLUMN IF NOT EXISTS withdrawn_ref TEXT;
+ALTER TABLE feedback ADD COLUMN IF NOT EXISTS withdrawn_ref TEXT;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS withdrawn_ref TEXT;
+ALTER TABLE admin_audit_logs ADD COLUMN IF NOT EXISTS withdrawn_ref TEXT;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS buyer_name TEXT;     -- 대금결제 기록: who paid, on the record itself (set at checkout; filled at withdrawal for older rows)
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS buyer_email TEXT;
+CREATE TABLE IF NOT EXISTS account_withdrawals (
+  ref               TEXT PRIMARY KEY,              -- 'wd_' + random; the same value is written to withdrawn_ref of the retained rows
+  withdrawn_at      timestamptz NOT NULL DEFAULT now(),
+  signed_up_at      timestamptz,
+  terms_version     TEXT,
+  terms_agreed_at   timestamptz,
+  privacy_version   TEXT,
+  privacy_agreed_at timestamptz,
+  source            TEXT NOT NULL DEFAULT 'SELF' CHECK (source IN ('SELF', 'BACKFILL'))   -- BACKFILL: an account withdrawn before 56 (tombstone)
+);
+CREATE INDEX IF NOT EXISTS idx_account_withdrawals_at ON account_withdrawals(withdrawn_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_withdrawn ON feedback(created_at) WHERE withdrawn_ref IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_billing_orders_withdrawn ON billing_orders(created_at) WHERE withdrawn_ref IS NOT NULL;

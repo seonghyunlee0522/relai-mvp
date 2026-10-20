@@ -170,7 +170,7 @@ export async function getRequirement(db, project, id) {
   r.changes = (await changesFor(db, 'REQUIREMENT', id));
   r.testing = (await testsFor(db, 'REQUIREMENT', id));
   r.acceptances = (await acceptancesFor(db, id));
-  r.history = (await db.all(`SELECT h.*, u.name AS changed_by_name,
+  r.history = (await db.all(`SELECT h.*, COALESCE(u.name, CASE WHEN h.withdrawn_actor THEN '탈퇴한 사용자' END) AS changed_by_name,
       c.display_id AS source_change_display_id, c.title AS source_change_title, c.status AS source_change_status, c.archived_at AS source_change_archived_at
     FROM requirement_history h LEFT JOIN users u ON u.id = h.changed_by LEFT JOIN change_requests c ON c.id = h.source_change_request_id
     WHERE h.requirement_id = ? ORDER BY h.changed_at DESC, h.seq DESC`, [id]));

@@ -33,8 +33,8 @@ export async function createPackOrder(db, { workspaceId, userId, provider, pack 
   const q = packQuote(pack);
   const id = newOrderId();
   await db.run(`INSERT INTO billing_orders (id, workspace_id, user_id, provider, kind, plan, cycle, seats, months, unit_price, list_amount, discount_amount,
-      supply_amount, vat_amount, amount, founding, goods_name, credits) VALUES (?,?,?,?,'CREDIT_PACK',NULL,NULL,NULL,NULL,?,?,0,?,?,?,false,?,?)`,
-  [id, workspaceId, userId, provider, q.amount, q.amount, q.supply_amount, q.vat_amount, q.amount, q.goods_name, q.credits]);
+      supply_amount, vat_amount, amount, founding, goods_name, credits, buyer_name, buyer_email) VALUES (?,?,?,?,'CREDIT_PACK',NULL,NULL,NULL,NULL,?,?,0,?,?,?,false,?,?, (SELECT name FROM users WHERE id = ?), (SELECT email FROM users WHERE id = ?))`,
+  [id, workspaceId, userId, provider, q.amount, q.amount, q.supply_amount, q.vat_amount, q.amount, q.goods_name, q.credits, userId, userId]);
   return db.get('SELECT * FROM billing_orders WHERE id = ?', [id]);
 }
 

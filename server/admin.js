@@ -204,7 +204,7 @@ export async function listAudit(db, q = {}) {
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const from = 'FROM admin_audit_logs a LEFT JOIN users adm ON adm.id = a.admin_user_id';
   const total = (await db.get(`SELECT COUNT(*) AS n ${from} ${w}`, params)).n;
-  const rows = await db.all(`SELECT a.id, a.action, a.target_type, a.target_id, a.metadata, a.created_at, a.admin_user_id, a.actor_kind, adm.name AS admin_name, adm.email AS admin_email
+  const rows = await db.all(`SELECT a.id, a.action, a.target_type, a.target_id, a.metadata, a.created_at, a.admin_user_id, a.actor_kind, COALESCE(adm.name, CASE WHEN a.withdrawn_ref IS NOT NULL THEN '탈퇴한 사용자' END) AS admin_name, adm.email AS admin_email
     ${from} ${w} ORDER BY a.created_at DESC, a.seq DESC LIMIT ? OFFSET ?`, [...params, size, offset]);
   return { items: rows.map((a) => ({ ...a, summary: auditSummary(a) })), page, size, total };
 }

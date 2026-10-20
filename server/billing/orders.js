@@ -75,8 +75,8 @@ export const newOrderId = () => `RELAI${new Date().toISOString().slice(0, 10).re
 export async function createOrder(db, { workspaceId, userId, provider, kind = 'ONE_TIME', q }) {
   const id = newOrderId();
   await db.run(`INSERT INTO billing_orders (id, workspace_id, user_id, provider, kind, plan, cycle, seats, months, unit_price, list_amount, discount_amount,
-      supply_amount, vat_amount, amount, founding, goods_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  [id, workspaceId, userId, provider, kind, q.plan, q.cycle, q.seats, q.months, q.unit_price, q.list_amount, q.discount_amount, q.supply_amount, q.vat_amount, q.amount, q.founding, q.goods_name]);
+      supply_amount, vat_amount, amount, founding, goods_name, buyer_name, buyer_email) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, (SELECT name FROM users WHERE id = ?), (SELECT email FROM users WHERE id = ?))`,
+  [id, workspaceId, userId, provider, kind, q.plan, q.cycle, q.seats, q.months, q.unit_price, q.list_amount, q.discount_amount, q.supply_amount, q.vat_amount, q.amount, q.founding, q.goods_name, userId, userId]);
   return getOrder(db, id);
 }
 export const getOrder = (db, id) => db.get('SELECT * FROM billing_orders WHERE id = ?', [String(id || '')]);
