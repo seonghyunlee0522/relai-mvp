@@ -29,3 +29,9 @@ export const prText = (v, labels = TC_PRIORITY) => prio(v, labels);
 export const prBadge = (v) => prText(v);
 /** Subtle secondary label (scope, type). */
 export const subtle = (label) => html`<span class="lbl-sub">${label}</span>`;
+
+/** 이슈·변경 tab counts: 이슈 = active, 리스크 = high/critical, 변경 요청 = still to be decided or reflected (작성 중 · 검토 중 · 승인 후 미반영)
+ *  — P2 (Jim prod 10-21 #7): every tab of the door shows its count the same way. */
+export const crOpen = (ch) => (ch ? Number(ch.draft || 0) + Number(ch.under_review || 0) + Number(ch.approved || 0) : 0);
+export const raidBadges = (is, rs, ch = null) => ({ raid: is && is.active ? html`<em class="stabs__n">${is.active}</em>` : '', risks: rs && rs.high_or_critical ? html`<em class="stabs__n">${rs.high_or_critical}</em>` : '',
+  changes: crOpen(ch) ? html`<em class="stabs__n" title="처리할 변경 요청 (작성 중 · 검토 중 · 승인 후 미반영)">${crOpen(ch)}</em>` : '' });

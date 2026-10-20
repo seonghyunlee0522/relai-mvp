@@ -25,7 +25,8 @@ export function onDeviceChange(render) {
 /* Drafts across the crossing (Q21-1): a page re-render rebuilds a drawer it reopens from the URL (요구사항 ?new=1) with empty
  * fields. Going to a phone saves what is typed in every open dialog / drawer form; back on a PC, after the re-render, the same
  * fields (same container, same id / name / data-field) get it back. Kept only for the same URL; a field the user already changed is left alone. */
-const OPEN = '.drawer:not([hidden]), .wdrawer:not([hidden]), .scrim, [role=dialog]';
+// P2 (Jim prod 10-21 #8): full-page forms marked [data-keep-draft] (새 프로젝트 / 프로젝트 정보 수정) are kept the same way.
+const OPEN = '.drawer:not([hidden]), .wdrawer:not([hidden]), .scrim, [role=dialog], form[data-keep-draft]';
 let drafts = null;
 const fieldKey = (el) => el.id ? '#' + el.id : el.name ? `[name="${el.name}"]` : el.dataset.field ? `[data-field="${el.dataset.field}"]` : null;
 const boxKey = (box) => box.id ? '#' + box.id : box.className.split(/\s+/).filter((c) => /^(drawer|wdrawer|scrim|dialog)(--|$)/.test(c)).join('.');

@@ -54,7 +54,7 @@ export async function raidPage(id) {
     const q = params(); const I = isIssue();
     const hasFilter = ['q', ...filterKeys(), 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: 'raid', title: '이슈·리스크', badges: raidBadges(is, rs) }))}
+      ${raw(projectHead(p, g, { tab: 'raid', title: '이슈·리스크', badges: raidBadges(is, rs, g.changes) }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 이슈와 리스크는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(coachMark('ISSUE_RISK_INTRO'))}
       <div class="rhead"><div class="seg seg--lg" role="tablist" title="${I ? '이슈는 이미 발생해 대응이 필요한 문제입니다.' : '리스크는 아직 발생하지 않았지만 발생 가능성이 있는 위험입니다.'}"><button class="${I ? 'is-on' : ''}" data-tab="issues" role="tab">이슈${raw(is.active ? html`<em>${is.active}</em>` : '')}</button><button class="${!I ? 'is-on' : ''}" data-tab="risks" role="tab">리스크${raw(rs.high_or_critical ? html`<em>${rs.high_or_critical}</em>` : '')}</button></div>

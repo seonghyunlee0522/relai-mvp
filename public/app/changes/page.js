@@ -47,7 +47,7 @@ export async function changesPage(id) {
     const q = params();
     const hasFilter = ['q', ...filterKeys, 'archived'].some((k) => q.get(k));
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: 'changes', title: '변경 요청', badges: raidBadges(g.issues, g.risks) }))}
+      ${raw(projectHead(p, g, { tab: 'changes', title: '변경 요청', badges: raidBadges(g.issues, g.risks, summary || g.changes) }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 변경 요청은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(coachMark('CHANGE_REQUEST_INTRO'))}
       <div class="summary summary--inline" style="margin-bottom:8px">

@@ -217,7 +217,18 @@ export async function requirementsPage(id) {
     <button type="button" class="kchip" data-kf="status=CONFIRMED"><b>${summary.confirmed}</b>확정</button>
     <button type="button" class="kchip ${summary.scope_undecided ? 'is-warn' : ''}" data-kf="scope=UNDECIDED"><b>${summary.scope_undecided}</b>범위 미결정</button>
     ${raw(wbsPhase() ? html`<button type="button" class="kchip ${summary.in_scope_unlinked ? 'is-warn' : ''}" data-kf="scope=IN_SCOPE&status=DRAFT,REVIEWING,CONFIRMED,ON_HOLD&link=unlinked"><b>${summary.in_scope_unlinked}</b>WBS 미연결 (범위 내)</button>` : '')}`;
-  const paintKpi = () => { const k = $('#kstrip'); if (k) k.innerHTML = kpiHtml(); };
+  /** P2 (Jim prod 10-21 #3): every count on the page follows `summary` — the KPI chips and the desktop status segments
+   *  (전체 · 작성 중 …) are repainted together and re-bound, so a quick-add row shows up in the counts at once. */
+  const kfClick = async (b) => { for (const k of filterKeys) setParam(k, ''); setParam('q', ''); for (const kv of (b.dataset.kf ? b.dataset.kf.split('&') : [])) { const [k, v] = kv.split('='); setParam(k, v); } await load(); draw(); };
+  const bindCounts = (el) => {
+    el.querySelectorAll('[data-kf]').forEach((b) => { b.onclick = () => kfClick(b); });
+    el.querySelectorAll('[data-stf]').forEach((b) => { b.onclick = async () => { setParam('status', b.dataset.stf); await load(); draw(); }; });
+  };
+  const paintKpi = () => {
+    const k = $('#kstrip'); if (k) { k.innerHTML = kpiHtml(); bindCounts(k); }
+    const sg = main.querySelector('[data-status-seg]');
+    if (sg) { const st = params().get('status') || ''; const t = document.createElement('div'); t.innerHTML = statusSeg(st.includes(',') ? 'MULTI' : st); const nw = t.firstElementChild; sg.replaceWith(nw); bindCounts(nw); }
+  };
 
   /* ---------- desktop toolbar (R2 §5.4): status segments · search · ⋯ · + 요구사항 추가 (≤ 4 controls) ---------- */
   const SEG = [['', '전체', () => summary.total], ['CONFIRMED', '확정', () => summary.confirmed], ['REVIEWING', '검토 중', () => summary.reviewing], ['DRAFT', '작성 중', () => summary.draft], ['ON_HOLD', '보류', () => summary.on_hold], ['REJECTED', '반려', () => summary.rejected]];
@@ -290,7 +301,6 @@ export async function requirementsPage(id) {
     main.querySelectorAll('[data-rview]').forEach((b) => b.onclick = async () => { setParam('view', b.dataset.rview === 'trace' ? 'trace' : ''); await load(); draw(); });
     main.querySelectorAll('[data-cls]').forEach((b) => b.onclick = async () => { const k = b.dataset.cls; setParam(k, params().get(k) === 'UNSPECIFIED' ? '' : 'UNSPECIFIED'); if (params().get('view') === 'classify') setParam('view', ''); await load(); draw(); });
     main.querySelectorAll('[data-tr-link]').forEach((b) => b.onclick = async () => { await openDetail(b.dataset.trLink); dtab = 'links'; drawDetail(); });
-    main.querySelectorAll('[data-kf]').forEach((b) => b.onclick = async () => { for (const k of filterKeys) setParam(k, ''); setParam('q', ''); for (const kv of (b.dataset.kf ? b.dataset.kf.split('&') : [])) { const [k, v] = kv.split('='); setParam(k, v); } await load(); draw(); });
     const ar = $('#arch'); if (ar) ar.onchange = async () => { setParam('archived', ar.checked ? '1' : ''); await load(); draw(); };
     bindMoreFilters(main);
     bindFilterClears(main, { setParam, keys: ['q', ...filterKeys, 'archived'], reload: async () => { await load(); draw(); } });
@@ -313,7 +323,7 @@ export async function requirementsPage(id) {
     if (xb) xb.onclick = (e) => { e.stopPropagation(); const open = xp.hidden; document.querySelectorAll('.gpop').forEach((x) => { x.hidden = true; }); xp.hidden = !open; };
     if (xp) xp.onclick = async (e) => { const b = e.target.closest('[data-xl]'); if (!b) return; xp.hidden = true; runXl(b.dataset.xl); };
     main.querySelectorAll('.tmenu [data-xl]').forEach((b) => { b.onclick = () => runXl(b.dataset.xl); });
-    main.querySelectorAll('[data-stf]').forEach((b) => { b.onclick = async () => { setParam('status', b.dataset.stf); await load(); draw(); }; });
+    bindCounts(main);
     const sm = main.querySelector('[data-selmode]'); if (sm) sm.onclick = () => { selMode = !selMode; setParam('select', selMode ? '1' : ''); listGrid.setSelectMode(selMode); draw(); };
     // Quick add
     const qa = $('#qa');

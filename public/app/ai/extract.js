@@ -3,16 +3,33 @@
  * which calls the normal requirement create service (DRAFT status). */
 import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
-import { toast } from '../shared/dialogs.js';
+import { confirmDialog, toast } from '../shared/dialogs.js';
 import { REQ_PRIORITY, REQ_SCOPE, REQ_TYPE } from '../shared/constants.js';
 import { aiDialog, runLine, aiNotice, aiStatus, canRun, confChip, reportError, warningsHtml } from '../shared/ai.js';
 
+/* P2 (Jim prod 10-21 #9): an extraction is paid (30 크레딧) the moment it runs, so its unregistered result is never lost silently.
+ * Closing asks first; a closed result is kept per project for this browser tab (until 등록, 결과 버리기 or a reload) and
+ * shown again when the dialog reopens. */
+const kept = new Map();   // pid → { r, candidates }
+/** Close-confirm copy for `n` unregistered candidates (pure; unit-tested). */
+export const discardCopy = (n, cost) => ({ title: `등록하지 않은 요구사항 후보 ${n}건이 있습니다`,
+  body: `닫아도 결과는 이 창을 새로고침하기 전까지 보관되어, AI로 요구사항 추출을 다시 열면 그대로 이어서 등록할 수 있습니다. 추출에 쓴 ${cost ? `${cost} ` : ''}크레딧은 이미 차감되었습니다.`,
+  confirm: '보관하고 닫기', cancel: '계속 검토' });
+export const keptResult = (pid) => kept.get(pid) || null;
 const opt = (map, cur) => Object.entries(map).map(([v, l]) => html`<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('');
 
 export async function openExtractDialog({ pid, onDone }) {
   const st = await aiStatus(pid, { fresh: true });
   const d = aiDialog({ title: 'AI로 요구사항 추출', subtitle: '회의록, 고객 인터뷰 메모, 이메일 본문, 요구사항 정의 텍스트를 붙여넣으면 요구사항 후보를 뽑아 드립니다. 문서 파일이라면 내용을 복사해 붙여 넣으세요.', feature: 'REQUIREMENT_EXTRACTION', status: st });
-  let candidates = [];
+  let candidates = []; let last = null;
+  const cost = st && st.costs ? st.costs.REQUIREMENT_EXTRACTION : null;
+  const unregistered = () => (last ? candidates.length : 0);
+  d.setGuard(async () => {
+    if (!unregistered()) return true;
+    const c = discardCopy(unregistered(), cost);
+    if (!(await confirmDialog({ ...c, dismissable: true }))) return false;
+    kept.set(pid, { r: last, candidates }); return true;
+  });
   const drawInput = () => {
     d.body.innerHTML = html`<label class="lbl" for="ai-text">분석할 텍스트</label>
       <textarea class="textarea aid__text" id="ai-text" maxlength="20000" placeholder="예) 10/2 고객 미팅 — 고객사 IdP와 SSO 연동이 필수. 관리자 화면에서 사용자별 권한을 조정할 수 있어야 하며, 모든 변경은 감사 로그에 남아야 함…"></textarea>
@@ -24,15 +41,16 @@ export async function openExtractDialog({ pid, onDone }) {
     $('#ai-run', d.el).onclick = async () => {
       const text = ta.value.trim(); if (text.length < 10) { toast('분석할 텍스트를 10자 이상 입력해 주세요.'); return; }
       d.busy(true, 'AI가 요구사항 후보를 추출하는 중입니다… (최대 30초)');
-      try { const r = await api('POST', wsApi(`/${pid}/ai/requirements/extract`), { text }); candidates = r.candidates.map((c) => ({ ...c, _sel: true })); drawResult(r); }
+      try { const r = await api('POST', wsApi(`/${pid}/ai/requirements/extract`), { text }); candidates = r.candidates.map((c) => ({ ...c, _sel: true })); kept.delete(pid); drawResult(r); }
       catch (e) { reportError(e); }
       finally { d.busy(false); }
     };
   };
-  const drawResult = (r) => {
-    const n = candidates.length;
+  const drawResult = (r, { restored = false } = {}) => {
+    last = r; const n = candidates.length;
     d.body.innerHTML = html`<div class="aid__sum"><b>요구사항 후보 ${n}건</b>${raw(runLine(r.run, d))}<span class="aid__sp"></span>
         <label class="toggle"><input type="checkbox" id="ai-all" checked> 전체 선택</label></div>
+      ${raw(restored ? '<div class="notice" data-ai-kept>지난번 추출 결과(아직 등록 전)를 다시 보여 드립니다. 크레딧은 다시 차감되지 않았습니다.</div>' : '')}
       ${raw(warningsHtml(r.warnings))}
       ${raw(n ? html`<ol class="aic">${raw(candidates.map((c, i) => html`<li class="aic__i ${c._sel ? 'is-sel' : ''}" data-i="${i}">
         <label class="aic__ck"><input type="checkbox" data-sel="${i}" ${c._sel ? 'checked' : ''} aria-label="후보 ${i + 1} 선택"></label>
@@ -51,7 +69,10 @@ export async function openExtractDialog({ pid, onDone }) {
         </div></li>`).join(''))}</ol>` : '<div class="aempty">텍스트에서 요구사항 후보를 찾지 못했습니다. 더 구체적인 내용을 붙여넣어 보세요.</div>')}`;
     const selCount = () => candidates.filter((c) => c._sel).length;
     const paintFoot = () => { d.foot.innerHTML = html`<button type="button" class="btn btn--secondary btn--sm" id="ai-back">← 다시 입력</button><span class="aid__sp"></span><span class="aid__btns"><button type="button" class="btn btn--secondary btn--sm" data-close>닫기</button><button type="button" class="btn btn--primary btn--sm" id="ai-commit" ${selCount() ? '' : 'disabled'}>선택 항목 등록 (${selCount()}건)</button></span>`;
-      $('#ai-back', d.el).onclick = drawInput;
+      $('#ai-back', d.el).onclick = async () => {   // 다시 입력 replaces the result → ask the same way (here 결과 버리기 is the choice)
+        if (candidates.length && !(await confirmDialog({ title: `후보 ${candidates.length}건을 버리고 다시 입력할까요?`, body: `이 결과는 다시 볼 수 없습니다. 추출에 쓴 ${cost ? `${cost} ` : ''}크레딧은 이미 차감되었습니다.`, confirm: '결과 버리고 다시 입력', danger: true, cancel: '계속 검토', dismissable: true }))) return;
+        last = null; candidates = []; kept.delete(pid); drawInput();
+      };
       $('#ai-commit', d.el).onclick = commit; };
     paintFoot();
     d.body.querySelectorAll('[data-sel]').forEach((cb) => cb.onchange = () => { candidates[Number(cb.dataset.sel)]._sel = cb.checked; cb.closest('.aic__i').classList.toggle('is-sel', cb.checked); $('#ai-all', d.el).checked = candidates.every((c) => c._sel); paintFoot(); });
@@ -65,8 +86,9 @@ export async function openExtractDialog({ pid, onDone }) {
     try {
       const r = await api('POST', wsApi(`/${pid}/ai/requirements/commit`), { candidates: picked });
       toast(`요구사항 ${r.created.length}건을 등록했습니다. (${r.created.map((c) => c.display_id).join(', ')})`);
-      d.busy(false); d.close(); if (onDone) await onDone(r);
+      kept.delete(pid); last = null; d.busy(false); d.close({ force: true }); if (onDone) await onDone(r);
     } catch (e) { d.busy(false); const f = e.fields ? Object.values(e.fields)[0] : null; toast(f || e.message); }
   };
-  drawInput();
+  const k = kept.get(pid);
+  if (k) { candidates = k.candidates; drawResult(k.r, { restored: true }); } else drawInput();
 }
