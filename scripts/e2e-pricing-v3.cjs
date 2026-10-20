@@ -30,6 +30,14 @@ const ORDERS = [
   const mk = async (viewport, opts = {}) => { const ctx = await browser.newContext({ viewport, locale: 'ko-KR', ...opts }); const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(e.message)); return { ctx, page }; };
   const noHScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
   const vis = (page, sel) => page.isVisible(sel).catch(() => false);
+  /** Whole-page shot without fullPage: the app re-renders on resize, so grow the viewport first, let it settle, then shoot. */
+  const tallShot = async (page, file) => {
+    const vp = page.viewportSize(); const h = await page.evaluate(() => document.documentElement.scrollHeight);
+    await page.setViewportSize({ width: vp.width, height: Math.min(4000, Math.max(vp.height, h)) }); await page.waitForTimeout(900);
+    const h2 = await page.evaluate(() => document.documentElement.scrollHeight);
+    if (h2 > h) { await page.setViewportSize({ width: vp.width, height: Math.min(4000, h2) }); await page.waitForTimeout(900); }
+    await page.screenshot({ path: path.join(SHOTS, file) }); await page.setViewportSize(vp); await page.waitForTimeout(400);
+  };
 
   // ---- landing (desktop + phone) ----
   for (const [tag, vp, mobile] of [['desktop', { width: 1440, height: 900 }, false], ['mobile', { width: 375, height: 812 }, true]]) {
@@ -75,7 +83,7 @@ const ORDERS = [
   check('plans: 4 cards, Free = 현재 플랜, 월간 default', (await page.$$('#plans-page .pc')).length === 4 && /현재 플랜/.test(await page.textContent('#plans-page [data-plan="FREE"]')) && (await page.getAttribute('#plans-page .pcw', 'data-cycle')) === 'MONTHLY');
   await page.click('#plans-page [data-cycle-set="ANNUAL"]');
   check('plans: 연간 toggle → 연 288,000원', /연 288,000원/.test(await page.textContent('#plans-page [data-plan="PRO"] .pc-a')));
-  await page.screenshot({ path: path.join(SHOTS, 'app-plans-annual-desktop.png'), fullPage: true });
+  await tallShot(page, 'app-plans-annual-desktop.png');
   await page.click('#plans-page [data-plan-cta="PRO"]'); await page.waitForTimeout(300);
   check('plans: Pro 선택 with payments off → SUBSCRIBE_SOON, no checkout call', (await page.textContent('body')).includes(SOON) && calls.length === 0);
 
@@ -85,7 +93,7 @@ const ORDERS = [
     /Free/.test(bt) && /결제 정보 없이 이용 중/.test(bt) && /활성 프로젝트\s*0 \/ 1/.test(bt) && /사용자\s*1 \/ 3/.test(bt) && /사용 가능/.test(bt) && /AI 크레딧 충전은 Pro부터/.test(bt) && !(await page.$('#bl-topup')) && !(await page.$('#bl-b-plan')));
   await page.waitForSelector('#bl-ledger table, #bl-ledger p', { timeout: 4000 }).catch(() => {});
   check('settings 요금제: 결제 내역 panel for the OWNER, no ₩ outside it', Boolean(await page.$('#bl-orders')) && !/₩/.test(await page.textContent('#bl-credits')));
-  await page.screenshot({ path: path.join(SHOTS, 'app-billing-free-desktop.png'), fullPage: true });
+  await tallShot(page, 'app-billing-free-desktop.png');
 
   // ---- /app/settings/billing on the v3 fixture (T2/T3 fields), desktop + phone ----
   const fixtureRoutes = async (p) => {
@@ -100,19 +108,22 @@ const ORDERS = [
   check('billing (fixture): credits 1,450 = 기본 900 (소멸일) + 가입 50 + 유상 500', /1,450/.test(await page.textContent('#bl-credit-total')) && /900/.test(await page.textContent('#bl-b-plan')) && /소멸/.test(await page.textContent('#bl-b-plan')) && /500/.test(await page.textContent('#bl-b-purchased')));
   check('billing (fixture): 예약된 변경 + 예약 취소, actions incl. 추가 · 충전 · 해지', Boolean(await page.$('#bl-scheduled [data-sched-cancel]')) && Boolean(await page.$('#bl-addon')) && Boolean(await page.$('#bl-topup')) && Boolean(await page.$('#bl-cancel')));
   check('billing (fixture): 결제 내역 3 rows with 영수증', (await page.$$('#bl-orders-tbl tbody tr')).length === 3 && Boolean(await page.$('#bl-orders-tbl a[href^="https://example.invalid"]')));
+  await page.waitForSelector('#bl-ledger table, #bl-ledger p', { timeout: 4000 }).catch(() => {});
+  check('billing: credit history (credits only, no won)', Boolean(await page.$('#bl-ledger table')) && !/₩|\d원/.test(await page.textContent('#bl-ledger')));
+  await tallShot(page, 'app-billing-fixture-desktop.png');
   await page.click('#bl-cancel'); await page.waitForTimeout(200);
   check('billing: 해지 = one click + one confirm (no survey)', /구독을 해지할까요/.test(await page.textContent('body')) && (await page.$$('.dialog input, .modal input, dialog input')).length === 0);
   await page.keyboard.press('Escape');
-  await page.screenshot({ path: path.join(SHOTS, 'app-billing-fixture-desktop.png'), fullPage: true });
   await ctx.close();
 
   const ph = await mk({ width: 375, height: 812 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await ph.page.goto(BASE + '/login');
   await ph.page.request.post(BASE + '/api/auth/login', { data: { email, password: 'passw0rd!' } });
   await fixtureRoutes(ph.page);
-  await ph.page.goto(BASE + '/app/settings/billing'); await ph.page.waitForSelector('#billing-page #bl-plan', { timeout: 8000 }).catch(() => {});
+  await ph.page.goto(BASE + '/app/settings/billing'); await ph.page.waitForSelector('#billing-page #bl-plan', { timeout: 8000 }).catch(() => {}); await ph.page.waitForSelector('#bl-ledger table, #bl-ledger p', { timeout: 4000 }).catch(() => {});
   check('billing mobile 375: renders, no horizontal scroll', Boolean(await ph.page.$('#bl-usage')) && await noHScroll(ph.page));
-  await ph.page.screenshot({ path: path.join(SHOTS, 'app-billing-fixture-mobile.png'), fullPage: true });
+  check('billing mobile 375: order + ledger rows show date, title and amount', await ph.page.evaluate(() => [...document.querySelectorAll('#bl-orders-tbl tbody tr, #bl-ledger-tbl tbody tr')].every((tr) => [0, 1, 2].every((i) => tr.children[i].offsetHeight > 0))));
+  await tallShot(ph.page, 'app-billing-fixture-mobile.png');
   await ph.page.goto(BASE + '/app/settings'); await ph.page.waitForSelector('#billing #bl-plan', { timeout: 8000 }).catch(() => {});
   check('settings phone layout: billing view mounted, no horizontal scroll', Boolean(await ph.page.$('#billing #bl-credits')) && await noHScroll(ph.page));
   await ph.ctx.close();

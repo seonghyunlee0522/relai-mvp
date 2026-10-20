@@ -27,11 +27,11 @@ export function planRows(p, cat) {
   const a = p.addons;
   const out = rows.map(([k, v]) => [k, v, v]);
   if (a) {
-    out.push(['추가 사용자 1명', `월 ${krw(a.user.MONTHLY)}`, `월 ${krw(a.user.monthly_equivalent)} 환산 (연 ${krw(a.user.ANNUAL)})`]);
-    out.push(['추가 프로젝트 1개', `월 ${krw(a.project.MONTHLY)}`, `월 ${krw(a.project.monthly_equivalent)} 환산 (연 ${krw(a.project.ANNUAL)})`]);
+    out.push(['추가 사용자 1명', `월 ${krw(a.user.MONTHLY)}`, `월 ${krw(a.user.monthly_equivalent)} 환산`]);
+    out.push(['추가 프로젝트 1개', `월 ${krw(a.project.MONTHLY)}`, `월 ${krw(a.project.monthly_equivalent)} 환산`]);
   }
-  const step = cat?.topup?.step || 10000; const per = cat?.credit_price_krw || 10;
-  const topup = p.topup === true ? `가능 · ${krw(step)} = ${num(step / per)} 크레딧` : p.topup === 'contract' ? '계약에 따름' : '불가';
+  const step = cat?.topup?.step || 10000;
+  const topup = p.topup === true ? `${krw(step)} 단위` : p.topup === 'contract' ? '계약에 따름' : '불가';
   out.push(['AI 크레딧 충전', topup, topup]);
   return out;
 }
@@ -72,7 +72,7 @@ export function pricingHtml(cat, { current = null, cta = () => '', cycle = 'MONT
   <button type="button" role="radio" class="pc-cycle__b" data-cycle-set="ANNUAL" aria-checked="${cycle === 'ANNUAL'}">연간 결제 <span class="pc-cycle__off">${pct}% 할인</span></button>
 </div>
 <div class="pc-grid">${cat.plans.map(card).join('\n')}</div>
-<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. 연간 결제는 12개월분을 한 번에 결제하고, AI 기본 크레딧은 연간 결제에도 매월 지급됩니다. 매월 지급되는 기본 크레딧은 그 달이 끝나면 소멸하며 다음 달로 이월되지 않습니다. 한도를 넘어도 데이터는 삭제되지 않습니다. 해지·환불 기준은 <a href="/terms#billing">이용약관</a>과 <a href="/terms#recurring">정기결제 안내</a>를 확인해 주세요.</p>
+<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. AI 크레딧 충전은 Pro·Team에서 ${krw(cat.topup?.step || 10000)} = ${num((cat.topup?.step || 10000) / (cat.credit_price_krw || 10))} 크레딧 단위로 할 수 있습니다. 연간 결제는 12개월분을 한 번에 결제하고, AI 기본 크레딧은 연간 결제에도 매월 지급됩니다. 매월 지급되는 기본 크레딧은 그 달이 끝나면 소멸하며 다음 달로 이월되지 않습니다. 한도를 넘어도 데이터는 삭제되지 않습니다. 해지·환불 기준은 <a href="/terms#billing">이용약관</a>과 <a href="/terms#recurring">정기결제 안내</a>를 확인해 주세요.</p>
 </div>`;
 }
 

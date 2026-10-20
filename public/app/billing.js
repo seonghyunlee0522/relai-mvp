@@ -15,6 +15,8 @@ import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
 const n = (v) => Number(v || 0).toLocaleString('ko-KR');
 const krw = (v) => `${n(v)}원`;
 const day = (iso) => { if (!iso) return '-'; const d = new Date(iso); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`; };
+/** '요금테스트님의 워크스페이스' stays as is; '한빛' → '한빛 워크스페이스'. */
+const wsName = (name) => (/(workspace|워크스페이스)$/i.test(String(name || '').trim()) ? name : `${name} 워크스페이스`);
 const CYCLE = { MONTHLY: '월간', ANNUAL: '연간' };
 const STATUS = { ACTIVE: '이용 중', PAST_DUE: '결제 실패 · 재시도 중', CANCELED: '해지됨', EXPIRED: '만료' };
 const CHANGE = { DOWNGRADE: '요금제 변경', CYCLE: '결제 주기 변경', ADDON_REDUCE: '추가 이용 줄이기', CANCEL: '해지' };
@@ -86,7 +88,7 @@ function overLimitBanner(b) {
   // over_limit = { projects, members }: how many are over the limit (server/billing/limits.js overLimit)
   const parts = [o.projects ? `활성 프로젝트 ${n(o.projects)}개` : '', o.members ? `사용자 ${n(o.members)}명` : ''].filter(Boolean);
   return html`<div class="bl-over" id="bl-over" role="status"><b>한도를 넘었어요 — 데이터는 그대로예요.</b>
-    <p>${parts.join(', ')}이 한도를 넘었어요. 프로젝트를 완료·보관하거나 구성원을 줄이면 다시 편집할 수 있어요. 요금제를 올려도 돼요.</p></div>`;
+    <p>한도 초과: ${parts.join(' · ')}. 프로젝트를 완료·보관하거나 구성원을 줄이면 다시 편집할 수 있어요. 요금제를 올려도 돼요.</p></div>`;
 }
 
 function actionsPanel(b) {
@@ -149,7 +151,7 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
 export async function billingPage(main = $('#main')) {
   document.title = '플랜 · 결제 — RELAI';
   main.innerHTML = html`<div class="page page--narrow page--billing" id="billing-page"><div class="page__head"><div><a class="link" href="/app/settings?tab=plan" data-link>← 설정</a>
-    <h1 style="margin-top:4px">플랜 · 결제</h1><p class="dim" style="margin-top:4px">${state.workspace.name} 워크스페이스의 요금제, 사용량, AI 크레딧과 결제를 관리해요.</p></div></div>
+    <h1 style="margin-top:4px">플랜 · 결제</h1><p class="dim" style="margin-top:4px">${wsName(state.workspace.name)}의 요금제, 사용량, AI 크레딧과 결제를 관리해요.</p></div></div>
     <div id="bl-root"><p class="hint">불러오는 중…</p></div>${raw(legalFooterHtml(LEGAL))}</div>`;
   await mountBilling($('#bl-root'));
 }

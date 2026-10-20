@@ -3660,4 +3660,10 @@ html.is-phone .actrow{grid-template-columns:44px minmax(0,1fr)}html.is-phone .ac
 .bl-upsell{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:var(--blue-soft);color:var(--navy);font-size:var(--fs-sm)}
 .bl-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}.bl-list li{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .bl-tbl{margin:10px 0 0;width:100%}.bl-tbl td.num,.bl-tbl th.num{text-align:right;white-space:nowrap}
-@media (max-width:640px){.bl-grid{grid-template-columns:minmax(0,1fr)}.pc-grid{grid-template-columns:minmax(0,1fr)}.bl-tbl th:nth-child(4),.bl-tbl td:nth-child(4){display:none}}
+@media (max-width:640px){.bl-grid{grid-template-columns:minmax(0,1fr)}.pc-grid{grid-template-columns:minmax(0,1fr)}}
+/* phone: billing tables as cards — date + amount on the first line, what it was below (status / receipt for orders) */
+html.is-phone .bl-tbl tbody td:nth-child(1){display:block;order:1;flex:1 1 auto;font-size:13px;color:var(--text-3)}
+html.is-phone .bl-tbl tbody td:nth-child(3){display:block;order:2;margin-left:auto;flex:none;text-align:right;font-weight:700;color:var(--navy)}
+html.is-phone .bl-tbl tbody td:nth-child(2){display:block;order:3;flex:0 0 100%;font-size:15px;color:var(--navy)}
+html.is-phone #bl-orders-tbl tbody td:nth-child(4),html.is-phone #bl-orders-tbl tbody td:nth-child(5){display:inline;order:4;font-size:13px}
+html.is-phone #bl-orders-tbl tbody td:nth-child(5):not(:empty)::before{content:'·';margin:0 6px;color:var(--text-3)}
