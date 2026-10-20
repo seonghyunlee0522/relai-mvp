@@ -30,8 +30,10 @@ export function checkCard(v) {
 export async function subscribePage(main = $('#main')) {
   const wid = state.workspace.id;
   const qs = new URLSearchParams(location.search);
+  const token = String(Math.random()); main.dataset.subRender = token;   // a second render of this route (router re-entry) wins; this one stops
   let b = null;
   try { b = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch { b = null; }
+  if (main.dataset.subRender !== token) return;
   const plans = (b?.catalogue?.plans || b?.plans || []).filter((p) => ['PRO', 'TEAM'].includes(p.key));
   const sel = { plan: ['PRO', 'TEAM'].includes(qs.get('plan')) ? qs.get('plan') : 'PRO', cycle: qs.get('cycle') === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY', extra_users: 0, extra_projects: 0 };
   const open = Boolean(b?.flags?.checkout_open);
