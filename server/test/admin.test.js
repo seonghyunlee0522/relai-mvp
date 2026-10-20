@@ -146,8 +146,8 @@ test('workspaces: list (owner, counts, last activity, search by name/owner email
   const d = (await ops.c('GET', `/api/admin/workspaces/${A.w}`)).json;
   assert.equal(d.members.length, 2); assert.equal(d.owners[0].email, 'a@x.com'); assert.equal(d.projects.active, 1); assert.equal(d.subscription, null);
   const dims = Object.fromEntries(d.usage.dims.map((x) => [x.key, x]));
-  assert.deepEqual([dims.projects.used, dims.projects.limit, dims.members.used, dims.requirements.used, dims.wbs.used, dims.weekly_reports.used], [1, 2, 2, 1, 1, 0]);
-  assert.equal(d.usage.plan, 'FREE'); assert.equal(d.usage.tier, 'ok');   // FREE allows 2 projects since 2026-10-20
+  assert.deepEqual([dims.projects.used, dims.projects.limit, dims.members.used, dims.members.limit], [1, 1, 2, 3]);   // pricing v3: projects + users only (D1)
+  assert.equal(d.usage.plan, 'FREE'); assert.equal(d.usage.tier, 'attention');   // FREE allows 1 active project (v3)
   assert.ok(!JSON.stringify(d).includes('R1'));                                  // requirement content never leaves the admin API
   assert.equal((await ops.c('GET', '/api/admin/workspaces/nope')).status, 404);
   // suspend → every /api/workspaces/:wid/* call refused for members, login still fine, data kept
@@ -175,25 +175,24 @@ test('workspaces: list (owner, counts, last activity, search by name/owner email
 test('usage: aggregation + limit %, tiers (warn ≥80, attention ≥90), sorts; dashboard KPIs, funnel, near-limit attention; billing KPIs hidden while billing is absent', async () => {
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
-  const A = await setup(client, 'a@x.com', '김가나');                           // 2 projects = 100 % of FREE (limit 2) → attention
+  const A = await setup(client, 'a@x.com', '김가나');                           // 2 projects (limits off here) = 200 % of FREE (limit 1) → attention
   await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));
   const Bs = await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '박나다', email: 'b@x.com', password: 'passw0rd!' });   // no project → ok
   const Bw = Bs.json.workspaces[0].id;
   const u = (await ops.c('GET', '/api/admin/usage?sort=projects')).json;
-  assert.equal(u.items[0].workspace_id, A.w); assert.equal(u.items[0].tier, 'attention'); assert.equal(u.items[0].max_pct, 100);
+  assert.equal(u.items[0].workspace_id, A.w); assert.equal(u.items[0].tier, 'attention'); assert.equal(u.items[0].max_pct, 200);   // limits off in this file: 2 projects of FREE's 1
   assert.equal(u.items.find((x) => x.workspace_id === Bw).tier, 'ok');
-  assert.deepEqual(u.plans.FREE.limits, { projects: 2, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 });
+  assert.deepEqual(u.plans.FREE.limits, { projects: 1, members: 3, requirements: null, wbs: null, weekly_reports: null });
   for (const s of ['requirements', 'wbs', 'activity']) assert.equal((await ops.c('GET', `/api/admin/usage?sort=${s}`)).status, 200);
   assert.equal((await ops.c('GET', '/api/admin/usage?sort=bogus')).json.sort, 'ai');
-  // tier thresholds on the shaping function (80 % is not reachable with the small member limit in an integration flow)
-  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 40, wbs: 0, weekly_reports: 0 }).tier, 'warn');
-  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 45, wbs: 0, weekly_reports: 0 }).tier, 'attention');
-  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 35, wbs: 80, weekly_reports: 0 }).tier, 'warn');
-  assert.equal(shapeUsage({ projects: 0, members: 0, requirements: 0, wbs: 0, weekly_reports: 0 }, 'TEAM').max_pct, null);
-  // requirements 40/50 inside A's project → still attention (projects 100 %) but the dim itself reports 80 %
-  for (let i = 0; i < 40; i++) await A.c('POST', A.req, { title: `R${i}` });
+  // tier thresholds on the shaping function (pricing v3 dims: projects + users; Team 10 projects / 40 users)
+  assert.equal(shapeUsage({ projects: 8, members: 0 }, 'TEAM').tier, 'warn');
+  assert.equal(shapeUsage({ projects: 9, members: 0 }, 'TEAM').tier, 'attention');
+  assert.equal(shapeUsage({ projects: 0, members: 32 }, 'TEAM').tier, 'warn');
+  assert.equal(shapeUsage({ projects: 0, members: 0 }, 'ENTERPRISE').max_pct, null);
+  assert.equal(shapeUsage({ projects: 0, members: 0, sub: { extra_projects: 10 } }, 'TEAM').dims.find((x) => x.key === 'projects').limit, 20);
   const dA = (await ops.c('GET', `/api/admin/workspaces/${A.w}`)).json.usage;
-  assert.equal(dA.dims.find((x) => x.key === 'requirements').pct, 80); assert.equal(dA.tier, 'attention');
+  assert.ok(!dA.dims.some((x) => x.key === 'requirements')); assert.equal(dA.tier, 'attention');
   // dashboard
   const d = (await ops.c('GET', '/api/admin/dashboard')).json;
   assert.deepEqual([d.kpis.users, d.kpis.active_workspaces, d.kpis.projects, d.kpis.signups_7d, d.kpis.signups_today], [3, 3, 2, 3, 3]);

@@ -17,6 +17,7 @@ import { updateStep } from './guide.js';
 import { ensureRow } from './definition.js';
 import { goLiveOf } from './golive.js';
 import { LEAF_SQL } from './wbs.js';
+import { assertWithinLimit } from './billing/limits.js';
 
 const now = () => new Date().toISOString();
 const parse = (v) => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
@@ -161,6 +162,7 @@ export async function closeProject(db, project, body = {}, userId, ops) {
 
 export async function reopenProject(db, project, userId) {
   if (project.status !== 'COMPLETED') return { error: 'not_closed' };
+  await assertWithinLimit(db, project.workspace_id, 'projects');   // pricing v3: a reopened project is active again (402 at the limit)
   const ts = now();
   await db.run(`UPDATE projects SET status = 'ACTIVE', closed_on = NULL, warranty_end_on = NULL, updated_at = ? WHERE id = ?`, [ts, project.id]);
   await logEvent(db, project, 'PROJECT_REOPENED', userId, ts);

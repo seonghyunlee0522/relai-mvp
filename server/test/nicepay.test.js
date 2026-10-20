@@ -92,26 +92,15 @@ async function boot(env = {}) {
 const sub = (db, w) => db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [w]);
 const months = (from, to) => (new Date(to) - new Date(from)) / (30.4375 * DAY);
 
-test('pricing v2: ₩20,000/month per workspace incl. owner + ₩5,000 per extra user, VAT excluded, no minimum, founding 40% off, Enterprise not sold by checkout', () => {
-  assert.deepEqual([PLANS.TEAM.base_monthly, PLANS.TEAM.included_users, PLANS.TEAM.extra_user_monthly], [20000, 1, 5000]);
-  const one = quote({ cycle: 'MONTHLY', users: 1 });   // owner only, no minimum seats
-  assert.deepEqual([one.extra_users, one.monthly_amount, one.supply_amount, one.vat_amount, one.amount], [0, 20000, 20000, 2000, 22000]);
-  const a = quote({ cycle: 'ANNUAL', users: 3 });     // annual = 12 × monthly, no annual discount by default
-  assert.deepEqual([a.extra_users, a.unit_price, a.list_amount, a.discount_amount, a.supply_amount, a.vat_amount, a.amount, a.months], [2, 30000, 360000, 0, 360000, 36000, 396000, 12]);
-  const m = quote({ cycle: 'MONTHLY', seats: 5 });    // `seats` still accepted as an alias of users
-  assert.deepEqual([m.users, m.unit_price, m.supply_amount, m.vat_amount, m.amount, m.months], [5, 40000, 40000, 4000, 44000, 1]);
-  const f = quote({ cycle: 'ANNUAL', users: 3, founding: true });
-  assert.deepEqual([f.discount_amount, f.founding_discount_amount, f.supply_amount, f.vat_amount, f.amount], [144000, 144000, 216000, 21600, 237600]);
-  // the annual discount is one configurable number (plans.js ANNUAL_DISCOUNT_PCT); founding stacks on what is left
-  const saved = CYCLES.ANNUAL.discount_pct;
-  try {
-    CYCLES.ANNUAL.discount_pct = 10;
-    const d = quote({ cycle: 'ANNUAL', users: 3, founding: true });
-    assert.deepEqual([d.cycle_discount_amount, d.founding_discount_amount, d.supply_amount, d.amount], [36000, 129600, 194400, 213840]);
-  } finally { CYCLES.ANNUAL.discount_pct = saved; }
-  assert.throws(() => quote({ cycle: 'ANNUAL', users: 0 }), OrderError);
-  assert.throws(() => quote({ cycle: 'ANNUAL', users: 3.5 }), OrderError);
-  assert.throws(() => quote({ cycle: 'WEEKLY', seats: 3 }), OrderError);
+test('pricing v3 checkout quote: VAT-inclusive list price, users above the included ones become extra users, Enterprise not sold by checkout', () => {
+  const one = quote({ plan: 'PRO', cycle: 'MONTHLY', users: 1 });   // fewer than included → no extra users
+  assert.deepEqual([one.extra_users, one.amount, one.supply_amount + one.vat_amount, one.seats], [0, 30000, 30000, 15]);
+  const a = quote({ plan: 'TEAM', cycle: 'ANNUAL', users: 42 });
+  assert.deepEqual([a.extra_users, a.amount, a.months, a.seats, a.discount_amount], [2, 768000 + 2 * 9600, 12, 42, (80000 + 2000) * 12 - (768000 + 2 * 9600)]);
+  assert.equal(CYCLES.ANNUAL.discount_pct, 20); assert.equal(PLANS.PRO.price.MONTHLY, 30000);
+  assert.throws(() => quote({ plan: 'PRO', cycle: 'ANNUAL', users: 0 }), OrderError);
+  assert.throws(() => quote({ plan: 'PRO', cycle: 'ANNUAL', users: 3.5 }), OrderError);
+  assert.throws(() => quote({ plan: 'PRO', cycle: 'WEEKLY', seats: 3 }), OrderError);
   assert.throws(() => quote({ plan: 'ENTERPRISE', cycle: 'ANNUAL', seats: 10 }), OrderError);
   assert.ok(a.goods_name.length <= 40);
 });
@@ -168,22 +157,22 @@ test('one-time checkout: order priced on the server, pay page, signed return →
   await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   const M = await addMember(client, A, 'm@x.com', '멤버');
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
-  assert.equal(b.checkout.can_purchase, true); assert.equal(b.checkout.founding_eligible, true); assert.equal(b.checkout.min_users, 2);   // floor = current members (owner + 1)
-  assert.deepEqual([b.checkout.base_monthly, b.checkout.extra_user_monthly], [20000, 5000]);
-  assert.equal(b.plans.find((p) => p.key === 'ENTERPRISE').base_monthly, null);   // Enterprise: no price, contact sales
+  assert.equal(b.checkout.can_purchase, true); assert.equal(b.checkout.min_users, 15);   // PRO includes 15 users
+  assert.deepEqual([b.catalogue.plans.find((p) => p.key === 'PRO').price.MONTHLY, b.catalogue.plans.find((p) => p.key === 'PRO').addons.user.MONTHLY], [30000, 1000]);
+  assert.equal(b.plans.find((p) => p.key === 'ENTERPRISE').price, null);   // Enterprise: no price, contact sales
   assert.equal(b.checkout.recurring_available, false); assert.equal(b.checkout.sandbox, true);
-  assert.deepEqual(b.plans.map((p) => p.key), ['FREE', 'TEAM', 'ENTERPRISE']);
-  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing/quote?cycle=MONTHLY&users=4`)).json.quote.amount, Math.round(35000 * 0.6) + Math.round(35000 * 0.6 * 0.1));
-  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'ANNUAL', users: 1 })).status, 400);   // fewer users than current members
+  assert.deepEqual(b.plans.map((p) => p.key), ['FREE', 'PRO', 'TEAM', 'ENTERPRISE']);
+  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing/quote?plan=PRO&cycle=MONTHLY&extra_users=2`)).json.quote.amount, 32000);
+  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'ANNUAL', extra_users: -1 })).status, 400);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'ENTERPRISE' })).status, 400);
   assert.equal((await M.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM' })).status, 403);
   const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'ANNUAL', seats: 3, amount: 1 });   // client amount ignored
-  assert.equal(co.status, 201); assert.equal(co.json.order.amount, 237600); assert.equal(co.json.order.founding, true);
+  assert.equal(co.status, 201); assert.equal(co.json.order.amount, 768000); assert.equal(co.json.order.founding, false);
   assert.match(co.json.checkout_url, /^\/api\/billing\/nicepay\/pay\/RELAI\d{8}[0-9a-f]{18}$/);
   const order = await db.get('SELECT * FROM billing_orders WHERE id = ?', [co.json.session_id]);
   // pay page: buyer only; carries the server amount and the sandbox client key, never the secret
   const page = await A.c('GET', co.json.checkout_url);
-  assert.equal(page.status, 200); assert.ok(page.text.includes('"amount":237600')); assert.ok(page.text.includes(CLIENT)); assert.ok(!page.text.includes(SECRET));
+  assert.equal(page.status, 200); assert.ok(page.text.includes('"amount":768000')); assert.ok(page.text.includes(CLIENT)); assert.ok(!page.text.includes(SECRET));
   assert.ok(page.text.includes('/api/billing/nicepay/return')); assert.ok(page.text.includes('https://pay.nicepay.co.kr/v1/js/'));
   assert.equal((await M.c('GET', co.json.checkout_url)).status, 404);
   assert.equal((await client()('GET', co.json.checkout_url)).status, 302);
@@ -207,17 +196,17 @@ test('one-time checkout: order priced on the server, pay page, signed return →
   const form = windowResult(order4);
   r = await returnPost(form);
   assert.equal(r.location, '/app/settings?checkout=success#billing');
-  const approves = np.called(/^\/v1\/payments\/[^/]+$/); assert.equal(approves.length, 1); assert.equal(approves[0].body.amount, 237600); assert.equal(approves[0].host, 'sandbox-api.nicepay.co.kr');
+  const approves = np.called(/^\/v1\/payments\/[^/]+$/); assert.equal(approves.length, 1); assert.equal(approves[0].body.amount, 768000); assert.equal(approves[0].host, 'sandbox-api.nicepay.co.kr');
   let s = await sub(db, A.w);
-  assert.equal(s.status, 'ACTIVE'); assert.equal(s.plan, 'TEAM'); assert.equal(s.seats, 3); assert.equal(s.billing_cycle, 'ANNUAL'); assert.equal(s.auto_renew, false);
-  assert.equal(s.next_billing_at, null); assert.ok(Math.abs(months(new Date(), s.current_period_end) - 12) < 0.2); assert.ok(s.founding_until);
+  assert.equal(s.status, 'ACTIVE'); assert.equal(s.plan, 'TEAM'); assert.equal(s.seats, 40); assert.equal(s.billing_cycle, 'ANNUAL'); assert.equal(s.auto_renew, false);
+  assert.equal(s.next_billing_at, null); assert.ok(Math.abs(months(new Date(), s.current_period_end) - 12) < 0.2); assert.equal(s.founding_until, null);
   assert.equal(s.payment_method_summary, '삼성 ****1234');
   assert.equal(await effectivePlan(db, A.w), 'TEAM');
   const pay = await db.get('SELECT * FROM payments WHERE workspace_id = ?', [A.w]);
-  assert.equal(Number(pay.amount), 237600); assert.equal(pay.status, 'PAID'); assert.equal(pay.moid, order4.id);
+  assert.equal(Number(pay.amount), 768000); assert.equal(pay.status, 'PAID'); assert.equal(pay.moid, order4.id);
   // replayed return and NicePay's own webhook for the same payment: no second approval, no second period
   assert.equal((await returnPost(form)).location, '/app/settings?checkout=success#billing');
-  const hook = await webhook({ resultCode: '0000', tid: form.tid, orderId: order4.id, status: 'paid', amount: 237600, ediDate: 'E1' });
+  const hook = await webhook({ resultCode: '0000', tid: form.tid, orderId: order4.id, status: 'paid', amount: 768000, ediDate: 'E1' });
   assert.equal(hook.status, 200); assert.equal(hook.text, 'OK'); assert.match(hook.type, /text\/html/);
   assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 1);
   assert.equal((await db.get('SELECT COUNT(*) n FROM payments')).n, 1);
@@ -228,22 +217,20 @@ test('one-time checkout: order priced on the server, pay page, signed return →
   assert.equal((await webhook({ resultCode: '0000', tid: 'tid_bad', orderId: co5.json.session_id, status: 'paid', amount: 100, ediDate: 'E2' })).text, 'OK');
   assert.equal((await db.get(`SELECT result FROM billing_events WHERE provider_event_id = 'paid:tid_bad'`)).result, 'IGNORED:amount_mismatch');
   assert.equal(new Date((await sub(db, A.w)).current_period_end).getTime(), new Date(s.current_period_end).getTime());
-  // seats: TEAM members limited to 3 purchased seats
+  // seats: TEAM includes 40 users
   await addMember(client, A, 'b@x.com', '박나다');
   await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '최다라', email: 'c@x.com', password: 'passw0rd!' });
-  const m4 = await A.c('POST', `/api/workspaces/${A.w}/members`, { email: 'c@x.com', role: 'MEMBER' });
-  assert.equal(m4.status, 402); assert.equal(m4.json.error.limit.seats, true); assert.equal(m4.json.error.limit.limit, 3);
-  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing.usage.dims.find((d) => d.key === 'members').limit, 3);
-  // one-time: nothing to cancel; extension allowed and continues from the current end (1 month, founding price still applies)
+  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing.usage.dims.find((d) => d.key === 'members').limit, 40);
+  // one-time: nothing to cancel; extension allowed and continues from the current end (1 month)
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/cancel`, {})).json.error.code, 'not_recurring');
   const b2 = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
-  assert.equal(b2.checkout.can_purchase, true); assert.equal(b2.checkout.founding_eligible, true); assert.ok(!('billing_key_enc' in b2.subscription));
-  const ext = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 4 });
+  assert.equal(b2.checkout.can_purchase, true); assert.ok(!('billing_key_enc' in b2.subscription));
+  const ext = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 41 });
   assert.equal(ext.status, 201);
   const extOrder = await db.get('SELECT * FROM billing_orders WHERE id = ?', [ext.json.session_id]);
   assert.equal((await returnPost(windowResult(extOrder))).location, '/app/settings?checkout=success#billing');
   s = await sub(db, A.w);
-  assert.ok(Math.abs(months(new Date(), s.current_period_end) - 13) < 0.2); assert.equal(s.seats, 4);
+  assert.ok(Math.abs(months(new Date(), s.current_period_end) - 13) < 0.2); assert.equal(s.seats, 41);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/members`, { email: 'c@x.com', role: 'MEMBER' })).status, 201);
   // period over → FREE without any provider event (no auto-renew)
   await db.run(`UPDATE subscriptions SET current_period_end = now() - interval '1 second' WHERE workspace_id = ?`, [A.w]);
@@ -296,20 +283,11 @@ test('approval network failure → net cancel, order failed; refund by operator 
   setEmailProvider(null); server.close();
 });
 
-test('founding offer: only the first 10 paying workspaces', async () => {
+test('founding offer retired (pricing v3): never eligible', async () => {
   const db = await testDb();
-  const ws = [];
   await db.run(`INSERT INTO users (id, email, name) VALUES ('u_f', 'f@x.com', 'F')`);
-  for (let i = 0; i < 11; i++) {
-    const id = `ws_${i}`; ws.push(id);
-    await db.run(`INSERT INTO workspaces (id, name, owner_id) VALUES (?, ?, 'u_f')`, [id, `W${i}`]);
-  }
-  for (let i = 0; i < 10; i++) {
-    assert.equal(await foundingEligible(db, ws[i]), true);
-    await db.run(`INSERT INTO billing_orders (id, workspace_id, provider, kind, plan, cycle, seats, months, unit_price, list_amount, discount_amount, supply_amount, vat_amount, amount, founding, goods_name, status)
-      VALUES (?, ?, 'nicepay', 'ONE_TIME', 'TEAM', 'ANNUAL', 3, 12, 30000, 360000, 144000, 216000, 21600, 237600, true, 'g', 'PAID')`, [`o${i}`, ws[i]]);
-  }
-  assert.equal(await foundingEligible(db, ws[10]), false);
+  await db.run(`INSERT INTO workspaces (id, name, owner_id) VALUES ('ws_f', 'W', 'u_f')`);
+  assert.equal(await foundingEligible(db, 'ws_f'), false);
 });
 
 test('recurring (정기결제) is off by default; when enabled: billing key, first charge, daily renewal charge, decline → PAST_DUE, cancel expires the key', async () => {
@@ -330,7 +308,7 @@ test('recurring (정기결제) is off by default; when enabled: billing key, fir
   assert.equal(r.status, 201, JSON.stringify(r.json));
   assert.equal(r.json.billing.plan, 'TEAM'); assert.equal(r.json.billing.subscription.auto_renew, true); assert.ok(!JSON.stringify(r.json).includes('BIKY'));
   const reg = np.called(/regist$/)[0]; assert.equal(reg.body.encMode, 'A2'); assert.ok(!JSON.stringify(reg.body).includes('1234567890123456'));
-  assert.equal(np.called(/subscribe\/BIKY_test_1\/payments$/)[0].body.amount, 19800);   // (20,000 + 2 × 5,000) × 60% + VAT (founding)
+  assert.equal(np.called(/subscribe\/BIKY_test_1\/payments$/)[0].body.amount, 80000);   // pricing v3: Team monthly, VAT included
   let s = await sub(db, A.w);
   assert.ok(s.billing_key_enc && !s.billing_key_enc.includes('BIKY')); assert.ok(s.next_billing_at);
   assert.ok(!JSON.stringify((await db.all('SELECT payload FROM billing_events'))).includes('BIKY'));

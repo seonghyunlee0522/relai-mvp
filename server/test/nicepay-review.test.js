@@ -71,7 +71,7 @@ async function capture(fn) {
 test('billing summary lists the priced products: Team 플랜 and the 3 AI 크레딧 packs', async () => {
   const { c, w, done } = await boot({ payments: false });
   const b = (await c('GET', `/api/workspaces/${w}/billing`)).json.billing;
-  assert.equal(b.plans.find((p) => p.key === 'TEAM').base_monthly, 20000);
+  assert.equal(b.plans.find((p) => p.key === 'TEAM').price.MONTHLY, 80000);   // pricing v3, VAT included
   assert.deepEqual(b.credit_packs.map((p) => p.amount), [10000, 30000, 100000]);
   assert.equal(b.payments_enabled, false);
   done();

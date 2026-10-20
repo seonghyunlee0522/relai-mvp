@@ -10,7 +10,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { LEGAL, koDate, legalFooterHtml } from '../public/app/shared/legal-info.js';
-import { CREDIT_PRICE_KRW, CREDIT_PACKS, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, FREE_LIMITS } from './plans.js';
+import { CREDIT_PRICE_KRW, CREDIT_PACKS, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS } from './plans.js';
+/** The published (2026-10-20) terms describe pricing v2. Frozen here until the v3 revision (T4, legal-review.md) replaces the text — plans.js is v3 now. */
+const TERMS_V2 = { TEAM: { base_monthly: 20000, included_users: 1, extra_user_monthly: 5000 }, FREE: { projects: 2, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 } };
 import { aiConfig } from './ai/config.js';
 import { shareMeta } from './share-meta.js';
 import { ga4For } from './ga4.js';
@@ -58,8 +60,8 @@ const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 
 /** 이용약관. Prices follow server/plans.js (pricing v2 + AI-credits-only billing: early access, starter credits, credit packs). */
 export function termsMarkdown(L = LEGAL, plans) {
-  const T = plans?.TEAM || { base_monthly: 20000, included_users: 1, extra_user_monthly: 5000 };
-  const F = plans?.FREE?.limits || FREE_LIMITS;
+  const T = TERMS_V2.TEAM;   // `plans` is ignored until the v3 terms land (T4)
+  const F = TERMS_V2.FREE;
   const starter = aiConfig().trialCredits;
   const packs = CREDIT_PACKS.map((p) => `${won(p.amount)}(${p.credits.toLocaleString('ko-KR')} 크레딧)`).join(', ');
   return `## 제1장 총칙

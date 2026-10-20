@@ -1,6 +1,6 @@
-/* batch7 T5 plan limits + paywall (founder decisions 2026-10-20):
- *   FREE = 2 projects (other FREE limits unchanged), early access is no longer unlimited (FREE limits), existing data over a
- *   limit is never deleted or made read-only, every refusal is a 402 pointing at /app/billing/plans, and the 500 free AI credits
+/* batch7 T5 plan limits + paywall, updated for pricing v3 (D1, D6):
+ *   FREE = 1 active project / 3 users (no requirement/WBS/report caps), early access is no longer unlimited (FREE limits), existing data over a
+ *   limit is never deleted (editing is locked until cleanup — D6), every refusal is a 402 pointing at /app/billing/plans, and the 500 free AI credits
  *   are granted ONCE per workspace (migration 52 tops up only workspaces that never got a starter grant). */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,43 +19,40 @@ const ws = (w) => `/api/workspaces/${w}`;
 const starterRows = (db, w) => db.all(`SELECT amount, reference_id FROM credit_ledger WHERE workspace_id = ? AND type IN ('PROMOTION','PLAN_GRANT') ORDER BY seq`, [w]);
 const bal = async (db, w) => Number((await db.get('SELECT balance FROM workspace_credit_accounts WHERE workspace_id = ?', [w])).balance);
 
-test('catalogue: FREE = 2 projects, other FREE limits unchanged; EARLY carries the FREE limits', () => {
-  assert.deepEqual({ ...PLANS.FREE.limits }, { projects: 2, members: 3, requirements: 50, wbs: 100, weekly_reports: 8 });
+test('catalogue (pricing v3): FREE = 1 active project, 3 users, no requirement/WBS/report caps (D1); EARLY carries the FREE limits', () => {
+  assert.deepEqual({ ...PLANS.FREE.limits }, { projects: 1, members: 3, requirements: null, wbs: null, weekly_reports: null });
   assert.deepEqual({ ...PLANS.EARLY.limits }, { ...PLANS.FREE.limits });
   assert.equal(PLANS_URL, '/app/billing/plans');
 });
 
-test('2-project limit: the 3rd project is 402 with the upsell target; early access (future early_access_until) is on FREE limits', async () => {
+test('1-project limit (v3): the 2nd project is 402 with the upsell target; early access (future early_access_until) is on FREE limits', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'pw1@x.com');
   assert.equal((await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [A.w])).early_access_until, null);   // b7-fix: signup grants no early access
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '1 year' WHERE id = ?`, [A.w]);   // an old stamped account …
   assert.equal(await effectivePlan(db, A.w), 'FREE');         // … is on the Free limits too
-  assert.equal((await A.c('POST', `${ws(A.w)}/projects`, project({ name: '둘째' }))).status, 201);
-  const r = await A.c('POST', `${ws(A.w)}/projects`, project({ name: '셋째' }));
+  const r = await A.c('POST', `${ws(A.w)}/projects`, project({ name: '둘째' }));
   assert.equal(r.status, 402); assert.equal(r.json.error.code, 'plan_limit_reached');
-  assert.equal(r.json.error.limit.dimension, 'projects'); assert.equal(r.json.error.limit.limit, 2); assert.equal(r.json.error.limit.plan, 'FREE');
+  assert.equal(r.json.error.limit.dimension, 'projects'); assert.equal(r.json.error.limit.limit, 1); assert.equal(r.json.error.limit.plan, 'FREE');
   assert.equal(r.json.error.upgrade.url, '/app/billing/plans');
-  assert.match(r.json.error.message, /무료 플랜의 진행 중 프로젝트 한도\(2\)에 도달했습니다/);
+  assert.match(r.json.error.message, /Free 플랜의 활성 프로젝트 한도\(1개\)에 도달했습니다/);
   assert.doesNotMatch(r.json.error.message, /₩/);
   // samples do not count
-  assert.equal((await A.c('GET', `${ws(A.w)}/billing`)).json.billing.usage.dims.find((d) => d.key === 'projects').used, 2);
+  assert.equal((await A.c('GET', `${ws(A.w)}/billing`)).json.billing.usage.dims.find((d) => d.key === 'projects').used, 1);
   server.close();
 });
 
-test('101st WBS item is blocked (402 → plans page); the 100 kept', async () => {
+test('D1: no WBS cap on FREE any more — the 101st item is created', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'pw2@x.com');
   const rows = Array.from({ length: 100 }, (_, i) => ({ row: i + 2, values: { code: String(i + 1), title: `w${i}` } }));
   assert.equal((await A.c('POST', `${A.wbs}/import`, { rows })).status, 200);
-  const r = await A.c('POST', A.wbs, { title: '101번째', item_type: 'TASK' });
-  assert.equal(r.status, 402); assert.equal(r.json.error.limit.dimension, 'wbs'); assert.equal(r.json.error.limit.used, 100);
-  assert.equal(r.json.error.upgrade.url, PLANS_URL);
-  assert.equal(Number((await db.get('SELECT COUNT(*) AS n FROM wbs_items WHERE project_id = ? AND archived_at IS NULL AND system_key IS NULL', [A.p.id])).n), 100);
+  assert.equal((await A.c('POST', A.wbs, { title: '101번째', item_type: 'TASK' })).status, 201);
+  assert.ok(db);
   server.close();
 });
 
-test('over-limit existing data is untouched: kept, readable and editable; only NEW rows are refused', async () => {
+test('over-limit existing data is untouched and readable; D6: editing locked (409 over_limit) until cleanup, new projects 402', async () => {
   const { db, server, client } = await boot();
   process.env.PLAN_LIMITS = 'off';   // build a workspace that was unlimited (former early access)
   const A = await setup(client, 'pw3@x.com');
@@ -66,13 +63,13 @@ test('over-limit existing data is untouched: kept, readable and editable; only N
   assert.equal(list.length, 4);
   const reqs = (await A.c('GET', A.req)).json.requirements;
   assert.equal(reqs.length, 55);
-  const upd = await A.c('PATCH', `${A.req}/${reqs[0].id}`, { title: '수정 가능' });
-  assert.equal(upd.status, 200, JSON.stringify(upd.json));
-  assert.equal((await A.c('POST', A.req, { title: '새 항목' })).status, 402);
+  const upd = await A.c('PATCH', `${A.req}/${reqs[0].id}`, { title: '잠김' });
+  assert.equal(upd.status, 409); assert.equal(upd.json.error.code, 'over_limit');
+  assert.equal((await A.c('POST', A.req, { title: '새 항목' })).status, 409);
   assert.equal((await A.c('POST', `${ws(A.w)}/projects`, project({ name: 'p5' }))).status, 402);
   assert.equal(Number((await db.get(`SELECT COUNT(*) AS n FROM projects WHERE workspace_id = ? AND sample_key IS NULL AND status != 'ARCHIVED'`, [A.w])).n), 4);
   const u = (await A.c('GET', `${ws(A.w)}/billing`)).json.billing.usage;
-  assert.equal(u.dims.find((d) => d.key === 'projects').used, 4); assert.equal(u.dims.find((d) => d.key === 'requirements').used, 55);
+  assert.equal(u.dims.find((d) => d.key === 'projects').used, 4); assert.equal(Number((await db.get('SELECT COUNT(*) n FROM requirements WHERE project_id = ?', [A.p.id])).n), 55);
   server.close();
 });
 
@@ -89,6 +86,7 @@ test('AI with insufficient credits: 402 AI_CREDIT_INSUFFICIENT carrying the plan
 test('500 free credits once per WORKSPACE: a 2nd project grants nothing; migration 52 tops up only never-granted workspaces, idempotently', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'pw5@x.com');
+  await db.run(`UPDATE projects SET status = 'COMPLETED' WHERE id = ?`, [A.p.id]);   // v3 FREE = 1 active project
   assert.equal((await A.c('POST', `${ws(A.w)}/projects`, project({ name: '둘째' }))).status, 201);
   assert.deepEqual((await starterRows(db, A.w)).map((r) => [Number(r.amount), r.reference_id]), [[500, 'AI_INITIAL_TRIAL_CREDITS']]);
   assert.equal((await A.c('GET', `${ws(A.w)}/billing`)).json.billing.starter_credits, 500);

@@ -61,7 +61,7 @@ import * as XL from './xlsx.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary, requirementJiraMap } from './integrations/jira/sync.js';
 import { AiError, CreditError } from './ai/service.js';
 import { ensureAccount } from './ai/credits.js';
-import { assertWithinLimit, PlanLimitError } from './billing/limits.js';
+import { assertWithinLimit, PlanLimitError, OverLimitError, overLimit, overLimitLockEnabled, ACTIVE_PROJECT_STATUSES } from './billing/limits.js';
 import { providerFromEnv } from './billing/provider.js';
 import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
@@ -297,6 +297,36 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /* ---------- projects (always workspace-scoped) ---------- */
   const base = '/api/workspaces/:wid/projects';
   const guard = [requireAuth, requireMember, requireWorkspaceActive];
+  /*
+   * Pricing v3 project write guard (design.md §5, decision D6). Every write under a project (any method but GET/HEAD/OPTIONS):
+   *   ARCHIVED   (보관)  read-only except 보관 해제                                         → 409 archived
+   *   COMPLETED  (완료)  read-only except 재개, 보관, 완료보고서                            → 409 project_completed
+   *   active, workspace OVER_LIMIT (usage > plan limits after a downgrade/expiry)   → 409 over_limit, except the cleanup
+   *              actions 보관 / 종료 (data is never deleted; members are removed on the workspace screens, not here)
+   * Sample projects are never locked. Only members are answered here; anyone else falls through to the route's own 401/403/404.
+   */
+  // POSTs that only read or draft (previews, AI drafts before commit, error sheets) stay open in every state.
+  const READ_ONLY_POST = [/\/preview\/?$/, /\/errors\.xlsx$/, /^\/ai\/(ask|requirements\/extract|tests\/generate|wbs\/generate)\/?$/, /^\/changes\/[^/]+\/ai\/impact\/?$/];
+  const WRITE_ALLOWED = {
+    ARCHIVED: [/^\/unarchive\/?$/],
+    // 하자보수: a closed project still records issues during the warranty period (Phase 7 US-2).
+    COMPLETED: [/^\/reopen\/?$/, /^\/archive\/?$/, /^\/weekly-reports\/completion\/?$/, /^\/weekly-reports\/[^/]+\/?$/, /^\/issues(\/|$)/],
+    OVER_LIMIT: [/^\/archive\/?$/, /^\/close\/?$/],
+  };
+  app.use(`${base}/:pid`, wrap(async (req, res, next) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.user) return next();
+    const p = await db.get(`SELECT p.status, p.sample_key FROM projects p JOIN workspace_members m ON m.workspace_id = p.workspace_id AND m.user_id = ?
+      WHERE p.workspace_id = ? AND p.id = ?`, [req.user.id, req.params.wid, req.params.pid]);
+    if (!p || p.sample_key || (req.method === 'POST' && READ_ONLY_POST.some((re) => re.test(req.path)))) return next();
+    const allowed = (key) => WRITE_ALLOWED[key].some((re) => re.test(req.path));
+    if (p.status === 'ARCHIVED' && !allowed('ARCHIVED')) return fail(res, 409, 'archived', '보관된 프로젝트는 수정할 수 없습니다. 보관 해제 후 편집하세요.');
+    if (p.status === 'COMPLETED' && !allowed('COMPLETED')) return fail(res, 409, 'project_completed', '완료된 프로젝트는 조회만 할 수 있습니다. 재개하면 다시 편집할 수 있어요.');
+    if (ACTIVE_PROJECT_STATUSES.includes(p.status) && overLimitLockEnabled() && !allowed('OVER_LIMIT')) {
+      const state = await overLimit(db, req.params.wid);
+      if (state) { const e = new OverLimitError(state); return fail(res, e.status, e.code, e.message, e.extra); }
+    }
+    next();
+  }));
 
   const listProjects = (wid, includeArchived) => db.all(`SELECT ${PROJECT_COLS},
         (SELECT name FROM project_phases ph WHERE ph.project_id = projects.id AND ph.phase_key = projects.current_phase) AS current_phase_name,
@@ -485,7 +515,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
   app.post(`${base}/:pid/reopen`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
-    const r = await tx(db, (d) => CLS.reopenProject(d, project, req.user.id));
+    const r = await tx(db, (d) => CLS.reopenProject(d, project, req.user.id));   // 재개 → 활성 again: plan limit checked there (402)
     if (r.error) return fail(res, 409, 'not_closed', '종료된 프로젝트가 아닙니다.');
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
   }));
@@ -648,7 +678,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (existing.status !== 'ARCHIVED') return fail(res, 409, 'not_archived', '보관된 프로젝트가 아닙니다.');
     const back = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'COMPLETED'].includes(existing.status_before_archive) ? existing.status_before_archive : 'ACTIVE';
     await tx(db, async (db) => {
-      await assertWithinLimit(db, req.params.wid, 'projects');   // an unarchived project is active again
+      if (ACTIVE_PROJECT_STATUSES.includes(back)) await assertWithinLimit(db, req.params.wid, 'projects');   // back to 활성 → counts again (a COMPLETED one does not)
       await db.run(`UPDATE projects SET status=?, status_before_archive=NULL, updated_at=now() WHERE workspace_id=? AND id=?`, [back, req.params.wid, req.params.pid]);
     });
     res.json((await guideResponse((await getProject(req.params.wid, req.params.pid)))));
@@ -1500,7 +1530,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (err.type === 'entity.too.large') return fail(res, 413, 'payload_too_large', '요청 데이터가 너무 큽니다. (엑셀 가져오기는 5MB 이하 파일만 지원합니다.)');
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);
     if (err instanceof AdminError) return fail(res, err.status, err.code, err.message);
-    if (err instanceof PlanLimitError) return fail(res, err.status, err.code, err.message, err.extra);
+    if (err instanceof PlanLimitError || err instanceof OverLimitError) return fail(res, err.status, err.code, err.message, err.extra);
     if (err instanceof AiError || err instanceof CreditError) return fail(res, err.status, err.code, err.message, err.extra || {});
     const dbe = dbErrorInfo(err);
     if (dbe) { if (dbe.status >= 500) console.error('[db]', err.message); return fail(res, dbe.status, dbe.code, dbe.message); }

@@ -49,33 +49,22 @@ test('provider interface: fake implements createCheckout/handleWebhook/cancel; r
   assert.ok(LATEST_VERSION >= 25);   // 25 = billing; later migrations (26 auth) follow
 });
 
-test('FREE limits: projects / requirements / WBS / weekly reports / members answer 402 plan_limit_reached with the limit payload', async () => {
+test('FREE limits (pricing v3): 1 active project and 3 users answer 402 plan_limit_reached with the limit payload; requirements / WBS / weekly reports are not capped (D1)', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'a@x.com', '김가나');
-  // projects: 2 active (founder decision 2026-10-20) — the 3rd is refused
-  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }))).status, 201);
-  const p2 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '세 번째' }));
+  // projects: 1 active — the 2nd is refused
+  const p2 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));
   assert.equal(p2.status, 402); assert.equal(p2.json.error.code, 'plan_limit_reached');
-  assert.deepEqual(p2.json.error.limit, { dimension: 'projects', label: '진행 중 프로젝트', used: 2, limit: 2, plan: 'FREE', adding: 1, allowed: 0 });
-  assert.equal(p2.json.error.upgrade.plan, 'TEAM'); assert.equal(p2.json.error.upgrade.url, '/app/billing/plans');
-  // archive frees a slot; unarchiving the first while two others are active is refused
+  assert.deepEqual(p2.json.error.limit, { dimension: 'projects', label: '활성 프로젝트', used: 1, limit: 1, plan: 'FREE', adding: 1, allowed: 0 });
+  assert.equal(p2.json.error.upgrade.plan, 'PRO'); assert.equal(p2.json.error.upgrade.url, '/app/billing/plans');
+  // archive frees the slot; unarchiving the first while another is active is refused
   await A.c('POST', `${A.purl}/archive`, {});
   const p3 = await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '세 번째' })); assert.equal(p3.status, 201);
   assert.equal((await A.c('POST', `${A.purl}/unarchive`, {})).status, 402);
   const P = `/api/workspaces/${A.w}/projects/${p3.json.project.id}`;
-  // requirements: 50
-  for (let i = 0; i < 50; i++) assert.equal((await A.c('POST', `${P}/requirements`, { title: `R${i}` })).status, 201);
-  const r11 = await A.c('POST', `${P}/requirements`, { title: 'R50' });
-  assert.equal(r11.status, 402); assert.equal(r11.json.error.limit.dimension, 'requirements'); assert.equal(r11.json.error.limit.used, 50);
-  // WBS: 100 (duplicate goes through the same check)
-  let last;
-  for (let i = 0; i < 100; i++) { last = await A.c('POST', `${P}/wbs`, { title: `W${i}`, item_type: 'TASK' }); assert.equal(last.status, 201, JSON.stringify(last.json)); }
-  assert.equal((await A.c('POST', `${P}/wbs`, { title: 'W100', item_type: 'TASK' })).json.error.limit.dimension, 'wbs');
-  assert.equal((await A.c('POST', `${P}/wbs/${last.json.item.id}/duplicate`, {})).status, 402);
-  assert.equal((await db.get(`SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?`, [p3.json.project.id])).n, 100);
-  // weekly reports: 8 per month
-  for (let i = 0; i < 8; i++) assert.equal((await A.c('POST', `${P}/weekly-reports/generate`, { period_start: '2026-10-05', period_end: '2026-10-11' })).status, 201);
-  assert.equal((await A.c('POST', `${P}/weekly-reports/generate`, { period_start: '2026-10-05', period_end: '2026-10-11' })).status, 402);
+  // requirements / WBS / weekly reports: no cap any more (old Free caps 50 / 100 / 8)
+  for (let i = 0; i < 51; i++) assert.equal((await A.c('POST', `${P}/requirements`, { title: `R${i}` })).status, 201);
+  for (let i = 0; i < 9; i++) assert.equal((await A.c('POST', `${P}/weekly-reports/generate`, { period_start: '2026-10-05', period_end: '2026-10-11' })).status, 201);
   // members: 3 (owner + 2); direct add and invitation both refused at the limit
   await addMember(client, A, 'b@x.com', '박나다'); await addMember(client, A, 'c@x.com', '최다라');
   await client()('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '정라마', email: 'd@x.com', password: 'passw0rd!' });
@@ -86,7 +75,7 @@ test('FREE limits: projects / requirements / WBS / weekly reports / members answ
   // the customer billing summary reflects all of it
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
   assert.equal(b.plan, 'FREE'); assert.equal(b.subscription, null); assert.equal(b.can_manage, true); assert.equal(b.provider_available, true);
-  assert.deepEqual(b.usage.dims.map((d) => [d.key, d.used, d.limit]), [['projects', 2, 2], ['members', 3, 3], ['requirements', 50, 50], ['wbs', 100, 100], ['weekly_reports', 8, 8]]);
+  assert.deepEqual(b.usage.dims.map((d) => [d.key, d.used, d.limit]), [['projects', 1, 1], ['members', 3, 3]]);
   server.close();
 });
 
@@ -117,17 +106,18 @@ test('webhooks: signed + idempotent; activation lifts limits; payment failure �
   for (let i = 0; i < 51; i++) assert.equal((await A.c('POST', A.req, { title: `R${i}` })).status, 201);
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
   assert.equal(b.plan, 'TEAM'); assert.equal(b.subscription.payment_method_summary, '신한 ****1234'); assert.ok(!('provider_customer_id' in b.subscription));
-  assert.equal(b.usage.dims.find((d) => d.key === 'requirements').limit, null);
+  assert.deepEqual(b.limits, { projects: 10, users: 40 });
   // payment failure: PAST_DUE, plan kept during the grace period
   const f = await deliver(provider.signedEvent('payment.failed', { subscription_id: `sub_${A.w}`, payment: { amount: 49000, status: 'FAILED', provider_tid: 'tid_fail_1', failure_code: 'E3001', failure_message: '한도 초과' } }));
   assert.equal(f.json.status, 'PAST_DUE');
   const s = await db.get('SELECT status, grace_period_end FROM subscriptions WHERE workspace_id = ?', [A.w]);
   assert.equal(s.status, 'PAST_DUE'); assert.ok(new Date(s.grace_period_end) > new Date());
   assert.equal(await effectivePlan(db, A.w), 'TEAM');
-  // grace over → FREE: existing data stays, new rows refused
+  // grace over → FREE: existing data stays; 2 active projects > 1 → editing locked until cleanup (D6)
   await db.run(`UPDATE subscriptions SET grace_period_end = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'FREE');
-  assert.equal((await A.c('POST', A.req, { title: 'over' })).status, 402);
+  const over = await A.c('POST', A.req, { title: 'over' });
+  assert.equal(over.status, 409); assert.equal(over.json.error.code, 'over_limit');
   assert.equal((await db.get(`SELECT COUNT(*) n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ?`, [A.w])).n, 51);
   // recovery payment → ACTIVE again; expiry → FREE; a late failure after expiry is recorded but ignored
   assert.equal((await deliver(provider.signedEvent('payment.succeeded', { subscription_id: `sub_${A.w}`, ...period(), payment: { amount: 49000, status: 'PAID', provider_tid: 'tid_renew_2' } }))).json.status, 'ACTIVE');
@@ -208,7 +198,7 @@ test('orders through the fake provider: server-priced checkout, paid event verif
   const A = await setup(client, 'a@x.com', '김가나');
   await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3 });
-  assert.equal(co.status, 201); assert.equal(co.json.order.amount, Math.round(30000 * 0.6) + Math.round(30000 * 0.6 * 0.1));   // (₩20,000 + 2 × ₩5,000) founding 40% off + VAT
+  assert.equal(co.status, 201); assert.equal(co.json.order.amount, 80000);   // pricing v3: Team monthly, VAT included (3 users ≤ 40 included)
   const orderId = co.json.order.id;
   const paid = (amount, tid) => provider.signedEvent('subscription.activated', { order_id: orderId, payment: { amount, status: 'PAID', provider_tid: tid, moid: orderId } });
   assert.equal((await deliver(paid(1000, 'tid_low'))).json.reason, 'amount_mismatch');
@@ -217,10 +207,10 @@ test('orders through the fake provider: server-priced checkout, paid event verif
   const ok = provider.signedEvent('subscription.activated', { order_id: co2.json.order.id, payment: { amount: co2.json.order.amount, status: 'PAID', provider_tid: 'tid_ok', moid: co2.json.order.id } });
   assert.equal((await deliver(ok)).json.status, 'ACTIVE');
   const s = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [A.w]);
-  assert.equal(s.auto_renew, false); assert.equal(s.seats, 3); assert.ok(Math.abs((new Date(s.current_period_end) - Date.now()) / 86400e3 - 30.5) < 2);
+  assert.equal(s.auto_renew, false); assert.equal(s.seats, 40); assert.ok(Math.abs((new Date(s.current_period_end) - Date.now()) / 86400e3 - 30.5) < 2);
   assert.equal((await db.get('SELECT status FROM billing_orders WHERE id = ?', [co2.json.order.id])).status, 'PAID');
   const grants = await db.all(`SELECT amount FROM credit_ledger WHERE workspace_id = ? AND type = 'PLAN_GRANT' AND reference_type = 'PLAN_MONTHLY'`, [A.w]);
-  assert.deepEqual(grants.map((g) => Number(g.amount)), [1000]);   // TEAM monthly AI credits granted with the payment
+  assert.deepEqual(grants.map((g) => Number(g.amount)), [3000]);   // TEAM monthly AI credits (v3: 3,000) granted with the payment
   // a renewing subscription: cancel calls the provider with no subscription row lock held
   await db.run(`UPDATE subscriptions SET auto_renew = true WHERE workspace_id = ?`, [A.w]);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/cancel`, {})).status, 200);

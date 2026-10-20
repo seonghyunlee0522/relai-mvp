@@ -27,7 +27,7 @@ test('new project: opening the WBS shows the 6 fixed nodes 1..6; 데이터 이�
   const n = Number((await db.get(`SELECT COUNT(*) n FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = ? AND i.archived_at IS NULL AND i.system_key IS NULL`, [A.w])).n);
   assert.equal(n, 0);
   const { workspaceUsage } = await import('../usage.js');
-  const u = await workspaceUsage(db, A.w); assert.equal(u.dims.find((d) => d.key === 'wbs').used, 0);
+  const u = await workspaceUsage(db, A.w); assert.ok(!u.dims.some((d) => d.key === 'wbs'));   // pricing v3 (D1): WBS is not a plan dimension
   server.close();
 });
 

@@ -16,10 +16,10 @@ const grants = async (db, wid) => (await db.all(`SELECT amount, reference_id FRO
 
 test('TEAM: one grant per monthly cycle (anchored on the period start), idempotent; FREE, PAST_DUE and lapsed get none', async () => {
   const db = await testDb();
-  assert.equal(PLANS.TEAM.ai_credits_monthly, 1000); assert.equal(PLANS.FREE.ai_credits_monthly, 0);
+  assert.equal(PLANS.TEAM.ai_credits_monthly, 3000); assert.equal(PLANS.FREE.ai_credits_monthly, 0);
   await ws(db, 'w_team'); await sub(db, 'w_team', { startDaysAgo: 40 });
   const g = await grantMonthlyCredits(db, 'w_team');
-  assert.equal(g.amount, 1000);
+  assert.equal(g.amount, 3000);
   assert.equal(await grantMonthlyCredits(db, 'w_team'), null);   // same cycle → no second grant
   const cycle = new Date(Date.now() - 40 * 86400e3); cycle.setUTCMonth(cycle.getUTCMonth() + 1);
   assert.ok(Math.abs(new Date(g.cycle_start) - cycle) < 2 * 86400e3, `cycle ${g.cycle_start}`);   // 2nd month of the period

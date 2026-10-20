@@ -12,21 +12,20 @@ import { aiConfig } from '../ai/config.js';
 import express from 'express';
 import { rateLimiter } from '../security.js';
 import { requireAction, can } from '../authz.js';
-import { PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, CREDIT_PRICE_KRW, PURCHASED_VALID_YEARS, CREDIT_PACKS } from '../plans.js';
+import { PLANS, PAID_PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, CREDIT_PRICE_KRW, PURCHASED_VALID_YEARS, CREDIT_PACKS, catalogue as planCatalogue } from '../plans.js';
 import { workspaceUsage } from '../usage.js';
 import { writeAudit } from '../admin.js';
 import { emailConfig } from '../email/config.js';
 import { requireVerifiedEmail } from '../auth/account-security.js';
 import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE } from './provider.js';
 import { parseCard, safeEqual } from './nicepay.js';
-import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, foundingEligible, minUsers, MAX_USERS, publicOrder } from './orders.js';
+import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, minUsers, MAX_USERS, publicOrder, renewalAmount } from './orders.js';
+import { countUsage, workspaceLimits, overLimit } from './limits.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices } from './cron.js';
 import { grantDueMonthlyCredits } from './ai-grants.js';
 import { applyServiceEvent, serviceOrdersDaily } from './service-orders.js';
 
-const catalogue = () => Object.values(PLANS).filter((p) => p.key !== 'EARLY').map((p) => ({ key: p.key, label: p.label, base_monthly: p.contact_sales ? null : (p.base_monthly ?? 0),
-  included_users: p.included_users ?? null, extra_user_monthly: p.extra_user_monthly ?? null, contact_sales: Boolean(p.contact_sales), limits: p.limits, ai_credits_monthly: p.ai_credits_monthly ?? 0 }));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
 const settingsUrl = (status, reason, order = null) => (order?.kind === 'CREDIT_PACK'
@@ -127,36 +126,57 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   const orderFail = (res, e) => fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {});
 
   const paymentsOff = (res) => fail(res, 409, 'payments_disabled', PAYMENTS_OFF_MESSAGE);
+  /** Feature flags of the v3 billing screens (design.md §10); all off unless set. */
+  const flags = () => ({ payments: paymentsEnabled(), recurring: Boolean(provider?.recurringEnabled), addons: process.env.ADDONS_ENABLED === 'true', plan_change: process.env.PLAN_CHANGE_ENABLED === 'true' });
+  /**
+   * GET …/billing (pricing v3 shape, T1; T2 fills credits buckets, T3 scheduled changes / renewal state):
+   * { plan, cycle, status, auto_renew, next_payment_at, next_payment_amount, limits {projects, users}, usage {projects_active, members, pending_invites, …dims},
+   *   addons {extra_users, extra_projects}, scheduled [], credits {total, plan, plan_expires_at, promo, purchased}, catalogue, flags, over_limit, … }
+   */
   const summary = async (wid, role) => {
-    const plan = await effectivePlan(db, wid);
+    const { plan, limits } = await workspaceLimits(db, wid);
     const subscription = (await getSubscription(db, wid)) || null;
+    const row = subscription ? await db.get('SELECT extra_users, extra_projects, price_version, renewal_amount FROM subscriptions WHERE workspace_id = ?', [wid]) : null;
+    const paid = PAID_PLANS.includes(plan) && subscription && subscription.plan === plan;
+    const cycle = paid ? subscription.billing_cycle || 'MONTHLY' : null;
+    const renews = paid && !subscription.cancel_at_period_end;
+    const addons = { extra_users: paid ? Number(row?.extra_users || 0) : 0, extra_projects: paid ? Number(row?.extra_projects || 0) : 0 };
+    const counts = await countUsage(db, wid);
+    const over = await overLimit(db, wid);
+    const account = await db.get('SELECT balance FROM workspace_credit_accounts WHERE workspace_id = ?', [wid]);
     // One-time purchases can be extended at any time; a renewing (recurring) subscription cannot be bought twice.
-    // Early access: TEAM checkout is hidden (code kept) — the app is free and AI is paid with credit packs.
-    const canPurchase = paymentsEnabled() && plan !== 'EARLY' && (plan === 'FREE' || (subscription && !subscription.auto_renew));
+    const canPurchase = paymentsEnabled() && (plan === 'FREE' || (subscription && !subscription.auto_renew));
     const early = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
-    return { billing: { plan, plan_label: PLANS[plan].label, subscription, early_access_until: early?.early_access_until || null, usage: await workspaceUsage(db, wid, plan),
-      plans: catalogue(), credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
-      checkout: { can_purchase: Boolean(canPurchase), cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
-        base_monthly: PLANS.TEAM.base_monthly, included_users: PLANS.TEAM.included_users, extra_user_monthly: PLANS.TEAM.extra_user_monthly,
-        min_users: await minUsers(db, wid), max_users: MAX_USERS, founding_eligible: await foundingEligible(db, wid), founding: FOUNDING_OFFER, vat_rate: VAT_RATE, prices_exclude_vat: true,
+    return { billing: {
+      plan, plan_label: PLANS[plan].label, cycle, status: subscription && paid ? subscription.status : null, auto_renew: Boolean(paid && subscription.auto_renew),
+      next_payment_at: renews ? subscription.next_billing_at || subscription.current_period_end : null,
+      next_payment_amount: renews ? (row?.price_version === 'v2' ? row?.renewal_amount ?? null : renewalAmount(plan, cycle, addons.extra_users, addons.extra_projects)) : null,
+      limits, usage: { ...(await workspaceUsage(db, wid, plan)), ...counts, seats_left: limits.users === null ? null : Math.max(0, limits.users - counts.members - counts.pending_invites) },
+      addons, scheduled: [], credits: { total: account ? Number(account.balance) : 0, plan: null, plan_expires_at: null, promo: null, purchased: null },
+      catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null, price_version: row?.price_version || null,
+      subscription, early_access_until: early?.early_access_until || null,
+      plans: planCatalogue().plans, credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits,
+      provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
+      checkout: { can_purchase: Boolean(canPurchase), plans: PAID_PLANS, cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
+        min_users: await minUsers(db, wid), max_users: MAX_USERS, vat_rate: VAT_RATE, prices_include_vat: true, prices_exclude_vat: false,
         recurring_available: Boolean(provider?.recurringEnabled), sandbox: provider?.mode === 'sandbox' } } };
   };
   app.get(b, guard, wrap(async (req, res) => res.json(await summary(req.params.wid, req.role))));
 
   app.get(`${b}/quote`, guard, wrap(async (req, res) => {
-    try { res.json({ quote: await quoteFor(db, req.params.wid, { plan: 'TEAM', cycle: String(req.query.cycle || 'ANNUAL'), users: req.query.users ?? req.query.seats }) }); }
+    try { res.json({ quote: await quoteFor(db, req.params.wid, { plan: String(req.query.plan || 'PRO'), cycle: String(req.query.cycle || 'MONTHLY'), users: req.query.users ?? req.query.seats, extra_users: req.query.extra_users, extra_projects: req.query.extra_projects }) }); }
     catch (e) { if (e instanceof OrderError) return orderFail(res, e); throw e; }
   }));
 
-  /** Shared checkout validation: TEAM only, purchasable, provider present. Returns the quote or null after answering. */
+  /** Shared checkout validation: PRO / TEAM, purchasable, provider present. Returns the quote or null after answering. */
   const prepare = async (req, res) => {
     if (!paymentsEnabled()) { paymentsOff(res); return null; }
-    const plan = String(req.body?.plan || 'TEAM');
-    if (plan !== 'TEAM') { fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { plan: PLANS[plan]?.contact_sales ? 'Enterprise는 영업 문의로 계약합니다.' : '선택할 수 없는 플랜입니다.' } }); return null; }
+    const plan = String(req.body?.plan || 'PRO');
+    if (!PAID_PLANS.includes(plan)) { fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { plan: PLANS[plan]?.contact_sales ? 'Enterprise는 영업 문의로 계약합니다.' : '선택할 수 없는 플랜입니다.' } }); return null; }
     if (!provider) { unavailable(res); return null; }
     const sub = await getSubscription(db, req.params.wid);
-    if ((await effectivePlan(db, req.params.wid)) === plan && sub?.auto_renew) { fail(res, 409, 'already_subscribed', '이미 Team 플랜을 사용 중입니다.'); return null; }
-    try { return await quoteFor(db, req.params.wid, { plan, cycle: String(req.body?.cycle || 'ANNUAL'), users: req.body?.users ?? req.body?.seats }); }
+    if ((await effectivePlan(db, req.params.wid)) === plan && sub?.auto_renew) { fail(res, 409, 'already_subscribed', `이미 ${PLANS[plan].label} 플랜을 사용 중입니다.`); return null; }
+    try { return await quoteFor(db, req.params.wid, { plan, cycle: String(req.body?.cycle || 'MONTHLY'), users: req.body?.users ?? req.body?.seats, extra_users: req.body?.extra_users, extra_projects: req.body?.extra_projects }); }
     catch (e) { if (e instanceof OrderError) { orderFail(res, e); return null; } throw e; }
   };
 

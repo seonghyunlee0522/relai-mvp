@@ -8,7 +8,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './validate.js';
-import { assertWithinLimit } from './billing/limits.js';
+import { assertWithinLimit, assertSeatForInvite } from './billing/limits.js';
+import { tx } from './db.js';
 import { newToken, sha256 } from './security.js';
 import { writeAudit } from './admin.js';
 import { emailConfig } from './email/config.js';
@@ -110,13 +111,18 @@ export async function createMemberInvite(db, { workspaceId, email, role }, actor
   if (ws.status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 워크스페이스에서는 초대할 수 없습니다.');
   const member = await db.get('SELECT 1 FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND u.email = ?', [workspaceId, em]);
   if (member) throw new InviteError(409, 'already_member', '이미 워크스페이스 멤버입니다.');
-  await assertWithinLimit(db, workspaceId, 'members');   // no invite when the plan has no free seat (acceptance re-checks)
   const dup = await db.get(`SELECT id FROM invitations WHERE type = 'WORKSPACE_MEMBER' AND workspace_id = ? AND email = ? AND status = 'PENDING' AND expires_at >= now()`, [workspaceId, em]);
   if (dup) throw new InviteError(409, 'invite_pending', '이미 초대가 진행 중입니다. 재발송을 사용하세요.', { invitation_id: dup.id });
-  await db.run(`UPDATE invitations SET status = 'EXPIRED', updated_at = now() WHERE type = 'WORKSPACE_MEMBER' AND workspace_id = ? AND email = ? AND status = 'PENDING' AND expires_at < now()`, [workspaceId, em]);
+  // Seat reservation (pricing v3): members + pending invites + 1 ≤ users, checked and inserted under the workspace row lock so two
+  // concurrent invites cannot both take the last seat. The pending invite holds the seat until it is accepted, revoked or expires.
   let created;
-  try { created = await insertInvite(db, { type: 'WORKSPACE_MEMBER', workspace_id: workspaceId, email: em, role: r, invited_by: actor.id }, env); }
-  catch (e) { if (dupError(e)) throw new InviteError(409, 'invite_pending', '이미 초대가 진행 중입니다. 재발송을 사용하세요.'); throw e; }
+  try {
+    created = await tx(db, async (t) => {
+      await t.run(`UPDATE invitations SET status = 'EXPIRED', updated_at = now() WHERE type = 'WORKSPACE_MEMBER' AND workspace_id = ? AND email = ? AND status = 'PENDING' AND expires_at < now()`, [workspaceId, em]);
+      await assertSeatForInvite(t, workspaceId);
+      return insertInvite(t, { type: 'WORKSPACE_MEMBER', workspace_id: workspaceId, email: em, role: r, invited_by: actor.id }, env);
+    });
+  } catch (e) { if (dupError(e)) throw new InviteError(409, 'invite_pending', '이미 초대가 진행 중입니다. 재발송을 사용하세요.'); throw e; }
   await writeAudit(db, { adminUserId: actor.id, action: 'WORKSPACE_INVITE_CREATED', targetType: 'INVITATION', targetId: created.id, metadata: { email: em, workspace_id: workspaceId, workspace_name: ws.name, role: r }, actorKind: 'USER' });
   const inv = await getInvitation(db, created.id);
   const email_delivery = await deliver(db, inv, created.token, env);
@@ -129,7 +135,11 @@ export async function resendInvite(db, inv, actor, env = process.env) {
   if (inv.status !== 'PENDING' && inv.status !== 'EXPIRED') throw new InviteError(409, 'invite_not_pending', '진행 중인 초대만 재발송할 수 있습니다.');
   if (inv.type === 'WORKSPACE_MEMBER' && inv.target_workspace_status !== 'ACTIVE') throw new InviteError(403, 'workspace_suspended', '정지된 워크스페이스의 초대는 재발송할 수 없습니다.');
   const token = newToken();
-  await db.run(`UPDATE invitations SET token_hash = ?, expires_at = ?, status = 'PENDING', updated_at = now() WHERE id = ?`, [hashToken(token, env), expiry(env), inv.id]);
+  const reopens = inv.type === 'WORKSPACE_MEMBER' && (inv.status === 'EXPIRED' || new Date(inv.expires_at) <= new Date());   // an expired invite no longer holds a seat
+  await tx(db, async (t) => {
+    if (reopens) await assertSeatForInvite(t, inv.workspace_id);
+    await t.run(`UPDATE invitations SET token_hash = ?, expires_at = ?, status = 'PENDING', updated_at = now() WHERE id = ?`, [hashToken(token, env), expiry(env), inv.id]);
+  });
   await writeAudit(db, { adminUserId: actor.id, action: inv.type === 'WORKSPACE_CREATE' ? 'PLATFORM_INVITE_RESENT' : 'WORKSPACE_INVITE_RESENT', targetType: 'INVITATION', targetId: inv.id, metadata: { email: inv.email }, actorKind: inv.type === 'WORKSPACE_CREATE' ? 'ADMIN' : 'USER' });
   const fresh = await getInvitation(db, inv.id);
   const email_delivery = await deliver(db, fresh, token, env);

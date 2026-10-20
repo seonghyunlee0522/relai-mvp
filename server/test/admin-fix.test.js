@@ -29,13 +29,13 @@ test('P1-1 (T5: early access retired): an early-access workspace reads FREE in e
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
   const A = await setup(client, 'early@x.com', '얼리');                       // signed up before the cutoff → early access
-  await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));   // 2 projects = FREE's limit
+  await A.c('POST', `/api/workspaces/${A.w}/projects`, project({ name: '두 번째' }));   // v3: the 2nd is refused; 1 project = FREE's limit
   assert.equal(await effectivePlan(db, A.w), 'FREE');   // early_access_until in the future no longer grants a plan
 
   let p = await adminPlans(ops, A.w, A.uid);
   assert.deepEqual([p.list, p.detail, p.detail_usage, p.user, p.usage], ['FREE', 'FREE', 'FREE', 'FREE', 'FREE']);
-  assert.equal(p.list_label, '무료');
-  assert.equal(p.usage_row.max_pct, 100); assert.equal(p.usage_row.tier, 'attention');
+  assert.equal(p.list_label, 'Free');
+  assert.equal(p.usage_row.max_pct, 200); assert.equal(p.usage_row.tier, 'attention');
   const dash = (await ops.c('GET', '/api/admin/dashboard')).json;
   assert.ok(dash.attention.near_limit.some((x) => x.workspace_id === A.w));
 
@@ -50,7 +50,7 @@ test('P1-1 (T5: early access retired): an early-access workspace reads FREE in e
   assert.equal(await effectivePlan(db, A.w), 'FREE');
   p = await adminPlans(ops, A.w, A.uid);
   assert.deepEqual([p.list, p.detail, p.detail_usage, p.user, p.usage], ['FREE', 'FREE', 'FREE', 'FREE', 'FREE']);
-  assert.equal(p.usage_row.max_pct, 100); assert.equal(p.usage_row.tier, 'attention');
+  assert.equal(p.usage_row.max_pct, 200); assert.equal(p.usage_row.tier, 'attention');
   server.close();
 });
 
