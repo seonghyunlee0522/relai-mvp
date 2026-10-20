@@ -1642,3 +1642,91 @@ CREATE TABLE IF NOT EXISTS free_credit_claims (
   granted_at    timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS enterprise_topup boolean NOT NULL DEFAULT false;
+
+/* Pricing v3 T3 (migration 63) — subscription lifecycle. Additive only (previews share the production DB).
+ *   subscription_changes   changes the OWNER scheduled for the next renewal: DOWNGRADE (TEAM → PRO), CYCLE (월간 ↔ 연간), ADDON_REDUCE
+ *                          (fewer extra users / projects). to_state = the target { plan, cycle, extra_users, extra_projects }. One SCHEDULED
+ *                          row per kind and subscription (partial unique index); the renewal charge applies them (APPLIED) or they lapse
+ *                          with the subscription (CANCELED).
+ *   subscription_refunds   해지 환불 / 청약철회: unused KST days of each paid order of the current period, prorated (billing/prorate.js, refunds
+ *                          rounded up, never more than paid), no penalty (founder 2026-10-20). REQUESTED until the provider partial cancel
+ *                          succeeds (REFUND_PARTIAL_ENABLED) or an operator marks it DONE.
+ *   subscriptions.ended_at / data_retention_until   when the paid plan ended and the 30-day 조회·내보내기 window after it.
+ *   subscriptions.last_failed_at                    the last declined renewal (retry_count, migration 57, counts them). */
+CREATE TABLE IF NOT EXISTS subscription_changes (
+  id              TEXT PRIMARY KEY,
+  subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+  workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind            TEXT NOT NULL CHECK (kind IN ('DOWNGRADE','CYCLE','ADDON_REDUCE')),
+  from_state      TEXT NOT NULL,                  -- JSON { plan, cycle, extra_users, extra_projects }
+  to_state        TEXT NOT NULL,                  -- JSON, same shape
+  effective_at    timestamptz NOT NULL,           -- the renewal it applies at (current_period_end when scheduled)
+  status          TEXT NOT NULL DEFAULT 'SCHEDULED' CHECK (status IN ('SCHEDULED','APPLIED','CANCELED')),
+  created_by      TEXT,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  closed_at       timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subscription_changes_open ON subscription_changes(subscription_id, kind) WHERE status = 'SCHEDULED';
+CREATE INDEX IF NOT EXISTS idx_subscription_changes_ws ON subscription_changes(workspace_id, created_at);
+CREATE TABLE IF NOT EXISTS subscription_refunds (
+  id              TEXT PRIMARY KEY,
+  workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  subscription_id TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
+  order_id        TEXT NOT NULL REFERENCES billing_orders(id),
+  kind            TEXT NOT NULL CHECK (kind IN ('WITHDRAWAL','CANCEL')),   -- WITHDRAWAL = 청약철회 (within 7 days of the payment)
+  amount          INTEGER NOT NULL CHECK (amount >= 0),
+  days            INTEGER NOT NULL,               -- unused KST days refunded
+  period_days     INTEGER NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED','DONE','FAILED')),
+  cancel_order_id TEXT,                           -- the new NicePay orderId of the partial cancel
+  cancelled_tid   TEXT,
+  failure_message TEXT,
+  reason          TEXT,
+  created_by      TEXT,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  done_at         timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_refunds_ws ON subscription_refunds(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_subscription_refunds_open ON subscription_refunds(created_at) WHERE status <> 'DONE';
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS ended_at timestamptz;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS data_retention_until timestamptz;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_failed_at timestamptz;
+
+/* Pricing v3 T3 (migration 64) — 정기결제 동의 · 가격 변경 고지 (전자상거래법 §13②·⑥, legal-review §1, §5). Append-only records,
+ * kept 5 years as 계약 기록; no card data, ip as a hash.
+ *   billing_consents       one row per consent the customer gave on a checkout screen: CHECKOUT (plan subscribe), RECURRING
+ *                          (자동 갱신 고지), ADDON, UPGRADE, PRICE_INCREASE (증액 동의). disclosure_hash = sha256 of the exact 고지 text shown
+ *                          (billing/consent.js), terms_version = the 이용약관 version it refers to.
+ *   price_change_notices   a renewal above the agreed renewal_amount: notified ≥ 30 days before, consented or declined. Without
+ *                          consent the renewal is not charged and auto-renewal stops (billing/cron.js). */
+CREATE TABLE IF NOT EXISTS billing_consents (
+  id              TEXT PRIMARY KEY,
+  workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id         TEXT,                           -- no FK: the record outlives a withdrawn account (5 years)
+  order_id        TEXT,
+  kind            TEXT NOT NULL CHECK (kind IN ('CHECKOUT','RECURRING','ADDON','UPGRADE','PRICE_INCREASE')),
+  terms_version   TEXT NOT NULL,
+  disclosure_hash TEXT NOT NULL,
+  amount          INTEGER,                        -- charged now (VAT incl.)
+  renewal_amount  INTEGER,                        -- the amount each renewal will charge (VAT incl.)
+  cycle           TEXT,
+  next_charge_at  timestamptz,
+  ip_hash         TEXT,
+  user_agent      TEXT,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_billing_consents_ws ON billing_consents(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_billing_consents_order ON billing_consents(order_id) WHERE order_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS price_change_notices (
+  id              TEXT PRIMARY KEY,
+  subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+  workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  old_amount      INTEGER NOT NULL,
+  new_amount      INTEGER NOT NULL,
+  effective_at    timestamptz NOT NULL,           -- the renewal the new amount applies to
+  notified_at     timestamptz NOT NULL DEFAULT now(),
+  consented_at    timestamptz,
+  consent_id      TEXT,
+  declined_at     timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_price_change_notices ON price_change_notices(subscription_id, effective_at);

@@ -17,12 +17,14 @@ import { workspaceUsage } from '../usage.js';
 import { writeAudit } from '../admin.js';
 import { emailConfig } from '../email/config.js';
 import { requireVerifiedEmail } from '../auth/account-security.js';
-import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE } from './provider.js';
+import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE, CHECKOUT_NOT_OPEN_MESSAGE } from './provider.js';
 import { parseCard, safeEqual } from './nicepay.js';
-import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, minUsers, MAX_USERS, publicOrder, renewalAmount } from './orders.js';
+import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, minUsers, MAX_USERS, publicOrder, renewalAmount, quoteAddon, quoteUpgrade, loadQuoteContext } from './orders.js';
 import { countUsage, workspaceLimits, overLimit } from './limits.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
-import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices } from './cron.js';
+import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices, expireEndedSubscriptions, notifyPriceIncreases, sendCancelNotice } from './cron.js';
+import { disclosure, checkConsent, recordConsent } from './consent.js';
+import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange, refundQuote, cancelWithRefund, executeRefund, markRefundDone, listRefunds, refundPartialEnabled } from './lifecycle.js';
 import { grantDueMonthlyCredits } from './ai-grants.js';
 import { isCreditOrder } from './credit-packs.js';
 import { bucketBalances } from '../ai/credits.js';
@@ -128,8 +130,19 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   const orderFail = (res, e) => fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {});
 
   const paymentsOff = (res) => fail(res, 409, 'payments_disabled', PAYMENTS_OFF_MESSAGE);
-  /** Feature flags of the v3 billing screens (design.md §10); all off unless set. */
-  const flags = () => ({ payments: paymentsEnabled(), recurring: Boolean(provider?.recurringEnabled), addons: process.env.ADDONS_ENABLED === 'true', plan_change: process.env.PLAN_CHANGE_ENABLED === 'true' });
+  /**
+   * Feature flags of the v3 billing screens (design.md §10); all off unless set. Paid plans are sold ONLY as 정기결제 (founder
+   * 2026-10-20: no one-time passes): checkout_open = PAYMENTS_ENABLED and NICEPAY_RECURRING_ENABLED (the provider's recurringEnabled).
+   * ONE_TIME_PLANS_ENABLED=true re-opens the retired one-time plan checkout (kept for the existing tests; never set in prod).
+   */
+  const flags = () => ({ payments: paymentsEnabled(), recurring: Boolean(provider?.recurringEnabled), checkout_open: checkoutOpen(),
+    addons: process.env.ADDONS_ENABLED === 'true', plan_change: process.env.PLAN_CHANGE_ENABLED === 'true', refund_partial: refundPartialEnabled() });
+  const checkoutOpen = () => paymentsEnabled() && Boolean(provider?.recurringEnabled && provider.registerBillingKey);
+  const oneTimeOpen = () => process.env.ONE_TIME_PLANS_ENABLED === 'true';
+  const notOpen = (res) => fail(res, 409, 'checkout_not_open', CHECKOUT_NOT_OPEN_MESSAGE);
+  /** Gate for paid checkout: payments off → payments_disabled; recurring not approved → checkout_not_open. True when it answered. */
+  const closed = (res) => { if (!paymentsEnabled()) { paymentsOff(res); return true; } if (!checkoutOpen()) { notOpen(res); return true; } return false; };
+  const consentFail = (res, e, d) => fail(res, e.status, e.code, e.message, { fields: e.fields, disclosure: d });
   /**
    * GET …/billing (pricing v3 shape, T1; T2 fills credits buckets, T3 scheduled changes / renewal state):
    * { plan, cycle, status, auto_renew, next_payment_at, next_payment_amount, limits {projects, users}, usage {projects_active, members, pending_invites, …dims},
@@ -148,14 +161,26 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     // T2: bucket view (ai/credits.js bucketBalances) — total = plan + promo + purchased; plan expires at plan_expires_at.
     const creditBuckets = async (w) => { const c = await bucketBalances(db, w); return { total: c.total, plan: c.plan, plan_expires_at: c.plan_expires_at, promo: c.promo, purchased: c.purchased, available: c.available }; };
     // One-time purchases can be extended at any time; a renewing (recurring) subscription cannot be bought twice.
-    const canPurchase = paymentsEnabled() && (plan === 'FREE' || (subscription && !subscription.auto_renew));
+    const canPurchase = checkoutOpen() ? !(paid && renews) : paymentsEnabled() && oneTimeOpen() && (plan === 'FREE' || (subscription && !subscription.auto_renew));
     const early = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
+    const full = subscription ? await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [wid]) : null;
+    const changes = paid ? await scheduledChanges(db, full.id) : [];
+    const target = paid && renews && row?.price_version !== 'v2' ? composeTarget(full, changes) : null;
+    const notice = full ? await db.get(`SELECT id, old_amount, new_amount, effective_at, notified_at, consented_at, declined_at FROM price_change_notices
+      WHERE subscription_id = ? AND consented_at IS NULL AND declined_at IS NULL AND effective_at > now() ORDER BY effective_at LIMIT 1`, [full.id]) : null;
     return { billing: {
       plan, plan_label: PLANS[plan].label, cycle, status: subscription && paid ? subscription.status : null, auto_renew: Boolean(paid && subscription.auto_renew),
       next_payment_at: renews ? subscription.next_billing_at || subscription.current_period_end : null,
-      next_payment_amount: renews ? (row?.price_version === 'v2' ? row?.renewal_amount ?? null : renewalAmount(plan, cycle, addons.extra_users, addons.extra_projects)) : null,
+      next_payment_amount: renews ? (row?.price_version === 'v2' ? row?.renewal_amount ?? null : target ? target.amount : renewalAmount(plan, cycle, addons.extra_users, addons.extra_projects)) : null,
+      next_payment: target ? { plan: target.plan, cycle: target.cycle, extra_users: target.extra_users, extra_projects: target.extra_projects, amount: target.amount } : null,
+      renewal_amount: paid ? row?.renewal_amount ?? null : null, retry_count: paid ? Number(full?.retry_count || 0) : 0,
+      cancel_at_period_end: Boolean(paid && subscription.cancel_at_period_end), period_end: paid ? subscription.current_period_end : null,
+      ended_at: full?.ended_at || null, data_retention_until: full?.data_retention_until && new Date(full.data_retention_until) > new Date() ? full.data_retention_until : null,
+      price_notice: notice ? { id: notice.id, old_amount: notice.old_amount, new_amount: notice.new_amount, effective_at: notice.effective_at,
+        disclosure: disclosure('PRICE_INCREASE', { plan: full.plan, cycle: full.billing_cycle || 'MONTHLY', old_amount: notice.old_amount, new_amount: notice.new_amount, effective_at: notice.effective_at }) } : null,
+      refunds: subscription ? await listRefunds(db, wid) : [],
       limits, usage: { ...(await workspaceUsage(db, wid, plan)), ...counts, seats_left: limits.users === null ? null : Math.max(0, limits.users - counts.members - counts.pending_invites) },
-      addons, scheduled: [], credits: await creditBuckets(wid),
+      addons, scheduled: changes.map((c) => ({ id: c.id, kind: c.kind, from: c.from, to: c.to, effective_at: c.effective_at })), credits: await creditBuckets(wid),
       catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null, price_version: row?.price_version || null,
       subscription, early_access_until: early?.early_access_until || null,
       plans: planCatalogue().plans, credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits,
@@ -166,24 +191,50 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   };
   app.get(b, guard, wrap(async (req, res) => res.json(await summary(req.params.wid, req.role))));
 
+  /**
+   * GET …/billing/quote — every amount a screen shows comes from here (no ₩ computed in the browser), with the 고지 (disclosure) the
+   * customer consents to: kind PLAN (default; plan, cycle, extra_users, extra_projects), ADDON (extra_users, extra_projects to add now),
+   * UPGRADE (plan). → { quote, disclosure }.
+   */
+  const quoteOf = async (wid, src) => {
+    const kind = String(src.kind || 'PLAN').toUpperCase();
+    if (kind === 'ADDON' || kind === 'UPGRADE') {
+      const { sub } = await loadQuoteContext(db, wid);
+      const q = kind === 'ADDON' ? quoteAddon({ wid, sub, extra_users: src.extra_users, extra_projects: src.extra_projects })
+        : quoteUpgrade({ wid, sub, plan: String(src.plan || 'TEAM') });
+      return { quote: q, disclosure: disclosure(kind, q), sub };
+    }
+    const q = await quoteFor(db, wid, { plan: String(src.plan || 'PRO'), cycle: String(src.cycle || 'MONTHLY'), users: src.users ?? src.seats, extra_users: src.extra_users, extra_projects: src.extra_projects });
+    return { quote: q, disclosure: disclosure('CHECKOUT', q) };
+  };
   app.get(`${b}/quote`, guard, wrap(async (req, res) => {
-    try { res.json({ quote: await quoteFor(db, req.params.wid, { plan: String(req.query.plan || 'PRO'), cycle: String(req.query.cycle || 'MONTHLY'), users: req.query.users ?? req.query.seats, extra_users: req.query.extra_users, extra_projects: req.query.extra_projects }) }); }
+    try { const { quote, disclosure: d } = await quoteOf(req.params.wid, req.query); res.json({ quote, disclosure: d }); }
     catch (e) { if (e instanceof OrderError) return orderFail(res, e); throw e; }
   }));
 
   /** Shared checkout validation: PRO / TEAM, purchasable, provider present. Returns the quote or null after answering. */
-  const prepare = async (req, res) => {
+  const prepare = async (req, res, { recurring = false } = {}) => {
     if (!paymentsEnabled()) { paymentsOff(res); return null; }
+    if (!recurring && !oneTimeOpen()) { notOpen(res); return null; }
     const plan = String(req.body?.plan || 'PRO');
     if (!PAID_PLANS.includes(plan)) { fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { plan: PLANS[plan]?.contact_sales ? 'Enterprise는 영업 문의로 계약합니다.' : '선택할 수 없는 플랜입니다.' } }); return null; }
     if (!provider) { unavailable(res); return null; }
     const sub = await getSubscription(db, req.params.wid);
-    if ((await effectivePlan(db, req.params.wid)) === plan && sub?.auto_renew) { fail(res, 409, 'already_subscribed', `이미 ${PLANS[plan].label} 플랜을 사용 중입니다.`); return null; }
+    const current = await effectivePlan(db, req.params.wid);
+    if (current === plan && sub?.auto_renew) { fail(res, 409, 'already_subscribed', `이미 ${PLANS[plan].label} 플랜을 사용 중입니다.`); return null; }
+    if (recurring && PAID_PLANS.includes(current) && sub?.auto_renew && !sub.cancel_at_period_end) { fail(res, 409, 'already_subscribed', `이미 ${PLANS[current].label} 플랜을 구독 중입니다. 플랜 변경을 이용해 주세요.`); return null; }
     try { return await quoteFor(db, req.params.wid, { plan, cycle: String(req.body?.cycle || 'MONTHLY'), users: req.body?.users ?? req.body?.seats, extra_users: req.body?.extra_users, extra_projects: req.body?.extra_projects }); }
     catch (e) { if (e instanceof OrderError) { orderFail(res, e); return null; } throw e; }
   };
 
+  /**
+   * POST …/billing/checkout — paid plans are sold only as 정기결제 (founder 2026-10-20). Until NicePay approves recurring billing the
+   * answer is 409 checkout_not_open (screens show 정기결제 준비 중). With recurring open it is the same as POST …/billing/recurring
+   * (card registration + first charge + consent). ONE_TIME_PLANS_ENABLED=true keeps the retired one-time window path for tests.
+   */
   app.post(`${b}/checkout`, payer, wrap(async (req, res) => {
+    if (paymentsEnabled() && checkoutOpen() && req.body?.card) return subscribe(req, res);
+    if (paymentsEnabled() && !oneTimeOpen()) return checkoutOpen() ? fail(res, 400, 'card_required', '정기결제에 쓸 카드 정보를 입력해 주세요.') : notOpen(res);
     const q = await prepare(req, res); if (!q) return;
     const workspace = await db.get('SELECT id, name FROM workspaces WHERE id = ?', [req.params.wid]);
     const order = await createOrder(db, { workspaceId: workspace.id, userId: req.user.id, provider: provider.name, kind: 'ONE_TIME', q });
@@ -192,22 +243,47 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     res.status(201).json({ checkout_url: out.checkout_url, session_id: out.session_id, provider: provider.name, order: publicOrder(order) });
   }));
 
+  /**
+   * POST …/billing/cancel — 해지, any time, monthly and annual: auto-renewal stops at once and the plan runs to the end of what was
+   * paid. { refund: true } ends the plan now and refunds the unused days of every paid order of the period (no penalty; 청약철회
+   * within 7 days of a payment), billing/lifecycle.js. One click + one confirm on the screen; no survey.
+   */
   app.post(`${b}/cancel`, payer, wrap(async (req, res) => {
     if (!provider) return unavailable(res);
+    if (req.body?.refund === true || req.body?.refund === 'true') {
+      const out = await cancelWithRefund(db, provider, { workspaceId: req.params.wid, userId: req.user.id, reason: String(req.body?.reason || '고객 해지 환불').slice(0, 100) });
+      if (out.error) return fail(res, 409, out.error, '해지할 구독이 없습니다.');
+      await sendCancelNotice(db, req.params.wid, { immediate: true, refunds: out.refunds, total: out.total, executed: out.executed }).catch((e) => console.error('[billing] cancel mail failed', e.message));
+      return res.json({ ...(await summary(req.params.wid, req.role)), cancel: { immediate: true, refund_total: out.total, withdrawal: out.withdrawal, refunds: out.refunds.map((r) => ({ id: r.id, kind: r.kind, amount: r.amount, days: r.days, period_days: r.period_days, status: r.status || 'REQUESTED' })) } });
+    }
     const out = await requestCancel(db, provider, req.params.wid);
     if (out.error === 'no_active_subscription') return fail(res, 409, out.error, '해지할 구독이 없습니다.');
     if (out.error === 'already_canceled') return fail(res, 409, out.error, '이미 해지 예약된 구독입니다.');
     if (out.error === 'not_recurring') return fail(res, 409, out.error, '자동 결제되지 않는 이용권입니다. 이용 기간이 끝나면 Free 플랜으로 전환됩니다.');
-    res.json(await summary(req.params.wid, req.role));
+    await sendCancelNotice(db, req.params.wid, { immediate: false }).catch((e) => console.error('[billing] cancel mail failed', e.message));
+    res.json({ ...(await summary(req.params.wid, req.role)), cancel: { immediate: false } });
   }));
 
-  /** 정기결제: register a card (billing key) and charge the first period. Off until NICEPAY_RECURRING_ENABLED=true. */
-  app.post(`${b}/recurring`, payer, wrap(async (req, res) => {
-    if (!provider?.recurringEnabled || !provider.registerBillingKey) return fail(res, 404, 'recurring_disabled', '정기결제는 아직 제공되지 않습니다.');
+  /** GET …/billing/refund-quote — what 해지 + 환불 would refund right now (per order: unused days / period days, amount). */
+  app.get(`${b}/refund-quote`, owner, wrap(async (req, res) => {
+    const q = await refundQuote(db, req.params.wid);
+    res.json({ refund: { total: q.total, withdrawal: Boolean(q.withdrawal), lines: q.lines.map(({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount }) => ({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount })) } });
+  }));
+
+  /**
+   * 정기결제 구독 (new subscription): consent to the disclosure of this exact quote → billing key registration → first charge.
+   * POST …/billing/recurring { plan, cycle, extra_users?, extra_projects?, card, agree, disclosure_hash }.
+   */
+  const subscribe = async (req, res) => {
+    if (closed(res)) return;
     let card;
     try { card = parseCard(req.body?.card); } catch (e) { if (e instanceof BillingError) return fail(res, e.status, e.code, e.message, { fields: e.fields }); throw e; }
-    const q = await prepare(req, res); if (!q) return;
-    const order = await createOrder(db, { workspaceId: req.params.wid, userId: req.user.id, provider: provider.name, kind: 'RECURRING_FIRST', q });
+    const q = await prepare(req, res, { recurring: true }); if (!q) return;
+    const d = disclosure('CHECKOUT', q);
+    const bad = checkConsent(req.body, d); if (bad) return consentFail(res, bad, d);
+    const order = await createOrder(db, { workspaceId: req.params.wid, userId: req.user.id, provider: provider.name, kind: 'RECURRING_FIRST', q, clientKey: req.body?.client_key });
+    if (order.status !== 'PENDING') return order.status === 'PAID' ? res.status(201).json(await summary(req.params.wid, req.role)) : fail(res, 409, 'order_closed', '이미 처리된 주문입니다. 화면을 새로 고쳐 주세요.');
+    await recordConsent(db, { workspaceId: req.params.wid, userId: req.user.id, orderId: order.id, kind: 'CHECKOUT', d, amount: q.total, renewalAmount: q.next_renewal_amount, cycle: q.cycle, nextChargeAt: q.next_renewal_at, req });
     const customer = { email: req.user.email, name: req.user.name };
     let bid;
     try {
@@ -226,6 +302,97 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
       return fail(res, e.status, e.code, e.message);
     }
     res.status(201).json(await summary(req.params.wid, req.role));
+  };
+  app.post(`${b}/recurring`, payer, wrap(async (req, res) => {
+    if (paymentsEnabled() && !checkoutOpen()) return fail(res, 404, 'recurring_disabled', CHECKOUT_NOT_OPEN_MESSAGE);
+    return subscribe(req, res);
+  }));
+
+  /**
+   * Charge an in-period order (ADDON / UPGRADE) on the stored billing key. A total waived under MIN_CARD_KRW is applied without a
+   * charge. A decline only fails the order (the subscription is not PAST_DUE for a declined add-on). Returns true when applied.
+   */
+  const chargeInPeriod = async (res, wid, order) => {
+    if (Number(order.amount) === 0) {
+      const out = await processWebhookEvent(db, provider.name, { id: `waived:${order.id}`, type: 'subscription.activated', order_id: order.id, payment: { amount: 0, currency: 'KRW', status: 'PAID', provider_tid: `waived:${order.id}`, moid: order.id }, payload: { waived: true } });
+      if (out.ignored) { fail(res, 409, 'apply_failed', '변경을 반영하지 못했습니다.'); return false; }
+      return true;
+    }
+    const sub = await db.get('SELECT billing_key_enc FROM subscriptions WHERE workspace_id = ?', [wid]);
+    let ev;
+    try { ev = await provider.chargeBillingKey({ bidEnc: sub.billing_key_enc, order }); }
+    catch (e) { if (!(e instanceof BillingError)) throw e; await failOrder(db, order.id, e.code, e.message); fail(res, e.status, e.code, e.message); return false; }
+    if (ev.type !== 'subscription.activated') { await failOrder(db, order.id, ev.payment?.failure_code || 'declined', ev.payment?.failure_message); fail(res, 402, 'payment_failed', ev.payment?.failure_message || '결제가 승인되지 않았습니다.'); return false; }
+    if (!(await applyOrRefund(db, provider, order, ev))) { fail(res, 502, 'apply_failed', '결제를 반영하지 못해 자동 취소했습니다.'); return false; }
+    return true;
+  };
+  /** Shared ADDON / UPGRADE flow: flags, a renewing subscription with a card on file, consent, order (client_key), charge. */
+  const inPeriod = (kind) => wrap(async (req, res) => {
+    if (closed(res)) return;
+    if (kind === 'ADDON' && process.env.ADDONS_ENABLED !== 'true') return fail(res, 409, 'addons_disabled', '추가 구매는 아직 열리지 않았습니다.');
+    if (kind === 'UPGRADE' && process.env.PLAN_CHANGE_ENABLED !== 'true') return fail(res, 409, 'plan_change_disabled', '플랜 변경은 아직 열리지 않았습니다.');
+    const wid = req.params.wid;
+    let quote; let d; let sub;
+    try { ({ quote, disclosure: d, sub } = await quoteOf(wid, { ...req.body, kind })); } catch (e) { if (e instanceof OrderError) return orderFail(res, e); throw e; }
+    if (!sub?.billing_key_enc || !sub.auto_renew || sub.cancel_at_period_end) return fail(res, 409, 'not_renewing', '정기결제 중인 구독에서만 바로 변경할 수 있습니다. 해지 예약된 구독은 다음 결제가 없습니다.');
+    const bad = checkConsent(req.body, d); if (bad) return consentFail(res, bad, d);
+    const order = await createOrder(db, { workspaceId: wid, userId: req.user.id, provider: provider.name, kind, q: quote, clientKey: req.body?.client_key });
+    if (order.status === 'PAID') return res.json(await summary(wid, req.role));
+    if (order.status !== 'PENDING') return fail(res, 409, 'order_closed', '이미 처리된 주문입니다. 화면을 새로 고쳐 주세요.');
+    await recordConsent(db, { workspaceId: wid, userId: req.user.id, orderId: order.id, kind, d, amount: quote.total, renewalAmount: quote.next_renewal_amount, cycle: quote.cycle, nextChargeAt: quote.next_renewal_at, req });
+    if (!(await chargeInPeriod(res, wid, order))) return;
+    res.status(201).json({ ...(await summary(wid, req.role)), order: publicOrder(await getOrder(db, order.id)) });
+  });
+  /** POST …/billing/addons { extra_users, extra_projects, agree, disclosure_hash, client_key } — more users / projects now, prorated. */
+  app.post(`${b}/addons`, payer, inPeriod('ADDON'));
+  /** POST …/billing/upgrade { plan: 'TEAM', agree, disclosure_hash, client_key } — PRO → TEAM now, prorated difference, +credits. */
+  app.post(`${b}/upgrade`, payer, inPeriod('UPGRADE'));
+
+  /**
+   * POST …/billing/changes { kind: DOWNGRADE | CYCLE | ADDON_REDUCE, … } — scheduled for the next renewal (no refund now). A change that
+   * raises the renewal amount (월간 → 연간) needs consent to the new renewal: the first call answers 400 consent_required with the
+   * disclosure, the second carries agree + disclosure_hash. DELETE …/billing/changes/:id withdraws one.
+   */
+  app.post(`${b}/changes`, payer, wrap(async (req, res) => {
+    const kind = String(req.body?.kind || '').toUpperCase();
+    if (['DOWNGRADE', 'CYCLE'].includes(kind) && process.env.PLAN_CHANGE_ENABLED !== 'true') return fail(res, 409, 'plan_change_disabled', '플랜 변경은 아직 열리지 않았습니다.');
+    if (kind === 'ADDON_REDUCE' && process.env.ADDONS_ENABLED !== 'true') return fail(res, 409, 'addons_disabled', '추가 구매 변경은 아직 열리지 않았습니다.');
+    const wid = req.params.wid;
+    const full = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [wid]);
+    let d = null;
+    if (full && kind === 'CYCLE') {
+      const others = (await scheduledChanges(db, full.id)).filter((c) => c.kind !== 'CYCLE');
+      const target = composeTarget(full, [...others, { kind, to: { cycle: String(req.body?.cycle || '') } }]);
+      if (target.amount !== null && target.amount > Number(full.renewal_amount ?? 0)) {
+        d = disclosure('CHECKOUT', { plan: target.plan, cycle: target.cycle, total: 0, lines: [], next_renewal_amount: target.amount, next_renewal_at: full.current_period_end });
+        const bad = checkConsent(req.body, d); if (bad) return consentFail(res, bad, d);
+      }
+    }
+    try {
+      const out = await scheduleChange(db, { workspaceId: wid, userId: req.user.id, kind, body: req.body || {} });
+      if (d) await recordConsent(db, { workspaceId: wid, userId: req.user.id, kind: 'RECURRING', d, amount: 0, renewalAmount: out.target.amount, cycle: out.target.cycle, nextChargeAt: full.current_period_end, req });
+      res.status(201).json({ ...(await summary(wid, req.role)), change: out.change });
+    } catch (e) { if (e instanceof OrderError) return orderFail(res, e); throw e; }
+  }));
+  app.delete(`${b}/changes/:cid`, payer, wrap(async (req, res) => {
+    if (!(await cancelScheduledChange(db, { workspaceId: req.params.wid, changeId: req.params.cid }))) return fail(res, 404, 'not_found', '예약된 변경을 찾을 수 없습니다.');
+    res.json(await summary(req.params.wid, req.role));
+  }));
+
+  /** POST …/billing/price-consent { notice_id, agree, disclosure_hash } — 증액 동의 (§13⑥): the renewal may charge the new amount. */
+  app.post(`${b}/price-consent`, payer, wrap(async (req, res) => {
+    const n = await db.get(`SELECT p.*, s.plan, s.billing_cycle FROM price_change_notices p JOIN subscriptions s ON s.id = p.subscription_id
+      WHERE p.id = ? AND p.workspace_id = ? AND p.consented_at IS NULL AND p.declined_at IS NULL AND p.effective_at > now()`, [String(req.body?.notice_id || ''), req.params.wid]);
+    if (!n) return fail(res, 404, 'not_found', '동의할 가격 변경 안내가 없습니다.');
+    const d = disclosure('PRICE_INCREASE', { plan: n.plan, cycle: n.billing_cycle || 'MONTHLY', old_amount: n.old_amount, new_amount: n.new_amount, effective_at: n.effective_at });
+    if (req.body?.decline === true) {
+      await db.run('UPDATE price_change_notices SET declined_at = now() WHERE id = ?', [n.id]);
+      return res.json(await summary(req.params.wid, req.role));
+    }
+    const bad = checkConsent(req.body, d); if (bad) return consentFail(res, bad, d);
+    const cid = await recordConsent(db, { workspaceId: req.params.wid, userId: req.user.id, kind: 'PRICE_INCREASE', d, renewalAmount: n.new_amount, cycle: n.billing_cycle, nextChargeAt: n.effective_at, req });
+    await db.run('UPDATE price_change_notices SET consented_at = now(), consent_id = ? WHERE id = ? AND consented_at IS NULL', [cid, n.id]);
+    res.json(await summary(req.params.wid, req.role));
   }));
 
   /** Payment window page. Only the OWNER who created the order, only while it is pending. */
@@ -261,12 +428,34 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     res.json({ refunded: true, ...out });
   }));
 
+  /** Operator: subscription refunds (해지 환불 / 청약철회) — list open ones, retry a failed partial cancel, or mark one paid by hand. */
+  const admin = (req, res) => { if (req.user?.system_role !== 'SYSTEM_ADMIN') { fail(res, 403, 'forbidden', '운영자 권한이 필요합니다.'); return false; } return true; };
+  app.get('/api/billing/admin/subscription-refunds', requireAuth, wrap(async (req, res) => {
+    if (!admin(req, res)) return;
+    const status = ['REQUESTED', 'FAILED', 'DONE'].includes(req.query.status) ? req.query.status : null;
+    res.json({ refunds: await db.all(`SELECT r.id, r.workspace_id, w.name AS workspace_name, r.order_id, r.kind, r.amount, r.days, r.period_days, r.status, r.failure_message, r.created_at, r.done_at
+      FROM subscription_refunds r JOIN workspaces w ON w.id = r.workspace_id ${status ? 'WHERE r.status = ?' : "WHERE r.status <> 'DONE'"} ORDER BY r.created_at DESC LIMIT 200`, status ? [status] : []) });
+  }));
+  app.post('/api/billing/admin/subscription-refunds/:id/:action', requireAuth, wrap(async (req, res) => {
+    if (!admin(req, res)) return;
+    const r = await db.get('SELECT id, workspace_id, status, amount FROM subscription_refunds WHERE id = ?', [req.params.id]);
+    if (!r) return fail(res, 404, 'not_found', '환불 건을 찾을 수 없습니다.');
+    if (r.status === 'DONE') return fail(res, 409, 'already_done', '이미 처리된 환불입니다.');
+    let out;
+    if (req.params.action === 'retry') { if (!provider?.refundPartial) return unavailable(res); out = await executeRefund(db, provider, r.id); }
+    else if (req.params.action === 'done') out = { status: (await markRefundDone(db, r.id, { note: req.body?.note })) ? 'DONE' : r.status };
+    else return fail(res, 404, 'not_found', '찾을 수 없습니다.');
+    await writeAudit(db, { adminUserId: req.user.id, action: `SUBSCRIPTION_REFUND_${req.params.action.toUpperCase()}`, targetType: 'SUBSCRIPTION_REFUND', targetId: r.id, metadata: { amount: r.amount, workspace_id: r.workspace_id, result: out.status } });
+    res.json({ refund: { id: r.id, ...out } });
+  }));
+
   /** Daily jobs (Vercel Cron sends `Authorization: Bearer $CRON_SECRET`). */
   app.get('/api/billing/cron/daily', wrap(async (req, res) => {
     const secret = String(process.env.CRON_SECRET || '');
     if (!secret) return fail(res, 503, 'cron_unconfigured', 'CRON_SECRET is not set');
     if (!safeEqual(req.get('authorization'), `Bearer ${secret}`)) return fail(res, 401, 'unauthenticated', '인증이 필요합니다.');
-    res.json({ reminders: await sendRenewalReminders(db), renewals: await chargeDueRenewals(db, provider), ai_credits: await grantDueMonthlyCredits(db), early_access: await sendEarlyAccessNotices(db),
+    res.json({ reminders: await sendRenewalReminders(db), price_notices: await notifyPriceIncreases(db), renewals: await chargeDueRenewals(db, provider),
+      expired: await expireEndedSubscriptions(db, provider), ai_credits: await grantDueMonthlyCredits(db), early_access: await sendEarlyAccessNotices(db),
       service_orders: await serviceOrdersDaily(db) });
   }));
 }

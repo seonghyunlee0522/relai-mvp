@@ -111,7 +111,7 @@ test('AC1 + AC2 (T5, b7-fix): new workspace = no early_access_until (signup gran
   assert.equal((await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [A.w])).early_access_until, null);   // early access retired: signup grants nothing
   assert.equal(await effectivePlan(db, A.w), 'FREE');   // early access retired as an unlimited plan (2026-10-20)
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
-  assert.equal(b.plan, 'FREE'); assert.equal(b.plan_label, 'Free'); assert.equal(b.early_access_until, null); assert.equal(b.checkout.can_purchase, true);   // FREE may buy TEAM once payments are on
+  assert.equal(b.plan, 'FREE'); assert.equal(b.plan_label, 'Free'); assert.equal(b.early_access_until, null); assert.equal(b.checkout.can_purchase, false); assert.equal(b.flags.checkout_open, false);   // paid plans open only with 정기결제 (founder 2026-10-20; NICEPAY_RECURRING_ENABLED off here)
   // FREE limits apply (pricing v3): 2nd active project refused; requirements are not capped (D1)
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 402);
   for (let i = 0; i < 51; i++) assert.equal((await A.c('POST', `${A.purl}/requirements`, { title: `요구사항 ${i + 1}` })).status, 201);

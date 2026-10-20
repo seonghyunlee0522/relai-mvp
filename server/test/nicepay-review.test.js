@@ -5,6 +5,7 @@
  *  - the order page that opens the NicePay window shows 결제 수단 신용카드, and no review screen source says sample/test/샘플/테스트
  * Nothing here reaches NicePay (stubbed fetch). */
 import { test } from 'node:test';
+process.env.ONE_TIME_PLANS_ENABLED ??= 'true';   // the retired one-time plan checkout (paid plans = 정기결제 only since 2026-10-20) is still exercised here
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -88,7 +89,8 @@ test('payments off: the card registration endpoint refuses and NicePay is never 
 test('정기결제 on: monthly billing key + first charge; card data only as encData, never in DB, response or log', async () => {
   const { db, c, w, np, done } = await boot();
   let r;
-  const log = await capture(async () => { r = await c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', users: 1, card: CARD }); });
+  const hash = (await c('GET', `/api/workspaces/${w}/billing/quote?plan=TEAM&cycle=MONTHLY&users=1`)).json.disclosure.hash;   // 정기결제 고지 (T3)
+  const log = await capture(async () => { r = await c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', users: 1, card: CARD, agree: true, disclosure_hash: hash }); });
   assert.equal(r.status, 201, r.text);
   assert.equal(r.json.billing.subscription.auto_renew, true); assert.equal(r.json.billing.subscription.billing_cycle, 'MONTHLY');
   const reg = np.calls.find((x) => x.path === '/v1/subscribe/regist');
@@ -103,7 +105,8 @@ test('정기결제 on: monthly billing key + first charge; card data only as enc
 test('정기결제 decline: 402, nothing stored, card data not in the log', async () => {
   const { db, c, w, done } = await boot({ decline: true });
   let r;
-  const log = await capture(async () => { r = await c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', users: 1, card: CARD }); });
+  const hash = (await c('GET', `/api/workspaces/${w}/billing/quote?plan=TEAM&cycle=MONTHLY&users=1`)).json.disclosure.hash;   // 정기결제 고지 (T3)
+  const log = await capture(async () => { r = await c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', users: 1, card: CARD, agree: true, disclosure_hash: hash }); });
   assert.equal(r.status, 402);
   assert.ok(!log.includes(CARD_DIGITS) && !log.includes('800101'));
   assert.ok(!JSON.stringify(await db.all('SELECT * FROM billing_orders')).includes(CARD_DIGITS));

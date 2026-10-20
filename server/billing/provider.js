@@ -22,6 +22,8 @@ import { createNicepayProvider } from './nicepay.js';
  *  Read per call so tests and a redeploy can flip it. Starter credits, the dashboard and the ledger never depend on it. */
 export const paymentsEnabled = () => /^(1|true|yes|on)$/i.test(String(process.env.PAYMENTS_ENABLED || '').trim());
 export const PAYMENTS_OFF_MESSAGE = '초기 고객은 무료로 이용합니다. 지금은 결제를 받지 않습니다.';
+/** Paid plans open only with NicePay 정기결제 approval (founder 2026-10-20; NICEPAY_RECURRING_ENABLED): until then checkout answers this. */
+export const CHECKOUT_NOT_OPEN_MESSAGE = '정기결제 준비 중이에요. 카드 자동 결제 승인이 끝나면 Pro · Team 플랜을 바로 구독할 수 있어요.';
 
 export class BillingError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }

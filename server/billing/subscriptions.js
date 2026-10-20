@@ -12,11 +12,15 @@
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { PLANS, DEFAULT_PLAN, FOUNDING_OFFER, EARLY_ACCESS } from '../plans.js';
-import { grantMonthlyCredits } from './ai-grants.js';
+import { grantMonthlyCredits, grantUpgradeCredits } from './ai-grants.js';
 import { applyPackEvent, isCreditOrder } from './credit-packs.js';
 
 export const STATUSES = ['ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED'];
 export const GRACE_DAYS = 7;
+/** Days a workspace keeps 조회 · 내보내기 of its data after the paid plan ends (founder 2026-10-20; data is never deleted by billing). */
+export const RETENTION_DAYS = 30;
+/** Order kinds that change an existing period without extending it (T3). */
+export const IN_PERIOD_KINDS = ['ADDON', 'UPGRADE'];
 export const EVENT_TYPES = ['subscription.activated', 'payment.succeeded', 'payment.failed', 'subscription.canceled', 'subscription.expired', 'payment.refunded'];
 
 /** SQL predicate (alias `s`): the subscription currently grants its plan. Shared with usage.js. */
@@ -50,7 +54,7 @@ export async function grantEarlyAccess(db, workspaceId = null) {
   return r.changes;
 }
 
-const PUBLIC_COLS = 's.id, s.workspace_id, s.plan, s.status, s.provider, s.current_period_start, s.current_period_end, s.next_billing_at, s.cancel_at_period_end, s.grace_period_end, s.payment_method_summary, s.canceled_at, s.created_at, s.updated_at, s.seats, s.billing_cycle, s.auto_renew, s.founding_until';
+const PUBLIC_COLS = 's.id, s.workspace_id, s.plan, s.status, s.provider, s.current_period_start, s.current_period_end, s.next_billing_at, s.cancel_at_period_end, s.grace_period_end, s.payment_method_summary, s.canceled_at, s.created_at, s.updated_at, s.seats, s.billing_cycle, s.auto_renew, s.founding_until, s.extra_users, s.extra_projects, s.renewal_amount, s.retry_count, s.ended_at, s.data_retention_until';
 /** Customer-facing subscription (no provider ids, no billing key). */
 export const getSubscription = (db, workspaceId) => db.get(`SELECT ${PUBLIC_COLS} FROM subscriptions s WHERE s.workspace_id = ?`, [workspaceId]);
 
@@ -108,14 +112,17 @@ export async function transition(db, sub, type, ev = {}, { billingEventId = null
   switch (type) {
     case 'subscription.activated':
       put('plan', ev.plan && PLANS[ev.plan] ? ev.plan : 'TEAM'); if (ev.provider) put('provider', ev.provider);
-      set.push('cancel_at_period_end = false', 'grace_period_end = NULL', 'canceled_at = NULL'); break;
-    case 'payment.succeeded': set.push('grace_period_end = NULL'); break;
-    case 'payment.failed': set.push(`grace_period_end = COALESCE(grace_period_end, now() + interval '${GRACE_DAYS} days')`); break;
-    case 'subscription.canceled':
-      if (ev.immediate) { to = 'CANCELED'; set.push('canceled_at = now()', 'next_billing_at = NULL'); } else set.push('cancel_at_period_end = true', 'next_billing_at = NULL');
+      set.push('cancel_at_period_end = false', 'grace_period_end = NULL', 'canceled_at = NULL');
+      if (!ev.keep_period) set.push('retry_count = 0', 'last_failed_at = NULL', 'ended_at = NULL', 'data_retention_until = NULL');
       break;
-    case 'cancel.requested': set.push('cancel_at_period_end = true', 'next_billing_at = NULL'); break;
-    case 'subscription.expired': set.push('next_billing_at = NULL'); break;
+    case 'payment.succeeded': set.push('grace_period_end = NULL', 'retry_count = 0', 'last_failed_at = NULL'); break;
+    case 'payment.failed': set.push(`grace_period_end = COALESCE(grace_period_end, now() + interval '${GRACE_DAYS} days')`, 'retry_count = retry_count + 1', 'last_failed_at = now()'); break;
+    case 'subscription.canceled':
+      if (ev.immediate) { to = 'CANCELED'; set.push('canceled_at = now()', 'next_billing_at = NULL', 'ended_at = now()', `data_retention_until = now() + interval '${RETENTION_DAYS} days'`); } else set.push('cancel_at_period_end = true', 'next_billing_at = NULL');
+      break;
+    case 'cancel.requested': set.push('cancel_at_period_end = true', 'auto_renew = false', 'next_billing_at = NULL'); break;
+    case 'subscription.expired': set.push('next_billing_at = NULL', 'ended_at = COALESCE(ended_at, LEAST(now(), COALESCE(current_period_end, now())))',
+      `data_retention_until = COALESCE(data_retention_until, LEAST(now(), COALESCE(current_period_end, now())) + interval '${RETENTION_DAYS} days')`); break;
     case 'payment.refunded': {
       const back = Number(ev.revoke_months) || 0;
       if (back > 0) set.push(`current_period_end = current_period_end - make_interval(months => ${back})`);
@@ -200,7 +207,7 @@ export async function processWebhookEvent(db, provider, ev) {
       }
       const t = await transition(db, sub, ev.type, { ...ev, provider }, { billingEventId: ins.id });
       if (!t) return finish({ ignored: true, reason: `transition_from_${sub?.status}` }, sub);
-      if (order) await settleOrder(db, provider, order, ev, t.id);
+      if (order) await settleOrder(db, provider, order, ev, t.id, sub?.plan || null);
       const fresh = await db.get('SELECT * FROM subscriptions WHERE id = ?', [t.id]);
       const paymentId = ev.type === 'payment.refunded' ? null : await recordPayment(db, provider, fresh, ev, ins.id);
       if (PAID_TYPES.includes(ev.type) && fresh.status === 'ACTIVE') await grantMonthlyCredits(db, fresh.workspace_id);   // same transaction: paid ⇔ granted
@@ -224,6 +231,8 @@ export function checkOrder(order, ev) {
   if (PAID_TYPES.includes(ev.type)) {
     if (order.status !== 'PENDING') return { ignore: `order_${order.status.toLowerCase()}` };
     if (!ev.payment || ev.payment.status !== 'PAID' || Number(ev.payment.amount) !== Number(order.amount)) return { ignore: 'amount_mismatch', fail: true };
+    // ADDON / UPGRADE: same period, same renewal settings; only the plan (upgrade) and the add-ons change (settleOrder).
+    if (IN_PERIOD_KINDS.includes(order.kind)) return { ev: { ...base, billing_cycle: order.cycle, keep_period: true, period_start: null, period_end: null } };
     return { ev: { ...base, seats: order.seats, billing_cycle: order.cycle, extend_months: order.months, auto_renew: order.kind !== 'ONE_TIME', period_start: null, period_end: null } };
   }
   if (ev.type === 'payment.failed') return order.status === 'PENDING' ? { ev: base } : { ignore: `order_${order.status.toLowerCase()}` };
@@ -231,11 +240,44 @@ export function checkOrder(order, ev) {
   return { ev: base };
 }
 
-async function settleOrder(db, provider, order, ev, subscriptionId) {
+/**
+ * What a paid order changes on the subscription row (pricing v3, T3) — inside the webhook transaction, under the row lock, once per
+ * order (the order is PENDING → PAID exactly once, so a duplicate approval never adds twice):
+ *   period orders (ONE_TIME / RECURRING_FIRST / RECURRING_RENEWAL) of a v3 order: extra_users / extra_projects = what the order bought
+ *     (absolute), renewal_amount = the order amount (the amount the customer agreed each renewal charges), price_version v3;
+ *     a renewal also starts the new period at the order's period_start and closes the scheduled changes it applied.
+ *   ADDON: extra_* += the units bought; renewal_amount = the renewal with them (shown and consented on the add-on screen).
+ *   UPGRADE: plan = the new plan, extra_* = the carried add-ons, seats cleared, renewal_amount recomputed, scheduled downgrade
+ *     dropped, and the monthly-credit difference for the current credit cycle (T2 grantUpgradeCredits).
+ * A v2 order (bought before v3) changes nothing here: the legacy row keeps its seats until the period ends.
+ */
+async function applyOrderToSubscription(db, order, subscriptionId, prevPlan) {
+  if (order.price_version === 'v2') return;
+  const { renewalAmount } = await import('./orders.js');
+  if (order.kind === 'ADDON') {
+    await db.run(`UPDATE subscriptions SET extra_users = extra_users + ?, extra_projects = extra_projects + ?, updated_at = now() WHERE id = ?`,
+      [Number(order.addon_users || 0), Number(order.addon_projects || 0), subscriptionId]);
+  } else if (order.kind === 'UPGRADE') {
+    await db.run(`UPDATE subscriptions SET plan = ?, extra_users = ?, extra_projects = ?, seats = NULL, updated_at = now() WHERE id = ?`,
+      [order.plan, Number(order.addon_users || 0), Number(order.addon_projects || 0), subscriptionId]);
+    await db.run(`UPDATE subscription_changes SET status = 'CANCELED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED' AND kind IN ('DOWNGRADE','ADDON_REDUCE')`, [subscriptionId]);
+    if (prevPlan && prevPlan !== order.plan) await grantUpgradeCredits(db, order.workspace_id, { from: prevPlan, to: order.plan, reference: order.id });
+  } else if (['ONE_TIME', 'RECURRING_FIRST', 'RECURRING_RENEWAL'].includes(order.kind)) {
+    await db.run(`UPDATE subscriptions SET extra_users = ?, extra_projects = ?, price_version = NULL, updated_at = now()${order.kind === 'RECURRING_RENEWAL' && order.period_start ? ', current_period_start = ?' : ''} WHERE id = ?`,
+      [Number(order.addon_users || 0), Number(order.addon_projects || 0), ...(order.kind === 'RECURRING_RENEWAL' && order.period_start ? [order.period_start] : []), subscriptionId]);
+    if (order.kind === 'RECURRING_RENEWAL') await db.run(`UPDATE subscription_changes SET status = 'APPLIED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED'`, [subscriptionId]);
+  } else return;
+  const s = await db.get('SELECT plan, billing_cycle, extra_users, extra_projects FROM subscriptions WHERE id = ?', [subscriptionId]);
+  const next = renewalAmount(s.plan, s.billing_cycle || 'MONTHLY', Number(s.extra_users || 0), Number(s.extra_projects || 0));
+  if (next !== null) await db.run('UPDATE subscriptions SET renewal_amount = ? WHERE id = ?', [next, subscriptionId]);
+}
+
+async function settleOrder(db, provider, order, ev, subscriptionId, prevPlan = null) {
   const tid = ev.payment?.provider_tid || ev.refund_tid || null;
   if (PAID_TYPES.includes(ev.type)) {
     await db.run(`UPDATE billing_orders SET status = 'PAID', provider_tid = ?, paid_at = now(), updated_at = now() WHERE id = ?`, [tid, order.id]);
     if (order.founding) await db.run(`UPDATE subscriptions SET founding_until = COALESCE(founding_until, now() + make_interval(months => ${FOUNDING_OFFER.months})) WHERE id = ?`, [subscriptionId]);
+    await applyOrderToSubscription(db, order, subscriptionId, prevPlan);
   } else if (ev.type === 'payment.failed') {
     await db.run(`UPDATE billing_orders SET status = 'FAILED', provider_tid = COALESCE(?, provider_tid), failure_code = ?, failure_message = ?, updated_at = now() WHERE id = ?`,
       [tid, ev.payment?.failure_code || null, ev.payment?.failure_message || null, order.id]);

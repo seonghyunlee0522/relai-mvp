@@ -1,6 +1,7 @@
 /* NicePay billing: pricing/quotes, signature + amount checks (unit), and the full one-time / recurring / refund / reminder flow
  * against a stubbed NicePay API (injected fetch). Nothing here reaches NicePay. */
 import { test } from 'node:test';
+process.env.ONE_TIME_PLANS_ENABLED ??= 'true';   // the retired one-time plan checkout (paid plans = 정기결제 only since 2026-10-20) is still exercised here
 import assert from 'node:assert/strict';
 process.env.PAYMENTS_ENABLED ??= 'true';   // v1 ships with payments off (PAYMENTS_ENABLED); this suite exercises checkout
 import { createHash, createDecipheriv } from 'node:crypto';
@@ -304,8 +305,16 @@ test('recurring (정기결제) is off by default; when enabled: billing key, fir
   await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');   // paying needs a verified e-mail (requireVerifiedEmail)
   assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing.checkout.recurring_available, true);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card: { ...card, number: '12' } })).status, 400);
-  const r = await A.c('POST', `/api/workspaces/${A.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card });
+  // 정기결제 고지 · 동의 (T3): without the consent → 400 consent_required + the disclosure; a stale hash → consent_stale
+  const noConsent = await A.c('POST', `/api/workspaces/${A.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card });
+  assert.equal(noConsent.status, 400); assert.equal(noConsent.json.error.code, 'consent_required'); assert.ok(noConsent.json.error.disclosure.hash);
+  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card, agree: true, disclosure_hash: 'x' })).json.error.code, 'consent_stale');
+  const hash = (await A.c('GET', `/api/workspaces/${A.w}/billing/quote?plan=TEAM&cycle=MONTHLY&seats=3`)).json.disclosure.hash;
+  assert.equal(np.called(/regist$/).length, 0);   // nothing reached NicePay before the consent
+  const r = await A.c('POST', `/api/workspaces/${A.w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', seats: 3, card, agree: true, disclosure_hash: hash });
   assert.equal(r.status, 201, JSON.stringify(r.json));
+  const consent = await db.get('SELECT * FROM billing_consents WHERE workspace_id = ?', [A.w]);
+  assert.equal(consent.kind, 'CHECKOUT'); assert.equal(consent.disclosure_hash, hash); assert.equal(consent.amount, 80000); assert.equal(consent.renewal_amount, 80000);
   assert.equal(r.json.billing.plan, 'TEAM'); assert.equal(r.json.billing.subscription.auto_renew, true); assert.ok(!JSON.stringify(r.json).includes('BIKY'));
   const reg = np.called(/regist$/)[0]; assert.equal(reg.body.encMode, 'A2'); assert.ok(!JSON.stringify(reg.body).includes('1234567890123456'));
   assert.equal(np.called(/subscribe\/BIKY_test_1\/payments$/)[0].body.amount, 80000);   // pricing v3: Team monthly, VAT included
@@ -316,13 +325,13 @@ test('recurring (정기결제) is off by default; when enabled: billing key, fir
   // renewal due → charged by the daily cron, period +1 month
   await db.run(`UPDATE subscriptions SET next_billing_at = now() - interval '1 minute', current_period_end = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
   const cron = () => fetch(`http://127.0.0.1:${server.address().port}/api/billing/cron/daily`, { headers: { Authorization: 'Bearer cron-test-secret' } }).then((x) => x.json());
-  assert.deepEqual((await cron()).renewals, { due: 1, paid: 1, failed: 0 });
+  assert.deepEqual((await cron()).renewals, { due: 1, paid: 1, failed: 0, blocked: 0 });
   s = await sub(db, A.w); assert.ok(Math.abs(months(new Date(), s.current_period_end) - 1) < 0.1); assert.equal(s.status, 'ACTIVE');
-  assert.deepEqual((await cron()).renewals, { due: 0, paid: 0, failed: 0 });
+  assert.deepEqual((await cron()).renewals, { due: 0, paid: 0, failed: 0, blocked: 0 });
   // decline → PAST_DUE with grace; retried the next day only
   np.st.chargeDecline = true;
   await db.run(`UPDATE subscriptions SET next_billing_at = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
-  assert.deepEqual((await cron()).renewals, { due: 1, paid: 0, failed: 1 });
+  assert.deepEqual((await cron()).renewals, { due: 1, paid: 0, failed: 1, blocked: 0 });
   s = await sub(db, A.w); assert.equal(s.status, 'PAST_DUE'); assert.ok(new Date(s.next_billing_at) > new Date());
   assert.equal((await cron()).renewals.due, 0);
   // OWNER cancel: billing key expired at NicePay (outside the DB transaction), no more renewals

@@ -71,3 +71,49 @@ export function creditRefundRequestEmail({ workspaceName, workspaceId, requester
   const text = `워크스페이스 ${workspaceName} (${workspaceId})\n요청자: ${requester}\n환불 가능: ${credits(refundable)}\n${note ? `메모: ${note}\n` : ''}`;
   return { subject, html, text };
 }
+
+/* ---------- pricing v3 subscription lifecycle (T3) ---------- */
+const wonKr = (n) => `${Number(n || 0).toLocaleString('ko-KR')}원`;
+const kDate = (d) => new Date(d).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+
+/** A renewal charge was declined. `attempt` of `max`; `final` = no more automatic attempts. */
+export function paymentFailedEmail({ workspaceName, planLabel, amount, attempt, max, nextAttemptAt, graceEnd, final, link, support }) {
+  const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 자동 결제에 실패했습니다`;
+  const next = final ? `더 이상 자동으로 결제를 시도하지 않습니다. ${graceEnd ? `${kDate(graceEnd)}까지` : '유예 기간 동안'} 결제 수단을 바꿔 다시 구독하지 않으면 Free 플랜 한도가 적용됩니다.`
+    : `${nextAttemptAt ? `${kDate(nextAttemptAt)}에` : '곧'} 다시 결제를 시도합니다(${attempt}/${max + 1}회째 실패). 그동안 플랜은 그대로 이용할 수 있습니다.`;
+  const html = shell('자동 결제에 실패했습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜 갱신 결제 <b>${esc(wonKr(amount))}</b>(VAT 포함)가 승인되지 않았습니다.</p>
+    <p>${esc(next)}</p><p>데이터는 삭제되지 않습니다.</p>${link ? button(link, '결제 정보 확인하기') : ''}`, support);
+  const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜 갱신 결제 ${wonKr(amount)}(VAT 포함)가 승인되지 않았습니다.\n${next}\n${link ? `\n확인하기: ${link}\n` : ''}`;
+  return { subject, html, text };
+}
+
+/** 증액 사전 고지 (전자상거래법 §13⑥): the renewal amount rises; the owner must consent or auto-renewal stops. */
+export function priceIncreaseEmail({ workspaceName, planLabel, oldAmount, newAmount, effectiveAt, link, support }) {
+  const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 갱신 금액 변경 안내 — 동의가 필요합니다`;
+  const html = shell('갱신 금액 변경 안내', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜 다음 갱신(<b>${esc(kDate(effectiveAt))}</b>) 금액이 <b>${esc(wonKr(oldAmount))} → ${esc(wonKr(newAmount))}</b>(VAT 포함)로 바뀝니다.</p>
+    <p>설정 › 플랜 · 결제에서 동의하면 바뀐 금액으로 갱신됩니다. 동의하지 않으면 추가 결제 없이 자동 갱신이 중단되고, 이미 결제한 기간이 끝날 때까지 이용합니다. 언제든 해지할 수 있습니다.</p>${link ? button(link, '변경 내용 확인하기') : ''}`, support);
+  const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜 다음 갱신(${kDate(effectiveAt)}) 금액이 ${wonKr(oldAmount)} → ${wonKr(newAmount)}(VAT 포함)로 바뀝니다.\n동의하지 않으면 자동 갱신이 중단됩니다(추가 결제 없음).\n${link ? `\n확인하기: ${link}\n` : ''}`;
+  return { subject, html, text };
+}
+
+/** The renewal was not charged because the higher amount was not consented: auto-renewal stopped. */
+export function renewalBlockedEmail({ workspaceName, planLabel, amount, agreed, periodEnd, link, support }) {
+  const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 자동 갱신이 중단되었습니다`;
+  const html = shell('자동 갱신이 중단되었습니다', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 다음 갱신 금액 ${esc(wonKr(amount))}이(가) 동의한 금액 ${esc(wonKr(agreed))}보다 커서 결제하지 않았습니다.</p>
+    <p>자동 갱신을 중단했습니다. ${periodEnd ? `${esc(kDate(periodEnd))}까지` : '결제한 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 계속 이용하려면 새 금액을 확인하고 다시 구독해 주세요.</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
+  const text = `${workspaceName} 워크스페이스의 다음 갱신 금액 ${wonKr(amount)}이(가) 동의한 금액 ${wonKr(agreed)}보다 커서 결제하지 않았고 자동 갱신을 중단했습니다.\n${link ? `\n열기: ${link}\n` : ''}`;
+  return { subject, html, text };
+}
+
+/** 해지 확인 (§13② 계약 내용 고지): period-end cancel, or immediate cancel with the refund lines. */
+export function cancelEmail({ workspaceName, planLabel, immediate, periodEnd, refundTotal = 0, refundLines = [], executed, retentionUntil, link, support }) {
+  const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 해지 안내`;
+  const what = immediate
+    ? `구독을 해지해 지금 Free 플랜이 되었습니다. ${refundTotal > 0 ? `미사용 기간 환불 ${wonKr(refundTotal)}을(를) ${executed ? '결제한 카드로 취소 처리했습니다' : '3영업일 안에 결제한 카드로 취소해 드립니다'}(위약금 없음).` : '환불할 미사용 기간이 없습니다.'}`
+    : `자동 갱신을 중단했습니다. ${periodEnd ? `${kDate(periodEnd)}까지` : '결제한 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 더 이상 결제되지 않습니다.`;
+  const lines = refundLines.map((l) => `<li>${esc(l.label || '결제')}: ${esc(wonKr(l.amount))} (미사용 ${esc(l.days)}/${esc(l.period_days)}일${l.kind === 'WITHDRAWAL' ? ', 청약철회' : ''})</li>`).join('');
+  const keep = `해지 후 ${retentionUntil ? `${kDate(retentionUntil)}까지` : '30일 동안'} 프로젝트 데이터를 조회하고 내보낼 수 있습니다.`;
+  const html = shell('구독 해지 안내', `<p><b>${esc(workspaceName)}</b> 워크스페이스의 ${esc(planLabel)} 플랜: ${esc(what)}</p>${lines ? `<ul>${lines}</ul>` : ''}<p>${esc(keep)}</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
+  const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜: ${what}\n${refundLines.map((l) => `- ${l.label || '결제'}: ${wonKr(l.amount)} (미사용 ${l.days}/${l.period_days}일)`).join('\n')}\n${keep}\n${link ? `\n열기: ${link}\n` : ''}`;
+  return { subject, html, text };
+}

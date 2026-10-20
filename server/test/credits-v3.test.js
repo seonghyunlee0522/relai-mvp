@@ -4,6 +4,7 @@
  * parallel reservations and expiry during a reservation (never negative), failed payments grant nothing, workspace isolation,
  * migration 62 backfill (no balance changes, idempotent), refunds from the PURCHASED bucket with a new orderId per partial cancel. */
 import { test } from 'node:test';
+process.env.ONE_TIME_PLANS_ENABLED ??= 'true';   // the retired one-time plan checkout (paid plans = 정기결제 only since 2026-10-20) is still exercised here
 import assert from 'node:assert/strict';
 process.env.PAYMENTS_ENABLED ??= 'true';
 import { testDb } from './helpers.js';

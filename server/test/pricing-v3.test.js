@@ -1,5 +1,6 @@
 /* Pricing v3 T1 — pure contracts: catalogue, VAT-inclusive prices, 20% annual, proration worked examples (design.md §3), rounding. */
 import { test } from 'node:test';
+process.env.ONE_TIME_PLANS_ENABLED ??= 'true';   // the retired one-time plan checkout (paid plans = 정기결제 only since 2026-10-20) is still exercised here
 import assert from 'node:assert/strict';
 import { PLANS, CYCLES, PAID_PLANS, planPrice, addonPrice, limitsFor, splitVat, catalogue, FREE_LIMITS, USAGE_DIMS } from '../plans.js';
 import { prorate, roundKrw, ratio, kstDaysBetween } from '../billing/prorate.js';

@@ -234,6 +234,8 @@ export const migrations = [
     const { backfillCreditBuckets } = await import('./ai/credits.js');
     await backfillCreditBuckets(db);
   } },
+  { version: 63, name: 'Pricing v3 T3: subscription_changes (scheduled downgrade / cycle / add-on reduction at renewal), subscription_refunds (해지 환불 · 청약철회, unused days prorated, no penalty), subscriptions ended_at / data_retention_until / last_failed_at (schema.sql, additive)', up() {} },
+  { version: 64, name: 'Pricing v3 T3: billing_consents (정기결제 · 추가 구매 · 증액 동의, disclosure hash, append-only) and price_change_notices (schema.sql, additive)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

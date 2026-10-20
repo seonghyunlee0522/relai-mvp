@@ -1,5 +1,6 @@
 /* Phase 10 Billing: FREE plan limits on the product API (402), subscription webhooks (idempotent, signed), checkout/cancel, admin views. */
 import { test } from 'node:test';
+process.env.ONE_TIME_PLANS_ENABLED ??= 'true';   // the retired one-time plan checkout (paid plans = 정기결제 only since 2026-10-20) is still exercised here
 import assert from 'node:assert/strict';
 process.env.PAYMENTS_ENABLED ??= 'true';   // v1 ships with payments off (PAYMENTS_ENABLED); this suite exercises checkout
 import { testDb } from './helpers.js';
