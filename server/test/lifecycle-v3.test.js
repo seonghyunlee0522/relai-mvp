@@ -257,6 +257,8 @@ test('declined renewal: PAST_DUE, retried every 2 days ×3 with a mail each time
   assert.equal((await t.cron()).renewals.due, 0);   // 1 attempt + 3 retries, then stop
   assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM email_deliveries WHERE type = 'BILLING_PAYMENT_FAILED'`)).n, 4);
   assert.equal(await effectivePlan(t.db, A.w), 'PRO');   // grace keeps the plan
+  assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM credit_ledger WHERE workspace_id = ? AND type = 'PLAN_GRANT'`, [A.w])).n, 1);   // failed renewal → no grant
+  assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM billing_orders WHERE workspace_id = ? AND kind = 'RECURRING_RENEWAL' AND status = 'PAID'`, [A.w])).n, 0);
   await t.db.run(`UPDATE subscriptions SET grace_period_end = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
   const c = await t.cron();
   assert.equal(c.expired.expired, 1);

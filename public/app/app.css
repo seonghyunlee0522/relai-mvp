@@ -3622,3 +3622,21 @@ html.is-phone .actrow{grid-template-columns:44px minmax(0,1fr)}html.is-phone .ac
 .sub-agree{display:flex;gap:8px;align-items:flex-start;margin:8px 0}
 .sub-pay{min-width:240px}
 .cr-method{margin:10px 0 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.cr-method label{display:inline-flex;gap:4px;align-items:center;font-weight:600}
+
+/* Pricing v3 T3 — 구독하기 (public/app/subscribe.js): plan radios, cycle, add-on steppers, server quote lines, 정기결제 안내. */
+.sub-plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.sub-plan{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--border,#E4E8EF);border-radius:10px;cursor:pointer}
+.sub-plan:has(input:checked){border-color:var(--primary,#2E51C4);background:var(--primary-weak,#EEF3FF)}
+.sub-plan small{display:block;margin-top:2px}
+.sub-cycle{display:flex;flex-wrap:wrap;gap:8px 16px;margin:14px 0}
+.sub-cycle label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.sub-steps{display:flex;flex-wrap:wrap;gap:12px 24px;margin-bottom:12px}
+.sub-step{display:flex;align-items:center;gap:10px}.sub-step__ctl{display:flex;align-items:center;gap:4px}.sub-step__ctl .input{width:64px;text-align:center}
+.sub-lines{width:100%;border-collapse:collapse;font-size:14px}.sub-lines th{text-align:left;font-weight:500;color:var(--text-2);padding:5px 0}.sub-lines td{text-align:right;padding:5px 0;white-space:nowrap}
+.sub-total th,.sub-total td{border-top:1px solid var(--border,#EEF1F6);padding-top:10px;color:var(--text,#101828)}
+.sub-limits{margin-top:6px;font-size:13px}
+#sub-disclosure-items dd{margin-bottom:8px;line-height:1.55}
+@media (max-width:600px){
+  .sub-form{max-width:100%}.sub-pay{width:100%;min-width:0}.sub-exp .select{width:auto;flex:1}
+  .sub-info{display:block}.sub-info dt{margin-top:8px;font-weight:600}.sub-info dd{margin-left:0}
+}
