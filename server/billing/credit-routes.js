@@ -23,7 +23,7 @@ import { createPackOrder, refundableCredits, refundQuoteFor, refundCredits } fro
 import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE } from './provider.js';
 
 const TZ = () => process.env.APP_TIMEZONE || 'Asia/Seoul';
-const CHARGED = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA'];
+const CHARGED = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA', 'TEST_GENERATION'];
 const won = (credits) => credits * CREDIT_PRICE_KRW;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const prevMonth = (m) => { const [y, mo] = m.split('-').map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`; };

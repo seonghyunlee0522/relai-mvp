@@ -182,6 +182,13 @@ export function autoReply({ schemaName, user }) {
     add('오픈', 'STABILIZATION', null, [], 'MILESTONE'); add('안정화 지원', 'STABILIZATION');
     return { items, notes: ['데모용 자동 초안입니다.'] };
   }
+  if (schemaName === 'test_scenarios') {   // batch7 #18: 1~2 scenarios per requirement in the prompt; uses only ids and environments it was given
+    const env = ((user.split('## 적용 환경')[1] || '').split('##')[0].match(/^- (.+)$/m) || [])[1] || '';
+    return { requirements: reqs.slice(0, 20).map((r, i) => ({ requirement_id: r, scenarios: [
+      { title: '정상 흐름 확인', type: '정상', precondition: '테스트 계정으로 로그인한 상태', test_data: '일반 사용자 계정 1개 (비밀번호: <테스트 계정 비밀번호>)', environment: env, steps: [{ instruction: '기능 화면으로 이동한다', expected: '화면이 열린다' }, { instruction: '필수 값을 입력하고 저장한다', expected: '저장 완료 메시지가 보인다' }], expected_result: `${r}의 완료 조건을 만족한다` },
+      ...(i % 2 === 0 ? [{ title: '필수 값 누락 시 오류', type: '예외', precondition: '테스트 계정으로 로그인한 상태', test_data: '필수 값을 비운 입력', environment: env, steps: [{ instruction: '필수 값을 비우고 저장한다', expected: '오류 안내가 보인다' }], expected_result: '저장되지 않고 오류 안내가 보인다' }] : []),
+    ] })), notes: ['데모용 자동 시나리오입니다.'] };
+  }
   if (schemaName === 'change_impact') return { summary: '연결된 요구사항과 그 구현 WBS, 관련 테스트에 영향이 예상됩니다.', affected_requirements: reqs.slice(0, 2).map((d) => ({ display_id: d, reason: '변경 대상 요구사항', confidence: 'HIGH' })), affected_wbs: wbs.slice(0, 2).map((w) => ({ wbs_code: w, impact_type: 'REWORK', reason: '요구사항 구현 작업', confidence: 'MEDIUM' })), affected_tests: tests.slice(0, 2).map((d) => ({ display_id: d, reason: '재수행 필요', confidence: 'MEDIUM' })), possible_risks: risks.slice(0, 1).map((d) => ({ display_id: d, reason: '관련 Risk', confidence: 'LOW' })) };
   const top = [...issues.slice(0, 2).map((d) => ({ type: 'ISSUE', display_id: d })), ...risks.slice(0, 1).map((d) => ({ type: 'RISK', display_id: d })), ...reqs.slice(0, 1).map((d) => ({ type: 'REQUIREMENT', display_id: d }))];
   return { answer: top.length ? `현재 확인할 항목은 ${top.length}건입니다.\n${top.map((t, i) => `${i + 1}. ${t.display_id}`).join('\n')}` : '현재 프로젝트 데이터에서 특별히 확인할 항목이 없습니다.', references: top, warnings: ['데모용 자동 응답입니다.'] };

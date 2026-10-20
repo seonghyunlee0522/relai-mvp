@@ -24,7 +24,7 @@ test('account: created at signup with DEV_INITIAL_AI_CREDITS through a PLAN_GRAN
   assert.equal(led.length, 1); assert.equal(led[0].type, 'PLAN_GRANT'); assert.equal(led[0].amount, 100); assert.equal(led[0].balance_after, 100); assert.ok(led[0].reason.includes('DEV_INITIAL_AI_CREDITS'));
   const s = await status(A);
   assert.deepEqual(s.credits, { balance: 100, reserved: 0, available: 100, lifetime_granted: 100, lifetime_used: 0 });
-  assert.deepEqual(s.costs, { REQUIREMENT_EXTRACTION: 10, WBS_GENERATION: 15, CHANGE_IMPACT: 8, PROJECT_QA: 3, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0 });
+  assert.deepEqual(s.costs, { REQUIREMENT_EXTRACTION: 10, WBS_GENERATION: 15, CHANGE_IMPACT: 8, PROJECT_QA: 3, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0, TEST_GENERATION: 30 });
   server.close();
 });
 

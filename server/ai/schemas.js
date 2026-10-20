@@ -8,6 +8,7 @@ import { WBS_TYPES } from '../wbs.js';
 import { IMPACT_TYPES } from '../changes.js';
 
 export const CONFIDENCE = ['HIGH', 'MEDIUM', 'LOW'];
+export const TEST_SCENARIO_TYPES = ['정상', '예외', '경계'];
 export const REF_TYPES = ['REQUIREMENT', 'WBS', 'CHANGE', 'ISSUE', 'RISK', 'TEST', 'ACCEPTANCE'];
 
 const str = (maxLength) => ({ type: 'string', ...(maxLength ? { maxLength } : {}) });
@@ -64,6 +65,14 @@ export const SCHEMAS = {
     answer: str(4000),
     references: arr(obj({ type: en(REF_TYPES), display_id: str(30) }), 20),
     warnings: arr(str(300), 5),
+  }),
+  TEST_GENERATION: obj({   // batch7 B8: 요구사항당 1~3 시나리오 — 시나리오 · 사전 조건 · 테스트 계정·데이터 · 단계별 동작/예상 결과 · 최종 예상 결과 · 대상 환경
+    requirements: arr(obj({
+      requirement_id: str(20),
+      scenarios: arr(obj({ title: str(200), type: en(TEST_SCENARIO_TYPES), precondition: str(2000), test_data: str(2000), environment: str(500),
+        steps: arr(obj({ instruction: str(1000), expected: str(1000) }), 15), expected_result: str(2000) }), 3),
+    }), 20),
+    notes: arr(str(300), 5),
   }),
   WBS_PLAN_QUESTIONS: PLANNER_SCHEMAS.wbs_planning_questions,
   WBS_PLAN_FIX: PLANNER_SCHEMAS.wbs_plan_fix,

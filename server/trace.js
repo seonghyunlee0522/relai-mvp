@@ -72,6 +72,34 @@ export async function traceStats(db, projectId) {
   };
 }
 
+/**
+ * 연결 현황 매트릭스 (batch7 #13): per live requirement — active WBS links, live test links and the latest result of those tests.
+ * Returns { rows: { [requirement_id]: { wbs, tests, pass, fail, blocked, not_run, last } }, coverage: { in_scope, wbs, tests, passed } }.
+ * last = 'FAIL' if any linked test's latest run failed, else 'BLOCKED', else 'PASS' when every test passed, else 'NOT_RUN' (null = no test).
+ * The coverage bar counts in-scope, not-rejected requirements (the same base as traceStats).
+ */
+export async function traceMatrix(db, projectId) {
+  const reqs = await db.all(`SELECT r.id, r.scope, r.status,
+      (SELECT COUNT(*) FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id WHERE l.requirement_id = r.id AND w.archived_at IS NULL) AS wbs
+    FROM requirements r WHERE r.project_id = ? AND r.archived_at IS NULL`, [projectId]);
+  const tests = await db.all(`SELECT l.target_id AS requirement_id,
+      (SELECT e.result FROM test_executions e WHERE e.test_case_id = t.id ORDER BY e.execution_number DESC LIMIT 1) AS last_result
+    FROM test_links l JOIN test_cases t ON t.id = l.test_case_id WHERE l.project_id = ? AND l.target_type = 'REQUIREMENT' AND t.archived_at IS NULL`, [projectId]);
+  const by = new Map();
+  for (const t of tests) { if (!by.has(t.requirement_id)) by.set(t.requirement_id, []); by.get(t.requirement_id).push(t.last_result || 'NOT_RUN'); }
+  const rows = {}; const cov = { in_scope: 0, wbs: 0, tests: 0, passed: 0 };
+  for (const r of reqs) {
+    const res = by.get(r.id) || [];
+    const n = (k) => res.filter((x) => x === k).length;
+    const last = !res.length ? null : n('FAIL') ? 'FAIL' : n('BLOCKED') ? 'BLOCKED' : n('PASS') === res.length ? 'PASS' : 'NOT_RUN';
+    rows[r.id] = { wbs: Number(r.wbs), tests: res.length, pass: n('PASS'), fail: n('FAIL'), blocked: n('BLOCKED'), not_run: n('NOT_RUN'), last };
+    if (r.scope === 'IN_SCOPE' && r.status !== 'REJECTED') {
+      cov.in_scope++; if (Number(r.wbs)) cov.wbs++; if (res.length) cov.tests++; if (last === 'PASS') cov.passed++;
+    }
+  }
+  return { rows, coverage: cov };
+}
+
 /* ---------- writes (caller wraps in tx) ---------- */
 export async function addLink(db, project, { requirement, wbs }, linkType, userId) {
   if (requirement.archived_at) throw new ValidationError({ requirement_id: '보관된 요구사항은 연결할 수 없습니다.' });

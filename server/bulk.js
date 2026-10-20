@@ -8,7 +8,7 @@ import * as R from './requirements.js';
 import * as W from './wbs.js';
 
 export const BULK_MAX = 500;
-const REQ_PATCH_KEYS = ['owner_user_id', 'status', 'priority', 'scope', 'type'];
+const REQ_PATCH_KEYS = ['owner_user_id', 'owner_stakeholder_id', 'owner', 'status', 'priority', 'scope', 'type'];   // #11: 담당자 = member or 01 관계자 (one of the two)
 const WBS_PATCH_KEYS = ['owner_user_id', 'status', 'planned_start_date', 'planned_end_date', 'progress', 'actual_start_date', 'actual_end_date'];
 
 const joinMessages = (e) => (e instanceof ValidationError ? Object.values(e.fields).join(' ') : null);
@@ -55,7 +55,8 @@ export async function bulkRequirements(db, project, wid, body, userId) {
     input = R.parseRequirement(patch, { partial: true });          // static problems (bad enum …) → 400 for the whole request
     source = await R.resolveSourceChange(db, project, body.source_change_request_id);
   }
-  const ownerBad = action === 'update' && input.owner_user_id && !(await R.isWorkspaceMember(db, wid, input.owner_user_id));
+  const ownerBad = action === 'update' && ((input.owner_user_id && !(await R.isWorkspaceMember(db, wid, input.owner_user_id)))
+    || (input.owner_stakeholder_id && !(await R.isOwnerStakeholder(db, project.id, input.owner_stakeholder_id))));
   return tx(db, async (t) => {
     const rows = await byIds(t, 'requirements', project, ids);
     let updated = 0; const skipped = [];
@@ -64,7 +65,7 @@ export async function bulkRequirements(db, project, wid, body, userId) {
       if (!r) { skipped.push({ id, reason: '요구사항을 찾을 수 없습니다.' }); continue; }
       if (r.archived_at) { skipped.push({ id, reason: '보관된 요구사항은 수정할 수 없습니다.' }); continue; }
       if (action === 'archive') { await R.archiveRequirement(t, r, userId); updated++; continue; }
-      if (ownerBad) { skipped.push({ id, reason: '담당자는 현재 워크스페이스 멤버만 지정할 수 있습니다.' }); continue; }
+      if (ownerBad) { skipped.push({ id, reason: '담당자는 워크스페이스 멤버 또는 01 관계자만 지정할 수 있습니다.' }); continue; }
       const changed = await R.updateRequirement(t, project, r, input, userId, { sourceChangeRequestId: source ? source.id : null });
       if (changed.length) updated++; else skipped.push({ id, reason: NO_CHANGE });
     }

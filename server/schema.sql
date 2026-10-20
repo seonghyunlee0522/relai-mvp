@@ -1426,3 +1426,11 @@ CREATE TABLE IF NOT EXISTS feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status, created_at DESC);
+/* Batch7 T4 (migration 51) — additive only; the 737c631 code ignores these columns.
+ * requirements.owner_stakeholder_id: 요구사항 담당자 = 01 관계자 (계정 없음), same rule as wbs_items (exactly one of owner_user_id / owner_stakeholder_id).
+ * test_executions.step_results: JSON [{ index, result: 'PASS'|'FAIL' }] — 단계별 결과 from the inline 실행 기록 form.
+ * test_cases.test_data / environment: 테스트 계정·데이터 and 대상 환경 (AI 테스트 시나리오, B8). No secrets — the UI says so. */
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS owner_stakeholder_id TEXT;
+ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS step_results TEXT;
+ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS test_data TEXT NOT NULL DEFAULT '';
+ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS environment TEXT NOT NULL DEFAULT '';

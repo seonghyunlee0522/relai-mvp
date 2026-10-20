@@ -114,6 +114,8 @@ export async function ownerOptions(db, project) {
   // A stakeholder who IS a workspace member (01 tells the PM to list themself) is offered once, as the RELAI 사용자 (J-A2).
   const members = await db.all('SELECT u.name, u.email FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', [project.workspace_id]);
   // K13: such a stakeholder is flagged `member` and every picker hides them unless THIS item already names them (shared/owner-picker.js teamFor).
-  const team = teamOf(all).map((x) => (isMemberStakeholder(all.find((s) => s.id === x.id) || x, members) ? { ...x, member: true } : x));
-  return { team, stakeholders_total: all.length };
+  const team = teamOf(all).map((x) => { const sh = all.find((s) => s.id === x.id) || x; const y = { ...x, org: sh.org || '', department: sh.department || '' }; return isMemberStakeholder(sh, members) ? { ...y, member: true } : y; });   // org/department: the shared picker's 조직·부서 step (batch7 #11)
+  // batch7 #11: every named 01 관계자 with 조직·부서 — the 요구사항 담당자 may be anyone in 01 (고객사 현업 included); WBS / 이슈 keep `team`
+  const directory = all.filter((x) => x.name).map((x) => ({ id: x.id, name: x.name, role: x.role || '', org_type: x.org_type || 'OTHER', org: x.org || '', department: x.department || '', ...(isMemberStakeholder(x, members) ? { member: true } : {}) }));
+  return { team, directory, stakeholders_total: all.length };
 }

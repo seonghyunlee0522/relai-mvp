@@ -196,6 +196,7 @@ export const migrations = [
   { version: 46, name: 'Product analytics: analytics_events (+ once-per-user milestone index) and analytics_active_days — first-party, ids only (schema.sql)', up() {} },
   { version: 47, name: 'Promotions: promotions table + launch-offer seed (schema.sql) — display only, edited in 관리자 › 프로모션', up() {} },
   { version: 48, name: 'In-app feedback: feedback table (schema.sql) — 의견 남기기 in the app rail, triaged in 관리자 › 의견', up() {} },
+  { version: 51, name: 'Batch7 T4: requirements.owner_stakeholder_id, test_executions.step_results, test_cases.test_data + environment (schema.sql, additive)', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

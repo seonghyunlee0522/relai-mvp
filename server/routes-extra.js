@@ -56,7 +56,7 @@ async function requirementRows(db, project, wid) {
   const by = new Map(); for (const c of crit) { if (!by.has(c.requirement_id)) by.set(c.requirement_id, []); by.get(c.requirement_id).push(c.content); }
   const L = KINDS.requirements.columns; const lab = (key, v) => L.find((c) => c.key === key).options.find((o) => o.value === v)?.label ?? v;
   return reqs.map((r) => ({ display_id: r.display_id, title: r.title, description: r.description, type: lab('type', r.type), priority: lab('priority', r.priority), scope: lab('scope', r.scope),
-    status: lab('status', r.status), owner: r.owner_user_id ? label(r.owner_user_id) : '', requester_name: r.requester_name, requester_organization: r.requester_organization, criteria: (by.get(r.id) || []).join('\n') }));
+    status: lab('status', r.status), owner: r.owner_user_id ? label(r.owner_user_id) : r.owner_stakeholder_id && !r.owner_deleted ? r.owner_name : '', requester_name: r.requester_name, requester_organization: r.requester_organization, criteria: (by.get(r.id) || []).join('\n') }));
 }
 
 async function wbsRows(db, project, wid) {

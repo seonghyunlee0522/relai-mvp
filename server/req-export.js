@@ -3,7 +3,7 @@
  * (spec Phase 2 US-2). Built with the same document pieces as the 사업수행계획서 (doc-export.js → report-export.js PDF / Word).
  *
  * Fixed structure (an empty part prints a fixed sentence instead of disappearing):
- *   표지 → 개정 이력 → 1. 개요 (목표 1줄 · Charter 수행/제외 범위) → 2. 범위 내 요구사항 (ID · 제목 · 유형 · 우선순위 · 완료 조건, 유형별)
+ *   표지 → 개정 이력 → 1. 개요 (목표 1줄 · Charter 수행/제외 범위) → 2. 범위 내 요구사항 (ID · 제목 · 유형 · 우선순위 · 담당자 · 완료 조건, 유형별)
  *   → 3. 범위 외 요구사항 (ID · 제목) → 4. 승인 (고객사 승인자 · 승인일 / 수행사 PM, 서명 칸 비움; 승인 전 진행 사유)
  * Version: 승인 전 v0.9 (초안) + footer "승인 전 초안" · 승인 후 v1.0 (02 has no re-approval state). Archived requirements are left out.
  */
@@ -40,7 +40,7 @@ export function buildReqDocMarkdown(c, reqs, baseline, { workspaceName = '', aut
   if (undecided) L.push('', `범위가 결정되지 않은 요구사항 ${undecided}건은 이 문서에 포함되지 않습니다.`);
 
   h2('2. 범위 내 요구사항');
-  L.push(inScope.length ? table(['ID', '제목', '유형', '우선순위', '완료 조건'], inScope.map((r) => [r.display_id, r.title, REQ_TYPE[r.type] || r.type, REQ_PRIORITY[r.priority] || r.priority,
+  L.push(inScope.length ? table(['ID', '제목', '유형', '우선순위', '담당자', '완료 조건'], inScope.map((r) => [r.display_id, r.title, REQ_TYPE[r.type] || r.type, REQ_PRIORITY[r.priority] || r.priority, r.owner_label || '',
     (r.criteria || []).length ? r.criteria.map((x, i) => `${i + 1}. ${x.content}`).join('\n') : ''])) : NO_IN_SCOPE);
 
   h2('3. 범위 외 요구사항');

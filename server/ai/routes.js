@@ -11,11 +11,14 @@
  *   POST /changes/:cid/ai/impact             {}                           → impact candidates
  *   POST /changes/:cid/ai/impact/commit      { requirements, wbs, risks } → change relations
  *   POST /ai/ask                             { question, history }        → grounded answer + references
+ *   POST /ai/tests/generate                  { requirement_ids? }         → test scenario candidates (batch7 #18; empty = 확정·범위 내·테스트 미연결)
+ *   POST /ai/tests/commit                    { scenarios }                → creates tests + requirement links
  */
 import * as C from '../changes.js';
 import { aiStatus } from './service.js';
 import { extractRequirements, commitRequirements, generateWbs, commitWbs, changeImpact, commitImpact, askProject } from './features.js';
 import * as P from './planner.js';
+import { generateTests, commitTests } from './test-gen.js';
 
 export function mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base }) {
   const ai = `${base}/:pid/ai`;
@@ -83,6 +86,15 @@ export function mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable
     if (change.archived_at) return fail(res, 409, 'archived', '보관된 변경 요청은 수정할 수 없습니다.');
     const b = req.body || {};
     res.status(201).json(await commitImpact(db, { project, userId: req.user.id, change, requirements: b.requirements, wbs: b.wbs, risks: b.risks }));
+  }));
+
+  app.post(`${ai}/tests/generate`, guard, wrap(async (req, res) => {
+    const project = await loadProject(req, res); if (!project) return;
+    res.json(await generateTests(db, { ...ctx(req, project), requirementIds: req.body?.requirement_ids }));
+  }));
+  app.post(`${ai}/tests/commit`, guard, wrap(async (req, res) => {
+    const project = await loadProject(req, res); if (!project || !mutable(res, project)) return;
+    res.status(201).json(await commitTests(db, { project, userId: req.user.id, scenarios: req.body?.scenarios }));
   }));
 
   app.post(`${ai}/ask`, guard, wrap(async (req, res) => {
