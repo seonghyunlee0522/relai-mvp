@@ -4,12 +4,12 @@
 import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { toast } from '../shared/dialogs.js';
-import { REQ_STATUS } from '../shared/constants.js';
+import { tag } from '../shared/badges.js';
 import { aiDialog, aiNotice, aiStatus, aiStatusReset, canRun, reportError, warningsHtml } from '../shared/ai.js';
 
 export const TEST_GEN_MAX = 20;
 const fmt = (v) => Number(v || 0).toLocaleString('ko-KR');
-const TYPE_TONE = { 정상: 'chip--done', 예외: 'chip--fail', 경계: 'chip--hold' };
+const TYPE_TONE = { 정상: 'done', 예외: 'bad', 경계: 'hold' };   // batch7 B2 tones (--tag-*)
 
 /** "30 크레딧 · 잔액 70" — never a money amount (#7). */
 const costLine = (st) => {
@@ -32,10 +32,10 @@ export async function openTestGenDialog({ pid, onDone, preselect = null }) {
 
   const drawPick = () => {
     d.body.innerHTML = cov.length ? html`<div class="aid__sum"><b>요구사항 선택</b> <span class="dim" data-tg-n>${picked.size} / 최대 ${TEST_GEN_MAX}건</span><span class="aid__sp"></span>${raw(costLine(st))}</div>
-      <p class="hint" style="margin:0 0 8px">기본으로 확정됐지만 아직 테스트가 없는 범위 내 요구사항을 골라 두었습니다.</p>
-      <ol class="aic" data-tg-reqs>${raw(cov.map((r) => html`<li class="aic__i ${picked.has(r.id) ? 'is-sel' : ''}" style="display:flex;gap:8px;align-items:center;padding:6px 8px">
-        <input type="checkbox" data-tg-req="${r.id}" ${picked.has(r.id) ? 'checked' : ''} aria-label="${r.display_id} 선택"><span class="mono">${r.display_id}</span><span style="flex:1;min-width:0">${r.title}</span>
-        <span class="chip">${REQ_STATUS[r.status] || r.status}</span><small class="dim">${r.total ? `테스트 ${r.total}건` : r.test_exclusion_reason ? '테스트 제외' : '테스트 없음'}</small></li>`).join(''))}</ol>
+      <p class="hint tg-lead">기본으로 확정됐지만 아직 테스트가 없는 범위 내 요구사항을 골라 두었습니다.</p>
+      <ol class="aic" data-tg-reqs>${raw(cov.map((r) => html`<li class="aic__i tg-req ${picked.has(r.id) ? 'is-sel' : ''}">
+        <input type="checkbox" data-tg-req="${r.id}" ${picked.has(r.id) ? 'checked' : ''} aria-label="${r.display_id} 선택"><span class="mono">${r.display_id}</span><span class="tg-req__t">${r.title}</span>
+        ${raw(tag('req', r.status))}<small class="dim">${r.total ? `테스트 ${r.total}건` : r.test_exclusion_reason ? '테스트 제외' : '테스트 없음'}</small></li>`).join(''))}</ol>
       ${raw(aiNotice(st))}<p class="hint">테스트 계정은 역할과 데이터 종류만 제안합니다. 실제 비밀번호 같은 비밀값은 저장하지 마세요.</p>`
       : '<div class="aempty">범위 내 요구사항이 없습니다. 요구사항의 범위를 먼저 정하세요.</div>';
     d.foot.innerHTML = html`<span class="hint">결과는 초안이며 저장하기 전까지 아무것도 바뀌지 않습니다.</span><span class="aid__btns"><button type="button" class="btn btn--secondary btn--sm" data-close>취소</button><button type="button" class="btn btn--primary btn--sm" id="tg-run" ${picked.size && canRun(st, 'TEST_GENERATION') ? '' : 'disabled'}>시나리오 만들기</button></span>`;
@@ -58,19 +58,19 @@ export async function openTestGenDialog({ pid, onDone, preselect = null }) {
     finally { d.busy(false); }
   };
 
-  const stepsHtml = (s) => (s.steps.length ? html`<ol class="tg-steps" style="margin:0;padding-left:18px">${raw(s.steps.map((x) => html`<li>${x.instruction}${raw(x.expected ? html` <span class="dim">→ ${x.expected}</span>` : '')}</li>`).join(''))}</ol>` : '<span class="dim">-</span>');
-  const cell = (label, v) => html`<tr><th scope="row" style="width:132px;text-align:left;vertical-align:top;font-weight:600;padding:4px 8px 4px 0">${label}</th><td style="padding:4px 0">${raw(v)}</td></tr>`;
+  const stepsHtml = (s) => (s.steps.length ? html`<ol class="tg-steps">${raw(s.steps.map((x) => html`<li>${x.instruction}${raw(x.expected ? html` <span class="dim">→ ${x.expected}</span>` : '')}</li>`).join(''))}</ol>` : '<span class="dim">-</span>');
+  const cell = (label, v) => html`<tr><th scope="row">${label}</th><td>${raw(v)}</td></tr>`;
   const drawResult = (r) => {
     const n = groups.reduce((a, g) => a + g.scenarios.length, 0);
     d.body.innerHTML = html`<div class="aid__sum"><b>시나리오 ${n}개 · 요구사항 ${groups.length}건</b>${raw(r.run ? html`<small class="dim" data-tg-used> · ${fmt(r.run.credit_cost)} 크레딧 사용 · 잔액 ${fmt(r.run.balance)}</small>` : '')}<span class="aid__sp"></span>
         <label class="toggle"><input type="checkbox" id="tg-all" checked> 전체 선택</label></div>
       ${raw(warningsHtml(r.warnings))}
       ${raw(r.environments && r.environments.length ? html`<p class="hint" data-tg-env>적용 환경: ${r.environments.join(' · ')}</p>` : '')}
-      ${raw(groups.length ? groups.map((g, gi) => html`<section class="tg-card" data-tg-card="${g.requirement.id}" style="border:1px solid var(--line, #e3e6ea);border-radius:10px;padding:10px 12px;margin:0 0 12px">
-        <h4 style="margin:0 0 8px;font-size:14px"><span class="mono">${g.requirement.display_id}</span> ${g.requirement.title}</h4>
-        ${raw(g.scenarios.map((s, si) => html`<div class="tg-sc ${s._sel ? 'is-sel' : ''}" data-tg-sc="${gi}:${si}" style="border-top:1px solid var(--line, #eef0f3);padding:8px 0">
-          <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" data-tg-sel="${gi}:${si}" ${s._sel ? 'checked' : ''}><span class="chip ${TYPE_TONE[s.type] || ''}" data-tg-type>${s.type}</span>${s.title}</label>
-          <table class="tg-tbl" style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px"><tbody>
+      ${raw(groups.length ? groups.map((g, gi) => html`<section class="tg-card" data-tg-card="${g.requirement.id}">
+        <h4><span class="mono">${g.requirement.display_id}</span> ${g.requirement.title}</h4>
+        ${raw(g.scenarios.map((s, si) => html`<div class="tg-sc ${s._sel ? 'is-sel' : ''}" data-tg-sc="${gi}:${si}">
+          <label class="tg-sc__h"><input type="checkbox" data-tg-sel="${gi}:${si}" ${s._sel ? 'checked' : ''}><span class="tag tag--${TYPE_TONE[s.type] || 'muted'}" data-tone="${TYPE_TONE[s.type] || 'muted'}" data-tg-type>${s.type}</span>${s.title}</label>
+          <table class="tg-tbl"><tbody>
             ${raw(cell('사전 조건', html`${s.precondition || '-'}`))}${raw(cell('테스트 계정·데이터', html`<span data-tg-data>${s.test_data || '-'}</span>`))}
             ${raw(cell('단계 · 예상 결과', stepsHtml(s)))}${raw(cell('최종 예상 결과', html`<b>${s.expected_result || '-'}</b>`))}${raw(cell('대상 환경', html`${s.environment || '-'}`))}
           </tbody></table></div>`).join(''))}</section>`).join('') : '<div class="aempty">시나리오를 만들지 못했습니다. 요구사항에 설명이나 완료 조건을 더 적어 보세요.</div>')}`;

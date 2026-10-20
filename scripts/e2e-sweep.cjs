@@ -69,6 +69,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
 
   /* ---------- B1: admin 대시보드 near-limit rows ---------- */
   sql(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE email = '${email}'`);
+  sql(`UPDATE workspaces SET early_access_until = NULL WHERE id = '${w}'`);   // since admin-fix 7b5b1d2 an early-access workspace reads EARLY, not Free
   await page.goto(`${BASE}/admin`); await loaded('.apage');
   const near = page.locator('.aattn', { hasText: 'Free 플랜 한도 90% 이상' });
   const hrefs = await near.locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href')));

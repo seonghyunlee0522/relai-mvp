@@ -3560,3 +3560,38 @@ html.is-phone .actrow{grid-template-columns:44px minmax(0,1fr)}html.is-phone .ac
 .pl-faq:first-child{border-top:0}
 .pl-faq summary{cursor:pointer;font-weight:600}
 .pl-faq p{margin:8px 0 0}
+/* ---------- batch7 T4 screens (#11 #13 #18 #20), moved out of inline styles at integration ---------- */
+.cols2>.field--span{grid-column:1/-1}
+/* #11 담당자 picker: [조직·부서] [사람] + 이름 검색 */
+.opick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.opick__g,.opick__p{flex:1 1 150px;min-width:0}
+.opick__q{flex:1 1 100%;min-width:0}
+/* #20 inline 실행 기록 in the test detail */
+.dfield--gap{margin-top:10px}
+.runbox{margin-top:16px;padding:12px;border:1px solid var(--border);border-radius:var(--r-lg);background:#fff}
+.runbox>.dh{margin-top:0}
+.runbox>.dh small{font-weight:500;letter-spacing:0;text-transform:none}
+.runbox__steps{margin:4px 0 0}
+.runbox__step{display:flex;gap:8px;align-items:center}
+.runbox__step>label{white-space:nowrap}
+.runbox__txt{flex:1;min-width:0}
+.runbox__txt>small{display:block}
+.runbox .textarea{min-height:56px}
+.runbox .rd-issue:not([hidden]){display:flex;gap:6px;align-items:center;margin:4px 0}
+.runbox .actions{margin-top:8px}
+[data-tc-data] .textarea{min-height:44px}
+.runlog{margin-top:12px}
+.runlog [data-goto-exec]{margin-left:auto;width:auto;font-size:var(--fs-xs)}
+.runlog .exec .hint{margin:2px 0 0}
+/* #18 AI로 시나리오 만들기 */
+.tg-lead{margin:0 0 8px}
+.aic__i.tg-req{display:flex;gap:8px;align-items:center;padding:6px 8px}
+.tg-req__t{flex:1;min-width:0}
+.tg-card{border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 12px;margin:0 0 12px;background:#fff}
+.tg-card>h4{margin:0 0 8px;font-size:var(--fs-sm)}
+.tg-sc{border-top:1px solid var(--border);padding:8px 0}
+.tg-sc__h{display:flex;gap:8px;align-items:center;font-weight:600}
+.tg-tbl{width:100%;border-collapse:collapse;font-size:var(--fs-xs);margin-top:6px}
+.tg-tbl th{width:132px;text-align:left;vertical-align:top;font-weight:600;padding:4px 8px 4px 0}
+.tg-tbl td{padding:4px 0}
+.tg-steps{margin:0;padding-left:18px}

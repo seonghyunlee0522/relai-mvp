@@ -55,10 +55,10 @@ export function ownerPicker(members, owners, cur = '', { attrs = '', disabled = 
   const groups = ownerGroups(members, owners, cur, false, { all });
   const gi = Math.max(0, groups.findIndex((g) => g.options.some(([v]) => v === cur)));
   const dis = disabled ? 'disabled' : '';
-  return html`<span class="opick" data-opick="${JSON.stringify({ groups, cur, bulk })}" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0">
-    <select class="select select--sm opick__g" style="flex:1 1 150px;min-width:0" data-opick-g aria-label="${label} 조직·부서" ${dis}>${raw(groups.map((g, i) => html`<option value="${i}" ${i === gi ? 'selected' : ''}>${g.label} (${g.options.length})</option>`).join(''))}</select>
-    <select class="select select--sm opick__p" style="flex:1 1 150px;min-width:0" ${raw(attrs)} aria-label="${label}" ${dis}>${raw(personOpts(groups, gi, cur, '', bulk))}</select>
-    ${raw(search && !disabled ? html`<input class="input input--sm opick__q" style="flex:1 1 100%;min-width:0" type="search" data-opick-q placeholder="이름 검색" aria-label="${label} 이름 검색">` : '')}</span>`;
+  return html`<span class="opick" data-opick="${JSON.stringify({ groups, cur, bulk })}">
+    <select class="select select--sm opick__g" data-opick-g aria-label="${label} 조직·부서" ${dis}>${raw(groups.map((g, i) => html`<option value="${i}" ${i === gi ? 'selected' : ''}>${g.label} (${g.options.length})</option>`).join(''))}</select>
+    <select class="select select--sm opick__p" ${raw(attrs)} aria-label="${label}" ${dis}>${raw(personOpts(groups, gi, cur, '', bulk))}</select>
+    ${raw(search && !disabled ? html`<input class="input input--sm opick__q" type="search" data-opick-q placeholder="이름 검색" aria-label="${label} 이름 검색">` : '')}</span>`;
 }
 if (typeof document !== 'undefined' && !globalThis.__relaiOpick) {
   globalThis.__relaiOpick = true;

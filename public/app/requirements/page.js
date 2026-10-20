@@ -4,7 +4,7 @@ import { $, fmtShort, html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { download, keepUi } from '../core/ui.js';
 import { projectHead } from '../project/guide.js';
-import { resBadge, statusChip, subtle, prText, verifyChip } from '../shared/badges.js';
+import { resBadge, statusChip, subtle, prText, verifyChip, tag } from '../shared/badges.js';
 import { appliedFilters, bindFilterClears, bindMoreFilters, filterSelect, moreFilters, isPhone } from '../shared/filters.js';
 import { emptyFiltered } from '../shared/empty-state.js';
 import { isClassify } from '../shared/lifecycle.js';
@@ -116,7 +116,7 @@ export async function requirementsPage(id) {
   /* #13 연결 현황: a matrix, not a second 목록 — WBS 작업 · 테스트 · 최근 결과 · 지라 per requirement, 연결 안 된 것 먼저 */
   const tr = (r) => (trace && trace.rows[r.id]) || { wbs: r.linked_wbs_count || 0, tests: 0, last: null };
   const target = (r) => r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' && !r.archived_at;   // 없음 is a gap only for in-scope work
-  const none = (r) => (target(r) ? '<span class="chip chip--fail" data-tr-none>없음</span>' : dim());
+  const none = (r) => (target(r) ? '<span class="tag tag--bad" data-tone="bad" data-tr-none>없음</span>' : dim());
   const gapRank = (r) => { const t = tr(r); return (t.wbs ? 1 : 0) + (t.tests ? 1 : 0) + (t.last === 'PASS' ? 1 : 0) + (target(r) ? 0 : 10); };
   const traceGrid = createGrid({
     key: 'req.trace.b7', rowId: (r) => r.id, select: false, defaultSort: { key: 'gap', dir: 'asc' },
@@ -124,7 +124,7 @@ export async function requirementsPage(id) {
     columns: [
       { key: 'display_id', label: 'ID', width: 84, sticky: true, fixed: true, sort: (r) => r.display_id, cls: 'mono', render: (r) => html`${r.display_id}` },
       { key: 'title', label: '제목', width: 300, min: 160, sticky: true, fixed: true, sort: (r) => r.title, cls: 'ttl', render: (r) => html`<span>${r.title}</span>${raw(r.archived_at ? '<small>보관됨</small>' : '')}` },
-      { key: 'status', label: '상태', width: 96, sort: (r) => REQ_STATUS[r.status], render: (r) => statusChip(REQ_STATUS, REQ_STATUS_CHIP, r.status) },
+      { key: 'status', label: '상태', width: 96, sort: (r) => REQ_STATUS[r.status], render: (r) => tag('req', r.status) },
       { key: 'gap', label: '연결', width: 64, hidden: true, sort: gapRank, render: (r) => String(gapRank(r)) },   // sort key only: 연결 안 된 것 먼저
       { key: 'wbs', label: 'WBS 작업', width: 96, align: 'right', sort: (r) => tr(r).wbs, render: (r) => (tr(r).wbs ? html`<a class="link" href="/app/projects/${p.id}/wbs?requirement=${r.id}" data-link data-tr-wbs-n><b>${tr(r).wbs}</b>건</a>` : none(r)) },
       { key: 'tests', label: '테스트', width: 96, align: 'right', sort: (r) => tr(r).tests, render: (r) => (tr(r).tests ? html`<a class="link" href="/app/projects/${p.id}/tests?requirement=${r.id}" data-link data-tr-test-n><b>${tr(r).tests}</b>건</a>` : r.test_exclusion_reason ? html`<span class="dim" title="${r.test_exclusion_reason}">테스트 제외</span>` : none(r)) },
@@ -233,7 +233,7 @@ export async function requirementsPage(id) {
       ['가져오기·내보내기', html`${raw(archived ? '' : tmItem('Excel로 가져오기…', 'data-xl="import"'))}${raw(tmItem('등록 템플릿 내려받기 (Excel)', 'data-xl="template"'))}${raw(tmItem('현재 목록 내보내기 (Excel)', 'data-xl="export"'))}${raw(tmItem('요구사항 정의서 PDF', 'data-reqdoc="pdf"'))}${raw(tmItem('요구사항 정의서 Word', 'data-reqdoc="docx"'))}`],
       [ai.enabled && !archived ? 'AI' : '', ai.enabled && !archived ? tmItem('AI로 요구사항 추출', 'id="ai-extract" title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)"', aiPrice(ai, 'REQUIREMENT_EXTRACTION')) : ''],
     ], { label: '요구사항 메뉴 더보기' });
-    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(statusSeg(curSt))}<input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}" aria-label="요구사항 검색">${raw(rview() === 'list' ? listGrid.toolsHtml() : '')}<span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-extract-pc" data-ai-pc title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}</div>`;
+    return html`<div class="rtool rtool--r2" data-rtool-r2>${raw(statusSeg(curSt))}<input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}" aria-label="요구사항 검색">${raw(curGrid().toolsHtml())}<span class="rtool__sp"></span>${raw(menu)}${raw(ai.enabled && !archived ? '<button type="button" class="btn btn--secondary btn--sm btn--ai ai-pc" id="ai-extract-pc" data-ai-pc title="회의록·메모 텍스트에서 요구사항 후보 추출 (초안)">AI로 요구사항 추출</button>' : '')}${raw(archived ? '' : '<button class="btn btn--primary btn--sm" id="add">+ 요구사항 추가</button>')}</div>`;
   };
 
   const draw = () => {
@@ -257,7 +257,7 @@ export async function requirementsPage(id) {
           ${raw(filterSelect('link', '연결 상태', LINK_F, q.get('link')))}
           <label class="toggle"><input type="checkbox" id="arch" ${q.get('archived') ? 'checked' : ''}> 보관 포함</label>`, [...(phone ? ['status', 'scope'] : []), 'owner', 'type', 'priority', 'link', 'archived'].filter((k) => q.get(k)).length))}
         <span class="rtool__sp"></span>
-        ${raw(rview() === 'list' ? html`<span class="ph-hide">${raw(listGrid.toolsHtml())}</span>` : '')}
+        <span class="ph-hide">${raw(curGrid().toolsHtml())}</span>
         <span class="gtools ph-hide"><button type="button" class="btn btn--secondary btn--sm" id="xl-btn" aria-haspopup="true">Excel ▾</button>
           <div class="gpop" id="xl-pop" hidden>${raw(archived ? '' : '<button type="button" class="gpop__i linkbtn" data-xl="import">Excel로 가져오기…</button>')}<button type="button" class="gpop__i linkbtn" data-xl="template">등록 템플릿 내려받기</button><button type="button" class="gpop__i linkbtn" data-xl="export">현재 목록 내보내기</button></div></span>
         <span class="ph-hide">${raw(reqDocMenu())}</span>
@@ -352,7 +352,7 @@ export async function requirementsPage(id) {
             <div class="field"><label>우선순위</label><select class="select" name="priority">${raw(opt(REQ_PRIORITY, 'UNSPECIFIED'))}</select><small class="hint req-phint">${PRIORITY_HINT}</small></div>
             <div class="field"><label>범위</label><select class="select" name="scope">${raw(opt(REQ_SCOPE, 'UNDECIDED'))}</select></div>
             <div class="field"><label>상태</label><select class="select" name="status">${raw(opt(REQ_STATUS, 'DRAFT'))}</select></div>
-            <div class="field" style="grid-column:1/-1"><label>담당자</label>${raw(ownerPick('', 'name="owner"'))}${raw(OP.stakeholderHint(owners, p.id, archived))}<div class="err" data-for="owner"></div><div class="err" data-for="owner_user_id"></div></div>
+            <div class="field field--span"><label>담당자</label>${raw(ownerPick('', 'name="owner"'))}${raw(OP.stakeholderHint(owners, p.id, archived))}<div class="err" data-for="owner"></div><div class="err" data-for="owner_user_id"></div></div>
             <div class="field"><label>요청자</label><input class="input" name="requester_name" maxlength="100" placeholder="예: 김OO 책임"></div>
             <div class="field"><label>요청자 소속</label><input class="input" name="requester_organization" maxlength="100" placeholder="예: A사 IT팀"></div>
           </div>
