@@ -18,13 +18,22 @@ export const WBS_TYPES = ['SUMMARY', 'TASK', 'MILESTONE'];   // SUMMARY = legacy
 export const WBS_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD'];
 /** Display status derived from progress + dates (ON_HOLD always wins when set explicitly). */
 export const WBS_COMPUTED_STATUSES = ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'DELAYED', 'ON_HOLD'];
-export const MAX_DEPTH = 5;
+export const MAX_DEPTH = 6;   // batch7: the fixed phase nodes take level 1, so users still get 5 levels below them
 /** SQL fragment: `alias` row is a leaf (no live children). Metrics count leaf tasks only — groups are roll-ups. */
 export const LEAF_SQL = (alias = 'w') => `NOT EXISTS (SELECT 1 FROM wbs_items ${alias}_c WHERE ${alias}_c.parent_id = ${alias}.id AND ${alias}_c.archived_at IS NULL)`;
 const GROUP_ONLY = ['progress', 'planned_start_date', 'planned_end_date', 'actual_start_date', 'actual_end_date'];
 export const todayStr = () => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 const now = () => new Date().toISOString();
+
+/* ---------- 고정 최상위 노드 (batch7 B3, server/wbs-structure.js) ---------- */
+/** 409 system_node: a fixed phase node cannot be renamed, retyped, moved, indented, duplicated, archived or restored. Dates, owner and description stay editable. */
+export class SystemNodeError extends ValidationError {
+  constructor(action = '변경') { super({ system_key: `고정 단계 항목은 ${action}할 수 없습니다.` }); this.status = 409; this.code = 'system_node'; this.message = `'단계' 고정 항목은 ${action}할 수 없습니다. 하위 항목을 추가해 사용하세요.`; }
+}
+export const isSystem = (it) => Boolean(it && it.system_key);
+const SYSTEM_ORDER = ['PHASE:INITIATION', 'PHASE:REQUIREMENTS', 'PHASE:ANALYSIS_DESIGN', 'OPT:DATA_MIGRATION', 'PHASE:DEVELOPMENT', 'PHASE:TESTING', 'PHASE:TRANSITION_GO_LIVE'];
+const sysIdx = (k) => { const i = SYSTEM_ORDER.indexOf(k); return i < 0 ? 98 : i; };
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const dateOrNull = (v) => (v === undefined ? undefined : v === null || v === '' ? null : v);
 
@@ -141,6 +150,9 @@ export async function renumber(db, projectId) {
   const items = (await liveItems(db, projectId));
   const byParent = new Map();
   for (const it of items) { const k = it.parent_id || ''; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k).push(it); }
+  // batch7: fixed phase nodes are always 1..N at the root (FIXED order); user top-level items follow in their own order
+  const root = byParent.get('') || [];
+  if (root.some(isSystem)) byParent.set('', [...root.filter(isSystem).sort((a, b) => sysIdx(a.system_key) - sysIdx(b.system_key)), ...root.filter((x) => !isSystem(x))]);
   const walk = async (parentId, prefix, depth) => {
     for (const [i, it] of (byParent.get(parentId || '') || []).entries()) {
       const code = prefix ? `${prefix}.${i + 1}` : String(i + 1);
@@ -186,7 +198,7 @@ export async function loadTree(db, project, { includeArchived = false } = {}) {
   const walk = (parentKey, depth) => {
     for (const it of kids.get(parentKey) || []) {
       const children = kids.get(it.id) || [];
-      const node = { ...it, depth, children_count: children.length, is_group: children.length > 0, predecessors: predsOf.get(it.id) || [], linked_req_count: linkCounts.get(it.id) || 0 };
+      const node = { ...it, depth, children_count: children.length, is_group: children.length > 0 || isSystem(it), is_system: isSystem(it), predecessors: predsOf.get(it.id) || [], linked_req_count: linkCounts.get(it.id) || 0 };
       node.past_end = !children.length && pastEnd(project, it);   // US-3 row warning (leaf task end / milestone date after the project end)
       out.push(node);
       walk(it.id, depth + 1);
@@ -305,11 +317,11 @@ export function scheduleFigures(leafTasks, milestones, today = todayStr()) {
 /** Project WBS stats. `progress` = weighted mean of leaf TASK progress (milestones and groups excluded) — see scheduleFigures. */
 const countBy = (rows, f) => rows.reduce((m, r) => { const k = f(r); m[k] = (m[k] || 0) + 1; return m; }, {});
 export async function wbsStats(db, projectId) {
-  const items = (await liveItems(db, projectId));
+  const items = (await liveItems(db, projectId)).filter((i) => !isSystem(i));   // batch7: fixed phase nodes are structure, never counted ('WBS 0건' stays 0)
   const project = (await db.get('SELECT id, planned_end_date FROM projects WHERE id = ?', [projectId])) || {};
   const shIds = new Set((await projectStakeholders(db, projectId)).map((x) => x.id));
   const hasChild = new Set(items.filter((i) => i.parent_id).map((i) => i.parent_id));
-  const leafTasks = items.filter((i) => i.item_type === 'TASK' && !hasChild.has(i.id));
+  const leafTasks = items.filter((i) => i.item_type === 'TASK' && !hasChild.has(i.id));   // (a system node's children keep their parent_id → it is never a leaf here anyway)
   const tasks = leafTasks;   // groups (TASK with children, legacy SUMMARY) are roll-ups, never counted as work items
   const groups = items.filter((i) => hasChild.has(i.id));
   const milestones = items.filter((i) => i.item_type === 'MILESTONE');
@@ -413,6 +425,10 @@ export function autoActualDates(existing, next, today = todayStr()) {
 }
 
 export async function updateWbs(db, project, existing, input, userId = null, { delayReason = '' } = {}) {
+  if (isSystem(existing)) {
+    if (input.title !== undefined && input.title !== existing.title) throw new SystemNodeError('이름 변경');
+    if ((input.item_type !== undefined && input.item_type !== existing.item_type) || input.parent_id !== undefined || input.sequence !== undefined || input.lifecycle_phase !== undefined && input.lifecycle_phase !== existing.lifecycle_phase) throw new SystemNodeError('변경');
+  }
   const sets = []; const vals = [];
   const next = { ...input };
   // A group's progress and dates are roll-ups of its children: refuse direct edits instead of silently storing dead values.
@@ -450,6 +466,7 @@ export async function updateWbs(db, project, existing, input, userId = null, { d
 
 /** Move within/between parents. sequence is the 1-based target position among live siblings of the new parent. */
 export async function moveWbs(db, project, existing, { parent_id, sequence, convert_parent }, userId = null) {
+  if (isSystem(existing)) throw new SystemNodeError('이동');
   const newParent = parent_id === undefined ? existing.parent_id : (parent_id || null);
   if (newParent) {
     const parent = (await getItem(db, project.id, newParent));
@@ -485,6 +502,7 @@ const siblingsOf = (db, projectId, parentId) => db.all('SELECT * FROM wbs_items 
 
 /** 들여쓰기: become the last child of the previous sibling. */
 export async function indentWbs(db, project, existing, userId = null, { convert_parent } = {}) {
+  if (isSystem(existing)) throw new SystemNodeError('들여쓰기');
   const sibs = await siblingsOf(db, project.id, existing.parent_id);
   const i = sibs.findIndex((x) => x.id === existing.id);
   if (i <= 0) throw new ValidationError({ parent_id: '바로 위에 같은 레벨의 항목이 없어 들여쓸 수 없습니다.' });
@@ -495,6 +513,7 @@ export async function indentWbs(db, project, existing, userId = null, { convert_
 }
 /** 내어쓰기: become the sibling right after the current parent. */
 export async function outdentWbs(db, project, existing, userId = null) {
+  if (isSystem(existing)) throw new SystemNodeError('내어쓰기');
   if (!existing.parent_id) throw new ValidationError({ parent_id: '최상위 항목은 내어쓸 수 없습니다.' });
   const parent = await getItem(db, project.id, existing.parent_id);
   await moveWbs(db, project, existing, { parent_id: parent.parent_id || null, sequence: parent.sequence + 1 }, userId);
@@ -503,6 +522,7 @@ export async function outdentWbs(db, project, existing, userId = null) {
 
 /** 복제: copy the item (and, with `withChildren`, its subtree) right after itself. Links/dependencies are not copied. */
 export async function duplicateWbs(db, project, existing, userId, { withChildren = true } = {}) {
+  if (isSystem(existing)) throw new SystemNodeError('복제');
   const items = (await liveItems(db, project.id)); const kids = new Map();
   for (const it of items) { const k = it.parent_id || ''; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(it); }
   const copyOf = (src, parentId, title) => ({ item_type: src.item_type, title, description: src.description, owner_user_id: src.owner_user_id, owner_stakeholder_id: src.owner_stakeholder_id, lifecycle_phase: src.lifecycle_phase, status: 'NOT_STARTED', progress: 0, weight: src.weight,
@@ -525,6 +545,7 @@ export async function duplicateWbs(db, project, existing, userId, { withChildren
 /** Restore an archived item together with the descendants archived in the same operation (same archived_at). */
 export async function restoreWbs(db, project, existing, userId = null) {
   if (!existing.archived_at) return [];
+  if (isSystem(existing)) throw new SystemNodeError('복구');   // 데이터 이관 comes back through the WBS switch
   if (existing.parent_id) { const parent = await getItem(db, project.id, existing.parent_id); if (!parent || parent.archived_at) throw new ValidationError({ parent_id: '상위 항목이 보관 상태라 복구할 수 없습니다. 상위 항목을 먼저 복구하세요.' }); }
   const rows = await db.all('SELECT id FROM wbs_items WHERE project_id = ? AND archived_at = ?', [project.id, existing.archived_at]);
   const subtree = new Set([existing.id]);
@@ -542,6 +563,7 @@ export async function restoreWbs(db, project, existing, userId = null) {
  *  children: 'cascade' (default) archives the subtree; 'promote' first moves the direct children to the item's own level. */
 export async function archiveWbs(db, project, existing, userId = null, { skipRenumber = false, children = 'cascade' } = {}) {
   if (existing.archived_at) return [];
+  if (isSystem(existing)) throw new SystemNodeError('삭제');
   if (children === 'promote') {
     const kids = await siblingsOf(db, project.id, existing.id);
     let pos = existing.sequence + 1;

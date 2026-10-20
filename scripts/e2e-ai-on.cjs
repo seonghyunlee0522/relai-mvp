@@ -113,7 +113,7 @@ const shot = (page, n) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${n}`, full
     const drafted = (await c('GET', `${PP}/ai/wbs-plans/${plan.id}`)).json?.plan;
     const reqItem = drafted?.draft?.items.find((i) => (i.related_requirement_ids || []).length);
     await c('POST', `${PP}/ai/wbs-plans/${plan.id}/coverage`, { items: [{ temp_id: reqItem.temp_id, selected: false }] });   // leaves one requirement uncovered → fix allowed
-    const fixItem = (temp_id, title, project_area, related = []) => ({ temp_id, parent_temp_id: null, item_type: 'TASK', title, description: '', project_area, planned_duration_days: null, related_requirement_ids: related });
+    const fixItem = (temp_id, title, project_area, related = []) => ({ temp_id, parent_temp_id: null, item_type: 'TASK', title, description: '', project_area, phase: project_area === 'TESTING' ? 'TESTING' : 'DEVELOPMENT', planned_duration_days: null, related_requirement_ids: related });
     mock.transform = (name, data) => (name === 'wbs_plan_fix' ? { items: [fixItem('AI-FIX-1', '[보완] 성능 테스트 테스트', 'TESTING'), fixItem('AI-FIX-2', '기능 구현: 결제 요구사항 요구사항 구현', 'FUNCTIONAL_DEVELOPMENT', reqItem.related_requirement_ids)], notes: [] } : data);
     const fx = await c('POST', `${PP}/ai/wbs-plans/${plan.id}/fix`, {}); mock.transform = null;
     const fItems = fx.json?.plan?.draft?.items || []; const fBy = Object.fromEntries(fItems.map((i) => [i.temp_id, i])); const titleOf = (t) => fBy[t]?.title;

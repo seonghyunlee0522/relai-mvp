@@ -60,6 +60,7 @@ export const SYSTEM = {
 - answer는 한국어, 짧은 문단 또는 번호 목록(최대 10항목). 항목을 언급할 때는 display_id(ISS-004, REQ-012, 1.3 등)를 함께 적습니다.
 - <project_data>의 [DRAFT/IN_SCOPE/HIGH] 같은 영문 상태·유형 코드는 answer에 그대로 쓰지 않고 화면의 한국어 명칭(작성 중, 범위 내, 높음 등)으로 바꿔 씁니다.
 - references에는 answer에서 실제로 근거로 삼은 항목만 넣습니다. <project_data>에 있는 display_id만 사용합니다.
+- 진척·편차·건강도 질문("진척률 차이 이유", "왜 늦어")에는 '진척 요약'의 계획·실제 진척률과 편차 수치, 편차 기여 상위 작업(WBS 코드·계획·실제·종료 예정일·담당)을 근거로 답합니다.
 - 상태 변경, 종료, 승인 같은 행동을 수행했다고 말하지 않습니다. 당신은 읽기 전용 보조자입니다. 필요한 조치는 "제안"으로만 적습니다.
 - 질문이 프로젝트와 무관하거나 데이터로 답할 수 없으면 그렇게 말하고 warnings에 사유를 적습니다.`,
 };
@@ -98,10 +99,11 @@ ${AREA_GUIDE}
 - item_type: TASK | MILESTONE. 하위 항목을 갖는 묶음도 TASK입니다(자식이 있으면 상위 작업). MILESTONE은 하위 항목이 없습니다. SUMMARY는 사용하지 않습니다.
 - 깊이는 기본 2~3단계로 유지하고 최대 5단계를 넘지 않습니다. 전체 항목은 최대 80개. 프로젝트가 크면 상세보다 상위 수준 초안을 만들고 notes에 그 사실을 적습니다.
 - 각 항목에 project_area를 지정합니다(영역 분류·Coverage용).
+- 각 항목에 phase를 지정합니다. WBS 최상위는 RELAI 단계로 고정되어 있고 최상위 항목은 그 단계 아래에 들어갑니다: INITIATION(착수) · REQUIREMENTS(요구사항 정의) · ANALYSIS_DESIGN(분석·설계) · DATA_MIGRATION(데이터 이관) · DEVELOPMENT(구현) · TESTING(시험) · TRANSITION_GO_LIVE(전환·오픈). 하위 항목은 상위와 같은 값을 씁니다. 단계 이름만 되풀이하는 최상위 묶음("테스트", "분석/설계")은 만들지 말고 작업을 바로 그 단계에 둡니다.
 - related_requirement_ids에는 <project_data>의 선택 요구사항 display_id(REQ-nnn)만, 그리고 실제로 그 요구사항을 구현·검증하는 작업에만 넣습니다. 관리/인프라/교육 같은 수행 작업은 빈 배열로 둡니다. 억지로 모든 요구사항을 연결하지 않습니다.
 - 사용자가 NOT_NEEDED로 답한 영역, 프로젝트가 작아 불필요한 PM 업무는 과도하게 만들지 않습니다.
 - 기존 WBS에 이미 같은 작업이 있으면 다시 만들지 말고 notes에 "기존 x.y와 유사" 식으로 적습니다.
-- planned_duration_days는 규모 가늠용 참고값(정수, 일)이며 확신이 없으면 null. 날짜·담당자·인력·생산성은 절대 정하거나 추정하지 않습니다.
+- planned_duration_days는 규모 가늠용 참고값(정수, 근무일)이며 확신이 없으면 null. 같은 단계 안 작업들의 상대 크기로만 쓰이고, 실제 날짜는 RELAI가 프로젝트 기간과 근무일 규칙으로 배분합니다. 날짜·담당자·인력·생산성은 절대 정하거나 추정하지 않습니다.
 - 제공되지 않은 외부 시스템, 고객 정책, 조직을 지어내지 않습니다.`;
 
 SYSTEM.WBS_PLAN_FIX = `${COMMON_RULES}
@@ -110,7 +112,7 @@ SYSTEM.WBS_PLAN_FIX = `${COMMON_RULES}
 - 기존 초안 전체를 다시 만들지 않습니다. 보완 대상에 해당하는 항목만 최대 20개.
 - 배치: <현재 초안>에 같은 영역(project_area)의 상위 묶음(예: "교육", "데이터 이관", "테스트")이 있으면 parent_temp_id에 그 항목의 temp_id를 그대로 써서 그 아래에 넣습니다. 최상위(parent_temp_id = null)에는 초안에 그 영역의 묶음이 전혀 없을 때만 둡니다. 새 묶음이 필요하면 "AI-FIX-1" 형식의 새 temp_id로 만들고, 초안에 이미 있는 묶음과 같은 이름의 묶음은 다시 만들지 않습니다.
 - 제목: 짧은 한국어 명사구(2~20자, 예: "사용자 교육", "성능 테스트", "이관 데이터 검증")로 씁니다. 상위 묶음 이름이나 영역 이름을 앞에 붙이지 않고, 같은 단어를 반복하지 않으며("요구사항 요구사항" 금지), "[보완]", "추가:", "(누락)" 같은 표시나 마침표를 넣지 않습니다. 요구사항을 다루는 작업은 "REQ-001 구현"처럼 ID만 쓰지 말고 무엇을 하는지 적습니다.
-- 규칙(temp_id, item_type, project_area, related_requirement_ids, 참고값, 지어내기 금지)은 초안 생성과 동일합니다.`;
+- 규칙(temp_id, item_type, project_area, phase, related_requirement_ids, 참고값, 지어내기 금지)은 초안 생성과 동일합니다.`;
 
 const block = (tag, text) => `<${tag}>\n${text}\n</${tag}>`;
 export const dataBlock = (text) => block('project_data', text);

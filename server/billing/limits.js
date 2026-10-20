@@ -20,7 +20,7 @@ const COUNT_SQL = {
   projects: `SELECT COUNT(*) AS n FROM projects WHERE workspace_id = ? AND status != 'ARCHIVED' AND sample_key IS NULL`,
   members: `SELECT COUNT(*) AS n FROM workspace_members WHERE workspace_id = ?`,
   requirements: `SELECT COUNT(*) AS n FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = ? AND p.sample_key IS NULL AND r.archived_at IS NULL`,
-  wbs: `SELECT COUNT(*) AS n FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = ? AND p.sample_key IS NULL AND i.archived_at IS NULL`,
+  wbs: `SELECT COUNT(*) AS n FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = ? AND p.sample_key IS NULL AND i.archived_at IS NULL AND i.system_key IS NULL`,   // batch7: fixed phase nodes are free
   weekly_reports: `SELECT COUNT(*) AS n FROM weekly_reports wr JOIN projects p ON p.id = wr.project_id WHERE p.workspace_id = ? AND p.sample_key IS NULL AND wr.created_at >= date_trunc('month', now())`,
 };
 

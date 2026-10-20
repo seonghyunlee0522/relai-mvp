@@ -129,10 +129,11 @@ test('F6: 주요 의사결정 기록 is a decision log — 1 decision recorded �
 test('F7: WBS skeleton has a 데이터 이관 task when data migration is 있음 or 미정, not when 없음', async () => {
   const { server, client, db } = await boot();
   const A = await setup(client, 'f7@x.com');
-  const tasks = async (v) => { await db.run('UPDATE projects SET data_migration = ? WHERE id = ?', [v, A.p.id]); return (await skeletonPlan(db, await proj(db, A))).groups.find((g) => g.key === 'TRANSITION').tasks.map((t) => t.title); };
-  assert.ok((await tasks('YES')).includes('데이터 이관'));
-  assert.ok((await tasks('TBD')).includes('데이터 이관'));
-  assert.ok(!(await tasks('NO')).includes('데이터 이관'));
+  // batch7 B3: 데이터 이관 is its own fixed node (after 분석·설계) with its tasks
+  const tasks = async (v) => { await db.run('UPDATE projects SET data_migration = ? WHERE id = ?', [v, A.p.id]); return ((await skeletonPlan(db, await proj(db, A))).groups.find((g) => g.key === 'DATA_MIGRATION')?.tasks || []).map((t) => t.title); };
+  assert.ok((await tasks('YES')).includes('데이터 이관·검증'));
+  assert.ok((await tasks('TBD')).includes('데이터 이관·검증'));
+  assert.equal((await tasks('NO')).length, 0);
   server.close();
 });
 

@@ -196,6 +196,7 @@ export const migrations = [
   { version: 46, name: 'Product analytics: analytics_events (+ once-per-user milestone index) and analytics_active_days — first-party, ids only (schema.sql)', up() {} },
   { version: 47, name: 'Promotions: promotions table + launch-offer seed (schema.sql) — display only, edited in 관리자 › 프로모션', up() {} },
   { version: 48, name: 'In-app feedback: feedback table (schema.sql) — 의견 남기기 in the app rail, triaged in 관리자 › 의견', up() {} },
+  { version: 50, name: 'batch7 T3: wbs_items.system_key + uq_wbs_system_key (WBS 고정 최상위 뼈대), public_holidays + 2026–2027 seed (schema.sql) — additive; existing projects get their fixed nodes when the WBS is first opened', up() {} },
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

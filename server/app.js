@@ -25,6 +25,8 @@ const safeFileName = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g
 import * as R from './requirements.js';
 import * as W from './wbs.js';
 import * as SK from './wbs-skeleton.js';
+import * as WS from './wbs-structure.js';
+import { holidayMap } from './calendar/workdays.js';
 import { syncMilestones } from './milestone-sync.js';
 import * as T from './trace.js';
 import * as C from './changes.js';
@@ -271,6 +273,13 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
 
   // ?optional=1 (landing, invite page): an anonymous visitor gets 200 { user: null } instead of a 401 console error.
+  /* batch7 B4: 한국 공휴일 for the client's 근무일 math (not user data; cached a day). */
+  app.get('/api/calendar/holidays', requireAuth, wrap(async (req, res) => {
+    const ok = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    const map = await holidayMap(db, ok(req.query.from), ok(req.query.to));
+    res.set('Cache-Control', 'private, max-age=86400');
+    res.json({ holidays: [...map].map(([day, name]) => ({ day, name })) });
+  }));
   app.get('/api/me', (req, res, next) => (!req.user && req.query.optional ? res.json({ user: null, workspaces: [] }) : next()), requireAuth, wrap(async (req, res) => {
     res.json({ user: toPublicUser(req.user), workspaces: await q.memberships.all(req.user.id) });
   }));
@@ -815,7 +824,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
 
   /* ---------- WBS ---------- */
   const wbase = `${base}/:pid/wbs`;
-  const wbsResponse = async (project, opts = {}) => ({ ...(await W.loadTree(db, project, opts)), summary: (await W.wbsStats(db, project.id)), jira: (await wbsExecutionMap(db, project.id)),
+  const wbsResponse = async (project, opts = {}) => ({ ...(await W.loadTree(db, project, opts)), summary: (await W.wbsStats(db, project.id)), data_migration: project.data_migration ?? null, outside_count: (await WS.outsideItems(db, project.id)).filter((x) => !x.system_key).length, jira: (await wbsExecutionMap(db, project.id)),
     owners: (await SK.ownerOptions(db, project)), key_dates_pending: (await SK.pendingKeyDates(db, project)).length });   // Phase 3: 팀원 (계정 없음) picker · 01 주요 일정 가져오기 suggestion   // jira: null unless the project is mapped (Phase 12)
   const loadWbs = async (req, res, project) => {
     const w = (await W.getWbs(db, project, req.params.wid2 || req.params.iid));
@@ -857,9 +866,26 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.status(ids.length ? 201 : 200).json({ created: ids.length, created_ids: ids, ...(await wbsResponse(project)) });
   }));
 
+  /* batch7 B3: 데이터 이관 switch · 단계 구조 정리 (preview → apply). Before the /:iid routes. */
+  app.post(`${wbase}/structure/data-migration`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const out = (await tx(db, async (t) => WS.setDataMigration(t, project, req.body?.on === true, req.user.id)));
+    res.json({ ...out, data_migration: project.data_migration, ...(await wbsResponse(project)) });
+  }));
+  app.get(`${wbase}/structure/tidy`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project) return;
+    res.json(await WS.tidyPreview(db, project));
+  }));
+  app.post(`${wbase}/structure/tidy`, guard, wrap(async (req, res) => {
+    const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
+    const out = (await tx(db, async (t) => WS.applyTidy(t, project, req.body?.moves, req.user.id)));
+    res.json({ ...out, ...(await wbsResponse(project)) });
+  }));
+
   app.get(wbase, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res));
     if (!project) return;
+    if (project.status !== 'ARCHIVED') await tx(db, async (t) => WS.ensureStructure(t, project, req.user.id));   // B3.3/B3.4: fixed phase nodes appear when the WBS is first opened
     res.json((await wbsResponse(project, { includeArchived: req.query.include_archived === '1' })));   // GAP-002
   }));
 
@@ -1324,6 +1350,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
 
   /* ---------- Phase 9: health / attention / weekly reports ---------- */
+  app.get(`${base}/:pid/health/variance`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; res.json({ variance: (await H.varianceDrivers(db, project, 10)) }); }));   // batch7 #21: '이유 보기' (no AI)
   app.get(`${base}/:pid/health`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; res.json({ health: (await H.projectHealth(db, project)) }); }));
   app.get(`${base}/:pid/attention`, guard, wrap(async (req, res) => { const project = (await loadProject(req, res)); if (!project) return; const items = (await M.attentionAll(db, project.id)); res.json({ items, total: items.length }); }));
   mountDashboardRoute({ app, db, guard, wrap, loadProject, base });

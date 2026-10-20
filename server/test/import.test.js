@@ -367,7 +367,8 @@ test('wbs import: hierarchy + file order, auto types, dates/milestone, owner, pr
   assert.deepEqual(bad, [2 + 1, 2 + 8].sort());
   const tree = (await A.c('GET', A.wbs)).json;
   const codes = tree.items.map((i) => `${i.wbs_code}:${i.title}`);
-  assert.deepEqual(codes, ['1:기존 상위', '2:기존 작업', '3:분석', '3.1:요구사항 분석', '3.2:인터뷰', '4:설계', '4.1:화면 설계', '4.1.1:목록', '5:오픈', '6:마지막 작업']);
+  const fixedN = tree.items.filter((i) => i.is_system).length;   // batch7: the fixed phase nodes come first ('분석' / '설계' are not node names → stay top-level)
+  assert.deepEqual(codes.slice(fixedN), ['1:기존 상위', '2:기존 작업', '3:분석', '3.1:요구사항 분석', '3.2:인터뷰', '4:설계', '4.1:화면 설계', '4.1.1:목록', '5:오픈', '6:마지막 작업'].map((x) => x.replace(/^(\d+)/, (n) => String(Number(n) + fixedN))));
   const byTitle = Object.fromEntries(tree.items.map((i) => [i.title, i]));
   assert.equal(byTitle['분석'].item_type, 'TASK'); assert.equal(byTitle['분석'].is_group, true); assert.equal(byTitle['요구사항 분석'].item_type, 'TASK');
   assert.equal(byTitle['화면 설계'].item_type, 'TASK'); assert.equal(byTitle['화면 설계'].is_group, true);   // has a child → group (status COMPLETED kept)
@@ -383,14 +384,15 @@ test('wbs import: hierarchy + file order, auto types, dates/milestone, owner, pr
   const item = (await A.c('GET', `${A.wbs}/${byTitle['오픈'].id}`)).json.item;
   assert.deepEqual(item.history.map((h) => h.action_type).sort(), ['CREATED', 'DEP_ADDED', 'DEP_ADDED']);
   assert.ok(item.history.some((h) => h.new_value === '4.1 화면 설계'), JSON.stringify(item.history));
-  assert.equal((await db.get("SELECT COUNT(*) AS n FROM wbs_history WHERE action_type = 'CREATED'")).n, 2 + 8);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM wbs_history WHERE action_type = 'CREATED' AND new_value IS DISTINCT FROM '단계 구조(고정)'")).n, 2 + 8);   // batch7: fixed nodes excluded
   assert.equal(item.history[0].changed_by_name, '홍길동');
 
   // parent_id: top-level rows are created under the given parent
   const r2 = await A.c('POST', `${A.wbs}/import`, { parent_id: pre.id, rows: wrows([W('1', '하위 1'), W('1.1', '하위 1-1'), W('2', '하위 2')]) });
   assert.equal(r2.json.created, 3);
   const t2 = (await A.c('GET', A.wbs)).json.items;
-  assert.deepEqual(t2.filter((i) => i.wbs_code.startsWith('1')).map((i) => `${i.wbs_code}:${i.title}`), ['1:기존 상위', '1.1:하위 1', '1.1.1:하위 1-1', '1.2:하위 2']);
+  const pc = t2.find((i) => i.title === '기존 상위').wbs_code;   // batch7: after the fixed nodes
+  assert.deepEqual(t2.filter((i) => i.wbs_code === pc || i.wbs_code.startsWith(pc + '.')).map((i) => `${i.wbs_code.replace(pc, 'P')}:${i.title}`), ['P:기존 상위', 'P.1:하위 1', 'P.1.1:하위 1-1', 'P.2:하위 2']);
   // parent_id validation
   assert.equal((await A.c('POST', `${A.wbs}/import`, { parent_id: 'nope', rows: [] })).status, 400);
   assert.equal((await A.c('POST', `${A.wbs}/import/preview`, { parent_id: 'nope', rows: [] })).status, 400);

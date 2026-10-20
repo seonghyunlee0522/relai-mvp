@@ -21,7 +21,7 @@ const q = (area, question, options, extra = {}) => ({ id: `q_${area.toLowerCase(
 const QUESTIONS = (extra = []) => ({ areas: [{ area: 'FUNCTIONAL_DEVELOPMENT', status: 'REQUIRED', source: 'REQUIREMENT', reason: '요구사항' }, { area: 'DATA_MIGRATION', status: 'UNKNOWN', source: 'INFERRED', reason: '확인 불가' }, { area: 'INFRASTRUCTURE', status: 'UNKNOWN', source: 'INFERRED', reason: '확인 불가' }, { area: 'INTERFACE', status: 'UNKNOWN', source: 'INFERRED', reason: '확인 불가' }, { area: 'TRAINING', status: 'POSSIBLE', source: 'INFERRED', reason: '보통 필요' }],
   questions: [q('DATA_MIGRATION', '데이터 이관이 필요한가요?', [['none', '없음'], ['yes', '있음', [['db', '기존 DB'], ['excel', 'Excel / 파일']]], ['undecided', '아직 미정']]), q('INFRASTRUCTURE', '구축 환경은?', [['saas', 'SaaS'], ['customer_cloud', '고객사 Cloud'], ['on_premise', 'On-Premise'], ['undecided', '아직 미정']]),
     q('INTERFACE', '외부 연계가 있나요?', [['sso', 'SSO'], ['erp', 'ERP'], ['none', '없음']], { type: 'MULTI' }), q('TRAINING', '사용자 교육이 필요한가요?', [], { type: 'BOOLEAN' }), ...extra] });
-const it = (temp, title, area, parent = null, reqs = [], o = {}) => ({ temp_id: temp, parent_temp_id: parent, item_type: 'TASK', title, description: '', project_area: area, planned_duration_days: null, related_requirement_ids: reqs, ...o });
+const it = (temp, title, area, parent = null, reqs = [], o = {}) => ({ temp_id: temp, parent_temp_id: parent, item_type: 'TASK', title, description: '', project_area: area, phase: null, planned_duration_days: null, related_requirement_ids: reqs, ...o });
 const DRAFT = (reqIds) => ({ items: [
   it('AI-WBS-1', '프로젝트 관리', 'PROJECT_MANAGEMENT'), it('AI-WBS-2', '착수회의', 'PROJECT_MANAGEMENT', 'AI-WBS-1'), it('AI-WBS-3', '주간보고', 'PROJECT_MANAGEMENT', 'AI-WBS-1'),
   it('AI-WBS-4', '기능 개발', 'FUNCTIONAL_DEVELOPMENT'), ...reqIds.map((r, i) => it(`AI-WBS-${10 + i}`, `${r} 구현`, 'FUNCTIONAL_DEVELOPMENT', 'AI-WBS-4', [r], { planned_duration_days: 5 })),
@@ -182,17 +182,19 @@ test('planner: commit — selected only, real codes from renumber, links created
   await mkWbs(A, { item_type: 'TASK', title: '기존 작업' });
   const { plan, reqs } = await toReview(A);
   // 45. transaction: an invalid payload rolls back everything (the plan stays REVIEW, nothing created)
-  const beforeCount = Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?', [A.p.id])).n);
+  const beforeCount = Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ? AND system_key IS NULL', [A.p.id])).n);
   await db.run(`ALTER TABLE wbs_items ADD CONSTRAINT t_no_atomic CHECK (title <> '통합 테스트')`);
   let r = await A.c('POST', `${P(A)}/${plan.id}/commit`, {});
-  assert.ok(r.status >= 400, 'commit failed'); assert.equal(Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?', [A.p.id])).n), beforeCount, '45. rolled back'); assert.equal((await A.c('GET', `${P(A)}/${plan.id}`)).json.plan.status, 'REVIEW', '45. plan not marked committed');
+  assert.ok(r.status >= 400, 'commit failed'); assert.equal(Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ? AND system_key IS NULL', [A.p.id])).n), beforeCount, '45. rolled back'); assert.equal((await A.c('GET', `${P(A)}/${plan.id}`)).json.plan.status, 'REVIEW', '45. plan not marked committed');
   await db.run('ALTER TABLE wbs_items DROP CONSTRAINT t_no_atomic');
   // 41. selected only: drop 데이터 이관 group (children follow) and the milestone
   r = await A.c('POST', `${P(A)}/${plan.id}/commit`, { items: [{ temp_id: 'AI-WBS-20', selected: false }, { temp_id: 'AI-WBS-21', selected: false }, { temp_id: 'AI-WBS-22', selected: false }, { temp_id: 'AI-WBS-50', selected: false }] });
   assert.equal(r.status, 201, JSON.stringify(r.json));
   assert.equal(r.json.plan.status, 'COMMITTED'); assert.ok(r.json.plan.committed_at);
   const codes = r.json.created.map((c) => c.wbs_code);
-  assert.ok(codes.includes('2') && codes.includes('2.1') && codes.includes('3.1'), '42. real codes continue after existing "1"'); assert.ok(!r.json.created.some((c) => c.title === '데이터 이관' || c.title === '오픈'), '41. deselected skipped');
+  const tree0 = (await A.c('GET', A.wbs)).json.items; const sysCodes = new Set(tree0.filter((i) => i.is_system).map((i) => i.wbs_code));
+  assert.ok(codes.length && codes.every((c) => sysCodes.has(c.split('.')[0])), '42. batch7: every committed item sits under a fixed phase node (real codes from renumber)');
+  assert.equal(tree0.find((i) => i.title === '기존 작업').wbs_code, String(sysCodes.size + 1), '42. the existing top-level item follows the fixed nodes'); assert.ok(!r.json.created.some((c) => c.title === '데이터 이관' || c.title === '오픈'), '41. deselected skipped');
   assert.equal(r.json.links, 3, '43. one link per requirement task'); assert.equal(r.json.plan.commit_result.delivery > 0, true, '44. delivery tasks exist without links');
   const tree = (await A.c('GET', A.wbs)).json.items;
   const infra = tree.find((i) => i.title === 'Azure 운영 환경 구성'); assert.equal(infra.linked_req_count, 0, '44. no forced link');
@@ -202,7 +204,7 @@ test('planner: commit — selected only, real codes from renumber, links created
   // 46. double commit
   const createdN = r.json.created.length;
   r = await A.c('POST', `${P(A)}/${plan.id}/commit`, {}); assert.equal(r.status, 409); assert.equal(r.json.error.code, 'plan_committed');
-  assert.equal(Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ?', [A.p.id])).n), beforeCount + createdN, '46. nothing created twice');
+  assert.equal(Number((await db.get('SELECT COUNT(*) n FROM wbs_items WHERE project_id = ? AND system_key IS NULL', [A.p.id])).n), beforeCount + createdN, '46. nothing created twice');
   // 47. archived project: draft readable, commit blocked
   const B = await setup(client, 'p5b@x.com'); const { plan: pb } = await toReview(B);
   await B.c('POST', `${B.purl}/archive`, {});
@@ -303,7 +305,8 @@ test('planner (prod-test UX fixes): POST /fix places parentless items under the 
   assert.deepEqual(r.json.added, ['AI-FIX-1', 'AI-FIX-2', 'AI-FIX-3', 'AI-FIX-4'], 'added keeps the model order');
   // commit keeps the hierarchy: the fix item becomes a child of the committed 테스트 node
   const c = await A.c('POST', `${P(A)}/${plan.id}/commit`, {}); assert.equal(c.status, 201);
-  const wbs = (await A.c('GET', A.wbs)).json.items; const test1 = wbs.find((w) => w.title === '테스트'); const perf = wbs.find((w) => w.title === '성능 테스트');
+  const wbs = (await A.c('GET', A.wbs)).json.items; const test1 = wbs.find((w) => w.system_key === 'PHASE:TESTING');   // batch7: the draft's '테스트' group only repeats the node name → its children land on 시험
+  const perf = wbs.find((w) => w.title === '성능 테스트');
   assert.equal(perf.parent_id, test1.id);
   server.close();
 });

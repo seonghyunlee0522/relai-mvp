@@ -13,6 +13,8 @@ import * as T from '../trace.js';
 import * as C from '../changes.js';
 import * as X from '../raid.js';
 import { addWbsHistory } from '../wbs-history.js';
+import { nodeIdFor } from '../wbs-structure.js';
+import { inferPlanPhase, sameAsNode, nodeByPlan } from '../../public/app/shared/wbs-structure.js';
 import { runAiFeature, AiError } from './service.js';
 import { SYSTEM, dataBlock, inputBlock, neutralize } from './prompts.js';
 import { extractionContext, wbsGenerationContext, changeImpactContext, assistantContext } from './context.js';
@@ -155,23 +157,32 @@ export async function commitWbs(db, { project, userId, items, source = null }) {
   const temps = new Set(items.map((i) => str(i.temp_id)));
   const parsed = items.map((it, i) => {
     try {
-      const input = W.parseWbs({ item_type: it.item_type, title: it.title, description: it.description || '' });
+      const ms = it.item_type === 'MILESTONE';   // batch7 #15: rule-allocated dates (planner commit) ride along; anything else stays date-free
+      const input = W.parseWbs({ item_type: it.item_type, title: it.title, description: it.description || '', ...(ms ? { milestone_date: it.milestone_date || null } : { planned_start_date: it.planned_start_date || null, planned_end_date: it.planned_end_date || null }) });
       const parentTemp = it.parent_temp_id ? str(it.parent_temp_id) : null;
       if (parentTemp && !temps.has(parentTemp)) throw new ValidationError({ parent_temp_id: '선택되지 않은 상위 항목입니다. 상위 항목을 함께 선택하거나 최상위로 바꿔 주세요.' });
-      return { ...input, temp_id: str(it.temp_id) || `AI-${i + 1}`, parent_temp_id: parentTemp, parent_id: !parentTemp && it.parent_id ? String(it.parent_id) : null,
+      return { ...input, temp_id: str(it.temp_id) || `AI-${i + 1}`, parent_temp_id: parentTemp, parent_id: !parentTemp && it.parent_id ? String(it.parent_id) : null, plan_phase: parentTemp || it.parent_id ? null : inferPlanPhase(it),
         requirement_ids: uniq((Array.isArray(it.requirement_ids) ? it.requirement_ids : []).map((x) => String(x || '')).filter(Boolean)) };
     } catch (e) { if (e instanceof ValidationError) throw new ValidationError(Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [`items.${i}.${k}`, v]))); throw e; }
   });
+  // batch7 B3: a top-level item goes under its fixed phase node; a top-level group that only repeats the node's name ('테스트' → 시험) is the node itself.
+  const hasKids = new Set(parsed.filter((x) => x.parent_temp_id).map((x) => x.parent_temp_id));
+  const phaseOfTemp = new Map(); for (const it of parsed) if (it.plan_phase) phaseOfTemp.set(it.temp_id, it.plan_phase);
+  const topPhase = (it) => { let x = it; let g = 0; while (x && x.parent_temp_id && g++ < 60) x = parsed.find((p) => p.temp_id === x.parent_temp_id); return x ? phaseOfTemp.get(x.temp_id) || null : null; };
   const result = await tx(db, async (t) => {
-    const idOf = new Map(); const created = []; let links = 0; const pending = [...parsed]; let guard = 0;
+    const idOf = new Map(); const created = []; let links = 0; const pending = [...parsed]; let guard = 0; const nodeOf = new Map();
+    const node = async (plan) => { if (!nodeOf.has(plan)) nodeOf.set(plan, await nodeIdFor(t, project, plan, userId)); return nodeOf.get(plan); };
     while (pending.length) {
       if (++guard > 500) throw new ValidationError({ items: '상위 항목 관계를 해석할 수 없습니다.' });
       const it = pending.shift();
       if (it.parent_temp_id && !idOf.has(it.parent_temp_id)) { pending.push(it); continue; }
-      const parentId = it.parent_temp_id ? idOf.get(it.parent_temp_id) : it.parent_id;
-      const id = await W.createWbs(t, project, { ...it, parent_id: parentId }, userId, { skipRenumber: true });
+      if (it.plan_phase && hasKids.has(it.temp_id) && sameAsNode(it.title) === it.plan_phase) { idOf.set(it.temp_id, await node(it.plan_phase)); continue; }
+      const parentId = it.parent_temp_id ? idOf.get(it.parent_temp_id) : it.parent_id || (it.plan_phase ? await node(it.plan_phase) : null);
+      const plan = topPhase(it); const lifecycle = plan ? (nodeByPlan.get(plan)?.phase || null) : null;
+      const id = await W.createWbs(t, project, { ...it, parent_id: parentId, ...(lifecycle ? { lifecycle_phase: lifecycle } : {}) }, userId, { skipRenumber: true });
       await addWbsHistory(t, id, 'AI_GENERATED', { field: 'source', newValue: source && source.kind === 'AI_PROJECT_WBS_PLANNER' ? `AI Project WBS Planner에서 생성 (plan_id=${source.plan_id})` : 'AI WBS 초안에서 생성' }, userId);
       idOf.set(it.temp_id, id); created.push({ temp_id: it.temp_id, id, requirement_ids: it.requirement_ids });
+      if (hasKids.has(it.temp_id)) await t.run('UPDATE wbs_items SET planned_start_date = NULL, planned_end_date = NULL WHERE id = ?', [id]);   // a group's dates are its children's roll-up
     }
     await W.renumber(t, project.id);   // real wbs_code / sequence come from the existing numbering, never from the AI
     for (const c of created) {

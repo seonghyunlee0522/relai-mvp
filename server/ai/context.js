@@ -5,7 +5,7 @@
  */
 import { neutralize } from './prompts.js';
 import { attentionAll, upcomingDates } from '../metrics.js';
-import { projectHealth } from '../health.js';
+import { projectHealth, varianceDrivers, varianceText } from '../health.js';
 import { REQ_TYPES } from '../requirements.js';
 import { jiraContextLines } from '../integrations/jira/sync.js';
 import { buildProjectCharter, charterPromptBlock } from '../charter.js';
@@ -32,7 +32,7 @@ export const wbsRows = (db, projectId, { limit = 200 } = {}) => db.all(`SELECT w
     (w.item_type = 'TASK' AND w.status != 'COMPLETED' AND w.planned_end_date IS NOT NULL AND w.planned_end_date < CURRENT_DATE)::int AS overdue
   FROM wbs_items w WHERE w.project_id = ? AND w.archived_at IS NULL ORDER BY w.wbs_code LIMIT ?`, [projectId, limit]);
 const reqLine = (r) => `- ${r.display_id} [${r.status}/${r.scope}/${r.priority}] ${clip(r.title, 120)}`;
-const wbsLine = (w) => `- ${w.wbs_code} [${w.item_type}/${w.status}${w.overdue ? '/지연' : ''}] ${clip(w.title, 100)}${w.planned_end_date ? ` (~${w.planned_end_date})` : w.milestone_date ? ` (${w.milestone_date})` : ''}`;
+const wbsLine = (w) => `- ${w.wbs_code} [${w.item_type}/${w.status}${w.overdue ? '/지연' : ''}] ${clip(w.title, 100)}${w.item_type === 'TASK' ? ` 진척 ${Number(w.progress) || 0}%` : ''}${w.planned_end_date ? ` (~${w.planned_end_date})` : w.milestone_date ? ` (${w.milestone_date})` : ''}`;   // batch7 #21: progress printed
 
 /* ---------- feature 1: requirement extraction ---------- */
 export async function extractionContext(db, project) {
@@ -70,7 +70,7 @@ export async function changeImpactContext(db, project, change) {
 /* ---------- feature 4: project Q&A (intent → context) ---------- */
 export const INTENTS = ['schedule', 'scope', 'quality', 'risk', 'change', 'general'];
 const INTENT_WORDS = {
-  schedule: /일정|지연|마일스톤|milestone|오픈|open|기한|deadline|언제|delay|wbs|작업|task|진행률|schedule/i,
+  schedule: /일정|지연|마일스톤|milestone|오픈|open|기한|deadline|언제|delay|wbs|작업|task|진행률|schedule|진척|편차|건강도|늦|차이|계획 대비|왜/i,   // batch7 #21: '진척률 차이 이유?'
   scope: /요구사항|requirement|req-|범위|scope|미확정|확정|연결되지|미연결|coverage|추가 요청/i,
   quality: /테스트|test|tc-|검수|acceptance|acc-|품질|quality|fail|pass|실패|통과|결함/i,
   risk: /리스크|risk|rsk-|위험|이슈|issue|iss-|문제|블로커|block|critical/i,
@@ -96,6 +96,10 @@ export async function assistantContext(db, project, question) {
     const att = (await attentionAll(db, project.id)).slice(0, 25);
     parts.push(lines(`확인 필요 항목 (우선순위 순, ${att.length}건)`, att, (a) => `- ${a.display_id} [${a.type}] ${clip(a.title, 100)} — ${clip(a.meta, 80)}`));
     for (const a of att) refs.set(a.display_id, { type: a.type, id: a.id, display_id: a.display_id, title: a.title, href: a.href });
+    // batch7 B9 (#21): planned vs actual progress + the tasks behind the gap — the same list the Overview '이유 보기' shows
+    const v = await varianceDrivers(db, project, 10);
+    parts.push(varianceText(v));
+    for (const d of v.drivers) refs.set(d.wbs_code, { type: 'WBS', id: d.id, display_id: d.wbs_code, title: d.title, href: `wbs?sel=${d.id}` });
   }
   if (always || intents.includes('schedule')) {
     const up = await upcomingDates(db, project.id, { days: 14, limit: 25 });

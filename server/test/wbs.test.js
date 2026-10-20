@@ -29,7 +29,9 @@ async function setup(client, email = 'u@x.com') {
   return { c, w, uid, p, url: `/api/workspaces/${w}/projects/${p.id}/wbs`, purl: `/api/workspaces/${w}/projects/${p.id}` };
 }
 const mk = async (c, url, body) => { const r = await c('POST', url, body); assert.equal(r.status, 201, JSON.stringify(r.json)); return r.json.item; };
-const codes = (items) => items.map((i) => `${i.wbs_code}:${i.title}`);
+// batch7 B3: the fixed phase nodes (1..N) come first once the WBS has been listed; these suites build top-level items, so they read
+// the user items only, numbered as if the fixed nodes were not there.
+const codes = (items) => { const n = items.filter((i) => i.is_system).length; return items.filter((i) => !i.is_system).map((i) => `${i.wbs_code.replace(/^\d+/, (x) => String(Number(x) - n))}:${i.title}`); };
 
 test('hierarchy: summary/task/milestone, 3+ depth, codes, reorder, reparent, cycle guard', async () => {
   const { server, client } = await boot();
@@ -44,14 +46,14 @@ test('hierarchy: summary/task/milestone, 3+ depth, codes, reorder, reparent, cyc
   const m = await mk(c, url, { item_type: 'MILESTONE', title: '요구사항 확정', milestone_date: '2026-10-15' });
   let t = (await c('GET', url)).json;
   assert.deepEqual(codes(t.items), ['1:분석', '1.1:요구사항 분석', '1.2:인터페이스 분석', '2:설계', '2.1:화면 설계', '2.1.1:목록 화면', '2.1.1.1:필터 영역', '3:요구사항 확정']);
-  assert.deepEqual(t.items.map((i) => i.depth), [0, 1, 1, 0, 1, 2, 3, 0]);
+  assert.deepEqual(t.items.filter((i) => !i.is_system).map((i) => i.depth), [0, 1, 1, 0, 1, 2, 3, 0]);
   // reorder within parent
   t = (await c('POST', `${url}/${a2.id}/move`, { sequence: 1 })).json;
   assert.deepEqual(codes(t.items).slice(0, 3), ['1:분석', '1.1:인터페이스 분석', '1.2:요구사항 분석']);
   // reparent b1 under a → codes recomputed, ids intact
   t = (await c('POST', `${url}/${b1.id}/move`, { parent_id: a.id, sequence: 1 })).json;
   assert.deepEqual(codes(t.items), ['1:분석', '1.1:화면 설계', '1.1.1:목록 화면', '1.1.1.1:필터 영역', '1.2:인터페이스 분석', '1.3:요구사항 분석', '2:설계', '3:요구사항 확정']);
-  assert.equal(t.items.find((i) => i.id === b111.id).wbs_code, '1.1.1.1');
+  assert.equal(t.items.find((i) => i.id === b111.id).wbs_code.replace(/^\d+/, (x) => String(Number(x) - t.items.filter((i) => i.is_system).length)), '1.1.1.1');
   // cycle: move a under its descendant b11
   assert.equal((await c('POST', `${url}/${a.id}/move`, { parent_id: b11.id })).status, 400);
   assert.equal((await c('POST', `${url}/${a.id}/move`, { parent_id: a.id })).status, 400);
@@ -59,7 +61,7 @@ test('hierarchy: summary/task/milestone, 3+ depth, codes, reorder, reparent, cyc
   assert.equal((await c('POST', url, { item_type: 'TASK', title: 'x', parent_id: m.id })).status, 400);
   // move to root end
   t = (await c('POST', `${url}/${b1.id}/move`, { parent_id: null })).json;
-  assert.equal(t.items.find((i) => i.id === b1.id).wbs_code, '4');
+  assert.equal(t.items.find((i) => i.id === b1.id).wbs_code, String(4 + t.items.filter((i) => i.is_system).length));   // batch7: after the fixed nodes
   server.close();
 });
 
