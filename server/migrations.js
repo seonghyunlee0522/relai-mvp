@@ -196,6 +196,21 @@ export const migrations = [
   { version: 46, name: 'Product analytics: analytics_events (+ once-per-user milestone index) and analytics_active_days — first-party, ids only (schema.sql)', up() {} },
   { version: 47, name: 'Promotions: promotions table + launch-offer seed (schema.sql) — display only, edited in 관리자 › 프로모션', up() {} },
   { version: 48, name: 'In-app feedback: feedback table (schema.sql) — 의견 남기기 in the app rail, triaged in 관리자 › 의견', up() {} },
+  { version: 49, name: 'batch7 T2: project_definitions.environments + deliverable_catalog (seeded) / project_deliverables (schema.sql); open 01 APPROVAL steps → RECOMMENDED; seed promotion copy without ₩', async up(db) {
+    // 착수 결과 승인 is 권장 now (APPROVAL_IMPORTANCE). Completed ones keep their record untouched; live code reads importance from the row.
+    await db.run(`UPDATE project_steps SET importance = 'RECOMMENDED', is_required = 0, updated_at = now() WHERE step_key = 'APPROVAL' AND status <> 'COMPLETED' AND importance = 'REQUIRED'
+      AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'INITIATION')`);
+    // #7: the launch-offer seed rows (migration 47) spoke in won. Only rows the operator never edited are rewritten.
+    for (const [id, from, to] of PROMO_COPY_49) await db.run('UPDATE promotions SET body = ?, updated_at = now() WHERE id = ? AND body = ?', [to, id, from]);
+  } },
+];
+
+/** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
+const PROMO_COPY_49 = [
+  ['promo-ai-credits', '₩5,000 상당. 요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.', '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.'],
+  ['promo-ai-payg', '1 크레딧 = ₩10 (부가세 포함). 월 기본료 없이 쓴 만큼만 냅니다.', '월 기본료 없이 쓴 만큼만 크레딧이 차감됩니다.'],
+  ['promo-login', 'AI 크레딧 500 (₩5,000)도 함께 드립니다.', 'AI 크레딧 500도 함께 드립니다.'],
+  ['promo-credits', 'AI는 쓴 만큼만 크레딧으로 냅니다 (1 크레딧 = ₩10).', 'AI는 쓴 만큼만 크레딧이 차감됩니다.'],
 ];
 
 export const LATEST_VERSION = migrations[migrations.length - 1].version;

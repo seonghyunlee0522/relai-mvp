@@ -77,7 +77,7 @@ test('charter: [PROJECT CHARTER] is sent with AI requests (extraction, assistant
   const call = fakeCalls()[0];
   assert.ok(call.user.includes('[PROJECT CHARTER]'), 'charter block in the request');
   assert.ok(call.user.indexOf('[PROJECT CHARTER]') < call.user.indexOf('기존 요구사항'), 'charter comes first');
-  for (const s of ['법무 검토 자동화', 'Out of Scope:\n영문 계약서', 'Constraints:', 'Deliverables:\n(작성되지 않음)']) assert.ok(call.user.includes(s), s);
+  for (const s of ['법무 검토 자동화', '적용 환경:\n(작성되지 않음)', '환경·조건 메모:\n제외: 영문 계약서', '요구사항의 범위(IN/OUT) 데이터를 기준', 'Constraints:', 'Deliverables:\n(작성되지 않음)']) assert.ok(call.user.includes(s), s);
   assert.equal((call.user.match(/<\/project_data>/g) || []).length, 1, 'stored text cannot close the data block');
   assert.match(call.system, /PROJECT CHARTER\]는 이 프로젝트의 공식 기준정보/);
   setFakeProvider(() => ({ data: { answer: '제외 범위입니다.', references: [], warnings: [] } }));

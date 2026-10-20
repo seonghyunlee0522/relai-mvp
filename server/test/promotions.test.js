@@ -15,7 +15,7 @@ test('seed: the launch offer per placement; public read needs no login', async (
   const by = async (p) => (await c('GET', `/api/promotions?placement=${p}`)).json.promotions;
   assert.deepEqual((await by('signup')).map((p) => p.badge), ['얼리 액세스', 'AI 크레딧', '이후 AI']);
   assert.deepEqual((await by('landing')).map((p) => p.id), ['promo-early-access', 'promo-ai-credits', 'promo-ai-payg']);
-  assert.match((await by('signup'))[2].body, /1 크레딧 = ₩10/);
+  assert.match((await by('signup'))[2].body, /쓴 만큼만 크레딧이 차감/);
   assert.equal((await by('login'))[0].link_url, '/signup');
   assert.match((await by('home'))[0].title, /\{until\}/);
   assert.match((await by('credits'))[0].title, /\{until\}/);

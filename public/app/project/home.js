@@ -209,7 +209,7 @@ export async function homePage(main = $('#main')) {
   // AI credits at a glance (AI-credits-only billing): balance + early access, linked to 설정 › AI 크레딧. Never blocks Home.
   api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
     const el = $('#home-credits', main); if (!el) return;
-    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>AI 크레딧 ${c.balance.toLocaleString('ko-KR')} (₩${c.balance_krw.toLocaleString('ko-KR')})${c.purchased_remaining === 0 && c.free_remaining > 0 ? ' 무료 제공' : ''}</a><span class="home__promo"></span>`;
+    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>AI 크레딧 ${c.balance.toLocaleString('ko-KR')}${c.purchased_remaining === 0 && c.free_remaining > 0 ? ' 무료 제공' : ''}</a><span class="home__promo"></span>`;
     // the offer next to the balance comes from 관리자 › 프로모션 (placement home); {until} = this workspace's early-access end
     loadPromos('home').then((list) => { const p = promoHtml(list, { placement: 'home', variant: 'line', until: c.plan === 'EARLY' && c.early_access_until ? fmtDT(c.early_access_until).slice(0, 10) : null }); const slot = $('.home__promo', el); if (slot && p) slot.innerHTML = ` · ${p}`; });
   }).catch(() => {});

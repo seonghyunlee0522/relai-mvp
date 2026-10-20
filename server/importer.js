@@ -12,6 +12,7 @@ import * as Q from './testing.js';
 import { formatDisplayId } from './common.js';
 import { KINDS, normHeader, publicColumns } from './importspec.js';
 import { MAX_IMPORT_ROWS, ImportFileError, parseWorkbook, decodeBase64Xlsx, parseWorkbookRaw } from './xlsx.js';
+import { assertWithinLimit } from './billing/limits.js';
 
 const REQUIRED = '필수 항목입니다.';
 const CODE_RE = /^\d+(\.\d+)*$/;
@@ -398,6 +399,8 @@ export async function runImport(db, project, wid, kind, body, userId) {
   return tx(db, async (t) => {
     const ctx = await loadContext(t, project, wid, kind, body.parent_id);
     const validated = validate(kind, rows, ctx);
+    // batch7 #24: one plan-limit check for the whole file before any row is created (tests are not a plan dimension)
+    if (kind !== 'tests') await assertWithinLimit(t, project.workspace_id, kind === 'requirements' ? 'requirements' : 'wbs', validated.filter((o) => o.model).length);
     const created = new Map();   // index → { id, display_id | wbs_code }
     if (kind === 'requirements') {
       const reserved = new Set(validated.filter((o) => o.model?.display_id).map((o) => Number(/\d+$/.exec(o.model.display_id)[0])));

@@ -7,7 +7,8 @@
  *   - every AI request that needs project context  charterPromptBlock() → "[PROJECT CHARTER] …" (ai/context.js projectBlock)
  * So what the screen says "AI 가 참고합니다" is exactly what the AI receives.
  */
-import { loadDefinition, ORG_TYPE_LABEL } from './definition.js';
+import { loadDefinition, ORG_TYPE_LABEL, envSummary, envLines, ENV_GROUPS } from './definition.js';
+import { loadDeliverables, listedDeliverables, LEVEL_LABEL } from './deliverables.js';
 import { PROJECT_TRAITS, traitLabel } from '../public/app/shared/project-traits.js';
 
 const OPS_LABEL = { meetings: '회의', reporting: '보고', communication: '소통 채널' };
@@ -21,6 +22,7 @@ const dateStr = (v) => (!v ? null : typeof v === 'string' ? v.slice(0, 10) : new
 export async function buildProjectCharter(db, project, { definition = null } = {}) {
   const model = definition || (await loadDefinition(db, project));
   const d = model.definition;
+  const dl = await loadDeliverables(db, project);
   const ws = await db.get('SELECT name FROM workspaces WHERE id = ?', [project.workspace_id]);
   const own = [...new Set((d.stakeholders || []).filter((s) => s.org_type === 'OWN' && s.org).map((s) => s.org))];
   const ops = d.operations || {};
@@ -43,7 +45,15 @@ export async function buildProjectCharter(db, project, { definition = null } = {
     goals: d.goal || '',
     successCriteria: texts(d.success_criteria).join('\n'),
     scope: { inScope: texts(d.scope_in).join('\n'), outOfScope: texts(d.scope_out).join('\n') },
-    deliverables: d.deliverables || '',
+    // 적용 환경 (batch7 #2): structured choice; scope.inScope / outOfScope are now its 환경·조건 메모
+    environments: { summary: envSummary(d.environments), rows: envLines(d.environments),
+      supported: ENV_GROUPS.flatMap(([g, , o]) => o.filter(([k]) => (d.environments[g] || {})[k] === 'SUPPORTED').map(([, l]) => l)),
+      unsupported: ENV_GROUPS.flatMap(([g, , o]) => o.filter(([k]) => (d.environments[g] || {})[k] === 'UNSUPPORTED').map(([, l]) => l)),
+      os: d.environments.os || '', min_resolution: d.environments.min_resolution || '', languages: d.environments.languages || '' },
+    deliverables: d.deliverables || '',   // the free text written before the catalog (기존 입력), read-only
+    // 산출물 목록 (batch7 #3): the project's 필수 · 선택 picks; empty until the project saves a choice, so the legacy text stays the source
+    deliverableList: dl.has_selection ? listedDeliverables(dl).map((x) => ({ phase: x.phase_name, phase_key: x.phase_key, name: x.name, level: x.level, level_label: LEVEL_LABEL[x.level], submitted_at: x.submitted_at })) : [],
+    deliverableSummary: dl.summary,
     stakeholders: (d.stakeholders || []).map((s) => ({ name: s.name, org: s.org || '', department: s.department || '', category: s.org_type || 'OTHER', category_label: ORG_TYPE_LABEL[s.org_type] || '기타', role: s.role || '', responsibility: s.area || '' })),
     governance: ops.decisions || '',
     timeline: { startDate: dateStr(project.planned_start_date), endDate: dateStr(project.planned_end_date), milestones },
@@ -72,6 +82,8 @@ function approvalBlock(model, d) {
 }
 
 /* ---------- AI prompt block ---------- */
+const envText = (e) => (!e ? '' : [e.supported && e.supported.length ? e.supported.join(', ') : '', e.os && `OS: ${e.os}`, e.min_resolution && `최소 해상도: ${e.min_resolution}`, e.languages && `언어: ${e.languages}`].filter(Boolean).join(' / '));
+const deliverableText = (list) => ['REQUIRED', 'OPTIONAL'].map((lv) => { const n = list.filter((x) => x.level === lv).map((x) => x.name); return n.length ? `${LEVEL_LABEL[lv]}: ${n.join(', ')}` : ''; }).filter(Boolean).join('\n');
 const NONE = '(작성되지 않음)';
 const v = (s, clip) => { const t = clip(s); return t || NONE; };
 
@@ -101,14 +113,18 @@ ${v(c.goals, (x) => ml(x, 1000))}
 Success Criteria:
 ${v(c.successCriteria, (x) => ml(x))}
 
-In Scope:
-${v(c.scope.inScope, (x) => ml(x, 1600))}
+적용 환경:
+${v(envText(c.environments), (x) => ml(x, 800))}
 
-Out of Scope:
-${v(c.scope.outOfScope, (x) => ml(x))}
+제외 환경:
+${v((c.environments || {}).unsupported ? c.environments.unsupported.join(', ') : '', (x) => clip(x, 400))}
+
+환경·조건 메모:
+${v([c.scope.inScope, c.scope.outOfScope && `제외: ${c.scope.outOfScope}`].filter(Boolean).join('\n'), (x) => ml(x, 1600))}
+(요구사항이 범위 안인지는 각 요구사항의 범위(IN/OUT) 데이터를 기준으로 판단합니다. 위 환경은 기능 범위가 아니라 결과물이 동작해야 할 환경입니다.)
 
 Deliverables:
-${v(c.deliverables, (x) => ml(x))}
+${v((c.deliverableList || []).length ? deliverableText(c.deliverableList) : c.deliverables, (x) => ml(x))}
 
 Stakeholders:
 ${sh || NONE}

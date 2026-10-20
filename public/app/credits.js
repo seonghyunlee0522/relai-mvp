@@ -1,17 +1,18 @@
 /* 설정 › AI 크레딧 (AI-credits-only billing §4): one wallet per workspace, readable by every member, bought by the OWNER.
  * Balance (purchased / free), this + last month, per feature, the price list, packs, and the full usage log with month / project /
- * user filters and a CSV (the monthly statement). Every ₩ shown is credits × credit_price_krw from the server. */
+ * user filters and a CSV (the monthly statement). Credits are a usage unit here (batch7 #7): no won amounts on this page except
+ * the 충전 팩 buttons themselves, which only exist while payments are on. Payments off → no 충전 area at all, one 문의하기 link (#6). */
 import { api } from './core/api.js';
 import { $, html, raw, fmtDT } from './core/dom.js';
 import { state } from './core/state.js';
 import { toast, confirmDialog } from './shared/dialogs.js';
 import { isPhone, pcLine } from './core/device.js';
 import { loadPromos, promoHtml } from './shared/promo.js';
+import { LEGAL } from './shared/legal-info.js';
 
 const n = (v) => Number(v || 0).toLocaleString('ko-KR');
 const krw = (v) => `₩${n(v)}`;
 const signed = (v) => (v > 0 ? `+${n(v)}` : v < 0 ? `−${n(-v)}` : '0');
-const signedKrw = (v) => (v > 0 ? `+₩${n(v)}` : v < 0 ? `−₩${n(-v)}` : '₩0');
 const day = (iso) => (iso ? fmtDT(iso).slice(0, 10) : '');
 const CHECKOUT_MSG = { success: '결제가 완료되었습니다. 크레딧이 충전되었습니다.', canceled: '결제를 취소했습니다.', failed: '결제가 완료되지 않았습니다. 청구된 금액은 없습니다.', fake: '테스트 결제 화면입니다. 결제사 연동 후 실제 결제가 진행됩니다.' };
 
@@ -37,27 +38,26 @@ export async function creditsPage(main = $('#main')) {
     const used = tm.by_feature.filter((x) => x.runs > 0);
     return html`<div class="panel cr-sum ${s.low ? 'is-low' : ''}" id="cr-summary"><div class="panel__b">
       <div class="cr-kpis">
-        <div class="cr-kpi"><span class="cr-kpi__l">잔액</span><b class="cr-kpi__v" id="cr-balance">${n(s.balance)} 크레딧</b><span class="cr-kpi__w">${krw(s.balance_krw)}</span>
+        <div class="cr-kpi"><span class="cr-kpi__l">잔액</span><b class="cr-kpi__v" id="cr-balance">${n(s.balance)} 크레딧</b>
           <small class="dim">구매 ${n(s.purchased_remaining)} · 무료 ${n(s.free_remaining)}${raw(s.reserved ? html` · 처리 중 ${n(s.reserved)}` : '')}</small></div>
-        <div class="cr-kpi"><span class="cr-kpi__l">이번 달 사용 <small class="dim">(${tm.month})</small></span><b class="cr-kpi__v" id="cr-month">${n(tm.used)} 크레딧</b><span class="cr-kpi__w">${krw(tm.krw)}</span>
-          <small class="dim">지난달 ${n(lm.used)} 크레딧 (${krw(lm.krw)})</small></div>
+        <div class="cr-kpi"><span class="cr-kpi__l">이번 달 사용 <small class="dim">(${tm.month})</small></span><b class="cr-kpi__v" id="cr-month">${n(tm.used)} 크레딧</b>
+          <small class="dim">지난달 ${n(lm.used)} 크레딧</small></div>
       </div>
       ${raw(s.empty ? html`<p class="cr-warn" role="status">크레딧이 없어 AI 기능을 쓸 수 없습니다. ${raw(canTopUp() ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : s.can_buy ? '' : '워크스페이스 소유자에게 충전을 요청하세요.')}</p>`
-        : s.low ? html`<p class="cr-warn" role="status">잔액이 ${n(s.low_balance_threshold)} 크레딧(${krw(s.low_balance_threshold * s.credit_price_krw)}) 아래입니다. ${raw(canTopUp() ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : s.can_buy ? '' : '소유자에게 충전을 요청하세요.')}</p>`
-          : html`<p class="hint">잔액이 ${n(s.low_balance_threshold)} 크레딧(${krw(s.low_balance_threshold * s.credit_price_krw)}) 아래로 내려가면 소유자에게 메일로 알려 드립니다.</p>`)}
-      ${raw(s.purchased_remaining === 0 && s.free_remaining > 0 ? html`<p class="cr-gift">무료 시작 크레딧 <b>${n(s.starter_credits)} 크레딧 (${krw(s.starter_credits * s.credit_price_krw)})</b>을 드렸습니다 — ${starterUses()}를 해 볼 수 있습니다.</p>` : '')}
+        : s.low ? html`<p class="cr-warn" role="status">잔액이 ${n(s.low_balance_threshold)} 크레딧 아래입니다. ${raw(canTopUp() ? '<a href="#cr-buy" class="link">크레딧 충전</a>' : s.can_buy ? '' : '소유자에게 충전을 요청하세요.')}</p>`
+          : html`<p class="hint">잔액이 ${n(s.low_balance_threshold)} 크레딧 아래로 내려가면 소유자에게 메일로 알려 드립니다.</p>`)}
+      ${raw(payOff() || !s.provider_available || s.ai_enabled === false ? html`<p class="hint" data-credit-contact>크레딧이 더 필요하면 <a class="link" href="mailto:${LEGAL.contactEmail}?subject=${encodeURIComponent('RELAI AI 크레딧 문의')}">문의하기</a></p>` : '')}
+      ${raw(s.purchased_remaining === 0 && s.free_remaining > 0 ? html`<p class="cr-gift">무료 시작 크레딧 <b>${n(s.starter_credits)} 크레딧</b>을 드렸습니다 — ${starterUses()}를 해 볼 수 있습니다.</p>` : '')}
       <p class="cr-feat"><span class="dim">이번 달 기능별</span> ${raw(used.length ? used.map((x) => html`<span class="cr-feat__i">${x.label} ${n(x.runs)}회 <b>${n(x.credits)}</b></span>`).join('<span class="dim">·</span>') : '<span class="dim">아직 사용한 AI 기능이 없습니다.</span>')}</p>
     </div></div>`;
   };
-  const prices = () => html`<div class="panel" style="margin-top:16px"><div class="panel__h">AI 기능별 가격 <small class="dim" style="font-weight:400">1 크레딧 = ${krw(s.credit_price_krw)} (부가세 포함)</small></div><div class="panel__b">
-    <table class="rtable cr-price"><thead><tr><th>기능</th><th class="num">크레딧</th><th class="num">금액</th></tr></thead><tbody>
-    ${raw(s.prices.map((p) => html`<tr><td>${p.label}</td><td class="num">${n(p.credits)}</td><td class="num">${krw(p.krw)}</td></tr>`).join(''))}</tbody></table>
+  const prices = () => html`<div class="panel" style="margin-top:16px"><div class="panel__h">AI 기능별 크레딧</div><div class="panel__b">
+    <table class="rtable cr-price"><thead><tr><th>기능</th><th class="num">크레딧</th></tr></thead><tbody>
+    ${raw(s.prices.map((p) => html`<tr><td>${p.label}</td><td class="num">${n(p.credits)}</td></tr>`).join(''))}</tbody></table>
     <p class="hint" style="margin-top:8px">한 번 실행할 때마다 정해진 크레딧만 차감합니다. 실행 전에 가격을 보여 드리고, 실패한 요청은 차감하지 않습니다.</p></div></div>`;
   const buy = () => html`<div class="panel" style="margin-top:16px" id="cr-buy"><div class="panel__h">크레딧 충전</div><div class="panel__b">
     ${raw(!s.can_buy ? '<p class="hint">충전과 환불 요청은 워크스페이스 소유자가 할 수 있습니다.</p>'
       : isPhone() ? '<p class="hint" data-phone-pay>결제는 PC에서 할 수 있습니다.</p>'
-      : s.ai_enabled === false ? '<p class="hint" data-ai-off>AI 기능 준비 중입니다. 충전은 AI가 켜지면 열립니다.</p>'
-      : !s.provider_available ? '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>'
         : html`<div class="cr-packs">${raw(s.packs.map((p) => html`<button type="button" class="cr-pack" data-pack="${p.key}"><b>${krw(p.amount)}</b><span>${n(p.credits)} 크레딧</span><small>공급가액 ${krw(p.supply)} + 부가세 ${krw(p.vat)}</small></button>`).join(''))}</div>
           ${raw(state.user?.email_verified === false ? '<p class="hint">이메일 인증 후 충전할 수 있습니다.</p>' : '')}`)}
     <p class="hint" style="margin-top:10px">무료 크레딧을 먼저 쓰고 구매한 크레딧은 그다음에 씁니다. 구매한 크레딧은 ${s.purchased_valid_years}년간 유효하며 자동 결제되지 않습니다.
@@ -73,17 +73,17 @@ export async function creditsPage(main = $('#main')) {
         <select class="select select--sm" name="project" aria-label="프로젝트">${raw(opt('', '모든 프로젝트', f.project))}${raw(fl.projects.map((p) => opt(p.id, p.name, f.project)).join(''))}</select>
         <select class="select select--sm" name="user" aria-label="사용자">${raw(opt('', '모든 사용자', f.user))}${raw(fl.users.map((u) => opt(u.id, u.name, f.user)).join(''))}</select>
         <span class="panel__sp"></span><a class="btn btn--secondary btn--sm" href="${csv}" download id="cr-csv">CSV 내려받기</a></div>
-      <p class="cr-total" id="cr-total">AI 사용 <b>${n(t.used)} 크레딧</b> (${krw(t.used_krw)})${raw(t.added ? html` · 충전·지급 +${n(t.added)} 크레딧` : '')} <small class="dim">· ${n(t.count)}건</small></p>
-      <div class="rtable-wrap--in"><table class="rtable cr-log" style="margin:0"><thead><tr><th>일시</th><th>구분</th><th>프로젝트</th><th>사용자</th><th class="num">크레딧</th><th class="num">금액</th><th class="num">잔액</th></tr></thead><tbody>
+      <p class="cr-total" id="cr-total">AI 사용 <b>${n(t.used)} 크레딧</b>${raw(t.added ? html` · 충전·지급 +${n(t.added)} 크레딧` : '')} <small class="dim">· ${n(t.count)}건</small></p>
+      <div class="rtable-wrap--in"><table class="rtable cr-log" style="margin:0"><thead><tr><th>일시</th><th>구분</th><th>프로젝트</th><th>사용자</th><th class="num">크레딧</th><th class="num">잔액</th></tr></thead><tbody>
       ${raw(led.rows.length ? led.rows.map((r) => html`<tr class="${r.credits === 0 ? 'is-zero' : ''}"><td class="dim">${fmtDT(r.at).slice(5)}</td>
         <td>${r.label}${raw(r.receipt_url ? html` <a class="link" href="${r.receipt_url}" target="_blank" rel="noopener noreferrer">영수증</a>` : '')}${raw(r.note && r.type !== 'PURCHASE' ? html` <small class="dim">${r.note}</small>` : '')}</td>
-        <td>${r.project_name || '—'}</td><td>${r.user_name || '—'}</td><td class="num ${r.credits > 0 ? 'is-plus' : ''}">${signed(r.credits)}${raw(r.krw === null ? '' : html`<small class="cr-krw-m">${signedKrw(r.krw)}</small>`)}</td><td class="num">${r.krw === null ? '—' : signedKrw(r.krw)}</td><td class="num dim">${r.balance_after === null ? '—' : n(r.balance_after)}</td></tr>`).join('')
-        : '<tr><td colspan="7" class="dim" style="text-align:center;padding:18px">이 조건의 사용 내역이 없습니다.</td></tr>')}</tbody></table></div></div>`;
+        <td>${r.project_name || '—'}</td><td>${r.user_name || '—'}</td><td class="num ${r.credits > 0 ? 'is-plus' : ''}">${signed(r.credits)}</td><td class="num dim">${r.balance_after === null ? '—' : n(r.balance_after)}</td></tr>`).join('')
+        : '<tr><td colspan="6" class="dim" style="text-align:center;padding:18px">이 조건의 사용 내역이 없습니다.</td></tr>')}</tbody></table></div></div>`;
   };
   const draw = () => {
     main.innerHTML = html`<div class="page page--narrow page--credits">${raw(head())}
       ${raw(html`<div class="cr-promo">${raw(promoHtml(promos, { placement: 'credits', until: s.plan === 'EARLY' ? day(s.early_access_until) : null }))}</div>`)}
-      ${raw(summary())}${raw(payOff() ? '' : buy())}${raw(prices())}${raw(log())}</div>`;
+      ${raw(summary())}${raw(payOff() || (s.can_buy && !isPhone() && (s.ai_enabled === false || !s.provider_available)) ? '' : buy())}${raw(prices())}${raw(log())}</div>`;
     main.querySelectorAll('[data-pack]').forEach((b) => b.onclick = async () => {
       if (state.user?.email_verified === false) return toast('이메일 인증 후 충전할 수 있습니다.');
       b.disabled = true;

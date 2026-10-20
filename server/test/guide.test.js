@@ -64,7 +64,7 @@ test('activity complete / skip / undo / note; derived state wins over stored mar
   for (const s of steps.slice(0, 3)) assert.equal((await c('PATCH', `${url}/steps/${s.id}`, { status: 'COMPLETED' })).status, 200);
   g = (await c('PATCH', `${url}/steps/${steps[0].id}`, { note: '  목표: 상담 자동화  ' })).json;
   assert.equal(g.step.note, '목표: 상담 자동화'); assert.equal(g.step.status, 'COMPLETED'); assert.ok(g.step.completed_at);
-  assert.equal(g.phases[0].summary.completed, 3); assert.equal(g.phases[0].summary.required_done, 3); assert.equal(g.phases[0].summary.required_open, 2);   // 4th definition step + APPROVAL (Phase 1 v2)
+  assert.equal(g.phases[0].summary.completed, 3); assert.equal(g.phases[0].summary.required_done, 3); assert.equal(g.phases[0].summary.required_open, 1);   // 4th definition step (APPROVAL is 권장 since batch7 #5)
   assert.ok(g.phases[0].steps.slice(0, 3).every((s) => s.state === 'COMPLETED'));
   g = (await c('PATCH', `${url}/steps/${steps[0].id}`, { status: 'TODO' })).json;
   assert.equal(g.step.completed_at, null); assert.equal(g.phases[0].summary.completed, 2);

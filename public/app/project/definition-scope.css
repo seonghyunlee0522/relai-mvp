@@ -1,0 +1,52 @@
+/* 01 착수 › 수행 범위 · 적용 환경 drawer (batch7 #2·#3·#10) — loaded once from definition.js; every rule is scoped to its own
+ * classes (.envf .envg .dl .wd__chip .def__example), nothing here touches app.css globals. */
+
+/* 적용 환경: one row per option, 지원 / 미지원 segment */
+.envf{display:flex;flex-direction:column;gap:12px;margin:4px 0 12px}
+.envg{display:grid;grid-template-columns:72px minmax(0,1fr);gap:8px;align-items:start}
+.envg__k{font-size:var(--fs-sm);font-weight:700;color:var(--text-2);padding-top:6px}
+.envg__l{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px}
+.envg__i{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 4px 4px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg)}
+.envg__i.is-supported{border-color:var(--ok-bd);background:var(--ok-bg)}
+.envg__i.is-unsupported{border-color:var(--border-strong);background:var(--border-soft)}
+.envg__n{font-size:var(--fs-sm);font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.envg__seg button{height:26px;padding:0 10px;font-size:var(--fs-xs)}
+.envg__i.is-supported .envg__seg button.is-on{background:var(--ok);color:#fff}
+.envg__i.is-unsupported .envg__seg button.is-on{background:var(--text-3);color:#fff}
+.envf__t{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.envf__t .field{margin:0}
+.def__fnhint{margin:0 0 14px}
+
+/* 산출물 목록 */
+.dl{border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;margin:4px 0 16px;background:var(--bg)}
+.dl__h{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.dl__tabs button{height:30px;padding:0 14px}
+.dl__sum{font-size:var(--fs-sm);color:var(--text-2);font-weight:600}
+.dl__tip{margin:8px 0 4px}
+.dl__g{margin-top:10px}
+.dl__ph{display:block;font-size:var(--fs-xs);font-weight:700;color:var(--text-3);margin-bottom:4px}
+.dl__g ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.dl__i{display:flex;align-items:center;gap:8px;padding:4px 4px 4px 10px;border:1px solid var(--border-soft);border-radius:var(--r)}
+.dl__i.is-excluded .dl__n{color:var(--text-3)}
+.dl__i.is-required{border-color:var(--border-blue)}
+.dl__n{flex:1;min-width:0;font-size:var(--fs-sm);font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px}
+.dl__n .input{max-width:320px}
+.dl__new{font-style:normal;font-size:var(--fs-2xs);font-weight:700;color:var(--warn-fg);background:var(--warn-bg);border-radius:999px;padding:1px 7px}
+.dl__seg button{height:26px;padding:0 10px;font-size:var(--fs-xs)}
+.dl__seg button.dl__required.is-on{background:var(--blue-deep);color:#fff}
+.dl__seg button.dl__excluded.is-on{background:var(--text-3);color:#fff}
+.dl__add{display:flex;gap:8px;align-items:center;margin-top:10px}
+.dl__legacy{margin-top:12px;padding:10px 12px;border-radius:var(--r);background:var(--border-soft);font-size:var(--fs-sm)}
+.dl__legacy small{display:block;color:var(--text-3);margin:2px 0 6px}
+.dl__legacy p{margin:0;white-space:pre-wrap;color:var(--text-2)}
+
+/* drawer header status chip (완료 ▾ → 완료 취소) */
+.wd__chip{display:inline-flex;vertical-align:middle;margin-left:6px}
+.wd__chip summary{cursor:pointer;list-style:none}
+.wd__chip summary::-webkit-details-marker{display:none}
+.wd__chip .pmenu__list{min-width:120px}
+.def__example{font-weight:600}
+/* 재승인 권장 (batch7 #5): amber, not red — 착수 승인 is 권장 */
+.chx__badge.is-warn{background:var(--warn-bg);color:var(--warn-fg)}
+
+@media (max-width:767px){.envg{grid-template-columns:1fr}.envf__t{grid-template-columns:1fr}.dl__i{flex-wrap:wrap}}

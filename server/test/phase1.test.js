@@ -6,7 +6,7 @@ import { boot, setup, addMember } from './api-helpers.js';
 import { josa, pickJosa } from '../../public/app/shared/josa.js';
 import { parseReportMarkdown } from '../report-export.js';
 import { buildPlanMarkdown, planVersion } from '../charter-export.js';
-import { KICKOFF_IMPORTANCE, PHASE_BY_KEY } from '../templates/default-phases.js';
+import { KICKOFF_IMPORTANCE, APPROVAL_IMPORTANCE, PHASE_BY_KEY } from '../templates/default-phases.js';
 import { migrations } from '../migrations.js';
 import { isMeasurable } from '../../public/app/shared/criteria.js';
 import { LIFECYCLE_PHASES } from '../../public/app/shared/lifecycle.js';
@@ -20,11 +20,11 @@ const completeCore = async (A) => {
   for (const k of ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS']) { const r = await A.c('POST', `${A.purl}/definition/sections/${k}/complete`, {}); assert.equal(r.status, 200, `${k} ${JSON.stringify(r.json)}`); }
 };
 
-test('template: 01 착수 = GOALS … OPERATIONS → KICKOFF (권장, one constant) → APPROVAL (필수, last)', () => {
+test('template: 01 착수 = GOALS … OPERATIONS → KICKOFF (권장, one constant) → APPROVAL (권장 since batch7 #5, last)', () => {
   const st = PHASE_BY_KEY.INITIATION.steps;
   assert.deepEqual(st.map((s) => s.key), ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL']);
   assert.equal(st.find((s) => s.key === 'KICKOFF').importance, KICKOFF_IMPORTANCE); assert.equal(KICKOFF_IMPORTANCE, 'RECOMMENDED');
-  assert.equal(st.at(-1).importance, 'REQUIRED');
+  assert.equal(st.at(-1).importance, APPROVAL_IMPORTANCE); assert.equal(APPROVAL_IMPORTANCE, 'RECOMMENDED');
 });
 
 test('KICKOFF: defaults, completion needs a held meeting + minutes/decisions, summaries (준비 중 n/m, 후속 조치 남음), skippable', async () => {
@@ -55,14 +55,14 @@ test('KICKOFF: defaults, completion needs a held meeting + minutes/decisions, su
   server.close();
 });
 
-test('APPROVAL: required fields, 승인일 ≤ today, not skippable (409), direct approver → stakeholder, re-approval only on approved content / approver row', async () => {
+test('APPROVAL: required fields, 승인일 ≤ today, 권장 → skippable (batch7 #5), direct approver → stakeholder, re-approval only on approved content / approver row', async () => {
   const { server, client } = await boot();
   const A = await setup(client); const D = `${A.purl}/definition`;
   await completeCore(A);
   let r = await A.c('GET', D); const apv = () => r.json.sections.find((s) => s.key === 'APPROVAL');
-  assert.equal(apv().skippable, false);
-  assert.equal((await A.c('POST', `${D}/sections/APPROVAL/skip`, {})).status, 400);
-  assert.equal((await A.c('PATCH', `${A.purl}/steps/${apv().step_id}`, { status: 'SKIPPED' })).status, 409);   // REQUIRED: PATCH steps SKIPPED stays 409
+  assert.equal(apv().importance, 'RECOMMENDED'); assert.equal(apv().skippable, true);
+  assert.equal((await A.c('POST', `${D}/sections/APPROVAL/skip`, {})).status, 200);   // 권장: may be skipped, and resumed
+  assert.equal((await A.c('POST', `${D}/sections/APPROVAL/resume`, {})).status, 200);
   r = await A.c('POST', `${D}/sections/APPROVAL/complete`, {}); assert.equal(r.status, 400); assert.match(r.json.error.fields.missing, /승인자[\s\S]*승인일[\s\S]*승인 방법[\s\S]*근거/);
   r = await A.c('PUT', D, { approval: { approver_id: 'sh-client', date: '2099-01-01', method: 'EMAIL', evidence: 'x' } });
   assert.equal(r.status, 400); assert.equal(r.json.error.fields['approval.date'], '승인일은 오늘 이후일 수 없습니다.');
@@ -79,12 +79,12 @@ test('APPROVAL: required fields, 승인일 ≤ today, not skippable (409), direc
   // editing another stakeholder row (부서·역할) → no re-approval
   const sh = r.json.definition.stakeholders.map((s) => (s.id === 'sh-pm' ? { ...s, role: 'PM/PL', department: '개발본부' } : s));
   r = await A.c('PUT', D, { stakeholders: sh }); assert.equal(apv().changed_after_completion, false);
-  // the approver's row → re-approval (확인 필요, red)
+  // the approver's row → re-approval (진행 중 with the re-approval text; not red since 착수 승인 is 권장, batch7 #5)
   r = await A.c('PUT', D, { stakeholders: sh.map((s) => (s.id === added.id ? { ...s, role: '전무' } : s)) });
   assert.equal(apv().reapproval, true); assert.deepEqual(r.json.needs_review.filter((k) => k === 'APPROVAL'), ['APPROVAL']);
   let g = await A.c('GET', A.purl);
   const row = g.json.current_phase.steps.find((s) => s.step_key === 'APPROVAL');
-  assert.equal(row.crit, true); assert.match(row.text, /승인 후 목표·범위·일정이 바뀌었습니다/);
+  assert.equal(row.crit, false); assert.equal(row.state, 'IN_PROGRESS'); assert.match(row.text, /승인 후 목표·범위·일정이 바뀌었습니다/);
   // 다시 확인 완료 → baseline moves; then a milestone date change flags again; revert → clean
   r = await A.c('POST', `${D}/sections/APPROVAL/confirm`, {}); assert.equal(r.status, 200); assert.equal(apv().reapproval, false);
   r = await A.c('PUT', D, { key_dates: [{ title: '착수보고회', date: '2026-11-04' }, { title: '최종 검수', date: '2027-02-20' }] }); assert.equal(apv().reapproval, true);
@@ -107,7 +107,7 @@ test('guidance: INIT_DEFINE → INIT_KICKOFF → INIT_APPROVE → INIT_DONE; ski
   assert.equal(g.json.guidance.primary_action.href, `/app/projects/${A.p.id}/definition?activity=KICKOFF`);
   assert.match(g.json.guidance.description, /착수보고회 전에 고객에게 보내고/);
   assert.equal(g.json.guidance.secondary_action.href, `/api/workspaces/${A.w}/projects/${A.p.id}/charter/export?format=pdf`);
-  assert.equal(g.json.current_phase.summary.gate_met, false);   // APPROVAL is REQUIRED
+  assert.equal(g.json.current_phase.summary.gate_met, true);   // batch7 #5: APPROVAL is 권장 — the five sections open the gate
   await A.c('POST', `${D}/sections/KICKOFF/skip`, {});
   g = await A.c('GET', A.purl); assert.equal(g.json.guidance.rule, 'INIT_APPROVE'); assert.equal(g.json.guidance.primary_action.label, '승인 기록 →');
   // 01→02 without approval: the client stores the reason in the APPROVAL step note; the server does not block (확인 후 허용)
@@ -146,7 +146,7 @@ test('사업수행계획서 export: PDF + Word, Korean filename with version, ve
   server.close();
 });
 
-test('plan markdown: fixed sections, 작성되지 않음, tables, approval rows, bypass note, kickoff section hidden when skipped', () => {
+test('plan markdown: fixed sections, 작성 가이드 for empty parts (never 작성되지 않음), tables, approval rows, bypass note, kickoff section hidden when skipped', () => {
   const c = { profile: { name: 'P', client: '고객', start_date: '2026-11-01', end_date: '2027-02-28', description: '', project_type: '', scale: '' }, goals: '', successCriteria: '', scope: { inScope: 'A\nB', outOfScope: '' }, deliverables: '',
     stakeholders: [{ name: '이수진', org: 'ACME', department: '', category: 'CLIENT', category_label: '고객사', role: '차장', responsibility: '최종 승인' }, { name: '김피엠', org: '당사', category: 'OWN', category_label: '당사', role: 'PM', responsibility: '' }],
     governance: '', timeline: { startDate: '2026-11-01', endDate: '2027-02-28', milestones: [{ title: '하자보수 종료', date: '2027-05-01', source: 'KEY_DATE' }] }, assumptions: '', constraints: '', risks: '',
@@ -154,7 +154,7 @@ test('plan markdown: fixed sections, 작성되지 않음, tables, approval rows,
   const doc = buildPlanMarkdown(c, { workspaceName: '수행사', author: '홍길동', today: '2026-10-15' });
   for (const h of ['개정 이력', '1. 사업 개요', '2. 성공 기준', '3. 사업 범위', '4. 전제·제약·초기 리스크', '5. 추진 조직', '6. 사업 기간 및 마일스톤', '7. 운영 방식', '8. 승인']) assert.ok(doc.markdown.includes(`## ${h}`), h);
   assert.ok(!doc.markdown.includes('착수보고회'));   // skipped kickoff → section omitted
-  assert.match(doc.markdown, /작성되지 않음/); assert.match(doc.markdown, /\| 종료 후 \|/);
+  assert.ok(!doc.markdown.includes('작성되지 않음')); assert.match(doc.markdown, /⟦작성 가이드: /); assert.match(doc.markdown, /\| 종료 후 \|/);
   assert.match(doc.markdown, /미승인 — 사유: 회신 대기\*\* \(2026-10-15 · 홍길동\)/);
   assert.equal(doc.version, 'v0.9 (초안)'); assert.equal(doc.footer, '승인 전 초안');
   const blocks = parseReportMarkdown(doc.markdown); const tables = blocks.filter((b) => b.type === 'table');
@@ -191,7 +191,7 @@ test('migration 31: existing projects get KICKOFF + APPROVAL in 01 as TODO (idem
   await m31.up(db); await m31.up(db);
   const rows = await db.all(`SELECT s.step_key, s.status, s.sequence, s.importance FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE p.project_id = ? AND p.phase_key = 'INITIATION' ORDER BY s.sequence`, [A.p.id]);
   assert.deepEqual(rows.map((x) => x.step_key), ['GOALS', 'SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'OPERATIONS', 'KICKOFF', 'APPROVAL']);
-  assert.ok(rows.slice(5).every((x) => x.status === 'TODO')); assert.deepEqual(rows.slice(5).map((x) => x.importance), ['RECOMMENDED', 'REQUIRED']);
+  assert.ok(rows.slice(5).every((x) => x.status === 'TODO')); assert.deepEqual(rows.slice(5).map((x) => x.importance), ['RECOMMENDED', 'RECOMMENDED']);
   r = await A.c('GET', `${A.purl}/definition`); assert.equal(r.json.sections.find((s) => s.key === 'APPROVAL').changed_after_completion, false);
   server.close();
 });

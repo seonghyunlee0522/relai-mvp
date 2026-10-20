@@ -1,5 +1,5 @@
 
-export const fmtKRW = (n) => (n === null || n === undefined ? '-' : '₩' + Number(n).toLocaleString('ko-KR'));
+export const fmtKRW = (n) => (n === null || n === undefined ? '-' : `${Number(n).toLocaleString('ko-KR')}원`);   // project money (변경 요청 비용 영향); credits never show won
 export const fmtDays = (n) => (n === null || n === undefined ? '-' : n === 0 ? '0일' : `+${n}일`);
 export const fmtMD = (n) => (n === null || n === undefined ? '-' : `${n} MD`);
 export const no2 = (n) => String(n).padStart(2, '0');

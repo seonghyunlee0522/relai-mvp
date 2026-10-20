@@ -243,7 +243,7 @@ export async function changesPage(id) {
       ${raw(impactSummary(c))}
       <div class="dgrid">${raw(fld('일정 영향 (일)', html`<input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${dis}>`))}
         ${raw(fld('추가 공수 (MD)', html`<input class="input input--sm" type="number" min="0" step="0.5" data-field="effort_impact_md" value="${c.effort_impact_md ?? ''}" placeholder="0" ${dis}>`))}
-        ${raw(fld('비용 영향 (₩)', html`<input class="input input--sm" type="number" min="0" step="1000" data-field="cost_impact" value="${c.cost_impact ?? ''}" placeholder="0" ${dis}>`))}</div></div>`;
+        ${raw(fld('비용 영향(원 단위)', html`<input class="input input--sm" type="number" min="0" step="1000" data-field="cost_impact" value="${c.cost_impact ?? ''}" placeholder="0" ${dis}>`))}</div></div>`;
     return html`${raw(drawerHead(c.display_id, statusChip(CR_STATUS, CR_STATUS_CHIP, st), { archived: Boolean(c.archived_at), nav: desk ? navBtns(rows.map((r) => r.id), c.id, '변경 요청') : '' }))}
     ${raw(dtabs([{ key: 'info', label: '업무정보' }, { key: 'links', label: '영향 범위', count: liveReq.length + liveImp.length }, { key: 'hist', label: '변경 이력', count: c.history.length }], dtab))}
     <div class="drawer__b"><section data-pane="info" ${dtab === 'info' ? '' : 'hidden'}>${raw(desk ? deskInfo() : html`
@@ -266,7 +266,7 @@ export async function changesPage(id) {
       <div class="dgrid dgrid--3">
         <div class="dfield"><span>일정 영향 (일)</span><div><input class="input input--sm" type="number" min="0" step="1" data-field="schedule_impact_days" value="${c.schedule_impact_days ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>추가 공수 (MD)</span><div><input class="input input--sm" type="number" min="0" step="0.5" data-field="effort_impact_md" value="${c.effort_impact_md ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
-        <div class="dfield"><span>비용 영향 (₩)</span><div><input class="input input--sm" type="number" min="0" step="1000" data-field="cost_impact" value="${c.cost_impact ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
+        <div class="dfield"><span>비용 영향(원 단위)</span><div><input class="input input--sm" type="number" min="0" step="1000" data-field="cost_impact" value="${c.cost_impact ?? ''}" placeholder="0" ${fieldsRo ? 'disabled' : ''}></div></div>
       </div>`)}
 
       </section>

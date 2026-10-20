@@ -10,7 +10,7 @@ import { api, wsApi } from '../core/api.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { $, html, raw, todayLocal, fmtDate } from '../core/dom.js';
 import { projectHead } from './guide.js';
-import { planMenu, bindPlanMenu } from './initiation.js';
+import { planMenu, bindPlanMenu, NO_REASON } from './initiation.js';
 import { definitionHref } from '../shared/lifecycle.js';
 
 const SPARK = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg>';
@@ -44,13 +44,20 @@ export function charterParts(c, { ro, def }) {
     ${raw(block('프로젝트 목표', c.goals, ['프로젝트 목표가 아직 작성되지 않았습니다.', '이 프로젝트로 달성하려는 결과를 작성하면 AI가 요구사항과 WBS가 그 방향에 맞는지 검토할 수 있습니다.', def('GOALS', 'goal'), '프로젝트 목표 입력 →']))}
     ${raw(block('성공 기준', c.successCriteria, ['성공 기준이 아직 작성되지 않았습니다.', '프로젝트가 언제 성공적으로 완료되었다고 볼 수 있는지 작성하면 AI가 WBS와 프로젝트 상태를 판단하는 데 활용할 수 있습니다.', def('GOALS', 'success_criteria'), '성공 기준 입력 →']))}`);
 
-  /* ---------- 3. Scope & Deliverables ---------- */
-  const scope = section('3', 'scope', '범위 · 산출물', '신규 요구사항이나 변경 요청이 프로젝트 범위에 포함되는지 판단하고, 필요한 주요 산출물이 누락되지 않았는지 검토합니다.', html`
-    <div class="chx__two">
-      ${raw(block('수행 범위', c.scope.inScope, ['수행 범위가 정의되지 않았습니다.', '이번 프로젝트에서 하는 일을 작성하면 AI가 요구사항이 범위 안에 있는지 판단할 수 있습니다.', def('SCOPE', 'scope_in'), '수행 범위 입력 →']))}
-      ${raw(block('제외 범위', c.scope.outOfScope, ['제외 범위가 정의되지 않았습니다.', '프로젝트에서 수행하지 않는 범위를 명확하게 작성하면 범위 확대를 줄이고 AI가 신규 요구사항의 범위 포함 여부를 판단하는 데 도움이 됩니다.', def('SCOPE', 'scope_out'), '제외 범위 입력 →']))}
-    </div>
-    ${raw(block('주요 산출물', c.deliverables, ['주요 산출물이 정의되지 않았습니다.', '납품해야 할 산출물을 작성하면 AI가 WBS에 필요한 작업이 빠지지 않았는지 검토할 수 있습니다.', def('SCOPE', 'deliverables'), '주요 산출물 입력 →']))}`);
+  /* ---------- 3. 적용 환경 & Deliverables (batch7 #2·#3) ---------- */
+  const env = c.environments || { rows: [] }; const dl = c.deliverableList || [];
+  const envTable = env.rows.length ? html`<div class="chx__tblw"><table class="chx__tbl" data-env-table><thead><tr><th>구분</th><th>지원</th><th>미지원</th></tr></thead><tbody>
+      ${raw(env.rows.map(([k, sup, uns]) => html`<tr><td class="chx__nm">${k}</td><td>${sup || '-'}</td><td>${uns || '-'}</td></tr>`).join(''))}</tbody></table></div>`
+    : empty('적용 환경이 아직 정해지지 않았습니다.', '결과물이 동작해야 할 기기·브라우저를 고르면 테스트와 AI가 그 환경을 기준으로 확인합니다.', def('SCOPE', 'environments'), '적용 환경 선택 →');
+  const memo = [c.scope.inScope, c.scope.outOfScope && String(c.scope.outOfScope).split(/\r?\n/).filter(Boolean).map((x) => `제외: ${x}`).join('\n')].filter(Boolean).join('\n');
+  const dlBlock = dl.length ? html`<div class="chx__tblw"><table class="chx__tbl" data-dl-table><thead><tr><th>단계</th><th>산출물</th><th>구분</th></tr></thead><tbody>
+      ${raw(dl.map((x) => html`<tr><td>${x.phase}</td><td class="chx__nm">${x.name}</td><td>${x.level_label}</td></tr>`).join(''))}</tbody></table></div>`
+    : c.deliverables ? body(c.deliverables)
+      : empty('주요 산출물이 아직 정해지지 않았습니다.', '표준 산출물 목록에서 필수·선택을 고르면 사업수행계획서 표와 종료 점검에 그대로 쓰입니다.', def('SCOPE', 'deliverables'), '산출물 고르기 →');
+  const scope = section('3', 'scope', '적용 환경 · 산출물', '결과물이 동작해야 할 환경과 납품할 산출물을 기준으로 테스트와 WBS에 빠진 것이 없는지 검토합니다. 기능 범위는 요구사항의 범위(IN/OUT)로 판단합니다.', html`
+    <div class="chx__blk"><h3 class="chx__lbl">적용 환경</h3>${raw(envTable)}</div>
+    ${raw(memo ? html`<div class="chx__blk"><h3 class="chx__lbl">환경·조건</h3>${raw(body(memo))}</div>` : '')}
+    <div class="chx__blk"><h3 class="chx__lbl">주요 산출물${raw(dl.length ? html` <small>필수 ${dl.filter((x) => x.level === 'REQUIRED').length}건</small>` : '')}</h3>${raw(dlBlock)}</div>`);
 
   /* ---------- 4. Stakeholders & Governance ---------- */
   const sh = [...c.stakeholders].sort((a, b) => CAT_ORDER.indexOf(a.category) - CAT_ORDER.indexOf(b.category));
@@ -114,9 +121,9 @@ export function charterParts(c, { ro, def }) {
   /* ---------- 8. 착수보고회 · 착수 결과 승인 (Phase 1 v2) ---------- */
   const k = c.kickoff; const a = c.approval;
   const fmtDT = (v) => (!v ? '' : `${fmtDate(v.slice(0, 10))}${v.length > 10 ? ` ${v.slice(11, 16)}` : ''}`);
-  const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">승인됨</span>' : a.status === 'REAPPROVAL' ? '<span class="chx__badge is-crit">확인 필요 · 재승인 필요</span>' : '<span class="chx__badge">미승인</span>';
+  const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">승인됨</span>' : a.status === 'REAPPROVAL' ? '<span class="chx__badge is-warn">확인 필요 · 재승인 권장</span>' : '<span class="chx__badge">미승인</span>';
   const approvalInner = !a ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수 결과 승인 ${raw(apvState)}</h3>
-    ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — 사유: ${a.bypass.reason} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
+    ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — ${a.bypass.reason === NO_REASON ? NO_REASON : `사유: ${a.bypass.reason}`} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
       : html`<dl class="chx__kvs">${raw(kv('승인자', a.approver ? `${a.approver.name}${a.approver.title ? ` ${a.approver.title}` : ''}` : ''))}${raw(kv('승인일', a.date ? fmtDate(a.date) : ''))}${raw(kv('승인 방법', a.method_label))}${raw(kv('근거', a.evidence))}</dl>
         ${raw(a.status === 'REAPPROVAL' ? '<p class="chx__p chx__bypass">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.</p>' : '')}${raw(a.conditions ? html`<h3 class="chx__lbl">조건 / 보완 요청</h3>${raw(body(a.conditions))}` : '')}`)}</div>`;
   const kickInner = !k || k.skipped ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수보고회</h3>
@@ -127,8 +134,12 @@ export function charterParts(c, { ro, def }) {
   return { empty, block, kv, goals, scope, stake, shTable, governance, time, acr, ops, gate, kickInner, approvalInner };
 }
 
+/** 01 styles shared with the 정의 screen (적용 환경 · 산출물 표, 재승인 권장 badge — batch7 T2). */
+const CSS_HREF = '/assets/project/definition-scope.css';
+const loadCss = () => { if (document.querySelector(`link[href="${CSS_HREF}"]`)) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CSS_HREF; document.head.append(l); };
+
 export async function charterPage(id) {
-  const main = $('#main');
+  const main = $('#main'); loadCss();
   const [g, r] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/charter`))]);
   const p = g.project; const c = r.charter; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
   document.title = `프로젝트 개요 — ${p.name} — RELAI`;
@@ -150,7 +161,7 @@ export async function charterPage(id) {
   const ITEMS = [
     ['profile', '프로젝트 설명', c.profile.description, info('description')], ['profile', '프로젝트 유형', c.profile.project_type, def('PROFILE', 'project_type')],
     ['goals', '프로젝트 목표', c.goals, def('GOALS', 'goal')], ['goals', '성공 기준', c.successCriteria, def('GOALS', 'success_criteria')],
-    ['scope', '수행 범위', c.scope.inScope, def('SCOPE', 'scope_in')], ['scope', '제외 범위', c.scope.outOfScope, def('SCOPE', 'scope_out')], ['scope', '주요 산출물', c.deliverables, def('SCOPE', 'deliverables')],
+    ['scope', '적용 환경', (c.environments || {}).summary, def('SCOPE', 'environments')], ['scope', '주요 산출물', (c.deliverableList || []).length || c.deliverables, def('SCOPE', 'deliverables')],
     ['stakeholders', '관계자', c.stakeholders.length, def('STAKEHOLDERS')], ['stakeholders', '의사결정 / 승인 체계', c.governance, def('OPERATIONS', 'decisions')],
     ['timeline', '주요 마일스톤', c.timeline.milestones.length, def('MILESTONES', 'key_dates')],
     ['conditions', '가정사항', c.assumptions, def('SCOPE', 'assumptions')], ['conditions', '제약사항', c.constraints, def('SCOPE', 'constraints')], ['conditions', '초기 리스크', c.risks, def('SCOPE', 'initial_risks')],
@@ -185,7 +196,7 @@ export async function charterPage(id) {
         : t.field === 'project_type' && pf.project_type ? html`${pf.project_type}` : html`<span class="chx__none">${t.value_label}</span>`)}</dd></div>`).join(''))}</dl></div>`);
 
   /* ---------- right rail: outline (scroll-spy) · next milestone · what to complete · fill status ---------- */
-  const SECTIONS = [['profile', '기본 정보'], ['goals', '목표 · 성공 기준'], ['scope', '범위 · 산출물'], ['stakeholders', '관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(parts.gate ? [['approval', '착수보고회 · 승인']] : [])];
+  const SECTIONS = [['profile', '기본 정보'], ['goals', '목표 · 성공 기준'], ['scope', '적용 환경 · 산출물'], ['stakeholders', '관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(parts.gate ? [['approval', '착수보고회 · 승인']] : [])];
   const missing = ITEMS.filter((x) => !x.ok);
   const nextMs = tl.milestones.find((m) => m.date && m.date >= today);
   const dday = nextMs ? Math.round((dnum(nextMs.date) - dnum(today)) / DAY) : null;

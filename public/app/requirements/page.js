@@ -236,7 +236,7 @@ export async function requirementsPage(id) {
       ${raw(archived || rview() === 'trace' ? '' : html`<form class="qa" id="qa"><input class="input input--sm" id="qa-t" maxlength="200" placeholder="제목 입력 후 Enter — 요구사항 연속 추가" title="상세 항목은 목록에서 바로 수정하거나 행을 클릭해 입력하세요" autocomplete="off"></form>`)}</div>`)}
       ${raw(isPhone() ? '<p class="pcdl" data-phone-reqdoc>요구사항 정의서 <button type="button" class="link linkbtn" data-reqdoc="pdf" data-phone-ok>PDF</button> · <button type="button" class="link linkbtn" data-reqdoc="docx" data-phone-ok>Word</button></p>' : '')}
       ${raw(appliedFilters(q, FILTER_DEFS))}
-      ${raw(q.get('scope') === 'UNDECIDED' && scopeOut().length ? html`<p class="req-excl" data-scope-excl>착수 때 제외하기로 한 것: <b>${scopeOut().join(', ')}</b>. 여기에 해당하는 요구사항은 '범위 외'로 두세요.</p>` : '')}
+      ${raw(q.get('scope') === 'UNDECIDED' && scopeOut().length ? html`<p class="req-excl" data-scope-excl>착수 때 정한 제외 환경·조건: <b>${scopeOut().join(', ')}</b>. 이 조건에만 해당하는 요구사항은 '범위 외'로 두세요.</p>` : '')}
       <div id="bulkslot"></div>
       <div class="rlayout ${sel || creating || apvOpen ? 'has-drawer' : ''}">
         ${raw(curGrid().html())}
@@ -383,7 +383,7 @@ export async function requirementsPage(id) {
         <div class="apv__block" id="apv-block" role="alert" hidden></div>
         <p class="hint">승인자·승인일·승인 방법·근거가 있어야 완료 처리할 수 있습니다. 승인 이후 확정된 요구사항을 바꾸면 변경 요청으로 처리하도록 안내합니다.</p>
       </div>
-      ${raw(archived ? '' : html`<div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${lock ? '' : approvalStatusText(bw)}</span><span style="display:flex;gap:8px;margin-left:auto">${raw(done ? '<button type="button" class="btn btn--ghost btn--sm" data-apv="reopen">완료 취소</button>' : html`<button type="button" class="btn btn--secondary btn--sm" data-apv="save">임시저장</button><button type="button" class="btn btn--primary btn--sm" data-apv="complete" ${empty ? 'disabled' : ''}>완료 처리</button>`)}</span></div>`)}`;
+      ${raw(archived ? '' : html`<div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${lock ? '' : approvalStatusText(bw)}</span><span style="display:flex;gap:8px;margin-left:auto">${raw(done ? '<button type="button" class="btn btn--ghost btn--sm" data-apv="reopen">완료 취소</button>' : html`<button type="button" class="btn btn--secondary btn--sm" data-apv="save">저장</button><button type="button" class="btn btn--primary btn--sm" data-apv="complete" ${empty ? 'disabled' : ''}>완료 처리</button>`)}</span></div>`)}`;
     bindApproval();
   };
   const bindApproval = () => {
@@ -401,7 +401,7 @@ export async function requirementsPage(id) {
     d.querySelectorAll('[data-apv]').forEach((btn) => { btn.onclick = async () => {
       const act = btn.dataset.apv; collect(); if (stat) stat.textContent = '';
       try {
-        if (act === 'save') { await after(await api('PUT', rApi('/baseline'), { approval: approvalBody(bw) })); bw = null; drawApproval(); toast('임시저장했습니다.'); const s2 = $('#apv-stat'); if (s2) s2.textContent = '임시저장됨'; return; }
+        if (act === 'save') { await after(await api('PUT', rApi('/baseline'), { approval: approvalBody(bw) })); bw = null; drawApproval(); toast('저장했습니다.'); const s2 = $('#apv-stat'); if (s2) s2.textContent = '저장됨'; return; }
         if (act === 'reopen') {
           if (!(await confirmDialog({ title: '완료를 취소할까요?', body: '승인 기록은 그대로 남고, 이 업무만 다시 "진행 중"으로 바뀝니다.', confirm: '완료 취소' }))) return;
           await after(await api('POST', rApi('/baseline/reopen'), {})); bw = null; drawApproval(); toast('완료를 취소했습니다.'); return;

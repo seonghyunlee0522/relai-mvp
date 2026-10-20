@@ -18,7 +18,7 @@ import { EFFECTIVE_PLAN_SQL } from './billing/subscriptions.js';
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'];
 export const WORKSPACE_STATUSES = ['ACTIVE', 'SUSPENDED', 'CLOSED'];
 export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
-export const AUDIT_ACTIONS = ['FEEDBACK_UPDATE', 'PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS', 'CREDIT_REFUND', 'REFUND_PAYMENT',
+export const AUDIT_ACTIONS = ['DELIVERABLE_CATALOG_CREATE', 'DELIVERABLE_CATALOG_UPDATE', 'FEEDBACK_UPDATE', 'PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS', 'CREDIT_REFUND', 'REFUND_PAYMENT',
   'PLATFORM_INVITE_CREATED', 'PLATFORM_INVITE_RESENT', 'PLATFORM_INVITE_REVOKED', 'PLATFORM_INVITE_ACCEPTED', 'WORKSPACE_INVITE_CREATED', 'WORKSPACE_INVITE_RESENT', 'WORKSPACE_INVITE_REVOKED', 'WORKSPACE_INVITE_ACCEPTED',
   'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'SYSTEM_ADMIN_BOOTSTRAP', 'WORKSPACE_CREATED_FROM_INVITE',
   'ONBOARDING_STARTED', 'ONBOARDING_SKIPPED', 'ONBOARDING_COMPLETED', 'FIRST_PROJECT_CREATED', 'FIRST_REQUIREMENT_CREATED', 'FIRST_WBS_CREATED', 'EMAIL_TEST'];
@@ -180,6 +180,7 @@ const SUMMARY = {
   SYSTEM_ADMIN_BOOTSTRAP: (m) => `ADMIN_EMAILS로 운영자 권한 부여 ${m.email || ''}`,
   FEEDBACK_UPDATE: (m) => { const L = { NEW: '새 의견', IN_REVIEW: '검토 중', DONE: '처리 완료' }; const parts = [...(m.from_status !== m.status ? [`상태 ${L[m.from_status] || m.from_status} → ${L[m.status] || m.status}`] : []), ...(m.note_changed ? ['메모 수정'] : [])]; return `의견 ${parts.join(' · ')}`; },
   EMAIL_TEST: (m) => `테스트 메일 ${m.to || ''} — ${m.result === 'SENT' ? '발송 성공' : `실패${m.error_code ? ` (${m.error_code})` : ''}`}`,
+  DELIVERABLE_CATALOG_CREATE: (m) => `산출물 목록에 '${m.name || ''}' 추가`, DELIVERABLE_CATALOG_UPDATE: (m) => `산출물 목록 '${m.name || ''}' 수정`,
   WORKSPACE_CREATED_FROM_INVITE: (m) => `초대로 워크스페이스 '${m.name || ''}' 생성`,
 };
 export const auditSummary = (a) => (SUMMARY[a.action] ? SUMMARY[a.action](a.metadata || {}) : a.action);
@@ -193,7 +194,7 @@ export async function listAudit(db, q = {}) {
   const where = []; const params = [];
   const action = oneOf(q.action, AUDIT_ACTIONS); if (action) { where.push('a.action = ?'); params.push(action); }
   if (q.admin) { where.push('(a.admin_user_id = ? OR adm.email ILIKE ?)'); params.push(String(q.admin), like(q.admin)); }
-  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT', 'PROMOTION', 'FEEDBACK', 'EMAIL']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
+  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT', 'PROMOTION', 'FEEDBACK', 'EMAIL', 'DELIVERABLE']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
   // Operator actions by default; account/invitation events raised by regular users (Phase 13) are a separate view (actor_kind=USER) or `all`.
   const ak = q.actor_kind === 'all' ? '' : oneOf(q.actor_kind, ['ADMIN', 'USER']) || 'ADMIN';
   if (ak && !q.target_id) { where.push('a.actor_kind = ?'); params.push(ak); }

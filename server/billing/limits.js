@@ -7,6 +7,9 @@
  * Inside a transaction the workspace row is locked (`FOR UPDATE`) before counting, so two concurrent creates cannot both
  * pass the last free slot. Unlimited plans skip the lock and the count entirely.
  *
+ * Bulk paths (Excel import, AI commits, WBS 뼈대 — batch7 #24) call it ONCE with the total before creating anything, so a batch that
+ * does not fit creates nothing and the 402 says "n건 중 m건만 추가할 수 있습니다" (limit.allowed = free slots left).
+ *
  * Downgrades never delete data: a workspace above its limits keeps everything and only new rows are refused.
  * `PLAN_LIMITS=off` disables enforcement (legacy test fixtures build more rows than FREE allows); production leaves it unset.
  */
@@ -28,10 +31,12 @@ const COUNT_SQL = {
 export class PlanLimitError extends Error {
   constructor({ dimension, used, limit, plan, adding = 1, seats = false }) {
     const label = USAGE_DIMS.find((d) => d.key === dimension)?.label || dimension;
+    const allowed = Math.max(0, limit - used);
     super(seats ? `구매한 사용자 수(${limit}명)를 모두 사용 중입니다. 사용자를 늘리려면 이용 기간 연장 시 사용자 수를 늘려 구매하거나(1명당 월 ₩${PLANS.TEAM.extra_user_monthly.toLocaleString('ko-KR')}) 운영자에게 문의해 주세요.`
-      : `${PLANS[plan]?.label || plan} 플랜의 ${label} 한도(${limit})에 도달했습니다. Team 플랜으로 업그레이드하면 계속 추가할 수 있습니다.`);
+      : adding > 1 ? `${PLANS[plan]?.label || plan} 플랜의 ${label} 한도(${limit})를 넘습니다. ${adding}건 중 ${allowed}건만 추가할 수 있어 아무것도 추가하지 않았습니다.`
+        : `${PLANS[plan]?.label || plan} 플랜의 ${label} 한도(${limit})에 도달했습니다. Team 플랜으로 업그레이드하면 계속 추가할 수 있습니다.`);
     this.status = 402; this.code = 'plan_limit_reached';
-    this.extra = { limit: { dimension, label, used, limit, plan, adding, ...(seats ? { seats: true } : {}) }, upgrade: { plan: 'TEAM', url: '/app/settings#billing' } };
+    this.extra = { limit: { dimension, label, used, limit, plan, adding, allowed, ...(seats ? { seats: true } : {}) }, upgrade: { plan: 'TEAM', url: '/app/settings#billing' } };
   }
 }
 

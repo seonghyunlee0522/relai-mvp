@@ -33,6 +33,9 @@ export const IMPORTANCE = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
 export const IMPORTANCE_LABEL = { REQUIRED: '필수', RECOMMENDED: '권장', OPTIONAL: '선택' };
 /** 착수보고회(KICKOFF) importance — one constant so it can flip to REQUIRED (spec Phase 1 D1/Q1). Migration 31 copies it into existing projects. */
 export const KICKOFF_IMPORTANCE = 'RECOMMENDED';
+/** 착수 결과 승인(APPROVAL) importance (batch7 #5): 권장 — RELAI is not a customer-shared tool, so an internal project or a startup is never
+ * held at 01 waiting for a signature. Migration 49 copies it into existing projects' open APPROVAL steps. 02 요구사항 확정 승인 stays 필수. */
+export const APPROVAL_IMPORTANCE = 'RECOMMENDED';
 
 /** 03 분석·설계 phase description; the last sentence is Phase 3 US-6 (migration 33 copies it into existing projects). */
 export const ANALYSIS_DESIGN_DESCRIPTION_V1 = '요구사항의 “무엇”을 실행 가능한 “어떻게”로 구체화하고, 요구사항 기반 WBS와 실행 계획을 세웁니다.';
@@ -47,12 +50,12 @@ export const DEFAULT_PHASES = [
     description: '프로젝트의 목표, 범위, 관계자, 상위 일정, 운영 방식을 정리해 출발 기준을 맞춥니다.',
     steps: [
       A('GOALS', '프로젝트 목표 정의', '프로젝트를 통해 달성해야 할 목표와 성공 기준을 정리합니다.', '목표 또는 성공 기준이 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
-      A('SCOPE', '프로젝트 범위 정리', '이번 프로젝트에서 수행할 범위와 수행하지 않을 범위를 구분합니다.', '수행 범위가 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
+      A('SCOPE', '수행 범위 · 적용 환경 정리', '결과물이 돌아가야 할 기기·브라우저·OS 같은 적용 환경과 환경·조건을 정리합니다. 기능 범위는 요구사항에서 관리합니다.', '지원 환경이 1개 이상 선택되어 있습니다.', 'REQUIRED', 'definition'),
       A('STAKEHOLDERS', '관계자 / 조직 확인', '고객사, 수행사, 협력사의 주요 담당자와 역할을 정리합니다.', '관계자가 1명 이상 등록되어 있습니다.', 'REQUIRED', 'definition'),
       A('MILESTONES', '상위 일정 / 마일스톤 확인', '프로젝트 시작일·종료 예정일과 반드시 지켜야 하는 주요 시점을 정리합니다. WBS의 세부 일정과는 구분되는 프로젝트 수준의 개략 일정입니다.', '주요 일정 또는 마일스톤이 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
       A('OPERATIONS', '프로젝트 운영 방식 확인', '회의, 보고, 의사결정, 커뮤니케이션 방식을 정합니다.', '운영 방식 항목이 작성되어 있습니다.', 'RECOMMENDED', 'definition'),
       A('KICKOFF', '착수보고회 준비·개최', '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고 결과를 기록합니다.', '착수보고회가 열렸고 회의록 요약 또는 결정사항이 기록되어 있습니다.', KICKOFF_IMPORTANCE, 'definition'),
-      A('APPROVAL', '착수 결과 승인(고객·스폰서)', '정리한 목표·범위·일정·추진 조직을 고객이나 스폰서에게 승인받고 그 근거를 남깁니다.', '승인자·승인일·승인 방법·근거가 기록되어 있습니다.', 'REQUIRED', 'definition'),
+      A('APPROVAL', '착수 결과 승인(고객·스폰서)', '정리한 목표·범위·일정·추진 조직을 고객이나 스폰서에게 승인받고 그 근거를 남깁니다.', '승인자·승인일·승인 방법·근거가 기록되어 있습니다.', APPROVAL_IMPORTANCE, 'definition'),
     ],
   },
   {

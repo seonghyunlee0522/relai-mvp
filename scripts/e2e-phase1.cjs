@@ -99,7 +99,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   await page.fill('[data-kf="minutes"]', '목표·범위·일정 설명. 고객 질의 3건 답변. 영문 계약서는 제외로 합의.');
   await page.click('[data-kladd="decisions"]'); await page.fill('[data-kl="decisions"] li:last-child [data-klf="text"]', '주간 정례회의 매주 월 10시 확정');
   await page.click('[data-kladd="followups"]'); await page.fill('[data-kl="followups"] li:last-child .kl__text', '회의록 송부'); await page.fill('[data-kl="followups"] li:last-child .kl__owner', '김피엠');
-  await page.click('[data-wact="complete"]'); await page.waitForTimeout(800);
+  await page.click('[data-wact="save"]'); await page.waitForTimeout(800);   // batch7 #10: 저장 completes once the minimum is there
   await page.goto(`${BASE}/app/projects/${p.id}/definition`); await page.waitForSelector('[data-row="KICKOFF"]');   // the row list lives on the 개요 tab (UI/UX P1-1)
   const krow = await page.textContent('[data-row="KICKOFF"]');
   check('kickoff completed with 후속 조치 1건 남음', /완료/.test(krow) && /후속 조치 1건 남음/.test(krow), krow.replace(/\s+/g, ' ').slice(0, 120));
@@ -123,9 +123,9 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
     check(`gate dialog on path: ${name}`, ok);
     if (!ok) return;
     const title = await page.textContent('#agT');
-    check(`gate title (${name})`, title.trim() === '고객 승인 없이 요구사항 단계로 넘어가려 합니다', title);
-    await page.click('[data-v="proceed"]');
-    check(`reason required (${name})`, /이유를 입력/.test(await page.textContent('#ag-err')));
+    check(`gate title (${name})`, title.trim() === '착수 승인 기록 없이 요구사항 단계로 넘어갑니다', title);
+    // batch7 #5: 착수 승인 = 권장 — two buttons, no reason field
+    check(`no reason field (${name})`, !(await page.$('#ag-in')) && (await page.textContent('[data-v="proceed"]')).trim() === '승인 없이 진행' && (await page.textContent('[data-v="record"]')).trim() === '승인 기록하기');
     return true;
   };
   await page.goto(`${BASE}/app/projects/${p.id}`); await page.waitForSelector('.rg__title');
@@ -141,36 +141,35 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   // only these 2 paths leave 01: the 02 list has no "이 단계를 현재 단계로 변경" link
   await page.goto(`${BASE}/app/projects/${p.id}?phase=REQUIREMENTS`); await page.waitForSelector('.np__list');
   check('no 이 단계를 현재 단계로 변경 link', !(await page.$('[data-set-phase]')) && !/현재 단계로 변경/.test(await page.textContent('main')));
-  // proceed with a reason through the What's Next button
+  // proceed without approval through the What's Next button (batch7 #5: no reason asked)
   await page.goto(`${BASE}/app/projects/${p.id}`); await page.waitForSelector('#next');
-  await gatePath("What's Next button (사유 입력)", async () => { await page.click('#next'); });
-  await page.fill('#ag-in', '고객 PM 휴가로 승인 회신이 다음 주 예정');
+  await gatePath("What's Next button (승인 없이 진행)", async () => { await page.click('#next'); });
   await page.click('[data-v="proceed"]');
   await page.waitForTimeout(600);
-  // the general dialog (if any other required items) — none expected; may get "현재 단계로 변경" confirm for manual path
   const conf = await page.$('.scrim .dialog');
   if (conf) { await page.screenshot({ path: `${SHOTS}/05-after-gate-confirm.png` }); const b = await page.$('.scrim .dialog [data-v="1"], .scrim .dialog .btn--primary'); if (b) await b.click(); await page.waitForTimeout(800); }
   const g = (await api('GET', P)).json;
-  check('moved to 02 after reason', g.project.current_phase === 'REQUIREMENTS', g.project.current_phase);
+  check('moved to 02 without approval', g.project.current_phase === 'REQUIREMENTS', g.project.current_phase);
   const apvStep = g.phases[0].steps.find((x) => x.step_key === 'APPROVAL');
-  check('reason stored in APPROVAL note', /^\[승인 전 진행\] 고객 PM 휴가로 승인 회신이 다음 주 예정 · \d{4}-\d{2}-\d{2} · 홍길동$/.test(apvStep.note), apvStep.note);
-  check('APPROVAL row text 승인 전 진행 · 사유 있음', /승인 전 진행 · 사유 있음/.test(apvStep.text), apvStep.text);
+  check('fixed reason stored in APPROVAL note', /^\[승인 전 진행\] 승인 없이 진행 · \d{4}-\d{2}-\d{2} · 홍길동$/.test(apvStep.note), apvStep.note);
+  check('APPROVAL is 권장 (RECOMMENDED, not required)', apvStep.importance === 'RECOMMENDED' && !apvStep.is_required, `${apvStep.importance} ${apvStep.is_required}`);
 
-  // F6: 01 left with approval unrecorded → number + open-required badge in LNB and stepper, never ✓
+  // F6 (batch7 #5): 01 left with approval unrecorded — APPROVAL is 권장, so 01 is still ✓
   const lc01 = async () => { await page.goto(`${BASE}/app/projects/${p.id}`); await page.waitForSelector('.pstep'); return page.evaluate(() => {
     // Redesign R1: the desktop has no phase menu — the 지금 할 일 stepper is the one phase list (number + badge, or ✓)
     const st = document.querySelector('.pstep li:first-child'); const ic = st.querySelector('.st').textContent.trim();
     return { lnbCls: st.className, mark: ic === '✓' ? '✓' : st.querySelector('small').textContent.trim(), badge: (st.querySelector('.pstep__n') || {}).textContent || '', lnb: document.querySelectorAll('.lnb__ph').length,
       stCls: st.className, stIcon: st.querySelector('.st').textContent.trim(), stBadge: (st.querySelector('.pstep__n') || {}).textContent || '' }; }); };
   const b1 = await lc01();
-  check('bypass: 01 shows number + badge 1, not ✓ (no desktop phase menu)', !b1.lnb && /is-gap/.test(b1.lnbCls) && b1.mark === '01' && b1.badge.trim() === '1', JSON.stringify(b1));
-  check('bypass: stepper 01 not ✓, badge 1', /is-gap/.test(b1.stCls) && b1.stIcon !== '✓' && b1.stBadge.trim() === '1', JSON.stringify(b1));
+  // batch7 #5: 착수 승인 = 권장 → 01 with only the required items done reads 완료 (✓, no open-required badge)
+  check('no approval: 01 ✓, no badge (no desktop phase menu)', !b1.lnb && /is-done/.test(b1.lnbCls) && b1.mark === '✓' && !b1.badge.trim(), JSON.stringify(b1));
+  check('no approval: stepper 01 ✓, no badge', /is-done/.test(b1.stCls) && b1.stIcon === '✓' && !b1.stBadge.trim(), JSON.stringify(b1));
   await page.screenshot({ path: `${SHOTS}/05b-lnb-gap.png` });
 
   // 6. Charter: approval area shows 미승인 — 사유, timeline 종료 후 zone, export menu
   await page.goto(`${BASE}/app/projects/${p.id}/charter`); await page.waitForSelector('.chx');
   check('Charter title = 프로젝트 개요 (Korean label set)', (await page.title()).startsWith('프로젝트 개요'));
-  check('Charter shows 미승인 — 사유', /미승인 — 사유: 고객 PM 휴가로/.test(await page.textContent('#ch-approval')));
+  check('Charter shows 미승인 — 승인 없이 진행', /미승인 — 승인 없이 진행/.test(await page.textContent('#ch-approval')));
   check('Charter timeline 종료 후 zone', Boolean(await page.$('.chtl__after')));
   await page.screenshot({ path: `${SHOTS}/06-charter.png`, fullPage: true });
   await page.click('.phead__r .pmenu summary');
@@ -188,7 +187,7 @@ const check = (name, ok, extra = '') => { results.push([name, ok]); log(`${ok ? 
   check('approval method 착수보고회에서 승인 preselected', await page.isChecked('[data-af="method"][value="KICKOFF"]'));
   await page.fill('[data-af="evidence"]', "2026-10-09 박상무 회신 메일 '사업수행계획서 v1.0 승인'");
   await page.screenshot({ path: `${SHOTS}/07-approval-screen.png` });
-  await page.click('[data-wact="complete"]'); await page.waitForTimeout(800);
+  await page.click('[data-wact="save"]'); await page.waitForTimeout(800);   // batch7 #10: 저장 completes once the minimum is there
   check('approval completed', /완료/.test(await page.textContent('[data-defsec="APPROVAL"] .defsec__st')));
   const b2 = await lc01();
   check('approval recorded: 01 ✓, no badge', /is-done/.test(b2.lnbCls) && b2.mark === '✓' && !b2.badge, JSON.stringify(b2));

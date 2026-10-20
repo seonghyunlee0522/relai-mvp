@@ -4,8 +4,11 @@
  *                                       activity with its state and a one-line summary of what has been entered.
  *   Work Screen (right drawer)         The actual input form for one activity. Opens from a row, can expand to full
  *                                       screen and back without losing typed values (same DOM, same working copy).
- *   Footer actions                     [임시저장] saves only · [완료 처리] saves + validates + COMPLETED in one click ·
- *                                       ↷ 이 업무 건너뛰기 (non-REQUIRED only, with confirmation) · 업무 다시 시작 → on a skipped one.
+ *   Footer actions (batch7 #10)        [닫기] · [저장]: saving completes the activity on its own once its minimum content is there
+ *                                       (toast says so); short of it, the toast names what is missing. 완료 취소 lives in the status
+ *                                       chip menu (drawer header) · ↷ 이 업무 건너뛰기 (non-REQUIRED only) · 업무 다시 시작 → on a skipped one.
+ *   범위 drawer (batch7 #2·#3)         적용 환경 (기기·브라우저 지원/미지원, OS·해상도·언어) + 환경·조건 메모 + 산출물 목록
+ *                                       (베이직/심화/직접 추가 tabs, 필수·선택·제외 per row; PUT …/deliverables with the changes only).
  *
  * No nested drawers: Excel upload for 이해관계자 is a modal on top of the drawer. Completion is the INITIATION step status
  * (server/definition.js), so What's Next, the LNB badge and the phase gate all read the same source.
@@ -24,41 +27,48 @@ import { ACTIVITY_STATE } from '../shared/constants.js';
 import { TRAIT_FIELDS } from '../shared/project-traits.js';
 import { traitFields, traitGrid, wireTraitFields } from '../shared/trait-fields.js';
 import { josa } from '../shared/josa.js';
-import { planMenu, bindPlanMenu, isMeasurable, noApprovalLine } from './initiation.js';
+import { planMenu, bindPlanMenu, isMeasurable, noApprovalLine, NO_REASON } from './initiation.js';
 import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
 import { DEFINITION_SLUG, DEFINITION_TABS, definitionHref } from '../shared/lifecycle.js';
 import { charterParts } from './charter.js';
+import { ENV_GROUPS, ENV_TEXT, ENV_STATUS } from '../shared/environments.js';
+
+const CSS_HREF = '/assets/project/definition-scope.css';
+const loadCss = () => { if (document.querySelector(`link[href="${CSS_HREF}"]`)) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CSS_HREF; document.head.append(l); };
+const LEVELS = [['REQUIRED', '필수'], ['OPTIONAL', '선택'], ['EXCLUDED', '제외']];
+const DL_TABS = [['BASIC', '베이직'], ['ADVANCED', '심화'], ['CUSTOM', '직접 추가']];
+/** 작성 예시 보기 (batch7 #4): a finished 사업수행계획서 built from the 다온생명 sample, opened in a new tab. */
+export const exampleLink = (pid) => html`<a class="link def__example" href="${wsApi(`/${pid}/charter/example?format=pdf`)}" target="_blank" rel="noopener" data-plan-example>작성 예시 보기 (PDF)</a>`;
 
 const ORG_TYPE = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
-const OPS = [['meetings', '회의', '예: 주간 정례회의 매주 월 10시(고객·PM·개발 리드), 착수보고/중간보고/최종보고'], ['reporting', '보고', '예: 주간보고 매주 금 메일 발송, 월간 운영위원회 보고'], ['communication', '소통 채널', '예: Slack #pjt-채널, 공식 요청은 메일, 긴급은 전화'], ['decisions', '의사결정 / 승인 체계', '예: 주요 범위 변경은 고객사 PM과 수행사 PM 합의 후 운영위원회 승인']];
+const OPS = [['meetings', '회의', '예: 주간 정례회의는 매주 월요일 10시에 고객 PM·수행 PM·개발 리드가 참석하며, 착수·중간·최종 보고회를 각 1회 연다.'], ['reporting', '보고', '예: 수행사 PM이 매주 금요일 17시까지 주간보고를 메일로 보내고, 월 1회 운영위원회에 진척과 위험을 보고한다.'], ['communication', '소통 채널', '예: 일상 협의는 업무 메신저 공용 채널, 공식 요청·회신은 메일, 장애 등 긴급 사항은 전화로 한다.'], ['decisions', '의사결정 / 승인 체계', '예: 범위·일정 변경은 고객 PM과 수행 PM이 검토한 뒤 고객 스폰서가 승인한다.']]; 
 /** Project Charter free-text fields (Label · 짧은 설명 · Textarea). Free text on purpose — structure comes later in a separate design.
  * [field, label, hint, placeholder, rows] grouped by the activity whose work screen edits them. */
 const CHARTER_TEXT = {
   SCOPE: [
-    ['deliverables', '주요 산출물', '납품·제출해야 하는 결과물', '예: 요구사항 정의서, 화면 설계서, 테스트 결과서, 운영 매뉴얼 (한 줄에 하나씩)', 3],
-    ['assumptions', '가정사항', '계획이 성립하기 위한 전제 조건', '예: 고객사가 필요한 API 접근 권한을 일정 내 제공한다.', 3],
-    ['constraints', '제약사항', '수행을 제한하는 조건', '예: 고객사 내부망에서만 개발 가능 / 외부 SaaS 사용 불가 / 오픈 일정 변경 불가', 3],
-    ['initial_risks', '초기 리스크', '착수 시점에 인지한 주요 위험', '예: 기존 시스템 문서 부족 / 고객사 의사결정 지연 가능성', 3],
+    ['assumptions', '가정사항', '계획이 성립하기 위한 전제 조건', '예: 고객사는 기간계 조회 API와 테스트 계정을 착수 후 4주 안에 제공한다.', 3],
+    ['constraints', '제약사항', '수행을 제한하는 조건', '예: 개인정보는 고객사 내부망 밖으로 반출할 수 없으며, 오픈일(3월 2일)은 변경할 수 없다.', 3],
+    ['initial_risks', '초기 리스크', '착수 시점에 인지한 주요 위험과 대응', '예: 기존 시스템 설계 문서가 부족함 → 착수 2주 안에 현행 분석 인터뷰로 보완한다.', 3],
   ],
   OPERATIONS: [
-    ['change_management', '변경관리 방식', '범위·일정 변경 요청의 검토·승인 절차', '예: 일정 또는 범위 영향이 있는 변경은 PM 검토 후 고객 승인', 2],
-    ['acceptance', '검수 / 완료 기준', '검수와 프로젝트 완료로 보는 조건', '예: 인수 테스트 완료 및 심각 이슈 0건 / 운영 이관 완료 후 최종 검수', 2],
+    ['change_management', '변경관리 방식', '범위·일정 변경 요청의 검토·승인 절차', '예: 변경 요청은 RELAI에 등록해 일정·공수 영향을 적고, 수행 PM 검토 후 고객 PM이 승인한다.', 2],
+    ['acceptance', '검수 / 완료 기준', '검수와 프로젝트 완료로 보는 조건', '예: 범위 내 요구사항의 인수 테스트를 모두 통과하고 심각 결함이 0건이면 고객 PM이 검수확인서에 서명한다.', 2],
   ],
 };
 const textField = ([f, label, hint, ph, rows]) => ({ f, label, hint, ph, rows });
 /** One-line purpose per activity (Main view). Validation wording stays inside the work screen. */
 const PURPOSE = {
   GOALS: '프로젝트 목표와 성공 기준을 정해 프로젝트가 무엇을 위해 진행되는지 명확히 합니다.',
-  SCOPE: '이번 프로젝트에서 하는 것과 하지 않는 것, 주요 산출물과 전제·제약·리스크를 정리해 범위 논쟁의 기준을 만듭니다.',
+  SCOPE: '결과물이 동작할 기기·브라우저 같은 적용 환경과 납품할 산출물, 전제·제약·리스크를 정리합니다. 기능 범위는 요구사항에서 정합니다.',
   STAKEHOLDERS: '고객사·당사·협력사의 담당자와 역할을 정리해 누구와 무엇을 결정할지 분명히 합니다.',
   MILESTONES: '시작·종료 예정일과 반드시 지켜야 할 시점을 정리합니다. WBS의 세부 일정과는 다른 상위 일정입니다.',
   OPERATIONS: '회의·보고·소통·의사결정·변경관리·검수 방식을 정해 프로젝트 운영 규칙을 공유합니다.',
   KICKOFF: '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고, 결과를 기록합니다.',
   APPROVAL: '정리한 착수 결과를 고객·스폰서에게 승인받고 근거를 남깁니다. 승인된 내용이 이후 요구사항·변경·검수의 기준입니다.',
 };
-const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '범위 입력 →', STAKEHOLDERS: '관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →', KICKOFF: '착수보고회 준비 →', APPROVAL: '승인 기록 →' };
-const WIDE = new Set(['STAKEHOLDERS', 'MILESTONES', 'KICKOFF', 'APPROVAL']);
-const SECTION_FIELDS = { PROFILE: TRAIT_FIELDS, GOALS: ['goal', 'success_criteria'], SCOPE: ['scope_in', 'scope_out', 'deliverables', 'assumptions', 'constraints', 'initial_risks'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations', 'change_management', 'acceptance'], KICKOFF: ['kickoff'], APPROVAL: ['approval'] };
+const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '적용 환경 선택 →', STAKEHOLDERS: '관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →', KICKOFF: '착수보고회 준비 →', APPROVAL: '승인 기록 →' };
+const WIDE = new Set(['SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'KICKOFF', 'APPROVAL']);
+const SECTION_FIELDS = { PROFILE: TRAIT_FIELDS, GOALS: ['goal', 'success_criteria'], SCOPE: ['environments', 'scope_in', 'scope_out', 'assumptions', 'constraints', 'initial_risks'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations', 'change_management', 'acceptance'], KICKOFF: ['kickoff'], APPROVAL: ['approval'] };
 const METHODS = [['SIGNED', '서명본 수령'], ['EMAIL', '이메일 회신'], ['KICKOFF', '착수보고회에서 승인'], ['OTHER', '기타']];
 const KICKOFF_WORDS = /킥오프|착수\s*보고/;
 const mmdd = (d) => (d ? `${d.slice(5, 7)}/${d.slice(8, 10)}` : '');
@@ -71,6 +81,8 @@ const STATE_LABEL = { done: '완료', skip: '건너뜀', review: '확인 필요'
 const STATE_ICON = { done: '✓', skip: '—', review: '!', prog: '●', todo: '○' };
 const TAB_LABEL = { '': '개요', goals: '목표·범위', stakeholders: '관계자', milestones: '상위 일정', operations: '운영 방식', kickoff: '착수보고회', approval: '착수 승인' };
 const IMPORTANCE = { REQUIRED: '필수', RECOMMENDED: '권장' };
+/** 저장 → 자동 완료 toast (batch7 #10). */
+const DONE_TOAST = { GOALS: '목표와 성공 기준 작성을 완료했습니다.', SCOPE: '수행 범위 · 적용 환경 정리를 완료했습니다.', STAKEHOLDERS: '관계자 확인을 완료했습니다.', MILESTONES: '상위 일정 확인을 완료했습니다.', OPERATIONS: '운영 방식 확인을 완료했습니다.', KICKOFF: '착수보고회 기록을 완료했습니다.', APPROVAL: '착수 결과 승인 기록을 완료했습니다.' };
 const isOpenWork = (s) => s && s.status !== 'COMPLETED' && s.status !== 'SKIPPED';
 
 export async function definitionPage(id, slug = '') {
@@ -82,7 +94,10 @@ export async function definitionPage(id, slug = '') {
   slug = slug || '';
   const tabKeys = (DEFINITION_TABS.find(([x]) => x === slug) || ['', []])[1];
   let c = null;   // 프로젝트 개요 data (GET …/charter): the read blocks of a task tab
-  let [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`)), slug ? api('GET', wsApi(`/${id}/charter`)).then((r) => { c = r.charter; }) : null]);
+  let dl = null;   // 산출물 목록 (GET …/deliverables): resolved catalog + this project's choices
+  loadCss();
+  let [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`)), slug ? api('GET', wsApi(`/${id}/charter`)).then((r) => { c = r.charter; }) : null,
+    api('GET', wsApi(`/${id}/deliverables`)).then((r) => { dl = r; }).catch(() => { dl = null; })]);
   const p = g.project; const isArch = p.status === 'ARCHIVED'; const ro = isArch || isPhone();   // phone = view mode
   document.title = `${slug ? `${TAB_LABEL[slug]} · ` : '01 착수 · '}프로젝트 정의 — ${p.name} — RELAI`;
   const u = `/app/projects/${p.id}`;
@@ -97,6 +112,8 @@ export async function definitionPage(id, slug = '') {
   };
   const sec = (k) => m.sections.find((s) => s.key === k);
   let d = fresh();            // working copy of the open activity's values (kept across drawer ⇄ full screen)
+  let dlEdit = new Map();     // 산출물 changes not saved yet: key → { catalog_id | id, level, custom_name, phase_key, remove }
+  let dlTab = 'BASIC';
   let dirty = false;
   let open = null;                         // { key, full }
   const asked = qp.get('activity');
@@ -142,7 +159,7 @@ export async function definitionPage(id, slug = '') {
         ${raw(traitGrid(m.project_traits))}
       </div>
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 프로젝트 정의는 조회만 할 수 있습니다.</div>' : ro ? pcLine() : nowRow)}
-      <p class="pv__charter">입력한 내용을 한 장으로 → <a class="link" href="${u}/charter" data-link data-charter-link>프로젝트 개요 보기</a></p>
+      <p class="pv__charter">입력한 내용을 한 장으로 → <a class="link" href="${u}/charter" data-link data-charter-link>프로젝트 개요 보기</a> · 완성본이 궁금하면 → ${raw(exampleLink(p.id))}</p>
       <ol class="pv__list">${raw(rows)}</ol>
       ${raw(foot)}
     </section>`;
@@ -204,15 +221,19 @@ export async function definitionPage(id, slug = '') {
   const textAreas = (list) => list.map(textField).map((x) => html`<div class="field" data-field="${x.f}"><label>${x.label} <small class="dim">${x.hint}</small></label><textarea class="textarea" data-f="${x.f}" rows="${x.rows}" maxlength="4000" placeholder="${x.ph}" ${ro ? 'disabled' : ''}>${d[x.f] || ''}</textarea></div>`).join('');
   const form = (key) => {
     switch (key) {
-      case 'GOALS': return html`<div class="field" data-field="goal"><label>프로젝트 목표</label><textarea class="textarea" data-f="goal" rows="3" maxlength="2000" placeholder="이 프로젝트로 달성하려는 결과를 1~3문장으로 적습니다. 예: 법무팀 계약 검토 리드타임을 50% 단축하는 AI 검토 시스템 구축" ${ro ? 'disabled' : ''}>${d.goal}</textarea></div>
-        <div class="field" data-field="success_criteria"><label>성공 기준 <small class="dim">측정 가능한 완료·성공 조건</small></label>${raw(listRows('success_criteria', d.success_criteria, '예: 검토 요청 접수부터 결과 회신까지 평균 2영업일 이내'))}</div>
+      case 'GOALS': return html`<div class="field" data-field="goal"><label>프로젝트 목표</label><textarea class="textarea" data-f="goal" rows="3" maxlength="2000" placeholder="이 프로젝트로 달성하려는 결과를 1~3문장으로 적습니다. 예: 법무팀의 계약 검토 요청부터 회신까지 걸리는 시간을 평균 4영업일에서 2영업일로 줄이는 AI 검토 시스템을 구축한다." ${ro ? 'disabled' : ''}>${d.goal}</textarea></div>
+        <div class="field" data-field="success_criteria"><label>성공 기준 <small class="dim">측정 가능한 완료·성공 조건</small></label>${raw(listRows('success_criteria', d.success_criteria, '예: 오픈 3개월 후 검토 요청 접수부터 회신까지 평균 2영업일 이내'))}</div>
         <p class="hint">완료 처리하려면 목표 또는 성공 기준을 1개 이상 입력합니다.</p>`;
-      case 'SCOPE': return html`<div class="field" data-field="scope_in"><label>수행 범위 <small class="dim">이번 프로젝트에서 하는 것</small></label>${raw(listRows('scope_in', d.scope_in, '예: 계약서 자동 검토 기능(국문 표준계약 5종)'))}</div>
-        <div class="field" data-field="scope_out"><label>제외 범위 <small class="dim">하지 않기로 한 것</small></label>${raw(listRows('scope_out', d.scope_out, '예: 영문 계약서, 기존 ERP 연동'))}</div>
-        ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(0, 1)))}
+      case 'SCOPE': return html`<div class="def__sub"><b>적용 환경</b><small>결과물이 동작해야 할 환경을 지원 / 미지원으로 고릅니다. 테스트와 RELAI AI가 이 환경을 기준으로 확인합니다.</small></div>
+        ${raw(envForm())}
+        <p class="hint def__fnhint" data-scope-req-link>기능 범위(무엇을 만들지)는 요구사항마다 범위 안 / 범위 밖으로 정합니다. → <a class="link" href="${u}/requirements" data-link data-defnav>요구사항으로</a></p>
+        <div class="field" data-field="scope_in"><label>환경·조건 메모 <small class="dim">적용 환경에 붙는 조건</small></label>${raw(listRows('scope_in', d.scope_in, '예: 사내망 전용, 고객사 클라우드 리전 안에서만 운영'))}</div>
+        <div class="field" data-field="scope_out"><label>제외 환경·조건 <small class="dim">지원하지 않기로 한 환경·조건</small></label>${raw(listRows('scope_out', d.scope_out, '예: 외부 접속(VPN 밖) 제외, 영문 화면 제외'))}</div>
+        <div class="def__sub" data-field="deliverables"><b>주요 산출물</b><small>표준 산출물 목록에서 이번 프로젝트에 낼 것을 고릅니다. 사업수행계획서 3절 표와 07 종료 점검에 그대로 쓰입니다. 선택하지 않아도 완료할 수 있습니다.</small></div>
+        ${raw(dlForm())}
         <div class="def__sub"><b>전제 · 제약 · 초기 리스크</b><small>프로젝트 개요와 RELAI AI가 WBS·요구사항·변경 영향을 판단할 때 함께 고려합니다.</small></div>
-        ${raw(textAreas(CHARTER_TEXT.SCOPE.slice(1)))}
-        <p class="hint">완료 처리하려면 수행 범위를 1개 이상 입력합니다. 산출물·전제·제약·리스크는 선택 항목입니다.</p>`;
+        ${raw(textAreas(CHARTER_TEXT.SCOPE))}
+        <p class="hint">지원 환경(기기 또는 브라우저)을 1개 이상 고르고 저장하면 완료됩니다. 산출물·전제·제약·리스크는 선택 항목입니다.</p>`;
       case 'STAKEHOLDERS': return html`${raw(hierarchy(d.stakeholders))}
         <div class="def__tools">${raw(ro ? '' : html`<button type="button" class="btn btn--secondary btn--sm" id="sh-add">+ 직접 추가</button><button type="button" class="btn btn--secondary btn--sm" id="sh-xl">Excel 업로드</button><button type="button" class="link linkbtn def__tpl" id="sh-tpl">등록 템플릿 내려받기</button>`)}</div>
         <div class="def__tblwrap"><p class="hint def__shhelp">고객 측 의사결정자(스폰서)와 실무 책임자(고객 PM)를 꼭 넣으세요. 승인자로 선택됩니다.</p>
@@ -242,6 +263,44 @@ export async function definitionPage(id, slug = '') {
       default: return '';
     }
   };
+  /* ---------- 적용 환경 (batch7 #2) ---------- */
+  const envForm = () => {
+    const e = d.environments || {};
+    const groups = ENV_GROUPS.map(([g2, label, opts]) => html`<div class="envg" data-field="environments.${g2}"><span class="envg__k">${label}</span><ul class="envg__l">${raw(opts.map(([k, l]) => {
+      const v = (e[g2] || {})[k] || '';
+      return html`<li class="envg__i ${v ? `is-${v.toLowerCase()}` : ''}"><span class="envg__n">${l}</span><span class="seg envg__seg" role="group" aria-label="${l}">${raw(Object.entries(ENV_STATUS).map(([st, sl]) => html`<button type="button" class="${v === st ? 'is-on' : ''}" data-env="${g2}.${k}" data-v="${st}" aria-pressed="${v === st}" ${ro ? 'disabled' : ''}>${sl}</button>`).join(''))}</span></li>`;
+    }).join(''))}</ul></div>`).join('');
+    const texts = ENV_TEXT.map(([k, label, max, ph]) => html`<div class="field envt" data-field="environments.${k}"><label>${label}</label><input class="input input--sm" data-envt="${k}" value="${e[k] || ''}" maxlength="${max}" placeholder="${ph}" ${ro ? 'disabled' : ''}></div>`).join('');
+    return html`<div class="envf" data-field="environments">${raw(groups)}<div class="envf__t">${raw(texts)}</div></div>`;
+  };
+  /* ---------- 산출물 목록 (batch7 #3) ---------- */
+  const dlItems = () => (dl ? dl.items.map((x) => { const e = dlEdit.get(x.key); return e ? (e.remove ? null : { ...x, ...e, level: e.level || x.level }) : x; }).filter(Boolean) : []);
+  const dlForm = () => {
+    if (!dl) return '<p class="hint">산출물 목록을 불러오지 못했습니다. 화면을 새로 고쳐 주세요.</p>';
+    const items = dlItems(); const added = [...dlEdit.entries()].filter(([k, e]) => e.add && !e.remove).map(([k, e]) => ({ key: k, custom: true, ...e }));
+    const list = dlTab === 'CUSTOM' ? [...items.filter((x) => x.custom), ...added] : items.filter((x) => x.tier === dlTab);
+    const n = (lv) => [...items, ...added].filter((x) => x.level === lv).length;
+    const seg = (x) => html`<span class="seg dl__seg" role="group" aria-label="${x.name} 구분">${raw(LEVELS.map(([lv, l]) => html`<button type="button" class="${x.level === lv ? 'is-on' : ''} dl__${lv.toLowerCase()}" data-dlv="${lv}" aria-pressed="${x.level === lv}" ${ro ? 'disabled' : ''}>${l}</button>`).join(''))}</span>`;
+    const rowOf = (x) => html`<li class="dl__i is-${(x.level || '').toLowerCase()}" data-dl="${x.key}"><span class="dl__n">${x.custom && !ro ? raw(html`<input class="input input--sm" data-dlname value="${x.name || x.custom_name || ''}" maxlength="100" placeholder="산출물 이름">`) : x.name}${raw(x.is_new ? '<em class="dl__new">새 항목</em>' : '')}</span>${raw(seg(x))}${raw(x.custom && !ro ? html`<button type="button" class="def__x" data-dldel="${x.key}" aria-label="삭제">×</button>` : '')}</li>`;
+    const phases = dl.phases.filter((ph) => list.some((x) => x.phase_key === ph.key));
+    const body = list.length ? phases.map((ph) => html`<div class="dl__g"><b class="dl__ph">${ph.name}</b><ul>${raw(list.filter((x) => x.phase_key === ph.key).map(rowOf).join(''))}</ul></div>`).join('')
+      : `<p class="hint">${dlTab === 'CUSTOM' ? '목록에 없는 산출물은 아래에서 직접 추가합니다.' : '이 구분의 산출물이 없습니다.'}</p>`;
+    const add = dlTab === 'CUSTOM' && !ro ? html`<div class="dl__add"><select class="select select--sm" id="dl-add-ph" aria-label="단계">${raw(dl.phases.map((ph) => html`<option value="${ph.key}">${ph.name}</option>`).join(''))}</select><button type="button" class="btn btn--secondary btn--sm" id="dl-add">+ 직접 추가</button></div>` : '';
+    return html`<div class="dl" data-dl-picker>
+      <div class="dl__h"><span class="seg dl__tabs" role="tablist">${raw(DL_TABS.map(([t, l]) => html`<button type="button" role="tab" class="${dlTab === t ? 'is-on' : ''}" data-dltab="${t}" aria-selected="${dlTab === t}">${l}</button>`).join(''))}</span>
+        <span class="dl__sum" data-dl-sum>필수 ${n('REQUIRED')} · 선택 ${n('OPTIONAL')}</span></div>
+      <p class="hint dl__tip">${dlTab === 'BASIC' ? '베이직: 대부분의 프로젝트가 내는 산출물입니다. 기본값은 필수입니다.' : dlTab === 'ADVANCED' ? '심화: 공공·대형 사업에서 주로 요구하는 산출물입니다. 기본값은 제외입니다.' : '직접 추가: 목록에 없는 산출물입니다.'}</p>
+      ${raw(body)}${raw(add)}
+      ${raw(dl.legacy_text ? html`<div class="dl__legacy" data-dl-legacy><b>기존 입력</b><small>산출물 목록이 생기기 전에 적은 내용입니다. 지우지 않고 그대로 보여 줍니다.</small><p>${dl.legacy_text}</p></div>` : '')}
+    </div>`;
+  };
+  const dlChanges = () => [...dlEdit.entries()].map(([key, e]) => {
+    if (e.add) return e.remove ? null : { custom_name: e.custom_name || '', phase_key: e.phase_key, level: e.level };
+    const x = dl.items.find((y) => y.key === key); if (!x) return null;
+    if (x.custom) return e.remove ? { id: x.id, remove: true } : { id: x.id, level: e.level, custom_name: e.custom_name };
+    return { catalog_id: x.catalog_id, level: e.level };
+  }).filter(Boolean);
+
   /* ---------- 착수보고회 (US-1) ---------- */
   const klist = (kind, items, row, addLabel) => html`<ul class="def__list kl" data-kl="${kind}">${raw(items.map((it) => html`<li data-klid="${it.id}">${raw(row(it))}${raw(ro ? '' : html`<button type="button" class="def__x" data-kldel="${kind}" data-id="${it.id}" aria-label="삭제">×</button>`)}</li>`).join(''))}</ul>
     ${raw(ro ? '' : html`<button type="button" class="link linkbtn def__add" data-kladd="${kind}">${addLabel}</button>`)}`;
@@ -271,8 +330,8 @@ export async function definitionPage(id, slug = '') {
     const methods = METHODS.filter(([k]) => k !== 'KICKOFF' || !kick || kick.status !== 'SKIPPED');
     const pd = m.project_dates;
     const nOrg = (t) => (d.stakeholders || []).filter((x) => x.org_type === t).length;
-    return html`${raw(s && s.reapproval ? '<div class="notice notice--crit">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 다시 승인받은 뒤 <b>다시 확인 완료</b>를 누릅니다.</div>' : '')}
-      ${raw(s && s.bypass ? html`<div class="notice notice--soft">승인 전 진행 — 사유: ${s.bypass.reason} (${[s.bypass.date, s.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
+    return html`${raw(s && s.reapproval ? '<div class="notice notice--warn">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 다시 승인받은 뒤 <b>다시 승인 완료</b>를 누릅니다.</div>' : '')}
+      ${raw(s && s.bypass ? html`<div class="notice notice--soft">승인 전 진행 — ${s.bypass.reason === NO_REASON ? NO_REASON : `사유: ${s.bypass.reason}`} (${[s.bypass.date, s.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
       <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(planMenu())}</div>
         <dl><div><dt>목표</dt><dd>${d.goal || (d.success_criteria[0] && d.success_criteria[0].text) || '작성되지 않음'}</dd></div>
         <div><dt>범위</dt><dd>${d.scope_in.length ? `수행 ${d.scope_in.length}건 (${d.scope_in.slice(0, 2).map((x) => x.text).join(', ')}${d.scope_in.length > 2 ? ' …' : ''})${d.scope_out.length ? ` · 제외 ${d.scope_out.length}건` : ''}` : '작성되지 않음'}</dd></div>
@@ -296,16 +355,21 @@ export async function definitionPage(id, slug = '') {
     const body = skipped
       ? html`<div class="wd__skipped"><i class="st st--skip" aria-hidden="true">—</i><div><b>이 업무는 건너뛴 상태입니다.</b><p>이번 프로젝트에서는 수행하지 않는 것으로 기록되어 있습니다. 필요해지면 다시 시작할 수 있습니다.</p>${raw(ro ? '' : '<button type="button" class="btn btn--primary btn--sm" data-wact="resume">업무 다시 시작 →</button>')}</div></div>`
       : html`${raw(st === 'review' ? '<div class="notice notice--soft">완료 처리 후 내용이 수정되었습니다. 확인한 뒤 다시 완료 처리하세요.</div>' : '')}<div class="wd__form" data-sec="${s.key}">${raw(form(s.key))}</div>`;
+    // batch7 #10: [닫기] [저장] only — 저장 completes once the minimum content is there; 다시 승인받은 뒤의 확인은 승인 서랍에만 남김
     const foot = ro || skipped ? '' : html`<div class="wd__f">
       ${raw(s.skippable && !completed ? '<button type="button" class="link linkbtn wd__skip" data-wact="skip">↷ 이 업무 건너뛰기</button>' : s.key === 'APPROVAL' && !completed ? html`<span class="wd__stat hint" id="apv-stat">${approvalStatusText(d.approval || {})}</span>` : '<span></span>')}
       <span class="wd__btns"><span class="wd__stat" id="wd-stat">${dirty ? '저장되지 않은 변경' : ''}</span>
-        <button type="button" class="btn btn--secondary btn--sm" data-wact="save">임시저장</button>
-        ${raw(completed ? (st === 'review' ? '<button type="button" class="btn btn--primary btn--sm" data-wact="confirm">다시 확인 완료</button>' : '') + '<button type="button" class="btn btn--ghost btn--sm" data-wact="reopen">완료 취소</button>' : '<button type="button" class="btn btn--primary btn--sm" data-wact="complete">완료 처리</button>')}</span></div>`;
+        <button type="button" class="btn btn--ghost btn--sm" data-wact="close">닫기</button>
+        ${raw(s.key === 'APPROVAL' && s.reapproval ? '<button type="button" class="btn btn--secondary btn--sm" data-wact="confirm">다시 승인 완료</button>' : '')}
+        <button type="button" class="btn btn--primary btn--sm" data-wact="save">저장</button></span></div>`;
+    // 상태 칩 (header): 완료 → menu with 완료 취소
+    const chip = ro || skipped ? '' : completed ? html`<details class="pmenu wd__chip" data-stchip><summary class="chip chip--done">${st === 'review' ? '확인 필요' : '완료'} ▾</summary><div class="pmenu__list" role="menu"><button type="button" role="menuitem" data-wact="reopen">완료 취소</button></div></details>`
+      : html`<span class="chip ${s.has_data ? 'chip--active' : 'chip--muted'} wd__chip" data-stchip>${s.has_data ? '진행 중' : '미시작'}</span>`;
     const nt = slug ? nextTask(s.key) : null;   // P1-1: move on without going back to the list
     const next = !nt ? '' : nt.key ? html`<div class="wd__next"><button type="button" class="link linkbtn" data-wnext="${nt.key}">${nt.label} →</button></div>`
       : html`<div class="wd__next"><a class="link" href="${nt.href}" data-link data-defnav>${nt.label} →</a></div>`;
     return html`<aside class="wdrawer ${open.full ? 'wdrawer--full' : ''} ${WIDE.has(open.key) ? 'wdrawer--wide' : ''}" id="wdrawer" role="dialog" aria-labelledby="wdT">
-      <div class="wd__h"><div class="wd__ht"><b id="wdT">${s.title}</b><small>${PURPOSE[s.key] || s.description}</small></div>
+      <div class="wd__h"><div class="wd__ht"><b id="wdT">${s.title} ${raw(chip)}</b><small>${PURPOSE[s.key] || s.description}</small></div>
         <button type="button" class="wd__ib" id="wd-full" title="${open.full ? '축소' : '확대'}" aria-label="${open.full ? '축소' : '확대'}">${open.full ? '⤡' : '⤢'}</button><button type="button" class="wd__ib" id="wd-close" aria-label="닫기">×</button></div>
       <div class="wd__b">${raw(body)}</div>
       ${raw(foot)}${raw(next)}
@@ -331,7 +395,13 @@ export async function definitionPage(id, slug = '') {
     const v = (sel) => { const x = el.querySelector(sel); return x ? x.value : undefined; };
     el.querySelectorAll('[data-f]').forEach((x) => { d[x.dataset.f] = x.value; });   // single-value fields (goal, project_type, Project Charter free text)
     if (open.key === 'GOALS') { d.success_criteria = [...el.querySelectorAll('[data-item="success_criteria"]')].map((x) => ({ id: x.dataset.id, text: x.value })); }
-    if (open.key === 'SCOPE') for (const key of ['scope_in', 'scope_out']) d[key] = [...el.querySelectorAll(`[data-item="${key}"]`)].map((x) => ({ id: x.dataset.id, text: x.value }));
+    if (open.key === 'SCOPE') {
+      for (const key of ['scope_in', 'scope_out']) d[key] = [...el.querySelectorAll(`[data-item="${key}"]`)].map((x) => ({ id: x.dataset.id, text: x.value }));
+      const e = { ...d.environments, devices: { ...(d.environments || {}).devices }, browsers: { ...(d.environments || {}).browsers } };
+      el.querySelectorAll('[data-envt]').forEach((x) => { e[x.dataset.envt] = x.value; });
+      d.environments = e;
+      el.querySelectorAll('[data-dlname]').forEach((x) => { const k = x.closest('[data-dl]').dataset.dl; const cur = dlEdit.get(k) || {}; const it = dl && dl.items.find((y) => y.key === k); if ((it && it.name !== x.value) || cur.add) dlEdit.set(k, { ...cur, custom_name: x.value }); });
+    }
     if (open.key === 'STAKEHOLDERS') d.stakeholders = [...el.querySelectorAll('tr[data-sh]')].map((tr) => { const o = { id: tr.dataset.sh }; tr.querySelectorAll('[data-shf]').forEach((x) => { o[x.dataset.shf] = x.value; }); return o; });
     if (open.key === 'MILESTONES') d.key_dates = [...el.querySelectorAll('li[data-kd]')].map((li) => { const o = { id: li.dataset.kd }; li.querySelectorAll('[data-kdf]').forEach((x) => { o[x.dataset.kdf] = x.value; }); return o; });
     if (open.key === 'OPERATIONS') { d.operations = { ...d.operations }; el.querySelectorAll('[data-op]').forEach((x) => { d.operations[x.dataset.op] = x.value; }); }
@@ -356,11 +426,11 @@ export async function definitionPage(id, slug = '') {
   const reload = async () => { [g, m] = await Promise.all([api('GET', wsApi(`/${id}`)), api('GET', wsApi(`/${id}/definition`)), loadCharter()]); };
   const err = (e) => { const msg = e.fields ? Object.values(e.fields)[0] : e.message; toast(msg); const st = $('#wd-stat'); if (st) st.textContent = msg; };
 
-  const discardOk = async () => !dirty || confirmDialog({ title: '저장되지 않은 변경이 있습니다.', body: '임시저장하지 않은 내용은 사라집니다. 그대로 닫을까요?', confirm: '닫기' });
-  const openActivity = async (key, { full = false } = {}) => { if (open && open.key === key) return; if (!(await discardOk())) return; d = fresh(); dirty = false; open = { key, full }; setUrl(); draw(); const first = $('#wdrawer .wd__form input, #wdrawer .wd__form textarea, #wdrawer .wd__form select'); if (first) first.focus({ preventScroll: true }); };
+  const discardOk = async () => !dirty || confirmDialog({ title: '저장되지 않은 변경이 있습니다.', body: '저장하지 않은 내용은 사라집니다. 그대로 닫을까요?', confirm: '닫기' });
+  const openActivity = async (key, { full = false } = {}) => { if (open && open.key === key) return; if (!(await discardOk())) return; d = fresh(); dirty = false; dlEdit = new Map(); open = { key, full }; setUrl(); draw(); const first = $('#wdrawer .wd__form input, #wdrawer .wd__form textarea, #wdrawer .wd__form select'); if (first) first.focus({ preventScroll: true }); };
   // browser Back/Forward and the rail/topbar links ask the same question while the drawer holds unsaved input
   if (isCurrent(token)) setLeaveGuard({ dirty: () => dirty, ask: async () => { if (!(await discardOk())) return false; dirty = false; return true; }, href: () => here });
-  const closeDrawer = async () => { if (!(await discardOk())) return; open = null; dirty = false; setUrl(); draw(); };
+  const closeDrawer = async () => { if (!(await discardOk())) return; open = null; dirty = false; dlEdit = new Map(); setUrl(); draw(); };
   /** Another tab = another screen: a new history entry. `withDrawer` adds ?activity= so that task's drawer opens there. */
   const goTask = async (key, { withDrawer = false } = {}) => {
     if (key === 'PROFILE' || (DEFINITION_SLUG[key] || '') === slug) { if (!ro) openActivity(key); return; }
@@ -369,16 +439,31 @@ export async function definitionPage(id, slug = '') {
   };
 
   /* ---------- actions ---------- */
+  /** 저장 (batch7 #10): save; then, when the section now meets its minimum, complete it (or re-stamp a completed one) in the same click.
+   * 착수 승인 once completed is only saved — a change there stays '확인 필요' until 다시 승인 완료 (re-approval detection kept). */
   const save = async () => {
-    collect(); const st = $('#wd-stat'); if (st) st.textContent = '저장 중…';
-    try { m = await api('PUT', wsApi(`/${id}/definition`), sectionBody(open.key)); d = { ...d, ...fresh() }; dirty = false; await reload(); refreshView(); const prof = open.key === 'PROFILE'; const s2 = $('#wd-stat'); if (s2) s2.textContent = prof ? '저장됨' : '임시저장됨'; toast(prof ? '프로젝트 기본 특성을 저장했습니다.' : '임시저장했습니다.'); }
-    catch (e) { err(e); }
+    collect(); const key = open.key; const st = $('#wd-stat'); if (st) st.textContent = '저장 중…';
+    try {
+      if (key === 'SCOPE' && dl && dlEdit.size) { dl = await api('PUT', wsApi(`/${id}/deliverables`), { items: dlChanges() }); dlEdit = new Map(); }
+      m = await api('PUT', wsApi(`/${id}/definition`), sectionBody(key));
+      if (key === 'PROFILE') { d = { ...d, ...fresh() }; dirty = false; await reload(); refreshView(); const s2 = $('#wd-stat'); if (s2) s2.textContent = '저장됨'; toast('프로젝트 기본 특성을 저장했습니다.'); return; }
+      const s1 = sec(key); dirty = false;
+      const auto = s1.ready && (s1.status === 'TODO' ? 'complete' : s1.status === 'COMPLETED' && s1.changed_after_completion && key !== 'APPROVAL' ? 'confirm' : null);
+      if (auto) { const r = await api('POST', wsApi(`/${id}/definition/sections/${key}/${auto}`), {}); g = r.guide; delete r.guide; m = r; }
+      await loadCharter().catch(() => {});
+      const s2 = sec(key);
+      if (auto === 'complete') { open = null; setUrl(); draw(); toast(DONE_TOAST[key] || `${josa(s2.title, '을')} 완료했습니다.`); return; }
+      d = { ...d, ...fresh() }; drawDrawer(); refreshView();
+      const msg = s2.status === 'COMPLETED' ? (s2.reapproval ? '저장했습니다 · 승인 후 바뀐 내용은 고객에게 다시 확인받으세요.' : '저장했습니다.') : s2.status === 'SKIPPED' ? '저장했습니다.' : `저장했습니다 · ${s2.missing[0] || ''}`.replace(/ · $/, '');
+      const s3 = $('#wd-stat'); if (s3) s3.textContent = '저장됨'; toast(msg);
+    } catch (e) { err(e); }
   };
   const act = async (action) => {
     const key = open.key;
     if (action === 'skip') {
       if (!(await confirmDialog({ title: '이 업무를 건너뛸까요?', body: '이번 프로젝트에서는 이 업무를 수행하지 않는 것으로 기록됩니다. 나중에 다시 시작할 수 있습니다.', confirm: '건너뛰기' }))) return;
     }
+    if (action === 'close') return closeDrawer();
     if (action === 'reopen' && !(await confirmDialog({ title: '완료를 취소할까요?', body: '작성한 내용은 그대로 남고, 이 업무만 다시 "진행 중"으로 바뀝니다.', confirm: '완료 취소' }))) return;
     collect();
     const wd = $('#wdrawer');
@@ -387,7 +472,7 @@ export async function definitionPage(id, slug = '') {
     try {
       const r = await api('POST', wsApi(`/${id}/definition/sections/${key}/${action}`), body);
       g = r.guide; delete r.guide; m = r; dirty = false; await loadCharter().catch(() => {});
-      if (action === 'complete' || action === 'confirm' || action === 'skip') { open = null; setUrl(); draw(); toast(action === 'skip' ? '이 업무를 건너뛰었습니다.' : '완료 처리했습니다.'); }
+      if (action === 'complete' || action === 'confirm' || action === 'skip') { open = null; setUrl(); draw(); toast(action === 'skip' ? '이 업무를 건너뛰었습니다.' : action === 'confirm' ? '다시 승인받은 내용으로 확인했습니다.' : '완료 처리했습니다.'); }
       else { d = fresh(); draw(); toast(action === 'resume' ? '업무를 다시 시작합니다.' : '완료를 취소했습니다.'); }
     } catch (e) { err(e); }
   };
@@ -418,7 +503,7 @@ export async function definitionPage(id, slug = '') {
       const back = $('#xl-back', el); if (back) back.onclick = () => { rows = null; render(); };
       const commit = $('#xl-commit', el); if (commit) commit.onclick = () => {
         collect(); const add = rows.filter((r) => r.ok).map((r) => ({ id: uid(), org_type: r.values.org_type, org: r.values.org, department: r.values.department, name: r.values.name, role: r.values.role, area: r.values.area, note: r.values.note }));
-        d.stakeholders = [...d.stakeholders.filter((x) => x.name || x.org || x.department), ...add]; markDirty(); done(); drawDrawer(); toast(`${add.length}명을 목록에 추가했습니다. 임시저장 또는 완료 처리로 저장하세요.`);
+        d.stakeholders = [...d.stakeholders.filter((x) => x.name || x.org || x.department), ...add]; markDirty(); done(); drawDrawer(); toast(`${add.length}명을 목록에 추가했습니다. 저장을 누르면 반영됩니다.`);
       };
     };
     const upload = async (file) => {
@@ -481,6 +566,13 @@ export async function definitionPage(id, slug = '') {
     bindPlanMenu(el, p.id);
     const ka = $('#kd-add'); if (ka) ka.onclick = () => { collect(); d.key_dates.push({ id: uid(), title: '', date: '' }); markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll('li[data-kd] [data-kdf="date"]')].pop(); if (last) last.focus(); };
     el.querySelectorAll('[data-kddel]').forEach((b) => b.onclick = () => { collect(); d.key_dates = d.key_dates.filter((x) => x.id !== b.dataset.kddel); markDirty(); drawDrawer(); });
+    // 적용 환경: 지원 / 미지원; pressing the chosen one again clears it
+    el.querySelectorAll('[data-env]').forEach((b) => b.onclick = () => { collect(); const [g2, k] = b.dataset.env.split('.'); const cur = (d.environments[g2] || {})[k]; const grp = { ...d.environments[g2] }; if (cur === b.dataset.v) delete grp[k]; else grp[k] = b.dataset.v; d.environments = { ...d.environments, [g2]: grp }; markDirty(); drawDrawer(); });
+    el.querySelectorAll('[data-dltab]').forEach((b) => b.onclick = () => { collect(); dlTab = b.dataset.dltab; drawDrawer(); });
+    el.querySelectorAll('[data-dlv]').forEach((b) => b.onclick = () => { collect(); const k = b.closest('[data-dl]').dataset.dl; dlEdit.set(k, { ...(dlEdit.get(k) || {}), level: b.dataset.dlv }); markDirty(); drawDrawer(); });
+    el.querySelectorAll('[data-dldel]').forEach((b) => b.onclick = () => { collect(); const k = b.dataset.dldel; const cur = dlEdit.get(k) || {}; if (cur.add) dlEdit.delete(k); else dlEdit.set(k, { ...cur, remove: true }); markDirty(); drawDrawer(); });
+    const dla = $('#dl-add'); if (dla) dla.onclick = () => { collect(); const k = `new-${uid()}`; dlEdit.set(k, { add: true, custom_name: '', phase_key: $('#dl-add-ph').value, level: 'REQUIRED', name: '', tier: null }); markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll('[data-dlname]')].pop(); if (last) last.focus(); };
+    el.querySelectorAll('[data-stchip] [data-wact]').forEach((b) => b.addEventListener('click', () => { const dd = b.closest('details'); if (dd) dd.open = false; }));
     el.querySelectorAll('[data-item]').forEach((x) => {
       x.onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); const b = el.querySelector(`[data-add="${x.dataset.item}"]`); if (b) b.click(); } };
       x.onpaste = (e) => {

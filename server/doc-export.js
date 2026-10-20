@@ -52,6 +52,7 @@ export function approvalLines(a, { stakeholders = [], author = '' } = {}) {
   if (done) L.push('', `승인 방법: ${a.method_label || '-'} · 근거: ${a.evidence || '-'}`);
   if (a.status === 'REAPPROVAL') L.push('', '**승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.**');
   if (a.conditions) L.push('', '**조건 / 보완 요청**', textBlock(a.conditions));
-  if (!done && a.bypass) L.push('', `**미승인 — 사유: ${a.bypass.reason}** (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})`);
+  // 01 착수 승인 is 권장 since batch7 #5: the gate writes the fixed reason '승인 없이 진행' instead of asking one
+  if (!done && a.bypass) L.push('', `**미승인 — ${a.bypass.reason === '승인 없이 진행' ? '승인 없이 진행' : `사유: ${a.bypass.reason}`}** (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})`);
   return L;
 }

@@ -30,8 +30,8 @@ export async function settingsPage(main = $('#main')) {
   // Account lifecycle: login methods, password state, what would block 회원 탈퇴.
   let credits = null; try { credits = (await api('GET', `/api/workspaces/${wid}/credits/summary`)).credits; } catch { credits = null; }
   const creditsCard = () => !credits ? '' : html`<div class="panel" style="margin-top:20px" id="ai-credits"><div class="panel__h">AI 크레딧<a class="btn btn--secondary btn--sm" href="/app/settings/credits" data-link>${credits.payments_enabled === false ? '자세히' : '자세히 · 충전'}</a></div><div class="panel__b">
-    <p style="margin:0"><b class="${credits.low ? 'is-warn' : ''}">잔액 ${credits.balance.toLocaleString('ko-KR')} 크레딧 (${won(credits.balance_krw)})</b> <small class="dim">구매 ${credits.purchased_remaining.toLocaleString('ko-KR')} · 무료 ${credits.free_remaining.toLocaleString('ko-KR')}</small></p>
-    <p class="hint" style="margin-top:6px">이번 달 사용 ${credits.this_month.used.toLocaleString('ko-KR')} 크레딧 (${won(credits.this_month.krw)}) · 1 크레딧 = ${won(credits.credit_price_krw)} (부가세 포함) · 사용 내역은 모든 멤버가 볼 수 있습니다.</p></div></div>`;
+    <p style="margin:0"><b class="${credits.low ? 'is-warn' : ''}">잔액 ${credits.balance.toLocaleString('ko-KR')} 크레딧</b> <small class="dim">구매 ${credits.purchased_remaining.toLocaleString('ko-KR')} · 무료 ${credits.free_remaining.toLocaleString('ko-KR')}</small></p>
+    <p class="hint" style="margin-top:6px">이번 달 사용 ${credits.this_month.used.toLocaleString('ko-KR')} 크레딧 · 사용 내역은 모든 멤버가 볼 수 있습니다.</p></div></div>`;
   // 샘플 프로젝트 (OWNER / ADMIN): how many of the 3 examples this workspace has — 추가 brings back the missing ones, 삭제 removes all
   let samples = 0; const loadSamples = async () => { try { samples = (await api('GET', `/api/workspaces/${wid}/projects?include_archived=1`)).projects.filter((p) => p.sample_key).length; } catch { samples = 0; } };
   await loadSamples();
@@ -54,13 +54,19 @@ export async function settingsPage(main = $('#main')) {
     const canCancel = billing.can_manage && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && !s.cancel_at_period_end;
     const actions = !billing.can_manage ? '<p class="hint" style="margin-top:12px">플랜 변경·해지는 워크스페이스 소유자만 할 수 있습니다.</p>'
       : html`${raw(co.can_purchase && billing.provider_available ? buyForm() : '')}<div class="actions" style="margin-top:14px">${raw(canCancel && s.auto_renew ? '<button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button>' : '')}</div>
-        ${raw(billing.provider_available ? '' : '<p class="hint">결제 기능 준비 중입니다. 운영자에게 문의해 주세요.</p>')}`;
+`;
     // v1: payments off (PAYMENTS_ENABLED) → no purchase / upgrade button, one line instead
     if (billing.payments_enabled === false) return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip chip--active">${billing.plan === 'EARLY' ? '얼리 액세스' : billing.plan_label}</span></div><div class="panel__b">
-      <p class="cr-early" id="free-line">초기 고객은 무료로 이용합니다.</p>${raw(billing.plan === 'EARLY' ? '' : usageBars(billing.usage))}${raw(lines)}${raw(canCancel && s.auto_renew ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button></div>' : '')}</div></div>`;
+      <p class="cr-early" id="free-line">초기 고객은 무료로 이용합니다.</p>${raw(planLimits())}${raw(billing.plan === 'EARLY' ? '' : usageBars(billing.usage))}${raw(lines)}${raw(canCancel && s.auto_renew ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="bill-cancel">구독 해지</button></div>' : '')}</div></div>`;
     const early = billing.plan === 'EARLY' ? html`<p class="cr-early" id="early-line">RELAI 전체 기능을 무료로 씁니다. AI는 쓴 만큼만 크레딧으로 냅니다. 이후에는 Team 플랜(${won(PLAN_TEAM_MONTHLY)}/월, 부가세 별도)이 필요하며, 결제하지 않으면 Free 한도가 적용됩니다 (데이터는 삭제되지 않습니다).</p>` : '';
     return html`<div class="panel" style="margin-top:20px" id="billing"><div class="panel__h">플랜 · 결제 <span class="chip ${billing.plan === 'FREE' ? 'chip--muted' : 'chip--active'}">${billing.plan === 'EARLY' ? `얼리 액세스 · ${fmtDay(billing.early_access_until)}까지` : billing.plan_label}</span></div><div class="panel__b">
       ${raw(early)}${raw(billing.plan === 'EARLY' ? '' : usageBars(billing.usage))}${raw(lines)}${raw(billing.plan === 'EARLY' && !s ? '' : actions)}</div></div>`;
+  };
+  /** 현재 플랜 · 한도 (batch7 #24): EARLY = '무제한 · YYYY-MM-DD까지'; otherwise one line '프로젝트 1/1 · 요구사항 23/50 …' above the bars. */
+  const planLimits = () => {
+    if (billing.plan === 'EARLY') return html`<p class="plan-lim" id="plan-limits">현재 플랜 · 한도: <b>무제한</b>${raw(billing.early_access_until ? html` · ${fmtDay(billing.early_access_until)}까지` : '')}</p>`;
+    const u = ((billing.usage && billing.usage.dims) || []).filter((x) => x.limit !== null && x.limit !== undefined);
+    return u.length ? html`<p class="plan-lim" id="plan-limits">현재 플랜 · 한도: ${u.map((x) => `${x.label} ${x.used}/${x.limit}`).join(' · ')}</p>` : '';
   };
   /** Purchase form: cycle × users (owner included) → server quote (VAT excluded prices, founding discount) → NicePay payment window. */
   const buyForm = () => {

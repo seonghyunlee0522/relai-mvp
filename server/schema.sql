@@ -1395,15 +1395,15 @@ CREATE TABLE IF NOT EXISTS promotions (
   updated_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_promotions_active ON promotions(active, sort_order);
--- Seed (once): the launch offer. Runs only while migration 47 is not yet recorded, so an operator's later edits or deletions stay.
+-- Seed (once): the launch offer (copy without ₩ since batch7 #7; migration 49 rewrites unedited older rows). Runs only while migration 47 is not yet recorded, so an operator's later edits or deletions stay.
 INSERT INTO promotions (id, title, body, badge, link_url, link_label, placements, sort_order)
 SELECT v.id, v.title, v.body, v.badge, v.link_url, v.link_label, v.placements::text[], v.sort_order FROM (VALUES
   ('promo-early-access', '12개월 동안 전체 기능 무료', '가입한 날부터 12개월 동안 RELAI의 모든 기능을 요금 없이 씁니다.', '얼리 액세스', NULL, NULL, '{signup,landing}', 10),
-  ('promo-ai-credits', '가입하면 AI 크레딧 500 무료', '₩5,000 상당. 요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.', 'AI 크레딧', NULL, NULL, '{signup,landing}', 20),
-  ('promo-ai-payg', '이후 AI는 쓴 만큼만', '1 크레딧 = ₩10 (부가세 포함). 월 기본료 없이 쓴 만큼만 냅니다.', '이후 AI', NULL, NULL, '{signup,landing}', 30),
-  ('promo-login', '지금 가입하면 12개월 무료', 'AI 크레딧 500 (₩5,000)도 함께 드립니다.', '얼리 액세스', '/signup', '무료로 시작하기', '{login}', 40),
+  ('promo-ai-credits', '가입하면 AI 크레딧 500 무료', '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.', 'AI 크레딧', NULL, NULL, '{signup,landing}', 20),
+  ('promo-ai-payg', '이후 AI는 쓴 만큼만', '월 기본료 없이 쓴 만큼만 크레딧이 차감됩니다.', '이후 AI', NULL, NULL, '{signup,landing}', 30),
+  ('promo-login', '지금 가입하면 12개월 무료', 'AI 크레딧 500도 함께 드립니다.', '얼리 액세스', '/signup', '무료로 시작하기', '{login}', 40),
   ('promo-home', '얼리 액세스 {until}까지 무료', '', NULL, NULL, NULL, '{home}', 50),
-  ('promo-credits', '{until}까지 RELAI 전체 기능 무료', 'AI는 쓴 만큼만 크레딧으로 냅니다 (1 크레딧 = ₩10).', '얼리 액세스', NULL, NULL, '{credits}', 60)
+  ('promo-credits', '{until}까지 RELAI 전체 기능 무료', 'AI는 쓴 만큼만 크레딧이 차감됩니다.', '얼리 액세스', NULL, NULL, '{credits}', 60)
 ) AS v(id, title, body, badge, link_url, link_label, placements, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version >= 47)
 ON CONFLICT (id) DO NOTHING;
@@ -1426,3 +1426,57 @@ CREATE TABLE IF NOT EXISTS feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status, created_at DESC);
+/* batch7 T2 (migration 49): 01 '수행 범위 · 적용 환경' + 산출물 카탈로그. Additive only (previews share the production DB).
+ * project_definitions.environments: {devices:{PC_WEB:'SUPPORTED'|'UNSUPPORTED',…}, browsers:{…}, os, min_resolution, languages} (definition.js ENV_*).
+ * deliverable_catalog: the global standard list (관리자 › 산출물 목록). project_deliverables: only what a project changed; an unselected
+ * catalog item reads as its default_level, so a new catalog item shows in every project at once (server/deliverables.js). */
+ALTER TABLE project_definitions ADD COLUMN IF NOT EXISTS environments TEXT NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS deliverable_catalog (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  phase_key TEXT NOT NULL,                       -- the 7 lifecycle phase keys
+  tier TEXT NOT NULL CHECK (tier IN ('BASIC','ADVANCED')),
+  default_level TEXT NOT NULL DEFAULT 'OPTIONAL' CHECK (default_level IN ('REQUIRED','OPTIONAL','EXCLUDED')),
+  description TEXT DEFAULT '',
+  sort INTEGER NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS project_deliverables (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  catalog_id TEXT REFERENCES deliverable_catalog(id),
+  custom_name TEXT,
+  phase_key TEXT NOT NULL,
+  level TEXT NOT NULL CHECK (level IN ('REQUIRED','OPTIONAL','EXCLUDED')),
+  submitted_at DATE,
+  note TEXT DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CHECK (catalog_id IS NOT NULL OR custom_name IS NOT NULL)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_project_deliverable ON project_deliverables(project_id, catalog_id) WHERE catalog_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_project_deliverables_project ON project_deliverables(project_id);
+-- Seed (once): the standard list. Runs only while migration 49 is not yet recorded, so the operator's later edits stay.
+INSERT INTO deliverable_catalog (id, code, name, phase_key, tier, default_level, sort)
+SELECT 'dlv-' || lower(v.code), v.code, v.name, v.phase_key, v.tier, CASE WHEN v.tier = 'BASIC' THEN 'REQUIRED' ELSE 'EXCLUDED' END, v.sort FROM (VALUES
+  ('PLAN', '사업수행계획서', 'INITIATION', 'BASIC', 10), ('KICKOFF_REPORT', '착수보고서', 'INITIATION', 'BASIC', 20),
+  ('QUALITY_PLAN', '품질관리계획서', 'INITIATION', 'ADVANCED', 30), ('RISK_PLAN', '위험관리계획서', 'INITIATION', 'ADVANCED', 40), ('COMM_PLAN', '의사소통관리계획서', 'INITIATION', 'ADVANCED', 50),
+  ('REQ_SPEC', '요구사항 정의서', 'REQUIREMENTS', 'BASIC', 110),
+  ('REQ_TRACE', '요구사항 추적표', 'REQUIREMENTS', 'ADVANCED', 120), ('ASIS_ANALYSIS', '현행 업무 분석서', 'REQUIREMENTS', 'ADVANCED', 130),
+  ('UI_DESIGN', '화면 설계서', 'ANALYSIS_DESIGN', 'BASIC', 210), ('WBS_PLAN', 'WBS·일정계획서', 'ANALYSIS_DESIGN', 'BASIC', 220),
+  ('ARCH_DESIGN', '아키텍처 설계서', 'ANALYSIS_DESIGN', 'ADVANCED', 230), ('DB_DESIGN', 'DB 설계서(ERD)', 'ANALYSIS_DESIGN', 'ADVANCED', 240),
+  ('IF_SPEC', '인터페이스 정의서', 'ANALYSIS_DESIGN', 'ADVANCED', 250), ('CODE_SPEC', '코드 정의서', 'ANALYSIS_DESIGN', 'ADVANCED', 260),
+  ('SOURCE', '소스코드·배포본', 'DEVELOPMENT', 'BASIC', 310),
+  ('PROGRAM_LIST', '프로그램 목록', 'DEVELOPMENT', 'ADVANCED', 320), ('UNIT_TEST', '단위 테스트 결과서', 'DEVELOPMENT', 'ADVANCED', 330),
+  ('IT_RESULT', '통합 테스트 결과서', 'TESTING', 'BASIC', 410), ('UAT_RESULT', '사용자 인수 테스트 결과서', 'TESTING', 'BASIC', 420),
+  ('TEST_PLAN', '테스트 계획서', 'TESTING', 'ADVANCED', 430), ('PERF_TEST', '성능 테스트 결과서', 'TESTING', 'ADVANCED', 440), ('SEC_CHECK', '보안 점검 결과서', 'TESTING', 'ADVANCED', 450),
+  ('USER_MANUAL', '사용자 매뉴얼', 'TRANSITION_GO_LIVE', 'BASIC', 510), ('OPEN_PLAN', '오픈(전환) 계획서', 'TRANSITION_GO_LIVE', 'BASIC', 520),
+  ('OPS_MANUAL', '운영자 매뉴얼', 'TRANSITION_GO_LIVE', 'ADVANCED', 530), ('MIGRATION_RESULT', '데이터 이관 결과서', 'TRANSITION_GO_LIVE', 'ADVANCED', 540), ('TRAINING_RESULT', '교육 결과서', 'TRANSITION_GO_LIVE', 'ADVANCED', 550),
+  ('COMPLETION_REPORT', '완료보고서', 'OPERATIONS', 'BASIC', 610), ('ACCEPTANCE_CERT', '검수확인서', 'OPERATIONS', 'BASIC', 620),
+  ('WARRANTY_PLAN', '하자보수 계획서', 'OPERATIONS', 'ADVANCED', 630), ('LESSONS', '교훈 정리서', 'OPERATIONS', 'ADVANCED', 640)
+) AS v(code, name, phase_key, tier, sort)
+WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version >= 49)
+ON CONFLICT (code) DO NOTHING;

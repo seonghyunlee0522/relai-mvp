@@ -41,7 +41,7 @@ function initiation(key, ctx) {
   const go = (label) => act(label, u);
   if (!sec) return none('프로젝트 정의에서 작성합니다.', go('입력하기 →'));
   if (sec.status === 'SKIPPED') return { derived: 'SKIPPED', text: '이번 프로젝트에서는 수행하지 않음', cta: null };
-  if (sec.status === 'COMPLETED' && sec.reapproval) return prog(REAPPROVAL_TEXT, go('다시 승인받기 →'), { crit: true, reopen: true });   // red 확인 필요 (spec US-2)
+  if (sec.status === 'COMPLETED' && sec.reapproval) return prog(REAPPROVAL_TEXT, go('다시 승인받기 →'), { reopen: true });   // 진행 중, not red: 착수 승인 is 권장 (batch7 #5)
   if (sec.status === 'COMPLETED' && sec.changed_after_completion) return prog(`${sec.summary || '작성됨'} · 완료 후 수정되어 다시 확인이 필요합니다.`, go('다시 확인 →'));
   if (sec.status === 'COMPLETED') return ok(sec.summary || '작성 완료', null);
   if (sec.has_data || sec.ready) return prog(sec.summary || '작성 중', go('계속 작성 →'));

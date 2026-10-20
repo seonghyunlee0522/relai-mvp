@@ -14,18 +14,19 @@ export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI로 요구사항 추�
 export const CONF = { HIGH: ['높음', 'is-good'], MEDIUM: ['보통', 'is-warn'], LOW: ['낮음', 'is-crit'] };
 export const confChip = (c) => html`<span class="hchip hchip--sm ${(CONF[c] || CONF.LOW)[1]}" title="AI 확신도">${(CONF[c] || CONF.LOW)[0]}</span>`;
 
-/** "예상 30 크레딧 (₩300) · 잔액 4,230 크레딧" — price, ₩ rate and balance come from the server (feature config + account), never hard-coded here.
+/** "예상 30 크레딧 · 잔액 4,230 크레딧" — price and balance come from the server (feature config + account), never hard-coded here.
+ * Credits are a usage unit on every user screen: no won amount (batch7 #7).
  * The click is the consent (AI-credits-only billing §5). Amber below the low-balance threshold; at 0 / below the price the button is disabled with [크레딧 충전]. */
 export const CREDITS_URL = '/app/settings/credits';
 const fmt = (v) => Number(v).toLocaleString('ko-KR');
 export const creditLine = (st, feature) => {
   if (!st?.enabled) return '';
-  const cost = st.costs?.[feature]; const bal = st.credits?.available; const rate = st.credit_price_krw || 10;
+  const cost = st.costs?.[feature]; const bal = st.credits?.available;
   const short = typeof cost === 'number' && typeof bal === 'number' && bal < cost;
   const low = !short && typeof bal === 'number' && typeof st.low_balance_threshold === 'number' && bal < st.low_balance_threshold;
   const pay = st.payments_enabled !== false;   // v1: payments off → no 충전 link
   if (short) return html`<span class="ai-credit is-short" title="AI 사용량은 워크스페이스 크레딧으로 집계됩니다">크레딧이 부족합니다 (필요 <b>${fmt(cost)}</b> · 잔액 <b>${fmt(bal)}</b>)${raw(pay ? html` · <a href="${CREDITS_URL}" data-link>크레딧 충전</a>` : '')}</span>`;
-  return html`<span class="ai-credit ${low ? 'is-low' : ''}" title="실행하면 이 크레딧만 차감됩니다. 실패하면 차감하지 않습니다.">예상 <b>${typeof cost === 'number' ? fmt(cost) : '-'}</b> 크레딧 (₩${typeof cost === 'number' ? fmt(cost * rate) : '-'}) · 잔액 <b>${typeof bal === 'number' ? fmt(bal) : '-'}</b> 크레딧${raw(low && pay ? ` · <a href="${CREDITS_URL}" data-link>충전</a>` : '')}</span>`;
+  return html`<span class="ai-credit ${low ? 'is-low' : ''}" title="실행하면 이 크레딧만 차감됩니다. 실패하면 차감하지 않습니다.">예상 <b>${typeof cost === 'number' ? fmt(cost) : '-'}</b> 크레딧 · 잔액 <b>${typeof bal === 'number' ? fmt(bal) : '-'}</b> 크레딧${raw(low && pay ? ` · <a href="${CREDITS_URL}" data-link>충전</a>` : '')}</span>`;
 };
 /** Kept for older imports: credits are bought on the AI 크레딧 page. */
 export const UPGRADE_URL = CREDITS_URL;
@@ -67,11 +68,11 @@ export function aiDialog({ title, subtitle = '', feature, status, size = 'lg' })
   };
 }
 
-/** " · 30 크레딧 (₩300) 사용 · 잔액 4,230" after a run; also refreshes the dialog's header balance. */
+/** " · 30 크레딧 사용 · 잔액 4,230" after a run; also refreshes the dialog's header balance. */
 export const runLine = (run, d) => {
   if (!run) return '';
   d?.setBalance?.(run.balance);
-  return html`<small class="dim"> · ${fmt(run.credit_cost)} 크레딧 (₩${fmt(run.credit_cost * 10)}) 사용 · 잔액 ${fmt(run.balance)}</small>`;
+  return html`<small class="dim"> · ${fmt(run.credit_cost)} 크레딧 사용 · 잔액 ${fmt(run.balance)}</small>`;
 };
 /** Standard "no result" / warnings blocks. */
 export const warningsHtml = (w) => (w && w.length ? html`<ul class="aid__warn">${raw(w.map((x) => html`<li>${x}</li>`).join(''))}</ul>` : '');

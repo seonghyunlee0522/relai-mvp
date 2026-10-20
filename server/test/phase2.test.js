@@ -161,7 +161,7 @@ test('US-2 markdown: revision row per state, tables parse, empty lists keep the 
   const c = { profile: { name: 'P', client: 'C' }, goals: '목표 1\n목표 2', successCriteria: '', scope: { inScope: '- A\n- B', outOfScope: '' }, stakeholders: [{ category: 'OWN', name: '김피엠', role: 'PM' }] };
   const draft = buildReqDocMarkdown(c, [], { status: 'TODO', approval: { date: '' }, approver: null, bypass: null }, { workspaceName: 'W', author: '홍', today: '2026-10-15' });
   assert.equal(draft.version, 'v0.9 (초안)'); assert.equal(draft.footer, '승인 전 초안'); assert.equal(draft.fileVersion, 'v0.9');
-  assert.match(draft.markdown, /\| v0\.9 \| 2026-10-15 \| 초안 \| 홍 \|/); assert.match(draft.markdown, /\| 프로젝트 목표 \| 목표 1 \|/); assert.match(draft.markdown, /\| 수행 범위 \| A, B \|/);
+  assert.match(draft.markdown, /\| v0\.9 \| 2026-10-15 \| 초안 \| 홍 \|/); assert.match(draft.markdown, /\| 프로젝트 목표 \| 목표 1 \|/); assert.match(draft.markdown, /\| 환경·조건 \| A, B \|/); assert.match(draft.markdown, /\| 적용 환경 \| 작성되지 않음 \|/);
   assert.ok(draft.markdown.includes(NO_IN_SCOPE)); assert.ok(draft.markdown.includes(NO_OUT_OF_SCOPE));
   assert.match(draft.markdown, /\| 수행사 \| 김피엠 \| PM \|/);
   const done = buildReqDocMarkdown(c, [{ id: '1', display_id: 'REQ-001', sequence_number: 1, title: 'T', type: 'SECURITY', priority: 'HIGH', scope: 'IN_SCOPE', criteria: [] }], { status: 'COMPLETED', approval: { date: '2026-01-10', evidence: 'e' }, approver: { name: '이', title: '차장' }, method_label: '이메일 회신', bypass: null }, { workspaceName: 'W', author: '홍', today: '2026-10-15' });
@@ -217,8 +217,8 @@ test('US-4/5 activities: CONFIRM → 승인 기록, INTERFACE 권장 by traits (
 test('US-4(5) 범위 확정 guidance shows the Charter 제외 범위 (hidden when empty)', () => {
   const base = { project: { id: 'p1', workspace_id: 'w1', current_phase: 'REQUIREMENTS' }, phase: { phase_key: 'REQUIREMENTS', name: '요구사항 정의', sequence: 2 }, next_phase: null, stats: stats({ total: 3, scope_undecided: 2, type_unspecified: 0 }) };
   let r = projectGuidance({ ...base, definition: { scope_out: ['모바일 앱', 'OCR'] } });
-  assert.equal(r.rule, 'REQ_SCOPE'); assert.match(r.description, /착수 때 제외하기로 한 것: 모바일 앱, OCR\. 여기에 해당하는 요구사항은 '범위 외'로 두세요\./);
-  r = projectGuidance({ ...base, definition: { scope_out: [] } }); assert.ok(!/착수 때 제외/.test(r.description));
+  assert.equal(r.rule, 'REQ_SCOPE'); assert.match(r.description, /착수 때 정한 제외 환경·조건: 모바일 앱, OCR\. 이 조건에만 해당하는 요구사항은 '범위 외'로 두세요\./);
+  r = projectGuidance({ ...base, definition: { scope_out: [] } }); assert.ok(!/착수 때 정한 제외/.test(r.description));
 });
 
 test('US-4(6) Home: WBS 미연결 is neither 확인 필요 nor Blocker during 01·02, back from 03', async () => {

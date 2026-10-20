@@ -38,7 +38,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
       sub: document.querySelector('.auth__form .sub')?.textContent || '', mobile: getComputedStyle(document.querySelector('.sell-m')).display };
   });
   check('signup panel: value headline + 3 benefits + product visual + trust line', su.side && /끝까지/.test(su.h2) && su.benefits === 3 && su.shot && /카드 등록 없이/.test(su.trust), JSON.stringify(su));
-  check('signup pricing cards: 12개월 무료 · 500 크레딧 (₩5,000) · 1 크레딧 = ₩10', su.cards.length === 3 && /12개월/.test(su.cards[0]) && /500/.test(su.cards[1]) && /₩5,000/.test(su.cards[1]) && /1 크레딧 = ₩10/.test(su.cards[2]), JSON.stringify(su.cards));
+  check('signup pricing cards: 12개월 무료 · 500 크레딧 · 쓴 만큼만 (no ₩, batch7 #7)', su.cards.length === 3 && /12개월/.test(su.cards[0]) && /500/.test(su.cards[1]) && /쓴 만큼만/.test(su.cards[2]) && !su.cards.some((c) => /₩/.test(c)), JSON.stringify(su.cards));
   check('signup submit is right-aligned on PC (not full width)', su.btnRight <= 1 && !su.btnFull, JSON.stringify(su));
   check('offer text left the page copy (lives in the promo component)', !/AI 크레딧 500/.test(su.sub) && su.mobile === 'none', su.sub);
   await page.screenshot({ path: `${SHOTS}/signup-1440.png`, fullPage: true });
@@ -62,7 +62,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
 
   /* ---------- landing pricing: server-rendered cards ---------- */
   const land = await (await page.request.get(`${BASE}/`)).text();
-  check('landing #early-access: 3 promo cards rendered by the server, no plain-text offer line', (land.match(/class="promo-card"/g) || []).length === 3 && /1 크레딧 = ₩10/.test(land) && !/pricing__offer/.test(land));
+  check('landing #early-access: 3 promo cards rendered by the server, no plain-text offer line', (land.match(/class="promo-card"/g) || []).length === 3 && !/1 크레딧 = ₩10/.test(land) && !/pricing__offer/.test(land));
 
   /* ---------- first-run guide: real signup in the browser → tour opens once ---------- */
   const fresh = await newPage(PC);
@@ -121,7 +121,7 @@ const sql = (q) => execFileSync('psql', [process.env.DATABASE_URL, '-tAc', q]).t
   await fresh.screenshot({ path: `${SHOTS}/credits-1440.png` });
   await fresh.goto(`${BASE}/app`); await loaded(fresh); await fresh.waitForSelector('.home__promo .promo-line', { timeout: 8000 }).catch(() => {});
   const hl = await fresh.textContent('#home-credits').catch(() => '');
-  check('Home: AI 크레딧 500 (₩5,000) 무료 제공 · 얼리 액세스 <date>까지 무료 (from the home promo)', /AI 크레딧 500 \(₩5,000\) 무료 제공/.test(hl) && /얼리 액세스 \d{4}\.\d{2}\.\d{2}까지 무료/.test(hl), hl);
+  check('Home: AI 크레딧 500 무료 제공 (no ₩) · 얼리 액세스 <date>까지 무료 (from the home promo)', /AI 크레딧 500 무료 제공/.test(hl) && !/₩/.test(hl) && /얼리 액세스 \d{4}\.\d{2}\.\d{2}까지 무료/.test(hl), hl);
   const phc = await newPage(PHONE); await phc.context().addCookies(await fresh.context().cookies());
   await phc.goto(`${BASE}/app/settings/credits`); await loaded(phc); await phc.waitForTimeout(600);
   await phc.screenshot({ path: `${SHOTS}/credits-390.png`, fullPage: true });
