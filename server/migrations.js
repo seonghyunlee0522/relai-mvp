@@ -221,6 +221,11 @@ export const migrations = [
     await db.run('ALTER TABLE service_orders DROP CONSTRAINT IF EXISTS service_orders_status_check');
     await db.run(`ALTER TABLE service_orders ADD CONSTRAINT service_orders_status_check CHECK (status IN ('PENDING','APPROVING','PAID','FAILED','REFUNDED'))`);
   } },
+  { version: 57, name: "Pricing v3 T1: subscriptions.plan accepts FREE/PRO/TEAM/ENTERPRISE; subscriptions extra_users / extra_projects / project_limit / price_version / renewal_amount / retry_count / over_limit_since; billing_orders kinds ADDON / UPGRADE / CREDIT_TOPUP + addon_* / period_* / client_key / refund_tid_seq / price_version (schema.sql, additive). Paid rows bought before v3 are marked price_version 'v2' so they keep what they bought until their period ends; nothing else changes", async up(db) {
+    await db.run(`UPDATE subscriptions SET price_version = 'v2' WHERE price_version IS NULL AND plan <> 'FREE'`);
+    await db.run(`UPDATE billing_orders SET price_version = 'v2' WHERE price_version IS NULL AND kind IN ('ONE_TIME','RECURRING_FIRST','RECURRING_RENEWAL')`);
+  } },
+  { version: 61, name: 'Pricing v3 T1: idx_projects_ws_active (active = DRAFT/ACTIVE/ON_HOLD, samples excluded; schema.sql, index only)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

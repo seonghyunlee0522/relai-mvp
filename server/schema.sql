@@ -1158,7 +1158,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_wbs_plans_project ON ai_wbs_plans(project_id, 
 CREATE TABLE IF NOT EXISTS subscriptions (
   id                       TEXT PRIMARY KEY,
   workspace_id             TEXT NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,   -- one subscription row per workspace
-  plan                     TEXT NOT NULL CHECK (plan IN ('FREE','TEAM')),
+  plan                     TEXT NOT NULL CHECK (plan IN ('FREE','PRO','TEAM','ENTERPRISE')),   -- pricing v3 (mig 57)
   status                   TEXT NOT NULL CHECK (status IN ('ACTIVE','PAST_DUE','CANCELED','EXPIRED')),
   provider                 TEXT,
   provider_customer_id     TEXT,                    -- never exposed (not in the admin whitelist / customer API)
@@ -1227,6 +1227,41 @@ DO $$ BEGIN
     ALTER TABLE billing_orders DROP CONSTRAINT IF EXISTS billing_orders_kind_check;
     ALTER TABLE billing_orders ADD CONSTRAINT billing_orders_kind_check CHECK (kind IN ('ONE_TIME','RECURRING_FIRST','RECURRING_RENEWAL','CREDIT_PACK')); END IF;
 END $$;
+
+-- Pricing v3 T1 (migration 57): plans FREE / PRO / TEAM / ENTERPRISE, VAT-inclusive prices, add-ons (extra users / projects) bought
+-- per workspace and prorated to the current period end (billing/prorate.js). Limits = plan included + extra_* (plans.js limitsFor);
+-- ENTERPRISE limits are operator-set (seats, project_limit). price_version 'v2' marks a pre-v3 paid row that keeps what it bought
+-- until its period ends (migration 57 backfill); NULL = v3. renewal_amount = the last renewal amount the customer agreed to (T3 gate).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'subscriptions_plan_check' AND conrelid = 'subscriptions'::regclass AND pg_get_constraintdef(oid) LIKE '%PRO%') THEN
+    ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check;
+    ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check CHECK (plan IN ('FREE','PRO','TEAM','ENTERPRISE')); END IF;
+END $$;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS extra_users INTEGER NOT NULL DEFAULT 0 CHECK (extra_users >= 0);
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS extra_projects INTEGER NOT NULL DEFAULT 0 CHECK (extra_projects >= 0);
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS project_limit INTEGER;          -- ENTERPRISE only (NULL = unlimited)
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS price_version TEXT;             -- 'v2' = bought before pricing v3; NULL = v3
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS renewal_amount INTEGER;        -- VAT incl.; a renewal above it needs PRICE_INCREASE consent (T3)
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS over_limit_since timestamptz;   -- set while usage > limits after a plan/limit drop (D6)
+-- Orders (mig 57): ADDON (users/projects for the rest of the period), UPGRADE (PRO → TEAM difference), CREDIT_TOPUP (any 10,000원 step, T2).
+-- addon_* = units the order adds; period_* = the slice it covers; client_key = checkout idempotency key (double click → same order);
+-- refund_tid_seq numbers partial cancels (a new orderId per NicePay partial cancel, T2).
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS addon_users INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS addon_projects INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS period_start timestamptz;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS period_end timestamptz;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS client_key TEXT;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS refund_tid_seq INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS price_version TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_orders_client_key ON billing_orders(workspace_id, client_key) WHERE client_key IS NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'billing_orders_kind_check' AND conrelid = 'billing_orders'::regclass AND pg_get_constraintdef(oid) LIKE '%CREDIT_TOPUP%') THEN
+    ALTER TABLE billing_orders DROP CONSTRAINT IF EXISTS billing_orders_kind_check;
+    ALTER TABLE billing_orders ADD CONSTRAINT billing_orders_kind_check CHECK (kind IN ('ONE_TIME','RECURRING_FIRST','RECURRING_RENEWAL','CREDIT_PACK','ADDON','UPGRADE','CREDIT_TOPUP')); END IF;
+END $$;
+-- Pricing v3 T1 (migration 61): active-project count (DRAFT / ACTIVE / ON_HOLD; COMPLETED and ARCHIVED never count; samples excluded).
+CREATE INDEX IF NOT EXISTS idx_projects_ws_active ON projects(workspace_id) WHERE status IN ('DRAFT','ACTIVE','ON_HOLD') AND sample_key IS NULL;
 
 CREATE TABLE IF NOT EXISTS billing_events (
   id                TEXT PRIMARY KEY,
