@@ -294,7 +294,7 @@ test('migration 62 backfill: buckets split without changing any balance (purchas
   assert.equal((await bucketBalances(db, 'w_old')).promo, 200);
 });
 
-test('refund: purchased credits only (PLAN / PROMO never), D5 v3 — within 7 days full even if partly used, after −10%; each partial cancel has its own orderId', async () => {
+test('refund: purchased credits only (PLAN / PROMO never), v3 — always in full, no fee (founder decision 2026-10-20); each partial cancel has its own orderId', async () => {
   const env = await boot(); const { db, provider } = env;
   const A = await signup(env, 'r@x.com');
   await sub(db, A.w, { plan: 'PRO' }); await grantMonthlyCredits(db, A.w);   // PLAN 1,000 + PROMO 100
@@ -303,13 +303,13 @@ test('refund: purchased credits only (PLAN / PROMO never), D5 v3 — within 7 da
   assert.deepEqual(Object.values(await acc(db, A.w)).slice(1, 4), [0, 0, 2600]);
   await assert.rejects(refundCredits(db, provider, { wid: A.w, credits: 2601, reason: 'too much', adminUserId: null }), (e) => e.code === 'exceeds_refundable');
   const r1 = await refundCredits(db, provider, { wid: A.w, credits: 1000, reason: '1차', adminUserId: null });
-  assert.equal(r1.amount, 10000);   // paid today, partly used → still 100% (D5)
+  assert.equal(r1.amount, 10000);   // paid today, partly used → 100%
   const r2 = await refundCredits(db, provider, { wid: A.w, credits: 600, reason: '2차', adminUserId: null });
   assert.equal(r2.amount, 6000);
   const ids = provider.calls.refund.filter((c) => c.partial).map((c) => c.cancel_order_id);
   assert.deepEqual(ids, [`${order.id}C1`, `${order.id}C2`]);
   await db.run(`UPDATE billing_orders SET paid_at = now() - interval '10 days' WHERE id = ?`, [order.id]);
-  assert.equal((await refundCredits(db, provider, { wid: A.w, credits: 100, reason: '3차', adminUserId: null })).amount, 900);
+  assert.equal((await refundCredits(db, provider, { wid: A.w, credits: 100, reason: '3차', adminUserId: null })).amount, 1000);   // 10 days later → still 100%, no fee
   assert.equal((await acc(db, A.w)).purchased, 900);
   assert.deepEqual((await ledger(db, A.w)).filter((r) => r.type === 'REFUND').map((r) => r.d_purchased), [-1000, -600, -100]);
   await consistent(db, A.w);

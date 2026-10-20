@@ -179,12 +179,12 @@ const q = (s) => String(s).replace(/'/g, "''");
   const no = await api('POST', `${PP}/ai/requirements/extract`, { text: '잔액 부족 상태의 요청 본문입니다.' });
   check('AC6 API: 402 AI_CREDIT_INSUFFICIENT, no ledger row', no.status === 402 && no.json.error.code === 'AI_CREDIT_INSUFFICIENT' && sql(`SELECT COUNT(*) FROM credit_ledger WHERE workspace_id = '${q(W)}'`) === rows0);
 
-  // AC9: operator refund on the fake provider (pack paid 10 days ago → −10%)
+  // AC9: operator refund on the fake provider (pack paid 10 days ago → still in full, no fee)
   const o3 = (await api('POST', `${CR}/checkout`, { amount: 30000 })).json.order;
   await hook('subscription.activated', { order_id: o3.id, payment: { amount: 30000, status: 'PAID', provider_tid: `tid_${o3.id}` } });
-  sql(`UPDATE billing_orders SET paid_at = now() - interval '10 days' WHERE workspace_id = '${q(W)}' AND kind IN ('CREDIT_PACK','CREDIT_TOPUP') AND status = 'PAID'`);   // both packs older than 7 days → −10%
+  sql(`UPDATE billing_orders SET paid_at = now() - interval '10 days' WHERE workspace_id = '${q(W)}' AND kind IN ('CREDIT_PACK','CREDIT_TOPUP') AND status = 'PAID'`);   // both packs older than 7 days → v3: still 100%
   const rf = await api('POST', `/api/billing/admin/workspaces/${W}/credit-refund`, { credits: 2000, reason: 'e2e 환불' });
-  check('AC9 refund 2,000 → ₩18,000, one REFUND −2,000', rf.status === 200 && rf.json.amount === 18000 && sql(`SELECT string_agg(amount::text, ',') FROM credit_ledger WHERE workspace_id = '${q(W)}' AND type = 'REFUND'`) === '-2000', JSON.stringify(rf.json).slice(0, 200));
+  check('AC9 refund 2,000 → ₩20,000 (no fee), one REFUND −2,000', rf.status === 200 && rf.json.amount === 20000 && sql(`SELECT string_agg(amount::text, ',') FROM credit_ledger WHERE workspace_id = '${q(W)}' AND type = 'REFUND'`) === '-2000', JSON.stringify(rf.json).slice(0, 200));
   const over = await api('POST', `/api/billing/admin/workspaces/${W}/credit-refund`, { credits: 99999, reason: 'x' });
   check('AC9 more than refundable → 409 exceeds_refundable', over.status === 409 && over.json.error.code === 'exceeds_refundable');
   await page.goto(`${BASE}/admin/workspaces/${W}`); await page.waitForSelector('#ai-refund', { timeout: 8000 }).catch(() => {});

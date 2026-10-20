@@ -87,7 +87,7 @@ export async function adminWorkspacePage(id, main = $('#main')) {
       if (!r) return;
       try { const out = await api('POST', `/api/admin/workspaces/${id}/ai/credits`, r); toast(`크레딧을 반영했습니다. 현재 잔액 ${out.balance.toLocaleString('ko-KR')}`); await draw(); } catch (e) { toast(e.message); }
     };
-    // AI-credits-only billing: refund of unused PURCHASED credits (newest pack first; 7-day untouched pack 100%, else −10%) via NicePay partial cancel.
+    // AI-credits-only billing: refund of unused PURCHASED credits (newest pack first; v3: always in full, no fee — the v2 rule charged 10% after 7 days) via NicePay partial cancel.
     const rf = $('#ai-refund'); if (rf) rf.onclick = async () => {
       const base = `/api/billing/admin/workspaces/${id}/credit-refund`;
       try {
@@ -96,7 +96,7 @@ export async function adminWorkspacePage(id, main = $('#main')) {
         const c = await promptDialog({ title: '미사용 크레딧 환불', body: `환불 가능한 미사용 구매 크레딧: ${refundable.toLocaleString('ko-KR')}`, label: '환불할 크레딧 수', required: true, confirm: '금액 계산' });
         if (c === null) return;
         const { quote } = await api('GET', `${base}?credits=${encodeURIComponent(c)}`);
-        const lines = quote.allocations.map((a) => `${a.credits.toLocaleString('ko-KR')} 크레딧 → ₩${a.amount.toLocaleString('ko-KR')}${a.full ? ' (7일 이내 미사용: 전액)' : ' (수수료 10% 차감)'}${a.manual ? ' · 카드 취소 기한 지남: 계좌 환불' : ''}`).join(' / ');
+        const lines = quote.allocations.map((a) => `${a.credits.toLocaleString('ko-KR')} 크레딧 → ₩${a.amount.toLocaleString('ko-KR')}${a.full ? ' (전액)' : ' (수수료 10% 차감)'}${a.manual ? ' · 카드 취소 기한 지남: 계좌 환불' : ''}`).join(' / ');
         const reason = await promptDialog({ title: `₩${quote.amount.toLocaleString('ko-KR')} 환불할까요?`, body: `${lines}. 결제한 카드로 부분 취소하고, 크레딧 원장과 감사 기록에 남깁니다.`, label: '환불 사유 (필수)', required: true, confirm: '환불', danger: true });
         if (reason === null) return;
         const out = await api('POST', base, { credits: Number(c), reason });

@@ -85,16 +85,19 @@ test('prices (AC3 table), packs (VAT included split) and refund maths are exact'
   const now = new Date('2026-11-01T00:00:00Z');
   const old = { id: 'o1', credits: 3000, refunded_credits: 0, paid_at: new Date(now - 10 * DAY), amount: 30000 };
   const fresh = { id: 'o2', credits: 1000, refunded_credits: 0, paid_at: new Date(now - 2 * DAY), amount: 10000 };
-  // > 7 days: unused purchased credits × ₩10 less 10%
-  assert.deepEqual(refundQuote({ credits: 2000, packs: [old], unused: 3000, now }), { allocations: [{ order_id: 'o1', credits: 2000, amount: 18000, full: false, manual: false }], credits: 2000, amount: 18000 });
-  // within 7 days and untouched → 100%; newest pack first
+  // v3 (founder decision 2026-10-20): unused purchased credits × ₩10 in full, no fee, even after 7 days
+  assert.deepEqual(refundQuote({ credits: 2000, packs: [old], unused: 3000, now }), { allocations: [{ order_id: 'o1', credits: 2000, amount: 20000, full: true, manual: false }], credits: 2000, amount: 20000 });
+  // newest pack first; every pack in full
   const both = refundQuote({ credits: 1500, packs: [fresh, old], unused: 4000, now });
-  assert.deepEqual(both.allocations.map((a) => [a.order_id, a.credits, a.amount, a.full]), [['o2', 1000, 10000, true], ['o1', 500, 4500, false]]);
-  // v3 (D5): a fresh top-up partly used (unused 600 of 1000) is still refunded in full; the v2 rule charged the fee
+  assert.deepEqual(both.allocations.map((a) => [a.order_id, a.credits, a.amount, a.full]), [['o2', 1000, 10000, true], ['o1', 500, 5000, true]]);
+  // old v2 rule (CREDIT_REFUND_RULE=v2): > 7 days less 10%, within 7 days only an untouched pack in full
+  assert.equal(refundQuote({ credits: 2000, packs: [old], unused: 3000, now, rule: 'v2' }).amount, 18000);
+  assert.deepEqual(refundQuote({ credits: 1500, packs: [fresh, old], unused: 4000, now, rule: 'v2' }).allocations.map((a) => [a.amount, a.full]), [[10000, true], [4500, false]]);
+  // a fresh top-up partly used (unused 600 of 1000) is refunded in full; the v2 rule charged the fee
   assert.equal(refundQuote({ credits: 600, packs: [fresh], unused: 600, now }).allocations[0].amount, 6000);
   assert.equal(refundQuote({ credits: 600, packs: [fresh], unused: 600, now, rule: 'v2' }).allocations[0].amount, 5400);
-  // RELAI at fault → no fee even after 7 days
-  assert.equal(refundQuote({ credits: 2000, packs: [old], unused: 3000, now, noFee: true }).amount, 20000);
+  // RELAI at fault → no fee even under v2 after 7 days
+  assert.equal(refundQuote({ credits: 2000, packs: [old], unused: 3000, now, rule: 'v2', noFee: true }).amount, 20000);
   // more than the unused purchased credits → refused
   assert.throws(() => refundQuote({ credits: 3001, packs: [old], unused: 3000, now }), (e) => e.code === 'exceeds_refundable');
   assert.throws(() => refundQuote({ credits: 0, packs: [old], unused: 3000, now }), (e) => e.code === 'validation_error');
@@ -312,7 +315,7 @@ test('AC8: a new user is not warned on the first action; crossing below 200 send
   env.server.close();
 });
 
-test('AC9: operator refund — 2,000 unused purchased credits → ₩18,000 partial cancel, one REFUND −2,000 + audit; over the limit refused; free credits never; 7-day untouched pack 100%; failed cancel restored', async () => {
+test('AC9: operator refund — 2,000 unused purchased credits (paid 10 days ago) → ₩20,000 partial cancel (no fee), one REFUND −2,000 + audit; over the limit refused; free credits never; 7-day untouched pack 100%; failed cancel restored', async () => {
   const env = await boot(); const { db, provider } = env;
   const A = await owner(env);
   const admin = env.client(); const sa = await admin('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'ops@x.com', password: 'passw0rd!' });
@@ -324,17 +327,17 @@ test('AC9: operator refund — 2,000 unused purchased credits → ₩18,000 part
   await db.run(`UPDATE billing_orders SET paid_at = now() - interval '10 days' WHERE id = ?`, [order.id]);
   assert.equal((await A.c('POST', url, { credits: 10, reason: 'x' })).status, 403);   // customers ask; operators refund
   assert.equal((await admin('GET', url)).json.refundable, 3000);
-  assert.equal((await admin('GET', `${url}?credits=2000`)).json.quote.amount, 18000);
+  assert.equal((await admin('GET', `${url}?credits=2000`)).json.quote.amount, 20000);
   const r = await admin('POST', url, { credits: 2000, reason: '고객 요청' });
-  assert.equal(r.status, 200, JSON.stringify(r.json)); assert.equal(r.json.amount, 18000); assert.equal(r.json.credits, 2000);
-  assert.deepEqual(provider.calls.refund.map((x) => [x.order_id, x.amount, x.partial]), [[order.id, 18000, true]]);
+  assert.equal(r.status, 200, JSON.stringify(r.json)); assert.equal(r.json.amount, 20000); assert.equal(r.json.credits, 2000);
+  assert.deepEqual(provider.calls.refund.map((x) => [x.order_id, x.amount, x.partial]), [[order.id, 20000, true]]);
   const refunds = (await ledger(db, A.w)).filter((l) => l.type === 'REFUND');
   assert.deepEqual(refunds.map((l) => [Number(l.amount), l.reference_type]), [[-2000, 'ORDER']]);
   assert.equal(await balance(db, A.w), 500 + 1000);
   const o = await db.get('SELECT status, refunded_credits, refunded_amount FROM billing_orders WHERE id = ?', [order.id]);
-  assert.deepEqual([o.status, o.refunded_credits, o.refunded_amount], ['PAID', 2000, 18000]);
+  assert.deepEqual([o.status, o.refunded_credits, o.refunded_amount], ['PAID', 2000, 20000]);
   const audit = await db.get(`SELECT metadata FROM admin_audit_logs WHERE action = 'CREDIT_REFUND' AND target_id = ?`, [A.w]);
-  assert.equal((typeof audit.metadata === 'string' ? JSON.parse(audit.metadata) : audit.metadata).amount, 18000);
+  assert.equal((typeof audit.metadata === 'string' ? JSON.parse(audit.metadata) : audit.metadata).amount, 20000);
   // more than min(balance, purchased − refunded) = 1,000 → refused; the 500 free credits are never refundable
   assert.equal((await admin('POST', url, { credits: 1001, reason: 'x' })).json.error.code, 'exceeds_refundable');
   const sum = (await A.c('GET', `${A.cr}/summary`)).json.credits; assert.equal(sum.refundable, 1000); assert.equal(sum.purchased_remaining, 1000); assert.equal(sum.free_remaining, 500);

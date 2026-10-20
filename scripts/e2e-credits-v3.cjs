@@ -54,7 +54,7 @@ const q = (s) => String(s).replace(/'/g, "''");
   check('PRO: chips 10,000–100,000 and the stepper', (await page.locator('.cr-amt').count()) === 5 && Boolean(await page.$('#cr-plus')));
   await page.click('.cr-amt[data-amount="20000"]');
   const quote = await text('#cr-quote');
-  check('PRO: quote = 20,000원 / 2,000 크레딧 / workspace / 5년·환불', /20,000원/.test(quote) && /2,000 크레딧/.test(quote) && quote.includes(wsName) && /5년/.test(quote) && /7일/.test(quote), quote.replace(/\s+/g, ' '));
+  check('PRO: quote = 20,000원 / 2,000 크레딧 / workspace / 5년·환불', /20,000원/.test(quote) && /2,000 크레딧/.test(quote) && quote.includes(wsName) && /5년/.test(quote) && /전액/.test(quote) && !/수수료 \d/.test(quote), quote.replace(/\s+/g, ' '));
   await page.click('#cr-plus');
   check('PRO: + steps to 30,000원 (3,000 크레딧)', /30,000원/.test(await text('#cr-amount')) && /3,000 크레딧/.test(await text('#cr-quote')));
   await page.click('#cr-minus');

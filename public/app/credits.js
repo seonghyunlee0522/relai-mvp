@@ -75,7 +75,7 @@ export async function creditsPage(main = $('#main')) {
   const cur = () => opts()[pick] || opts()[0];
   const refundText = () => (s.refund_policy.rule === 'v2'
     ? `충전 후 ${s.refund_policy.full_days}일 안에 쓰지 않은 충전분은 전액, 그 밖의 미사용 구매 크레딧은 수수료 ${s.refund_policy.fee_pct}%를 뺀 금액`
-    : `충전 후 ${s.refund_policy.full_days}일 안에는 사용하지 않은 구매 크레딧 전액(일부 사용한 경우 포함), 그 뒤에는 수수료 ${s.refund_policy.fee_pct}%를 뺀 금액`);
+    : '사용하지 않은 구매 크레딧 전액(수수료 없음, 일부 사용한 경우 포함)');
   const topupForm = () => {
     const o = cur();
     return html`<div class="cr-topup" id="cr-topup">
@@ -103,7 +103,7 @@ export async function creditsPage(main = $('#main')) {
           : topupForm())}
     <p class="hint" style="margin-top:10px">크레딧은 기본 월 크레딧 → 무료 크레딧 → 구매 크레딧 순서로 씁니다. 기본 월 크레딧은 지급 주기가 끝나면 남은 만큼 소멸합니다.
       구매 크레딧은 ${s.purchased_valid_years}년간 유효하고, 구독이 끝나 Free가 되어도 남은 만큼 쓸 수 있습니다.
-      환불: ${refundText()}을 돌려 드립니다. 무료·기본 크레딧은 환불되지 않습니다.${s.sandbox ? ' (샌드박스 결제 환경)' : ''}</p>
+      환불: ${refundText()}을 돌려 드립니다. 무료·플랜 기본 제공·프로모션 크레딧은 환불되지 않습니다.${s.sandbox ? ' (샌드박스 결제 환경)' : ''}</p>
     ${raw(s.can_buy && s.refundable > 0 && !isPhone() ? html`<p style="margin-top:8px"><button type="button" class="link linkbtn" id="cr-refund">환불 요청</button> <small class="dim">환불 가능한 미사용 구매 크레딧 ${n(s.refundable)}</small></p>` : '')}</div></div>`;
   const opt = (v, label, cur) => html`<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${label}</option>`;
   const log = () => {

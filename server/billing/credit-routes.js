@@ -64,7 +64,7 @@ export async function creditSummary(db, wid, { role = null, provider = null } = 
     this_month: await monthUsage(db, wid, m), last_month: await monthUsage(db, wid, prevMonth(m)),
     prices: CHARGED.map((f) => ({ feature: f, label: shortLabel(f), credits: featureCreditCost(f), krw: won(featureCreditCost(f)) })),
     packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount, ...splitVat(p.amount) })),
-    starter_credits: aiConfig().trialCredits, purchased_valid_years: PURCHASED_VALID_YEARS, refund_policy: { full_days: REFUND_FULL_DAYS, fee_pct: REFUND_FEE_PCT, rule: refundRule() },
+    starter_credits: aiConfig().trialCredits, purchased_valid_years: PURCHASED_VALID_YEARS, refund_policy: { full_days: REFUND_FULL_DAYS, fee_pct: refundRule() === 'v2' ? REFUND_FEE_PCT : 0, rule: refundRule() },
     can_buy: owner, ai_enabled: aiConfig().enabled, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), sandbox: provider?.mode === 'sandbox', refundable: owner ? await refundableCredits(db, wid) : null,
     plan, plan_label: PLANS[plan].label, early_access_until: w?.early_access_until || null, workspace_name: w?.name || '',
   };

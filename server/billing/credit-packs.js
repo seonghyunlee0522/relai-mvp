@@ -9,8 +9,9 @@
  *            against the order → order PAID (+ receipt_url) → ledger PURCHASE +credits into the PURCHASED bucket (reference ORDER:<id>)
  *            → payments row. A failed or mismatched payment writes no PURCHASE row.
  *   refund   refundCredits (operator, Admin console): unused purchased credits only = min(available, PURCHASED bucket); newest order
- *            first; rule 'v3' (D5, default): 100% for credits of a top-up paid ≤ REFUND_FULL_DAYS ago even when the workspace used
- *            some, else less REFUND_FEE_PCT (rule 'v2' = the old "untouched pack only"); no fee when RELAI is at fault (noFee).
+ *            first; rule 'v3' (founder decision 2026-10-20, default): unused purchased credits are refunded in full at any time, no
+ *            fee; rule 'v2' (CREDIT_REFUND_RULE=v2) = the old "untouched pack ≤ REFUND_FULL_DAYS, else less REFUND_FEE_PCT";
+ *            no fee when RELAI is at fault (noFee). Free / plan / promo credits are never refundable.
  *            The ledger REFUND row is written first (credits cannot be spent meanwhile), then one NicePay partial cancel (cancelAmt)
  *            per order, each with its own orderId (<order id>C<n>, billing_orders.refund_tid_seq — nicepay-capabilities #5); a failed
  *            cancel is restored with a +REFUND row. Orders older than the card cancel window → bank transfer by hand.
@@ -33,7 +34,7 @@ export const CREDIT_ORDER_KINDS = ['CREDIT_PACK', 'CREDIT_TOPUP'];
 export const isCreditOrder = (order) => CREDIT_ORDER_KINDS.includes(order?.kind);
 /** Amount chips of the 충전 screen (any multiple of TOPUP_STEP_KRW up to TOPUP_MAX_KRW is accepted). */
 export const TOPUP_PRESETS = [10000, 20000, 30000, 50000, 100000];
-/** D5 switch: 'v3' (default) = full refund within REFUND_FULL_DAYS even when partly used; 'v2' = only an untouched pack. */
+/** Refund switch: 'v3' (default) = unused purchased credits refunded in full, no fee, any age; 'v2' = old fee rule. */
 export const refundRule = () => (process.env.CREDIT_REFUND_RULE === 'v2' ? 'v2' : 'v3');
 
 /** Pure: price of a top-up of `amount` won (VAT included). Throws OrderError(400) outside [STEP, MAX] or off the STEP grid. */
@@ -127,8 +128,8 @@ export async function refundableCredits(db, wid) {
 /**
  * Pure refund calculation. `packs` newest first ({ id, credits, refunded_credits, paid_at, amount }); `unused` = unused purchased
  * credits of the workspace (they belong to the newest packs, because purchased credits are spent oldest first after free ones).
- * `rule` 'v3' (D5): within REFUND_FULL_DAYS of payment the refunded credits are paid back in full, used or not; 'v2': only an untouched
- * pack. `noFee` (RELAI at fault: outage, service end) waives the fee. Refund amounts round up to the won.
+ * `rule` 'v3': the refunded credits are paid back in full whatever the pack's age, used or not; 'v2': full only for an untouched
+ * pack within REFUND_FULL_DAYS, else less REFUND_FEE_PCT. `noFee` (RELAI at fault) waives the v2 fee. Amounts round up to the won.
  * Returns { allocations: [{ order_id, credits, amount, full, manual }], credits, amount } or throws OrderError.
  */
 export function refundQuote({ credits, packs, unused, now = new Date(), rule = refundRule(), noFee = false }) {
@@ -144,7 +145,7 @@ export function refundQuote({ credits, packs, unused, now = new Date(), rule = r
     if (take <= 0) continue;
     const age = now.getTime() - new Date(p.paid_at).getTime();
     const fresh = age <= REFUND_FULL_DAYS * DAY;   // 청약철회 window
-    const full = noFee || (rule === 'v2' ? fresh && !Number(p.refunded_credits) && packUnused === Number(p.credits) : fresh);
+    const full = noFee || rule !== 'v2' || (fresh && !Number(p.refunded_credits) && packUnused === Number(p.credits));
     const gross = take * CREDIT_PRICE_KRW;
     allocations.push({ order_id: p.id, credits: take, amount: full ? gross : Math.ceil((gross * (100 - REFUND_FEE_PCT)) / 100), full, manual: age > CARD_CANCEL_DAYS * DAY });
     left -= take;
