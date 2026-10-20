@@ -62,8 +62,9 @@ if (typeof document !== 'undefined' && document.body && !document.body.dataset.p
   document.addEventListener('pointerdown', (e) => {
     const d = panelAt(e); if (!d || e.button !== 0) return;
     e.preventDefault();
-    const right = d.getBoundingClientRect().right; let w = 0;
-    const move = (ev) => { w = Math.round(Math.min(PANEL_MAX, Math.max(PANEL_MIN, right - ev.clientX))); setPanelW(w); };
+    // width from the start width and how far the edge moved left (an in-flow panel grows to its right, so the edge stays put — the drag still reads naturally)
+    const w0 = d.getBoundingClientRect().width; const x0 = e.clientX; let w = 0;
+    const move = (ev) => { w = Math.round(Math.min(PANEL_MAX, Math.max(PANEL_MIN, w0 + x0 - ev.clientX))); setPanelW(w); };
     const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.body.classList.remove('is-resizing'); if (w) store.set('panel.w', w); };
     document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.body.classList.add('is-resizing');
   }, true);

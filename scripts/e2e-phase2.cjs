@@ -191,7 +191,7 @@ const sql = (q) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
   check('US-1 Drawer has 요구사항 정의서 내려받기', Boolean(await page.$('[data-approval-drawer] [data-reqdoc-menu]')));
   const cbLabel = await page.textContent('.apv__confirm');
   check('US-1 checkbox 범위 내 미확정 3건을 함께 확정합니다 (default ON)', /범위 내 미확정 3건을 함께 확정합니다/.test(cbLabel) && await page.isChecked('#apv-confirm'));
-  check('Q6-1 02 approval = right-side panel (like 01)', await page.$eval('#drawer', (d) => d.classList.contains('drawer--side') && d.getBoundingClientRect().right >= window.innerWidth - 1 && d.getBoundingClientRect().left > 300));
+  check('Q6-1 02 approval = right-hand panel (like 01; batch7 B1: at ≥ 1280 it sits right next to the list)', await page.$eval('#drawer', (d) => { const r = d.getBoundingClientRect(); return d.classList.contains('drawer--side') && r.right <= window.innerWidth + 1 && r.left > 300 && r.width >= 470; }));
   check('Q6-2 승인 방법 chips + 필수 4개 중 N개 line', Boolean(await page.$('.apv__methods .choice')) && /필수 4개 중 0개 입력/.test(await page.textContent('#apv-stat')));
   await page.click('[data-apv="complete"]'); await page.waitForTimeout(600);
   check('US-1 empty fields → cannot complete', (await api('GET', `${R}/baseline`)).json.baseline.status === 'TODO');

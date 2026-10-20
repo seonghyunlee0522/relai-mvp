@@ -73,15 +73,17 @@ const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - 
   await page.reload(); await settle('#grid'); if (!(await page.$('#drawer:not([hidden])'))) { await page.click('#grid tbody tr[data-id] td.ttl'); await page.waitForSelector('#drawer:not([hidden]) .drawer__h'); }
   await page.waitForTimeout(300); const w2 = (await geo('#grid .gtable')).dw;
   check('#19 dragging the panel edge widens it (480–960) and the width is kept after a reload', w1 >= w0 + 100 && Math.abs(w2 - w1) <= 2, JSON.stringify({ w0, w1, w2 }));
-  await page.mouse.dblclick(box.x - 120 + 2, box.y); await page.waitForTimeout(300);
+  const box2 = await page.$eval('#drawer', (d) => { const r = d.getBoundingClientRect(); return { x: r.left + 2, y: r.top + r.height / 2 }; });
+  await page.mouse.dblclick(box2.x, box2.y); await page.waitForTimeout(300);
   const w3 = (await geo('#grid .gtable')).dw;
   check('#19 double-clicking the edge returns to the default width', Math.abs(w3 - w0) <= 2, JSON.stringify({ w0, w3 }));
 
   /* ---------- #12 B2: status / priority tags in the requirement list ---------- */
   const tagLook = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('#grid tbody tr[data-id]')];
-    const pick = (re) => rows.map((r) => r.querySelector('[data-label="상태"] .tsel, [data-label="상태"] .chip, [data-label="상태"] .tag')).find((e) => e && re.test(e.textContent));
-    const pr = (re) => rows.map((r) => r.querySelector('[data-label="우선순위"] .tsel, [data-label="우선순위"] .prio')).find((e) => e && (re.test(e.textContent) || re.test(e.querySelector('select')?.selectedOptions[0]?.textContent || '')));
+    const txt = (e) => (e.querySelector('select') ? e.querySelector('select').selectedOptions[0].textContent : e.textContent);
+    const pick = (re) => rows.map((r) => r.querySelector('[data-label="상태"] .tsel, [data-label="상태"] .chip, [data-label="상태"] .tag')).find((e) => e && re.test(txt(e)));
+    const pr = (re) => rows.map((r) => r.querySelector('[data-label="우선순위"] .tsel, [data-label="우선순위"] .prio')).find((e) => e && re.test(txt(e)));
     const cs = (e) => (e ? { bg: getComputedStyle(e).backgroundColor, fg: getComputedStyle(e).color, cls: e.className, mark: getComputedStyle(e, '::before').content + (e.querySelector('i')?.textContent || '') } : null);
     const v = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
     return { ok: cs(pick(/확정/)), draft: cs(pick(/작성 중/)), high: cs(pr(/높음/)), low: cs(pr(/낮음/)), tok: { done: v('--tag-done-bg'), draft: v('--tag-draft-bg'), hi: v('--prio-high'), lo: v('--prio-low') } };
@@ -136,7 +138,7 @@ const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - 
   const dest = new URL(page.url()); check('#17 지금 하기 → opens the guidance target', `${dest.pathname}${dest.search}` === g17.href || dest.pathname === g17.href.split('?')[0], `${dest.pathname}${dest.search} vs ${g17.href}`);
   await go(M, '.phead'); await page.waitForTimeout(300);
   const onNext = await page.evaluate(() => { const e = document.querySelector('#dtop-next'); return e ? { hidden: e.hidden, text: e.textContent.replace(/\s+/g, ' ').trim(), go: Boolean(e.querySelector('[data-next-go]')) } : null; });
-  check('#17 on 지금 할 일 the strip shrinks to "단계 진행 n/m" (no duplicate CTA)', onNext && !onNext.hidden && /단계 진행 \d+\/\d+/.test(onNext.text) && !onNext.go, JSON.stringify(onNext));
+  check('#17 on 지금 할 일 the strip shrinks to "단계 진행 n/m" (no duplicate CTA)', onNext && !onNext.hidden && /단계 진행\s*\d+\/\d+/.test(onNext.text) && !onNext.go, JSON.stringify(onNext));
   // refresh after a save: own project at 02 with one 검토 중 requirement → 확정 in the grid → the strip changes within 3 s
   const pr = await api('POST', `/api/workspaces/${w}/projects`, { name: '스트립 확인', client_name: '테스트고객', project_type: 'NEW_BUILD', planned_start_date: '2026-10-01', planned_end_date: '2027-03-31' });
   const pid = pr.json?.project?.id || pr.json?.id; const PB = `/api/workspaces/${w}/projects/${pid}`;
@@ -175,7 +177,7 @@ const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - 
   await shot('b22-activity');
   await page.click('[data-act-kind="wbs"]'); await page.waitForTimeout(300);
   const kinds = await page.$$eval('[data-act-row] .actrow__k', (els) => [...new Set(els.map((e) => e.textContent.trim()))]);
-  check('#22 종류 filter (WBS) keeps only WBS rows and lands in the URL', kinds.length > 0 && kinds.every((k) => k === 'WBS' || k === '지라') && /kind=wbs/.test(page.url()), JSON.stringify(kinds));
+  check('#22 종류 filter (WBS) keeps only WBS rows (changes, 지라, comments on WBS items) and lands in the URL', kinds.length > 0 && kinds.every((k) => k === 'WBS' || k === '지라' || k === '댓글') && /kind=wbs/.test(page.url()), JSON.stringify(kinds));
   await page.click('[data-act-kind=""]'); await page.waitForTimeout(200);
   if (a22.more) { const n0 = await page.$$eval('[data-act-row]', (e) => e.length); await page.click('#act-more'); await page.waitForFunction((n) => document.querySelectorAll('[data-act-row]').length > n, n0, { timeout: 8000 }).catch(() => {}); const n1 = await page.$$eval('[data-act-row]', (e) => e.length); check('#22 더 보기 loads older events (?before=)', n1 > n0, `${n0} → ${n1}`); }
   else log('SKIP #22 더 보기 (fewer than 120 events)');

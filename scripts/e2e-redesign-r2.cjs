@@ -144,7 +144,8 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ym
   const ctrlCount = (sel) => page.evaluate((s) => {
     const bar = document.querySelector(s); if (!bar) return -1;
     const v = (e) => e.offsetParent !== null && !e.closest('.tmenu') && !e.closest('.sseg');
-    return [...bar.querySelectorAll('button, input, select, a.btn')].filter(v).length + (bar.querySelector('.sseg') ? 1 : 0);
+    return [...bar.querySelectorAll('button, input, select, a.btn')].filter((e) => v(e) && !e.matches('[data-ai-pc]')).length   // the AI button only shows with AI on; it is not one of the counted controls
+    + (bar.querySelector('.sseg') ? 1 : 0);
   }, sel);
   await go(`/app/projects/${P.id}/requirements`, '#grid');
   const rc = await colsOf();
