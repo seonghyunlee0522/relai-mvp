@@ -2,13 +2,15 @@
  * Workspace usage counts against plan limits. One aggregate query per call — never per-row counting.
  * Counts are live (no counter cache; see docs/production-readiness.md §10 for the supporting indexes).
  */
-import { PLANS, DEFAULT_PLAN, USAGE_DIMS, pctOf, tierOf } from './plans.js';
+import { PLANS, DEFAULT_PLAN, USAGE_DIMS, pctOf, tierOf, limitsFor } from './plans.js';
 import { GRANTS_PLAN_SQL, EFFECTIVE_PLAN_SQL, effectivePlan } from './billing/subscriptions.js';
+import { ACTIVE_PROJECT_SQL, SEAT_MEMBER_SQL, PENDING_INVITE_SQL } from './billing/limits.js';
 
 const USAGE_SQL = `
   SELECT w.id AS workspace_id, w.name, w.status, w.created_at,
-    (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND p.status != 'ARCHIVED') AS projects,
-    (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id = w.id) AS members,
+    (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND ${ACTIVE_PROJECT_SQL('p')}) AS projects,
+    (SELECT COUNT(*) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = w.id AND ${SEAT_MEMBER_SQL}) AS members,
+    (SELECT COUNT(*) FROM invitations i WHERE i.workspace_id = w.id AND ${PENDING_INVITE_SQL('i')}) AS pending_invites,
     (SELECT COUNT(*) FROM requirements r JOIN projects p ON p.id = r.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND r.archived_at IS NULL) AS requirements,
     (SELECT COUNT(*) FROM wbs_items i JOIN projects p ON p.id = i.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND i.archived_at IS NULL AND i.system_key IS NULL) AS wbs,
     (SELECT COUNT(*) FROM weekly_reports wr JOIN projects p ON p.id = wr.project_id WHERE p.workspace_id = w.id AND p.sample_key IS NULL AND wr.created_at >= date_trunc('month', now())) AS weekly_reports,
@@ -16,7 +18,7 @@ const USAGE_SQL = `
       COALESCE((SELECT MAX(p.updated_at) FROM projects p WHERE p.workspace_id = w.id AND p.sample_key IS NULL), w.created_at),
       COALESCE((SELECT MAX(m.created_at) FROM workspace_members m WHERE m.workspace_id = w.id), w.created_at)) AS last_activity_at,
     ${EFFECTIVE_PLAN_SQL} AS plan_key,
-    (SELECT s.seats FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS seats,
+    (SELECT row_to_json(s) FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS sub,   -- whole row: limitsFor reads seats / extra_* / project_limit / price_version
     (SELECT COUNT(*) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days') AS ai_runs_30d,
     (SELECT COUNT(*) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days' AND r.status = 'FAILED') AS ai_failed_30d,
     (SELECT COALESCE(SUM(r.credit_cost), 0) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days' AND r.credit_status = 'CHARGED') AS ai_credits_30d,
@@ -24,14 +26,18 @@ const USAGE_SQL = `
     (SELECT a.balance FROM workspace_credit_accounts a WHERE a.workspace_id = w.id) AS ai_balance
   FROM workspaces w`;
 
-/** Shape one usage row: { plan, dims: [{key,label,used,limit,pct}], max_pct, tier }. */
+/** Shape one usage row: { plan, dims: [{key,label,used,limit,pct}], max_pct, tier, pending_invites, seats_left }. Limits = plans.js limitsFor (v3: projects + users). */
 export function shapeUsage(row, planKey = DEFAULT_PLAN) {
   const plan = PLANS[planKey] || PLANS[DEFAULT_PLAN];
-  const seatLimit = plan.per_seat && row.seats ? Number(row.seats) : null;   // per-seat plans: members limited to purchased seats
-  const dims = USAGE_DIMS.map((d) => { const used = Number(row[d.key] || 0); const limit = d.key === 'members' && seatLimit ? seatLimit : plan.limits[d.key]; return { key: d.key, label: d.label, used, limit: limit ?? null, pct: pctOf(used, limit) }; });
+  const sub = (typeof row.sub === 'string' ? JSON.parse(row.sub) : row.sub) || {};
+  const lim = limitsFor({ ...sub, plan: plan.key });
+  const limitOf = { projects: lim.projects, members: lim.users };
+  const dims = USAGE_DIMS.map((d) => { const used = Number(row[d.key] || 0); const limit = limitOf[d.key]; return { key: d.key, label: d.label, used, limit: limit ?? null, pct: pctOf(used, limit) }; });
   const pcts = dims.map((d) => d.pct).filter((p) => p !== null);
   const max_pct = pcts.length ? Math.max(...pcts) : null;
-  return { plan: plan.key, plan_label: plan.label, dims, max_pct, tier: tierOf(max_pct) };
+  const pending = Number(row.pending_invites || 0);
+  const seats_left = lim.users === null ? null : Math.max(0, lim.users - Number(row.members || 0) - pending);
+  return { plan: plan.key, plan_label: plan.label, dims, max_pct, tier: tierOf(max_pct), pending_invites: pending, seats_left };
 }
 
 /** Usage of one workspace against its effective plan (subscription-aware; pass `planKey` to override). */
@@ -59,7 +65,7 @@ const shapeAi = (r) => ({ runs_30d: Number(r.ai_runs_30d || 0), failed_30d: Numb
  */
 export async function allWorkspacesUsage(db, { sort = 'ai', page = 1, size = 50, q = '' } = {}) {
   const limits = PLANS[DEFAULT_PLAN].limits;
-  const pctExpr = (k) => (limits[k] === null ? 'NULL' : `CASE WHEN u.plan_key = '${DEFAULT_PLAN}' THEN ROUND(u.${k} * 100.0 / ${limits[k]}) END`);
+  const pctExpr = (k) => (limits[k] === null || limits[k] === undefined ? 'NULL' : `CASE WHEN u.plan_key = '${DEFAULT_PLAN}' THEN ROUND(u.${k} * 100.0 / ${limits[k]}) END`);
   const where = q ? `WHERE u.name ILIKE ?` : '';
   const params = q ? [`%${q}%`] : [];
   const total = (await db.get(`SELECT COUNT(*) AS n FROM (${USAGE_SQL}) u ${where}`, params)).n;

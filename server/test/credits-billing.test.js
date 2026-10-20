@@ -98,12 +98,10 @@ test('AC1 + AC2 (T5, b7-fix): new workspace = no early_access_until (signup gran
   assert.equal((await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [A.w])).early_access_until, null);   // early access retired: signup grants nothing
   assert.equal(await effectivePlan(db, A.w), 'FREE');   // early access retired as an unlimited plan (2026-10-20)
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
-  assert.equal(b.plan, 'FREE'); assert.equal(b.plan_label, '무료'); assert.equal(b.early_access_until, null); assert.equal(b.checkout.can_purchase, true);   // FREE may buy TEAM once payments are on
-  // FREE limits apply: 2nd project OK, 3rd refused; 51st requirement refused
-  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 201);
-  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('세 번째'))).status, 402);
-  for (let i = 0; i < 50; i++) assert.equal((await A.c('POST', `${A.purl}/requirements`, { title: `요구사항 ${i + 1}` })).status, 201);
-  assert.equal((await A.c('POST', `${A.purl}/requirements`, { title: '요구사항 51' })).status, 402);
+  assert.equal(b.plan, 'FREE'); assert.equal(b.plan_label, 'Free'); assert.equal(b.early_access_until, null); assert.equal(b.checkout.can_purchase, true);   // FREE may buy TEAM once payments are on
+  // FREE limits apply (pricing v3): 2nd active project refused; requirements are not capped (D1)
+  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 402);
+  for (let i = 0; i < 51; i++) assert.equal((await A.c('POST', `${A.purl}/requirements`, { title: `요구사항 ${i + 1}` })).status, 201);
   // AC2: exactly 500 credits, one PROMOTION row
   const led = await ledger(db, A.w);
   assert.deepEqual(led.map((l) => [l.type, Number(l.amount), l.reference_id]), [['PROMOTION', 500, 'AI_INITIAL_TRIAL_CREDITS']]);
@@ -129,7 +127,7 @@ test('AC1 + AC2 (T5, b7-fix): new workspace = no early_access_until (signup gran
 test('AC10 + AC12 (T5): FREE limits whatever early_access_until says (data kept), credits still work; ending notices retired; an active TEAM keeps TEAM + monthly credits', async () => {
   const env = await boot(); const { db } = env;
   const A = await owner(env);
-  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 201);
+  assert.equal((await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째'))).status, 402);   // v3 FREE: 1 active project
   // notices: 20 days left → the 30-day notice, once; 5 days left → the 7-day notice, once
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '20 days' WHERE id = ?`, [A.w]);
   // retired for good (b7-fix): no switch turns them back on, nothing is sent or stamped
@@ -143,7 +141,7 @@ test('AC10 + AC12 (T5): FREE limits whatever early_access_until says (data kept)
   assert.equal(await effectivePlan(db, A.w), 'FREE');
   const p3 = await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('세 번째'));
   assert.equal(p3.status, 402); assert.equal(p3.json.error.limit.plan, 'FREE');
-  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/projects`)).json.projects.length, 2);   // nothing deleted
+  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/projects`)).json.projects.length, 1);   // nothing deleted
   setFakeProvider(answer);
   const ask = await A.c('POST', `${A.purl}/ai/ask`, { question: '남은 크레딧으로 질문' });
   assert.equal(ask.status, 200); assert.equal(ask.json.run.credit_cost, 10); assert.equal(await balance(db, A.w), 490);
@@ -151,7 +149,7 @@ test('AC10 + AC12 (T5): FREE limits whatever early_access_until says (data kept)
   await db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, current_period_start, current_period_end, auto_renew)
     VALUES ('sub_t', ?, 'TEAM', 'ACTIVE', 'fake', now() - interval '3 days', now() + interval '27 days', false)`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'TEAM');
-  assert.equal((await grantMonthlyCredits(db, A.w)).amount, 1000);
+  assert.equal((await grantMonthlyCredits(db, A.w)).amount, 3000);   // pricing v3: Team 3,000 a month
   await db.run(`UPDATE workspaces SET early_access_until = now() + interval '200 days' WHERE id = ?`, [A.w]);
   assert.equal(await effectivePlan(db, A.w), 'TEAM');   // the paid plan wins while it runs
   await db.run(`UPDATE subscriptions SET current_period_end = now() - interval '1 second' WHERE id = 'sub_t'`);
@@ -232,6 +230,7 @@ test('AC5: OWNER buys ₩10,000 → order 9,091 + 909 → +1,000 PURCHASE with r
 test('AC7 + AC11: dashboard totals = SUM over the ledger; month / project / user filters; CSV (BOM, Korean) total = page total', async () => {
   const env = await boot(); const { db } = env;
   const A = await owner(env);
+  await db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, auto_renew, current_period_start, current_period_end) VALUES (gen_random_uuid()::text, ?, 'PRO', 'ACTIVE', false, now(), now() + interval '30 days')`, [A.w]);   // room for a 2nd project
   const P2 = (await A.c('POST', `/api/workspaces/${A.w}/projects`, proj('두 번째 프로젝트'))).json.project;
   const M = await addMember(env.client, A, 'member@x.com', '이수진');
   await buy(env, A, 'P30');

@@ -1260,8 +1260,6 @@ DO $$ BEGIN
     ALTER TABLE billing_orders DROP CONSTRAINT IF EXISTS billing_orders_kind_check;
     ALTER TABLE billing_orders ADD CONSTRAINT billing_orders_kind_check CHECK (kind IN ('ONE_TIME','RECURRING_FIRST','RECURRING_RENEWAL','CREDIT_PACK','ADDON','UPGRADE','CREDIT_TOPUP')); END IF;
 END $$;
--- Pricing v3 T1 (migration 61): active-project count (DRAFT / ACTIVE / ON_HOLD; COMPLETED and ARCHIVED never count; samples excluded).
-CREATE INDEX IF NOT EXISTS idx_projects_ws_active ON projects(workspace_id) WHERE status IN ('DRAFT','ACTIVE','ON_HOLD') AND sample_key IS NULL;
 
 CREATE TABLE IF NOT EXISTS billing_events (
   id                TEXT PRIMARY KEY,
@@ -1564,3 +1562,6 @@ CREATE TABLE IF NOT EXISTS service_orders (
   updated_at              timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_service_orders_created ON service_orders (created_at DESC);
+
+-- Pricing v3 T1 (migration 61): active-project count (DRAFT / ACTIVE / ON_HOLD; COMPLETED and ARCHIVED never count; samples excluded).
+CREATE INDEX IF NOT EXISTS idx_projects_ws_active ON projects(workspace_id) WHERE status IN ('DRAFT','ACTIVE','ON_HOLD') AND sample_key IS NULL;

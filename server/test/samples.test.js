@@ -110,7 +110,7 @@ test('samples are not usage: plan usage counts 0 projects, the first real projec
   const { db, server, client } = await boot();
   const A = await signup(client);
   const u = await workspaceUsage(db, A.w);
-  for (const k of ['projects', 'requirements', 'wbs', 'weekly_reports']) assert.equal(u.dims.find((d) => d.key === k).used, 0, k);
+  for (const k of ['projects']) assert.equal(u.dims.find((d) => d.key === k).used, 0, k);
   const prev = process.env.PLAN_LIMITS; process.env.PLAN_LIMITS = 'on';
   const p = await A.c('POST', `/api/workspaces/${A.w}/projects`, { name: '실제 프로젝트', client_name: '고객사', project_type: 'NEW_BUILD', planned_start_date: T, planned_end_date: addDays(T, 90) });
   process.env.PLAN_LIMITS = prev;
