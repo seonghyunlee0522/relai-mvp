@@ -72,6 +72,8 @@ export const USER_REFS = [
   ['comments', 'created_by', 'NULL'],
   ['ai_runs', 'user_id', 'NULL'],
   ['ai_wbs_plans', 'created_by', 'NULL'],
+  ['ai_prompts', 'updated_by', 'NULL'],               // 관리자 › AI 프롬프트: the prompt stays, its editor reads '탈퇴한 사용자'
+  ['ai_prompt_versions', 'created_by', 'NULL'],
   ['credit_ledger', 'created_by', 'NULL'],
   ['integration_connections', 'connected_by', 'NULL'],
   ['integration_project_mappings', 'created_by', 'NULL'],
