@@ -63,7 +63,7 @@ export const PHASE_ITEMS = {
     { key: 'milestones', label: '상위 일정 / 마일스톤', href: definitionHref(pid, 'MILESTONES'), match: (path) => isPath(path, pid, '/definition/milestones') },
     { key: 'operations', label: '프로젝트 운영 방식', href: definitionHref(pid, 'OPERATIONS'), match: (path) => isPath(path, pid, '/definition/operations') },
     { key: 'kickoff', label: '착수보고회', href: definitionHref(pid, 'KICKOFF'), match: (path) => isPath(path, pid, '/definition/kickoff') },
-    { key: 'approval', label: '착수 결과 승인', href: definitionHref(pid, 'APPROVAL'), match: (path) => isPath(path, pid, '/definition/approval') },
+    { key: 'approval', label: '착수 결과 확인', href: definitionHref(pid, 'APPROVAL'), match: (path) => isPath(path, pid, '/definition/approval') },
   ],
   REQUIREMENTS: (pid) => [
     { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), match: (path, qs) => isPath(path, pid, '/requirements') && !q(qs, 'view', 'trace') },
@@ -84,7 +84,7 @@ export const PHASE_ITEMS = {
     { key: 'defects', label: '결함', href: P(pid, '/tests?last_result=FAIL'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'last_result', 'FAIL') },
   ],
   TRANSITION_GO_LIVE: (pid) => [
-    { key: 'acceptance', label: '검수 / 인수 승인', href: P(pid, '/tests?tab=acceptance'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'tab', 'acceptance') },
+    { key: 'acceptance', label: '검수 / 인수', href: P(pid, '/tests?tab=acceptance'), match: (path, qs) => isPath(path, pid, '/tests') && q(qs, 'tab', 'acceptance') },
     CL(pid, 'cutover', '전환 계획', 'CUTOVER_PLAN'),
     CL(pid, 'migration', '데이터 이관', 'DATA_MIGRATION'),
     CL(pid, 'training', '사용자 교육 / 매뉴얼', 'TRAINING'),
@@ -129,7 +129,7 @@ export const DOORS = (pid) => [
     T('milestones', '상위 일정', definitionHref(pid, 'MILESTONES'), '오픈일 같은 주요 일정과 마일스톤을 정합니다.', 'INITIATION'),
     T('operations', '운영 방식', definitionHref(pid, 'OPERATIONS'), '보고 주기·회의·의사결정 방식을 정합니다.', 'INITIATION'),
     T('kickoff', '착수보고회', definitionHref(pid, 'KICKOFF'), '착수보고회 일정과 결과를 기록합니다.', 'INITIATION'),
-    T('approval', '착수 승인', definitionHref(pid, 'APPROVAL'), '착수 결과에 대한 고객 승인을 기록합니다.', 'INITIATION'),
+    T('approval', '착수 확인', definitionHref(pid, 'APPROVAL'), '착수 결과를 고객과 공유·확인했는지 체크합니다.', 'INITIATION'),
   ] },
   { key: 'requirements', label: '요구사항', href: P(pid, '/requirements'), tabs: [
     T('requirements', '목록', P(pid, '/requirements'), '고객이 원하는 기능과 조건을 모으고 분류·우선순위를 정해 확정합니다.', 'REQUIREMENTS'),
@@ -146,12 +146,12 @@ export const DOORS = (pid) => [
     T('test-plan', '테스트 연결률', P(pid, '/tests?tab=coverage'), '확정된 요구사항마다 시험이 준비됐는지 확인합니다.', 'TESTING'),
     T('tests', '테스트', P(pid, '/tests'), '요구사항 기준으로 시험을 만들고 결과를 기록합니다.', 'TESTING'),
     T('defects', '결함', P(pid, '/tests?last_result=FAIL'), '실패한 시험을 모아 보고 조치합니다.', 'TESTING'),
-    T('acceptance', '검수', P(pid, '/tests?tab=acceptance'), '고객 검수 결과와 인수 승인을 기록합니다.', 'TRANSITION_GO_LIVE'),
+    T('acceptance', '검수', P(pid, '/tests?tab=acceptance'), '검수 결과를 기록하고, 고객과 확인했으면 체크합니다.', 'TRANSITION_GO_LIVE'),
   ] },
   { key: 'issues', label: '이슈·변경', href: P(pid, '/issues'), tabs: [
     T('raid', '이슈', P(pid, '/issues'), '이미 발생해 프로젝트를 막는 문제를 기록하고 조치합니다.'),
     T('risks', '리스크', P(pid, '/issues?tab=risks'), '아직 발생하지 않은 위험을 미리 등록하고 대응 계획과 검토 일정을 관리합니다.'),
-    T('changes', '변경 요청', P(pid, '/changes'), '범위·일정 변경 요청의 영향을 보고 승인 여부를 기록합니다.'),
+    T('changes', '변경 요청', P(pid, '/changes'), '범위·일정 변경 요청의 영향을 보고 반영 여부를 결정합니다.'),
   ] },
   { key: 'reports', label: '보고서', href: P(pid, '/reports'), tabs: [
     T('weekly', '주간보고', P(pid, '/reports'), '보고 기간의 진행 이력을 모아 주간보고 초안을 만들고 확정합니다.'),
