@@ -16,7 +16,8 @@ import { addWbsHistory } from '../wbs-history.js';
 import { nodeIdFor } from '../wbs-structure.js';
 import { inferPlanPhase, sameAsNode, nodeByPlan } from '../../public/app/shared/wbs-structure.js';
 import { runAiFeature, AiError } from './service.js';
-import { SYSTEM, dataBlock, inputBlock, neutralize } from './prompts.js';
+import { dataBlock, inputBlock, neutralize } from './prompts.js';
+import { systemPrompt } from './prompt-store.js';
 import { extractionContext, wbsGenerationContext, changeImpactContext, assistantContext } from './context.js';
 import { humanizeCodes } from './labels.js';
 import { assertWithinLimit } from '../billing/limits.js';
@@ -48,7 +49,7 @@ export async function extractRequirements(db, { project, wid, userId, text }) {
     wid, projectId: project.id, userId, feature: 'REQUIREMENT_EXTRACTION',
     build: async () => {
       ctx = await extractionContext(db, project);
-      return { system: SYSTEM.REQUIREMENT_EXTRACTION, schemaName: 'requirement_candidates', schemaDescription: '추출된 요구사항 후보 목록',
+      return { system: await systemPrompt(db, 'REQUIREMENT_EXTRACTION'), schemaName: 'requirement_candidates', schemaDescription: '추출된 요구사항 후보 목록',
         user: `${dataBlock(ctx.text)}\n\n${inputBlock(neutralize(input))}\n\n위 <untrusted_input> 텍스트에서 요구사항 후보를 추출해 JSON으로 반환하세요.`,
         inputSummary: `text ${input.length} chars, existing ${ctx.existing.length}`, inputChars: input.length };
     },
@@ -107,7 +108,7 @@ export async function generateWbs(db, { project, wid, userId, requirementIds }) 
     build: async () => {
       ctx = await wbsGenerationContext(db, project, ids);
       if (!ctx.reqs.length) throw new ValidationError({ requirement_ids: '선택한 요구사항을 찾을 수 없습니다.' });
-      return { system: SYSTEM.WBS_GENERATION, schemaName: 'wbs_draft', schemaDescription: 'WBS 초안 트리',
+      return { system: await systemPrompt(db, 'WBS_GENERATION'), schemaName: 'wbs_draft', schemaDescription: 'WBS 초안 트리',
         user: `${dataBlock(ctx.text)}\n\n위 선택 요구사항을 구현하기 위한 WBS 초안을 JSON으로 반환하세요.`,
         inputSummary: `requirements ${ctx.reqs.length}, existing wbs ${ctx.wbs.length}`, inputChars: ctx.text.length };
     },
@@ -212,7 +213,7 @@ export async function changeImpact(db, { project, wid, userId, change }) {
     wid, projectId: project.id, userId, feature: 'CHANGE_IMPACT',
     build: async () => {
       ctx = await changeImpactContext(db, project, change);
-      return { system: SYSTEM.CHANGE_IMPACT, schemaName: 'change_impact', schemaDescription: '변경 영향 후보',
+      return { system: await systemPrompt(db, 'CHANGE_IMPACT'), schemaName: 'change_impact', schemaDescription: '변경 영향 후보',
         user: `${dataBlock(ctx.text)}\n\n변경 요청 ${change.display_id}의 영향 후보를 JSON으로 반환하세요.`,
         inputSummary: `${change.display_id}: req ${ctx.reqs.length}, wbs ${ctx.wbs.length}, tests ${ctx.tests.length}`, inputChars: ctx.text.length };
     },
@@ -284,7 +285,7 @@ export async function askProject(db, { project, wid, userId, question, history =
     wid, projectId: project.id, userId, feature: 'PROJECT_QA',
     build: async () => {
       ctx = await assistantContext(db, project, q);
-      return { system: SYSTEM.PROJECT_QA, schemaName: 'project_answer', schemaDescription: '프로젝트 질문에 대한 근거 기반 답변',
+      return { system: await systemPrompt(db, 'PROJECT_QA'), schemaName: 'project_answer', schemaDescription: '프로젝트 질문에 대한 근거 기반 답변',
         user: `${dataBlock(ctx.text)}${prior.length ? `\n\n<untrusted_input>\n이전 대화 (데이터):\n${prior.join('\n')}\n</untrusted_input>` : ''}\n\n${inputBlock(neutralize(q))}\n\n위 <untrusted_input>의 질문에 <project_data>만 근거로 답하세요.`,
         inputSummary: `question ${q.length} chars, intents ${ctx.intents.join('+')}`, inputChars: q.length };
     },

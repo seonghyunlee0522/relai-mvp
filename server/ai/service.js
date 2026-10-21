@@ -5,6 +5,7 @@
  * Nothing here writes project data; approval endpoints do that separately through the existing services.
  */
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { aiConfig, estimateProviderCost, featureCreditCost, maxOutputTokensFor, publicConfig } from './config.js';
 import { CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS } from '../plans.js';
 import { createProvider, AiProviderError } from './provider.js';
@@ -37,15 +38,26 @@ async function checkLimits(db, cfg, { wid, userId }) {
   }
 }
 
+/* 관리자 › AI 프롬프트 › 전송 내용 미리보기: a feature call made inside previewPrompt() stops right after build(), before the enabled
+ * check, rate limits, credit reservation, ai_runs row and provider call, and hands back exactly what would have been sent. */
+const previewStore = new AsyncLocalStorage();
+class PromptPreview extends Error { constructor(payload) { super('prompt preview'); this.payload = payload; } }
+export async function previewPrompt(fn) {
+  try { await previewStore.run({}, fn); } catch (e) { if (e instanceof PromptPreview) return e.payload; throw e; }
+  throw new Error('the feature returned without reaching the AI call');
+}
+
 /**
  * build() → { system, user, schemaName?, inputSummary, inputChars }  (prompt + metadata; runs before any credit is touched)
  * postValidate(data) → { data, warnings }  (feature-level grounding checks; throw AiError('AI_INVALID_OUTPUT') to reject)
  */
 export async function runAiFeature(db, { wid, projectId = null, userId, feature, schema: schemaOverride = null, build, postValidate = async (d) => ({ data: d, warnings: [] }) }) {
   const cfg = aiConfig();
-  if (!cfg.enabled) throw new AiError('AI_DISABLED', 'AI 기능을 사용할 수 없습니다. 관리자에게 문의하세요.', { status: 503 });
+  const preview = previewStore.getStore();
+  if (!cfg.enabled && !preview) throw new AiError('AI_DISABLED', 'AI 기능을 사용할 수 없습니다. 관리자에게 문의하세요.', { status: 503 });
   const schema = schemaOverride || SCHEMAS[feature]; if (!schema) throw new AiError('AI_BAD_FEATURE', '알 수 없는 AI 기능입니다.', { status: 400 });
   const prompt = await build();
+  if (preview) throw new PromptPreview({ feature, prompt, schema, maxTokens: maxOutputTokensFor(feature), cost: featureCreditCost(feature), inputTooLarge: prompt.inputChars > cfg.maxInputChars, maxInputChars: cfg.maxInputChars });
   if (prompt.inputChars > cfg.maxInputChars) throw new AiError('AI_INPUT_TOO_LARGE', `입력이 너무 깁니다. 최대 ${cfg.maxInputChars.toLocaleString('en-US')}자까지 분석할 수 있습니다.`, { status: 400, max: cfg.maxInputChars });
   await checkLimits(db, cfg, { wid, userId });
 

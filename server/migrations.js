@@ -247,6 +247,7 @@ export const migrations = [
     }
   } },
   { version: 67, name: 'Integrity: ai_runs.request_hash (identical AI request while one is PENDING → 409, no double charge) (schema.sql, additive, nullable; nothing rewritten)', up() {} },
+  { version: 68, name: 'Prompt admin: ai_prompts (operator overrides of the AI prompts; no row = code default) + ai_prompt_versions (history) (schema.sql, additive; nothing rewritten)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

@@ -36,6 +36,7 @@ import { adminWorkspacesPage, adminWorkspacePage } from './admin/workspaces.js';
 import { adminSubscriptionsPage, adminSubscriptionPage, adminPaymentsPage, adminPaymentPage } from './admin/billing.js';
 import { adminUsagePage } from './admin/usage.js';
 import { adminDeliverablesPage } from './admin/deliverables.js';
+import { adminPromptsPage, adminPromptPage } from './admin/ai-prompts.js';
 import { adminFunnelPage } from './admin/funnel.js';
 import { adminPromotionsPage } from './admin/promotions.js';
 import { adminPurgePage } from './admin/purge.js';
@@ -81,6 +82,8 @@ registerRoutes([
   [/^\/admin\/payments\/([\w-]+)\/?$/, adminPaymentPage],
   [/^\/admin\/usage\/?$/, adminUsagePage],
   [/^\/admin\/deliverables\/?$/, adminDeliverablesPage],
+  [/^\/admin\/ai-prompts\/?$/, adminPromptsPage],
+  [/^\/admin\/ai-prompts\/([A-Z_]+)\/?$/, adminPromptPage],
   [/^\/admin\/funnel\/?$/, adminFunnelPage],
   [/^\/admin\/promotions\/?$/, adminPromotionsPage],
   [/^\/admin\/feedback\/?$/, adminFeedbackPage],
