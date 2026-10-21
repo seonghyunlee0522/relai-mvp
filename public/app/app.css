@@ -634,7 +634,8 @@ dl.info dd{margin:0;color:var(--navy);font-weight:500;white-space:pre-wrap}
 .trace__t{font-size:var(--fs-2xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue-deep);margin-bottom:8px}
 .trace__g{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px}
 .trace__i{display:block;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);padding:8px 10px;min-width:0}
-a.trace__i:hover{border-color:var(--blue)}
+button.trace__i{width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+a.trace__i:hover,button.trace__i:hover{border-color:var(--blue)}
 .trace__i b{display:block;font-size:var(--fs-xl);font-weight:800;color:var(--navy);line-height:1.1;font-variant-numeric:tabular-nums}
 .trace__i span{display:block;font-size:var(--fs-xs);color:var(--text-3);white-space:nowrap}
 .trace__i small{display:block;font-size:var(--fs-xs);color:var(--text-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

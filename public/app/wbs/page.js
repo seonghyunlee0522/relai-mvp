@@ -753,7 +753,7 @@ export async function wbsPage(id) {
             <textarea class="textarea ddesc" data-field="description" maxlength="5000" placeholder="설명을 입력하세요." ${readOnly ? 'disabled' : ''}>${it.description}</textarea>
             ${raw(group ? html`<p class="hint">하위 작업 ${live.children_count}개가 있는 작업 그룹입니다. 일정과 진행률은 하위 작업에서 자동 계산됩니다.</p>` : '')}
             ${raw(traceStrip([
-              { label: '요구사항', value: liveReq.length, tone: liveReq.length ? '' : isLeafTask(live) ? 'warn' : 'muted' },
+              { label: '요구사항', value: liveReq.length, tab: 'req', tone: liveReq.length ? '' : isLeafTask(live) ? 'warn' : 'muted' },
               { label: '변경 요청', value: it.changes ? it.changes.length : 0, href: `/app/projects/${p.id}/changes?wbs=${it.id}`, tone: it.changes && it.changes.length ? 'warn' : 'muted' },
               { label: '이슈', value: it.raid ? it.raid.issues.length : 0, sub: it.raid && it.raid.risks.length ? `리스크 ${it.raid.risks.length}` : '', href: `/app/projects/${p.id}/issues?wbs=${it.id}`, tone: it.raid && it.raid.issues.length ? 'warn' : 'muted' },
               { label: '테스트', value: it.testing ? it.testing.tests.length : 0, sub: it.testing && it.testing.tests.length ? `통과 ${it.testing.summary.pass} · 실패 ${it.testing.summary.fail}` : '', href: `/app/projects/${p.id}/tests?wbs=${it.id}`, tone: it.testing && it.testing.summary.fail ? 'crit' : it.testing && it.testing.tests.length ? '' : 'muted' },
@@ -816,6 +816,7 @@ export async function wbsPage(id) {
     const it = sel; const d = $('#drawer'); const status = $('#dsave');
     $('#dclose').onclick = closeDrawer;
     bindDtabs(d, (k) => { dtab = k; if (k === 'jira' && !jiraDetail) loadJira(); });
+    d.querySelectorAll('[data-trace-tab]').forEach((b) => b.onclick = () => { const t = d.querySelector(`[data-dtab="${b.dataset.traceTab}"]`); if (t) t.click(); });
     const loadJira = async () => { try { jiraDetail = await api('GET', wApi(`/${it.id}/jira`)); } catch (e) { jiraDetail = { mapped: false, error: e.message }; } if (sel && sel.id === it.id) { drawDetail(); } };
     const jiraChanged = async (r) => { jiraDetail = { ...(jiraDetail || {}), ...(r.links ? { links: r.links } : {}), ...(r.summary ? { summary: r.summary } : {}) }; try { const t = await api('GET', wApi()); apply(t); sel = (await api('GET', wApi(`/${it.id}`))).item; } catch { /* keep pane */ } grid.refresh(); drawDetail(); };
     bindJiraPane(d.querySelector('[data-pane="jira"]'), { pid: id, wbsId: it.id, it: byId().get(it.id) || it, onChange: jiraChanged });
