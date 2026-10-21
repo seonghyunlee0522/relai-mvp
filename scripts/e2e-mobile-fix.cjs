@@ -1,12 +1,15 @@
 // Mobile tap fixes (Jim live test 2026-10-21, hive research/relai-mobile-buttons-2026-10-21.md) — real touch taps on
 // iPhone 13 WebKit and Android 360 Chromium, items 1–6. Read-only on the data: safe on a preview that shares the prod DB.
 // Not part of `npm test` (needs a running server + Playwright):
-//   BASE=http://127.0.0.1:3101 STATE=state.json PID=<project id> [SHOTS=dir] [EXTRA_HEADERS='{"x-vercel-protection-bypass":"…"}'] node scripts/e2e-mobile-fix.cjs
+//   BASE=http://127.0.0.1:3101 STATE=state.json PID=<project id> [SHOTS=dir] [GAP_MS=3000] node scripts/e2e-mobile-fix.cjs
+//   preview: vercel env run -- env TRUSTED_OIDC=1 BASE=https://<preview> … node scripts/e2e-mobile-fix.cjs
 // STATE = a Playwright storageState of a signed-in, verified account whose workspace holds project PID and the 3 sample projects.
 const fs = require('fs');
 const { chromium, webkit, devices } = require('playwright');
 const BASE = process.env.BASE; const PID = process.env.PID; const SHOTS = process.env.SHOTS || '';
-const HEADERS = process.env.EXTRA_HEADERS ? JSON.parse(process.env.EXTRA_HEADERS) : undefined;
+// a protected Vercel preview: run under `vercel env run` with TRUSTED_OIDC=1 → the short-lived dev OIDC token goes in a header (never printed)
+const HEADERS = process.env.EXTRA_HEADERS ? JSON.parse(process.env.EXTRA_HEADERS)
+  : process.env.TRUSTED_OIDC && process.env.VERCEL_OIDC_TOKEN ? { 'x-vercel-trusted-oidc-idp-token': process.env.VERCEL_OIDC_TOKEN } : undefined;
 const GAP = Number(process.env.GAP_MS || 0);   // pause between page loads (use ≥ 3000 on a deployment that shares the prod DB)
 if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
 const results = [];
