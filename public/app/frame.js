@@ -7,6 +7,7 @@ import { state } from './core/state.js';
 import { helpButton, wireHelp } from './onboarding/ui.js';
 import { DOORS, PHASE_ITEMS, doorOf } from './shared/lifecycle.js';
 import { railFeedback } from './feedback.js';
+import { closeOnOutsideTap } from './core/outside.js';
 
 const SV = (d) => `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 export const RAIL_ICON = {
@@ -39,6 +40,7 @@ function wireMenus() {
     if (b) { if (b.getAttribute('aria-expanded') === 'true') { closeDmenus(); return; } MENUS[b.dataset.dmenu](b); return; }
     if (!e.target.closest('.dmenu') || e.target.closest('a[data-link],[data-logout]')) closeDmenus();
   });
+  closeOnOutsideTap((t) => t.closest && t.closest('.dmenu, [data-dmenu]'), () => { if (document.querySelector('.dmenu')) closeDmenus(); });
   document.addEventListener('keydown', (e) => {
     const m = e.target.closest && e.target.closest('.dmenu');
     if (e.key === 'Escape' && document.querySelector('.dmenu')) { const open = document.querySelector('[data-dmenu][aria-expanded="true"]'); closeDmenus(); if (open) open.focus(); return; }

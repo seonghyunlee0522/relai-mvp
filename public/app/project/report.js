@@ -8,6 +8,7 @@ import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { projectHead } from './guide.js';
 import { closeDialog } from './closing.js';
 import { navigate } from '../core/router.js';
+import { wireDetailsMenus } from '../core/outside.js';
 
 /** 완료보고서 7절 교훈: three PM-written fields with a placeholder (no auto fill). */
 const LESSON_PH = { good: '예: 요구사항 확정 승인을 일찍 받아 변경 다툼이 적었다', bad: '예: 데이터 이관 리허설이 한 번뿐이라 오픈이 5일 밀렸다', next: '예: 이관 리허설을 일정에 두 번 넣는다' };
@@ -84,9 +85,7 @@ export async function reportPage(pid, rid, main = $('#main')) {
     // desktop dropdowns: one open at a time, closed after a pick or an outside click / Esc
     const menus = [...main.querySelectorAll('details.rmenu')];
     menus.forEach((d) => { d.ontoggle = () => { if (d.open) menus.forEach((o) => { if (o !== d) o.open = false; }); }; d.querySelectorAll('[role=menuitem]').forEach((b) => b.addEventListener('click', () => { d.open = false; })); });
-    if (menus.length && !reportPage.wired) { reportPage.wired = true;
-      document.addEventListener('click', (e) => { if (!e.target.closest('details.rmenu')) document.querySelectorAll('details.rmenu[open]').forEach((d) => { d.open = false; }); });
-      document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; const o = document.querySelector('details.rmenu[open]'); if (o) { o.open = false; o.querySelector('summary').focus(); } }); }
+    if (menus.length) wireDetailsMenus();   // outside tap / click + Esc, shared with the .pmenu dropdowns (core/outside.js)
     $('#copy-md').onclick = () => copy(report.rendered_content, 'Markdown');
     main.querySelectorAll('[data-dl]').forEach((b) => b.onclick = async () => {
       b.disabled = true;

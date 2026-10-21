@@ -13,6 +13,7 @@ import { DOORS, HOME_ITEMS, PHASE_ITEMS, PM_ITEMS, doorOf, phaseOfPath } from '.
 import { isPhone } from '../core/device.js';
 import { phaseState, phaseTip } from './status.js';
 import { openActivity } from './actions.js';
+import { closeNav } from '../shell.js';
 
 const ICON = {
   next: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10h11M11 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -84,6 +85,9 @@ function wire() {
       const grp = tg.closest('[data-grp]'); const pidEl = grp && grp.closest('[data-lnb-pid]');
       if (grp && !grp.classList.contains('is-open') && !grp.classList.contains('is-leaf')) { grp.classList.add('is-open'); tg.setAttribute('aria-expanded', 'true'); if (pidEl) setOpen(pidEl.dataset.lnbPid, tg.dataset.lnbToggle, true); }
       if (location.pathname + location.search !== tg.dataset.phaseHref) navigate(tg.dataset.phaseHref);
+      else if (isPhone()) {   // Jim mobile 10-21 #3: already on that list → close the 더보기 sheet and show the phase's activity list
+        closeNav(); const list = document.querySelector('#main .np'); if (list && list.scrollIntoView) list.scrollIntoView({ block: 'start' });
+      }
       return;
     }
     if (tg) {

@@ -3703,3 +3703,13 @@ html.is-phone .bl-tbl tbody td:nth-child(3){display:block;order:2;margin-left:au
 html.is-phone .bl-tbl tbody td:nth-child(2){display:block;order:3;flex:0 0 100%;font-size:15px;color:var(--navy)}
 html.is-phone #bl-orders-tbl tbody td:nth-child(4),html.is-phone #bl-orders-tbl tbody td:nth-child(5){display:inline;order:4;font-size:13px}
 html.is-phone #bl-orders-tbl tbody td:nth-child(5):not(:empty)::before{content:'·';margin:0 6px;color:var(--text-3)}
+
+/* Jim mobile 10-21 #4: small links / icons get a 44×44px tap area on phones (Apple HIG minimum). html.is-phone only — the PC layout is untouched. */
+html.is-phone :is(.sg-end a, .ovsec__ctx a, .ovsec__more, .pv__charter a, .actrow__h a, .appfoot a, .hc__attmore a, .sbanner p a, .hsum__smp a, .defsec__pg a, .home__credits){display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;vertical-align:middle;gap:.3em}
+html.is-phone .actrow__h{align-items:center}html.is-phone .actrow__h a{justify-content:flex-start}
+html.is-phone .appfoot{padding-top:0;padding-bottom:0}
+html.is-phone .coach .coach__more{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px}
+html.is-phone .coach__x{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:44px;min-height:44px;margin:-12px -12px -12px 0}
+html.is-phone .gfoot .btn--xs{min-width:44px;min-height:44px}
+html.is-phone .pl-faq{padding:0}html.is-phone .pl-faq summary{padding:12px 0}html.is-phone .pl-faq p{margin:0 0 12px}
+@media (pointer:coarse){html.is-phone body{cursor:pointer}}   /* #6: iOS Safari delivers taps on non-clickable areas to document listeners only when the target looks clickable */

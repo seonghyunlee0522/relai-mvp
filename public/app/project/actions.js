@@ -8,6 +8,7 @@ import { state } from '../core/state.js';
 import { confirmDialog, toast } from '../shared/dialogs.js';
 import { periodDialog } from './dashboard.js';
 import { openJiraProjectSettings } from '../shared/jira.js';
+import { closeOnOutsideTap } from '../core/outside.js';
 
 const RS = { DRAFT: ['초안', 'chip--muted'], FINAL: ['확정', 'chip--done'] };
 
@@ -112,6 +113,7 @@ export function wireProjectActions() {
     else if (btn.dataset.act === 'reports') reportsMenu(btn, c);
     else if (btn.dataset.act === 'more') moreMenu(btn, c);
   });
+  closeOnOutsideTap((t) => t.closest && t.closest('.amenu, .wsh__act [data-act], .phead__act [data-act]'), () => { if (document.querySelector('.amenu')) closeMenus(); });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.querySelector('.amenu')) { const b = document.querySelector('[data-act][aria-expanded="true"]'); closeMenus(); if (b) b.focus(); return; }
     const m = e.target.closest && e.target.closest('.amenu');

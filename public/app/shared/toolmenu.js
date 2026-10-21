@@ -3,6 +3,7 @@
  * Sections are [title, html] pairs. Controls inside keep their own data-* hooks, so the page binds them as before.
  * Keyboard: Enter/Space on ⋯ opens and focuses the first control; Esc closes and returns focus. One open at a time. */
 import { html, raw } from '../core/dom.js';
+import { closeOnOutsideTap } from '../core/outside.js';
 
 export const toolMenu = (sections, { label = '더보기' } = {}) => html`<span class="tmore" data-tmore-wrap><button type="button" class="btn btn--secondary btn--sm tmore__b" data-tmore aria-haspopup="true" aria-expanded="false" aria-label="${label}" title="${label}">⋯</button><div class="tmenu" hidden>${raw(sections.filter((s) => s && s[1]).map(([title, body]) => html`<div class="tmenu__sec">${raw(title ? html`<div class="tmenu__t">${title}</div>` : '')}${raw(body)}</div>`).join(''))}</div></span>`;
 /** A plain menu row (button). `attrs` is trusted attribute markup. */
@@ -20,6 +21,7 @@ if (typeof document !== 'undefined' && document.body && !document.body.dataset.t
     if (!m) { if (!e.target.closest('.gpop')) closeAll(); return; }
     if (e.target.closest('.tmenu__i,[data-tm-close]')) closeAll();   // a plain row acts and closes; selects / checkboxes keep it open
   });
+  closeOnOutsideTap((t) => t.closest && t.closest('.tmenu, [data-tmore], .gpop'), () => { if (document.querySelector('.tmenu:not([hidden])')) closeAll(); });   // Jim mobile 10-21 #6
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return; const m = document.querySelector('.tmenu:not([hidden])'); if (!m) return;
     const pop = m.querySelector('.gpop:not([hidden])'); if (pop) { e.stopPropagation(); pop.hidden = true; const b0 = pop.previousElementSibling; if (b0) b0.focus(); return; }   // a nested popover (컬럼) closes first

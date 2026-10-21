@@ -118,8 +118,10 @@ export async function sampleGuidePage(main = $('#main')) {
     <div class="page__head"><div><h1>RELAI 가이드 · 샘플로 보기</h1>
       <p>프로젝트 관리 방법을 몰라도 괜찮습니다. 단계가 다른 샘플 프로젝트 3개로, 각 화면이 채워지면 어떤 모습인지와 왜 필요한지를 먼저 보세요.</p></div></div>
     ${raw(missing ? html`<p class="sg-note" data-sg-missing>샘플 프로젝트 일부가 삭제되어 있어 해당 화면 바로가기가 빠졌습니다. 예시 내용은 그대로 읽을 수 있습니다.${raw(manage ? ' <a class="link" href="/app/settings?tab=me#samples" data-link>설정에서 샘플 다시 추가</a>' : '')}</p>` : '')}
-    <nav class="sg-pick" aria-label="샘플 프로젝트">${raw(SAMPLES.map((s) => html`<a class="sg-pick__i" href="#sg-${s.key}" data-sg-jump="${s.key}">
-      <i>${s.mark}</i><span><b>${s.label}</b><small>${s.name}</small></span></a>`).join(''))}</nav>
+    <nav class="sg-pick" aria-label="샘플 프로젝트">${raw(SAMPLES.map((s) => (ids[s.key]   // Jim mobile 10-21 #5: a card opens its sample; without the sample it still jumps to the section below
+      ? html`<a class="sg-pick__i" href="/app/projects/${ids[s.key]}" data-link data-sg-card="${s.key}" title="${s.name} 샘플 열기">`
+      : html`<a class="sg-pick__i" href="#sg-${s.key}" data-sg-jump="${s.key}">`)
+      + html`<i>${s.mark}</i><span><b>${s.label}</b><small>${s.name}</small></span></a>`).join(''))}</nav>
     ${raw(SAMPLES.map((s) => html`<section class="sg-s" id="sg-${s.key}" data-sg-sample="${s.key}">
       <header class="sg-s__h"><i>${s.mark}</i><div><h2>${s.name} <span class="chip chip--sample">샘플 · ${s.label}</span></h2><p class="sg-s__w">${s.where}</p><p>${s.lead}</p></div>
         <span class="sg-s__open">${raw(openBtn(ids[s.key], '', '샘플 열기'))}</span></header>

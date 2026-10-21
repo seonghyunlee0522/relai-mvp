@@ -19,7 +19,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const T = {
   active: false, paused: false, steps: [], idx: 0, el: null, key: null,
   async start({ replay = false } = {}) {
-    if (isPhone()) return;   // phone = view mode: no product tour
+    // phone = view mode: no product tour. An explicit start (도움말 › 가이드 다시 보기, a 가이드 button) opens the sample guide instead of doing nothing (Jim mobile 10-21 #1)
+    if (isPhone()) { navigate('/app/guide'); return; }
     const o = await ob.get(); if (!o) { toast('가이드를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.'); return; }
     this.steps = usable(o); if (!this.steps.length) { toast('지금 화면에서는 안내할 단계가 없습니다.'); return; }
     let idx = 0;

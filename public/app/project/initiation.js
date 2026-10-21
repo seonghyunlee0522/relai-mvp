@@ -9,11 +9,13 @@ import { download } from '../core/ui.js';
 import { toast } from '../shared/dialogs.js';
 import { state } from '../core/state.js';
 import { definitionHref } from '../shared/lifecycle.js';
+import { wireDetailsMenus } from '../core/outside.js';
 
 export const planUrl = (pid, fmt) => wsApi(`/${pid}/charter/export?format=${fmt}`);
 export const planMenu = (label = '사업수행계획서 내려받기') => html`<details class="pmenu"><summary class="btn btn--secondary btn--sm">${label} ▾</summary>
   <div class="pmenu__list" role="menu"><button type="button" role="menuitem" data-plan="pdf">PDF (.pdf)</button><button type="button" role="menuitem" data-plan="docx">Word (.docx)</button><button type="button" role="menuitem" data-plan="example">작성 예시 보기 (PDF)</button></div></details>`;
 export function bindPlanMenu(root, pid) {
+  wireDetailsMenus();   // Jim mobile 10-21 #2: closes on an outside tap like the report's .rmenu
   root.querySelectorAll('[data-plan]').forEach((b) => { b.onclick = async () => {
     const d = b.closest('details'); if (d) d.open = false;
     // 작성 예시 (batch7 #4): the sample-built plan opens in a new tab (served inline)
@@ -27,6 +29,7 @@ export const reqDocUrl = (pid, fmt) => wsApi(`/${pid}/requirements/export-doc?fo
 export const reqDocMenu = (label = '요구사항 정의서') => html`<details class="pmenu" data-reqdoc-menu><summary class="btn btn--secondary btn--sm">${label} ▾</summary>
   <div class="pmenu__list" role="menu"><button type="button" role="menuitem" data-reqdoc="pdf">PDF (.pdf)</button><button type="button" role="menuitem" data-reqdoc="docx">Word (.docx)</button></div></details>`;
 export function bindReqDocMenu(root, pid) {
+  wireDetailsMenus();
   root.querySelectorAll('[data-reqdoc]').forEach((b) => { b.onclick = async () => {
     const d = b.closest('details'); if (d) d.open = false;
     try { await download(reqDocUrl(pid, b.dataset.reqdoc)); toast('요구사항 정의서를 내려받았습니다.'); } catch (e) { toast(e.message); }

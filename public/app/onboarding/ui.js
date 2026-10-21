@@ -96,13 +96,15 @@ function openMenu(btn) {
   m.innerHTML = html`<button type="button" role="menuitem" data-h="tour">RELAI 가이드 다시 보기</button><a role="menuitem" href="/app/guide" data-link data-h-guide>샘플로 보는 RELAI 가이드</a><a role="menuitem" href="${GUIDE_PDF}" target="_blank" rel="noopener" data-h-pdf>RELAI 사용 방법 (PDF)</a>${raw(support ? html`<a role="menuitem" href="mailto:${support}">문의하기</a>` : '')}`;
   const r = btn.getBoundingClientRect(); m.style.cssText = `position:fixed;left:${Math.min(r.left, window.innerWidth - 240)}px;top:${r.bottom + 6 > window.innerHeight - 160 ? r.top - 150 : r.bottom + 6}px`;
   document.body.append(m); btn.setAttribute('aria-expanded', 'true');
-  const close = () => { m.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', close); };
-  setTimeout(() => document.addEventListener('click', close), 0);
+  const close = () => { m.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', close); document.removeEventListener('pointerdown', down, true); };
+  // Jim mobile 10-21 #6: pointerdown too (iOS Safari may not deliver a blank-area tap as a document click); the menu and its ? button are left to their click handlers
+  const down = (e) => { if (!e.target.closest('#helpmenu, .helpbtn')) close(); };
+  setTimeout(() => { document.addEventListener('click', close); document.addEventListener('pointerdown', down, true); }, 0);
   m.querySelector('[data-h]').focus();
   m.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); btn.focus(); } });
   m.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-h]'); if (!b) return; close();
-    if (b.dataset.h === 'tour') { if (!/^\/app/.test(location.pathname)) navigate('/app'); tour.start({ replay: true }); }
+    if (b.dataset.h === 'tour') { if (isPhone()) { navigate('/app/guide'); return; } if (!/^\/app/.test(location.pathname)) navigate('/app'); tour.start({ replay: true }); }   // phone: no tour → the sample guide (Jim mobile 10-21 #1)
   });
 }
 void state;
