@@ -11,7 +11,7 @@ import { navigate } from '../core/router.js';
 import { wireDetailsMenus } from '../core/outside.js';
 
 /** 완료보고서 7절 교훈: three PM-written fields with a placeholder (no auto fill). */
-const LESSON_PH = { good: '예: 요구사항 확정 승인을 일찍 받아 변경 다툼이 적었다', bad: '예: 데이터 이관 리허설이 한 번뿐이라 오픈이 5일 밀렸다', next: '예: 이관 리허설을 일정에 두 번 넣는다' };
+const LESSON_PH = { good: '예: 요구사항 확정 내용을 일찍 고객과 확인해 변경 다툼이 적었다', bad: '예: 데이터 이관 리허설이 한 번뿐이라 오픈이 5일 밀렸다', next: '예: 이관 리허설을 일정에 두 번 넣는다' };
 const lessonsBlock = (s, ro) => html`<div class="doc__lessons">${raw(s.fields.map((f) => html`<div class="doc__lesson"><h3>${f.label}</h3>${raw(ro
   ? html`<div class="doc__body">${raw(mdToHtml(f.body) || '<p class="dim">없음</p>')}</div>`
   : html`<label class="sr-only" for="ls-${f.key}">${f.label}</label><textarea class="textarea doc__ta" id="ls-${f.key}" data-lesson="${f.key}" data-lesson-sec="${s.key}" rows="3" placeholder="${LESSON_PH[f.key] || ''}">${f.body}</textarea>`)}</div>`).join(''))}</div>`;
