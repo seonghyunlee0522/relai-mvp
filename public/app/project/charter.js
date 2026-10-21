@@ -10,7 +10,7 @@ import { api, wsApi } from '../core/api.js';
 import { isPhone, pcLine } from '../core/device.js';
 import { $, html, raw, todayLocal, fmtDate } from '../core/dom.js';
 import { projectHead } from './guide.js';
-import { planMenu, bindPlanMenu, NO_REASON } from './initiation.js';
+import { planMenu, bindPlanMenu } from './initiation.js';
 import { definitionHref } from '../shared/lifecycle.js';
 
 const SPARK = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M10 1.5l1.9 4.6 4.6 1.9-4.6 1.9L10 14.5 8.1 9.9 3.5 8l4.6-1.9zM4 13l.9 2.1L7 16l-2.1.9L4 19l-.9-2.1L1 16l2.1-.9zM16 12l.7 1.6 1.6.7-1.6.7L16 16.6l-.7-1.6-1.6-.7 1.6-.7z"/></svg>';
@@ -118,18 +118,19 @@ export function charterParts(c, { ro, def }) {
     ${raw(block('변경 관리', om.changeManagement, ['변경관리 방식이 작성되지 않았습니다.', '변경 요청을 어떻게 검토·승인하는지 작성하면 AI가 변경 영향 분석 후 필요한 승인 절차를 안내할 수 있습니다.', def('OPERATIONS', 'change_management'), '변경관리 방식 입력 →']))}
     ${raw(block('검수 · 완료', om.acceptance, ['검수 / 완료 기준이 작성되지 않았습니다.', '무엇이 충족되면 검수·완료로 보는지 작성하면 AI가 테스트와 검수 준비 상태를 판단하는 데 활용합니다.', def('OPERATIONS', 'acceptance'), '검수 / 완료 기준 입력 →']))}`);
 
-  /* ---------- 8. 착수보고회 · 착수 결과 승인 (Phase 1 v2) ---------- */
+  /* ---------- 8. 착수보고회 · 착수 결과 공유·확인 (Phase 1 v2; 진행 여부 체크 since 2026-10-21) ---------- */
   const k = c.kickoff; const a = c.approval;
   const fmtDT = (v) => (!v ? '' : `${fmtDate(v.slice(0, 10))}${v.length > 10 ? ` ${v.slice(11, 16)}` : ''}`);
-  const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">승인됨</span>' : a.status === 'REAPPROVAL' ? '<span class="chx__badge is-warn">확인 필요 · 재승인 권장</span>' : '<span class="chx__badge">미승인</span>';
-  const approvalInner = !a ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수 결과 승인 ${raw(apvState)}</h3>
-    ${raw(a.status === 'TODO' ? (a.bypass ? html`<p class="chx__p chx__bypass">미승인 — ${a.bypass.reason === NO_REASON ? NO_REASON : `사유: ${a.bypass.reason}`} (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})</p>` : empty('착수 결과 승인 기록이 없습니다.', '사업수행계획서를 고객에게 보내고 승인 회신을 받으면 기록하세요. 승인된 목표·범위·일정이 이후 요구사항·변경·검수의 기준이 됩니다.', def('APPROVAL'), '승인 기록 →'))
-      : html`<dl class="chx__kvs">${raw(kv('승인자', a.approver ? `${a.approver.name}${a.approver.title ? ` ${a.approver.title}` : ''}` : ''))}${raw(kv('승인일', a.date ? fmtDate(a.date) : ''))}${raw(kv('승인 방법', a.method_label))}${raw(kv('근거', a.evidence))}</dl>
-        ${raw(a.status === 'REAPPROVAL' ? '<p class="chx__p chx__bypass">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.</p>' : '')}${raw(a.conditions ? html`<h3 class="chx__lbl">조건 / 보완 요청</h3>${raw(body(a.conditions))}` : '')}`)}</div>`;
+  // 진행 여부 체크 (2026-10-21): ✓ 확인 (who · when · 메모) or 미체크 — no approver/method/evidence, no 재승인
+  const apvState = !a ? '' : a.status === 'COMPLETED' ? '<span class="chx__badge is-ok">✓ 확인</span>' : '<span class="chx__badge">체크 안 함</span>';
+  const approvalInner = !a ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수 결과 공유·확인 ${raw(apvState)}</h3>
+    ${raw(a.status === 'TODO' ? empty('아직 체크하지 않았습니다.', '사업수행계획서로 목표·범위·일정을 고객·스폰서와 공유하고 확인했다면 체크해 두세요. 승인 기록이나 증빙은 필요 없습니다.', def('APPROVAL'), '진행 여부 체크 →')
+      : html`<dl class="chx__kvs">${raw(kv('체크', [a.checked_by_name, a.checked_on ? fmtDate(a.checked_on) : ''].filter(Boolean).join(' · ')))}${raw(kv('메모', a.note))}${raw(a.approver && a.method_label ? kv('이전 승인 기록', [`${a.approver.name}${a.approver.title ? ` ${a.approver.title}` : ''}`, a.date ? fmtDate(a.date) : '', a.method_label].filter(Boolean).join(' · ')) : '')}</dl>
+        ${raw(a.conditions ? html`<h3 class="chx__lbl">조건 / 보완 요청</h3>${raw(body(a.conditions))}` : '')}`)}</div>`;
   const kickInner = !k || k.skipped ? '' : html`<div class="chx__blk"><h3 class="chx__lbl">착수보고회</h3>
     ${raw(k.status === 'COMPLETED' ? html`<dl class="chx__kvs">${raw(kv('일시', fmtDT(k.datetime)))}${raw(kv('장소/방식', k.place))}${raw(kv('참석자', k.attendees.map((x) => x.name).join(', ')))}</dl>${raw(k.decisions.length ? html`<h3 class="chx__lbl">결정사항</h3><ul class="chx__ul">${raw(k.decisions.map((x) => html`<li>${x}</li>`).join(''))}</ul>` : '')}`
       : empty(k.datetime ? `착수보고회 예정 · ${fmtDT(k.datetime)}` : '착수보고회가 아직 열리지 않았습니다.', '착수보고회에서 목표·범위·일정을 고객과 함께 확인하고, 결과를 기록하면 여기에 표시됩니다.', def('KICKOFF'), '착수보고회 준비 →'))}</div>`;
-  const gate = a || (k && !k.skipped) ? section('8', 'approval', raw(html`착수보고회 · 승인`), '승인된 목표·범위·일정을 기준으로 이후 변경 요청과 검수를 판단합니다.', html`${raw(kickInner)}${raw(approvalInner)}`) : '';
+  const gate = a || (k && !k.skipped) ? section('8', 'approval', raw(html`착수보고회 · 확인`), '고객과 확인한 목표·범위·일정을 기준으로 이후 변경 요청과 검수를 판단합니다.', html`${raw(kickInner)}${raw(approvalInner)}`) : '';
 
   return { empty, block, kv, goals, scope, stake, shTable, governance, time, acr, ops, gate, kickInner, approvalInner };
 }
@@ -196,7 +197,7 @@ export async function charterPage(id) {
         : t.field === 'project_type' && pf.project_type ? html`${pf.project_type}` : html`<span class="chx__none">${t.value_label}</span>`)}</dd></div>`).join(''))}</dl></div>`);
 
   /* ---------- right rail: outline (scroll-spy) · next milestone · what to complete · fill status ---------- */
-  const SECTIONS = [['profile', '기본 정보'], ['goals', '목표 · 성공 기준'], ['scope', '적용 환경 · 산출물'], ['stakeholders', '관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(parts.gate ? [['approval', '착수보고회 · 승인']] : [])];
+  const SECTIONS = [['profile', '기본 정보'], ['goals', '목표 · 성공 기준'], ['scope', '적용 환경 · 산출물'], ['stakeholders', '관계자 · 의사결정'], ['timeline', '일정 · 마일스톤'], ['conditions', '전제 · 제약 · 초기 리스크'], ['operating', '운영 방식'], ...(parts.gate ? [['approval', '착수보고회 · 확인']] : [])];
   const missing = ITEMS.filter((x) => !x.ok);
   const nextMs = tl.milestones.find((m) => m.date && m.date >= today);
   const dday = nextMs ? Math.round((dnum(nextMs.date) - dnum(today)) / DAY) : null;

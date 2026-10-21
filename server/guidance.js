@@ -88,33 +88,28 @@ export function projectGuidance(ctx) {
       const d = definition?.progress || { done: 0, total: 5 };
       const gate = definition?.initiation_gate || {}; const apv = gate.approval; const kick = gate.kickoff;
       const review = (definition?.needs_review || []).filter((k) => k !== 'APPROVAL');
-      // K1: an approved definition that changed needs the customer's approval again — not a generic re-check
-      if (review.length && apv && apv.status !== 'TODO') return out('INIT_REAPPROVE', '변경 내용을 고객에게 다시 승인받으세요', `승인 후 바뀐 항목 ${review.length}개가 있습니다. 바뀐 내용을 고객에게 다시 승인받으세요. 승인된 기준이 이후 요구사항·변경·검수의 판단 기준입니다.`, '승인 후 바뀐 기준은 다시 합의해야 이후 분쟁을 막을 수 있습니다.', act('승인 다시 기록 →', u('/definition?activity=APPROVAL')), act('프로젝트 정의 확인 →', u('/definition')), '다시 승인받으면 요구사항을 정리합니다.');
       if (review.length) return out('INIT_REVIEW', '수정된 정의 항목을 다시 확인하세요', `완료 후 내용이 바뀐 항목 ${review.length}개가 있습니다. 정의는 요구사항·일정·검수의 기준이므로 바뀐 내용을 다시 확인해야 이후 판단이 어긋나지 않습니다.`, '프로젝트 정의는 요구사항·일정의 기준이 되므로 변경 후 다시 확인해야 합니다.', act('프로젝트 정의 확인 →', u('/definition')), null, '정의가 확정되면 요구사항을 정리합니다.');
       // Jim P2-1: once every 필수 업무 is done the card is the gate (as in 03), not the optional 운영 방식
       if (d.done < d.total && !(phase && phase.summary && phase.summary.gate_met)) return out('INIT_DEFINE', d.done === 0 ? '프로젝트의 목표와 범위를 정의하세요' : `프로젝트 정의를 마저 완료하세요 (${d.done}/${d.total})`, '초기에 목표·성공 기준, 수행·제외 범위, 관계자, 주요 일정과 운영 방식을 확정해야 이후 단계에서 방향성이 흔들리지 않습니다.', '착수 단계에서 정한 기준이 이후 요구사항, 일정, 검수의 판단 기준이 됩니다.', act(d.done === 0 ? '프로젝트 정의 시작 →' : '프로젝트 정의 이어서 작성 →', u('/definition')), null, '정의가 완료되면 요구사항을 등록합니다.');
-      // 착수 gate (Phase 1 v2): 정의 5개 → 착수보고회 → 승인. INIT_DONE only after 승인 (or a recorded 승인 전 진행 사유).
+      // 착수 순서: 정의 5개 → 착수보고회 → 착수 결과 확인 체크 (2026-10-21: 승인 절차 없음 — a 진행 여부 체크, never a gate)
       const plan = act('사업수행계획서 내려받기', `/api/workspaces/${project.workspace_id}/projects/${project.id}/charter/export?format=pdf`);
-      if (apv && apv.status === 'REAPPROVAL') return out('INIT_REAPPROVE', '변경 내용을 고객에게 다시 승인받으세요', '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 승인된 기준이 이후 요구사항·변경·검수의 판단 기준입니다.', '승인 후 바뀐 기준은 다시 합의해야 이후 분쟁을 막을 수 있습니다.', act('승인 다시 기록 →', u('/definition?activity=APPROVAL')), plan, '다시 승인받으면 요구사항을 정리합니다.');
-      if (apv && apv.status === 'TODO' && !apv.bypass) {
-        if (kick && kick.status === 'TODO') return out('INIT_KICKOFF', '착수보고회를 준비하고 진행하세요', '착수보고회는 고객과 수행팀이 같은 목표·범위·일정을 처음 공식적으로 확인하는 자리입니다. 순서: 사업수행계획서 초안을 내려받아 착수보고회 전에 고객에게 보내고 → 착수보고회에서 발표 → 승인을 받습니다.', '착수보고회에서 목표·범위·일정을 공식적으로 확인해야 이후 단계의 기준이 생깁니다.', act('착수보고회 준비 →', u('/definition?activity=KICKOFF')), plan, '착수보고회 후 착수 결과를 승인받습니다.');
-        return out('INIT_APPROVE', '착수 결과를 고객에게 승인받으세요', '승인된 목표·범위가 이후 요구사항·변경·검수의 기준이 됩니다. 사업수행계획서를 보내고, 승인 회신을 받으면 기록하세요.', '고객이 승인한 착수 결과가 이후 요구사항·변경·검수의 기준이 됩니다.', act('승인 기록 →', u('/definition?activity=APPROVAL')), plan, '승인을 받으면 요구사항을 정리합니다.');
+      if (apv && apv.status === 'TODO') {
+        if (kick && kick.status === 'TODO') return out('INIT_KICKOFF', '착수보고회를 준비하고 진행하세요', '착수보고회는 고객과 수행팀이 같은 목표·범위·일정을 처음 공식적으로 확인하는 자리입니다. 순서: 사업수행계획서 초안을 내려받아 착수보고회 전에 고객에게 보내고 → 착수보고회에서 발표 → 진행했으면 체크합니다.', '착수보고회에서 목표·범위·일정을 공식적으로 확인해야 이후 단계의 기준이 생깁니다.', act('착수보고회 준비 →', u('/definition?activity=KICKOFF')), plan, '착수보고회 후 착수 결과 공유·확인 여부를 체크합니다.');
+        return out('INIT_CHECK', '착수 결과를 고객과 공유·확인했는지 체크하세요', '사업수행계획서로 목표·범위·일정을 고객(또는 스폰서)과 공유하고 확인했다면 체크해 두세요. 승인 기록이나 증빙은 필요 없습니다. 체크하지 않아도 다음 단계로 넘어갈 수 있습니다.', '같은 목표·범위를 보고 있는지 한 번 맞춰 두면 이후 요구사항·변경·검수 판단이 쉬워집니다.', act('진행 여부 체크 →', u('/definition?activity=APPROVAL')), plan, '확인했으면 요구사항을 정리합니다.');
       }
-      if (apv && apv.status === 'TODO' && apv.bypass) warnings.push('착수 결과 미승인 · 승인 전 진행 사유 기록됨');
       return out('INIT_DONE', '프로젝트 정의가 완료되었습니다', '출발 기준이 정리되었습니다. 요구사항을 초기에 명확히 정리하면 설계·개발 단계의 범위 변경과 재작업을 크게 줄일 수 있습니다.', '요구사항은 WBS, 테스트, 검수와 연결되는 프로젝트의 기준입니다.', move || act('요구사항 입력 시작 →', u('/requirements?new=1')), move ? act('요구사항 입력 시작 →', u('/requirements?new=1')) : null, nextPhaseText);
     }
     case 'REQUIREMENTS': {
       if (n(req.total) === 0) return out('REQ_EMPTY', '요구사항을 수집하고 정리하세요', '요구사항을 초기에 명확히 정리하면 설계·개발 단계의 범위 변경과 재작업을 크게 줄일 수 있습니다. 직접 입력, Excel 가져오기, AI 추출(사용 가능 시)을 요구사항 화면에서 선택할 수 있습니다.', '요구사항은 프로젝트 범위와 검수 기준이 되며 WBS·테스트와 연결됩니다.', act('요구사항 입력 시작 →', u('/requirements?new=1')), null, '요구사항이 준비되면 분류와 범위를 정리합니다.');
       if (n(req.type_unspecified)) return out('REQ_CLASSIFY', '요구사항을 분류하세요', `유형이 지정되지 않은 요구사항 ${req.type_unspecified}건이 있습니다. 기능·비기능·인터페이스·데이터 구분이 있어야 설계와 테스트 범위를 빠짐없이 잡을 수 있습니다.`, '기능·비기능·인터페이스·데이터 구분이 있어야 설계와 테스트 범위를 정할 수 있습니다.', act('요구사항 분류 →', u('/requirements?type=UNSPECIFIED')), n(req.priority_unspecified) ? act('우선순위 설정 →', u('/requirements?priority=UNSPECIFIED')) : null, '분류가 끝나면 범위를 확정합니다.');
-      // Phase 2: 범위 확정 shows the Charter 제외 범위 (no auto matching); 확정 and 승인 both lead to the 승인 기록 Drawer
+      // Phase 2: 범위 확정 shows the Charter 제외 범위 (no auto matching); 확정 leads to the 요구사항 확정 확인 Drawer (체크 + 미확정 일괄 확정)
       const excl = (definition?.scope_out || []).length ? ` ${scopeOutHint(definition.scope_out)}` : '';
       const rb = definition?.req_baseline || null;
       const docLink = act('요구사항 정의서 내려받기', `/api/workspaces/${project.workspace_id}/projects/${project.id}/requirements/export-doc?format=pdf`);
       if (n(req.scope_undecided)) return out('REQ_SCOPE', '요구사항의 범위를 확정하세요', `범위가 결정되지 않은 요구사항 ${req.scope_undecided}건이 있습니다. 범위를 먼저 정해야 WBS와 테스트 범위를 흔들림 없이 세울 수 있습니다.${excl}`, '범위가 정해져야 실행 계획(WBS)과 테스트 범위를 정할 수 있습니다.', act('범위 결정 →', u('/requirements?scope=UNDECIDED')), n(req.priority_unspecified) ? act('우선순위 설정 →', u('/requirements?priority=UNSPECIFIED')) : null, '범위가 정해지면 요구사항을 확정합니다.');
-      if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope)) return out('REQ_CONFIRM', '요구사항을 검토하고 확정하세요', `범위 내 요구사항 ${req.in_scope}건 중 ${req.in_scope_confirmed}건이 확정되었습니다. 요구사항 정의서를 고객에게 보내 검토받으세요. 승인 회신을 받으면 승인 기록에서 한 번에 확정됩니다.${n(req.priority_unspecified) ? ` 우선순위 미지정 ${req.priority_unspecified}건.` : ''}`, '요구사항을 확정하면 이후 변경은 변경 요청으로 관리됩니다.', act('승인 기록하기', u('/requirements?approval=1')), docLink, '고객 승인을 기록하면 분석·설계 단계에서 WBS를 작성합니다.');
+      if (n(req.in_scope) && n(req.in_scope_confirmed) < n(req.in_scope)) return out('REQ_CONFIRM', '요구사항을 검토하고 확정하세요', `범위 내 요구사항 ${req.in_scope}건 중 ${req.in_scope_confirmed}건이 확정되었습니다. 요구사항 정의서로 고객과 내용을 맞춘 뒤 확정하세요. 확정 확인 화면에서 남은 요구사항을 한 번에 확정할 수 있습니다.${n(req.priority_unspecified) ? ` 우선순위 미지정 ${req.priority_unspecified}건.` : ''}`, '요구사항을 확정하면 이후 변경은 변경 요청으로 관리됩니다.', act('요구사항 확정하기', u('/requirements?approval=1')), docLink, '요구사항을 확정하면 분석·설계 단계에서 WBS를 작성합니다.');
       if (n(req.priority_unspecified)) warnings.push(`우선순위 미지정 요구사항 ${req.priority_unspecified}건`);
-      if (rb && rb.step_id && rb.status !== 'COMPLETED' && !rb.bypass) return out('REQ_APPROVE', '확정한 요구사항을 고객에게 승인받으세요', '고객이 승인한 요구사항이 설계·개발·테스트·검수의 기준이 됩니다. 요구사항 정의서를 보내고, 승인 회신을 받으면 기록하세요.', '고객이 승인한 요구사항이 이후 설계·개발·검수의 기준이 됩니다.', act('승인 기록하기', u('/requirements?approval=1')), docLink, '승인을 기록하면 분석·설계 단계에서 WBS를 작성합니다.');
-      if (rb && rb.status !== 'COMPLETED' && rb.bypass) warnings.push('요구사항 확정 미승인 · 승인 전 진행 사유 기록됨');
+      if (rb && rb.step_id && rb.status !== 'COMPLETED') return out('REQ_CHECK', '확정한 요구사항을 고객과 확인했는지 체크하세요', '요구사항 정의서로 확정 내용을 고객과 확인했다면 체크해 두세요. 승인 기록이나 증빙은 필요 없습니다. 체크하지 않아도 다음 단계로 넘어갈 수 있습니다.', '확정 내용을 한 번 맞춰 두면 설계·개발 중 범위 다툼이 줄어듭니다.', act('진행 여부 체크', u('/requirements?approval=1')), move || docLink, '확인했으면 분석·설계 단계에서 WBS를 작성합니다.');
       return out('REQ_DONE', '요구사항 정의가 마무리되었습니다', '요구사항이 확정되었습니다. 요구사항을 실행 가능한 작업 단위로 구체화하면 일정과 책임을 명확하게 관리할 수 있습니다.', 'WBS는 요구사항을 실제 작업 단위로 나눈 실행 계획입니다.', move || act('WBS 작성 시작 →', u('/wbs?new=1')), move ? act('요구사항 보기 →', u('/requirements')) : null, nextPhaseText);
     }
     case 'ANALYSIS_DESIGN': {
@@ -137,7 +132,7 @@ export function projectGuidance(ctx) {
       if (n(iss.blocked)) return out('DEV_BLOCKED', '차단된 이슈를 해결하세요', `차단된 이슈 ${iss.blocked}건이 진행을 막고 있습니다. 차단을 먼저 풀지 않으면 뒤따르는 작업까지 일정 전체가 밀립니다.`, '차단된 작업을 풀지 않으면 일정 전체가 밀립니다.', act('차단된 이슈 처리 →', u('/issues?status=BLOCKED')), act('WBS 보기 →', u('/wbs?ctx=monitor')), '진행 현황과 지연 작업을 확인합니다.');
       if (n(overdue_tasks)) return out('DEV_OVERDUE', '지연 작업을 확인하세요', `종료 예정일이 지난 작업 ${overdue_tasks}건이 있습니다. 지연 원인과 대응을 지금 정해야 일정 영향을 최소화할 수 있습니다.`, '지연 원인과 대응책을 정해야 일정 영향을 줄일 수 있습니다.', act('지연 작업 확인 →', u('/wbs?f=overdue')), act('이슈 등록 →', u('/issues?new=1')), '지연이 정리되면 진척률을 갱신합니다.');
       if (n(iss.critical)) return out('DEV_CRITICAL', '심각한 이슈를 처리하세요', `심각한 이슈 ${iss.critical}건이 열려 있습니다. 심각한 이슈는 범위·일정·품질에 직접 영향을 주므로 우선 처리해야 합니다.`, '심각한 이슈는 범위·일정·품질에 직접 영향을 줍니다.', act('심각한 이슈 처리 →', u('/issues?severity=CRITICAL')), null, '이슈가 정리되면 진행 현황을 확인합니다.');
-      if (n(chg.under_review)) return out('DEV_CHANGE', '고객 결정을 받아 기록하세요', `검토 중 변경 요청 ${chg.under_review}건이 고객 결정을 기다립니다. 고객이 누가·언제·어떻게 승인했는지 기록해야 범위·일정·비용 변경의 근거가 남습니다.`, '승인·반려가 늦어지면 범위와 일정이 불명확해집니다.', act('승인 기록하기', u('/changes?status=UNDER_REVIEW&approve=1')), null, '변경이 결정되면 WBS 영향에 반영합니다.');   // Phase 4 US-2
+      if (n(chg.under_review)) return out('DEV_CHANGE', '검토 중인 변경 요청을 결정하세요', `검토 중 변경 요청 ${chg.under_review}건이 있습니다. 반영할지(승인)·말지(반려) 정해 두세요. 고객과 협의했다면 결정할 때 체크해 두면 됩니다.`, '결정이 늦어지면 범위와 일정이 불명확해집니다.', act('변경 요청 결정 →', u('/changes?status=UNDER_REVIEW&approve=1')), null, '변경이 결정되면 WBS 영향에 반영합니다.');   // 2026-10-21: 고객 승인 기록 → 진행 여부 체크
       if (n(wbs.tasks) === 0) return out('DEV_NO_WBS', '실행 작업(WBS)이 없습니다', '구현 단계이지만 등록된 작업이 없습니다. 작업 단위가 있어야 진행률과 지연을 추적하고 팀과 같은 기준으로 이야기할 수 있습니다.', '작업이 있어야 진행률과 지연을 추적할 수 있습니다.', act('WBS 작성 시작 →', u('/wbs?new=1')), null, '작업이 준비되면 진행 현황을 갱신합니다.');
       const devTotal = wbs.by_phase && n(wbs.by_phase.DEVELOPMENT) ? n(wbs.by_phase.DEVELOPMENT) : n(wbs.tasks);
       const devDone = wbs.by_phase && n(wbs.by_phase.DEVELOPMENT) ? n(wbs.by_phase_completed && wbs.by_phase_completed.DEVELOPMENT) : n(wbs.tasks_completed);
@@ -158,12 +153,12 @@ export function projectGuidance(ctx) {
       // 검수 rules apply until the ACCEPTANCE activity is complete (from data, or marked by hand when 검수 happened outside RELAI)
       const accDone = Array.isArray(phase && phase.steps) && phase.steps.some((a) => a.step_key === 'ACCEPTANCE' && a.state === 'COMPLETED');
       if (!accDone) {
-        if (n(acc.total) === 0) return out('ACC_EMPTY', '검수 항목을 작성하고 인수 승인을 요청하세요', '오픈 전에 완료 기준과 미해결 항목을 점검하면 예상치 못한 이슈를 줄이고 안정적으로 프로젝트를 마무리할 수 있습니다. 검수 항목은 요구사항과 테스트를 묶어 만듭니다.', '검수 승인이 있어야 전환·오픈을 진행할 수 있습니다.', act('검수 항목 작성 →', u('/tests?tab=acceptance&new=1')), null, '검수가 승인되면 전환 계획과 오픈을 준비합니다.');
-        if (n(acc.rework)) return out('ACC_REWORK', '보완 요청된 검수를 처리하세요', `보완 필요 ${acc.rework}건이 있습니다. 보완 후 재요청해야 검수를 확정하고 오픈 일정을 지킬 수 있습니다.`, '보완 후 재요청해야 검수를 확정할 수 있습니다.', act('보완 처리 →', u('/tests?tab=acceptance&status=REWORK_REQUIRED')), null, '모든 검수가 승인되면 전환을 준비합니다.');
-        if (n(acc.requested)) return out('ACC_PENDING', '검수 결과를 기록하세요', `검수 요청 ${acc.requested}건이 고객 확인을 기다립니다. 승인·반려·보완 결과를 기록해야 미완료 항목을 빠짐없이 정리할 수 있습니다.`, '검수 결과(승인/반려/보완)를 기록해야 미완료 항목을 정리할 수 있습니다.', act('검수 결과 기록 →', u('/tests?tab=acceptance&status=REQUESTED')), null, '검수가 모두 승인되면 전환을 준비합니다.');
-        if (n(acc.draft)) return out('ACC_DRAFT', '작성 중인 검수를 요청하세요', `작성 중 검수 ${acc.draft}건이 있습니다. 검수를 요청해야 고객 확인 절차가 시작되고 오픈 일정이 확정됩니다.`, '검수 요청이 있어야 고객 확인 절차가 시작됩니다.', act('검수 요청 →', u('/tests?tab=acceptance&status=DRAFT')), null, '검수 결과를 기록합니다.');
-        // Phase 6 US-2: one approved 검수 is not the whole scope — 1차·2차 검수가 범위 내 요구사항을 모두 덮어야 끝납니다
-        if (n(acc.scope_target) && n(acc.scope_accepted) < n(acc.scope_target)) return out('ACC_SCOPE', '검수가 범위 전체를 덮도록 나머지를 검수받으세요', `${accScopeText(acc)}. 나머지 ${n(acc.scope_target) - n(acc.scope_accepted)}건을 검수에 묶어 고객 승인을 받아야 검수가 끝납니다.`, '범위 내 요구사항이 모두 승인된 검수에 들어가야 잔금 청구의 근거가 됩니다.', act('검수 범위 보기', u('/tests?tab=acceptance&new=1')), null, '검수가 범위 전체를 덮으면 전환과 오픈을 진행합니다.');
+        if (n(acc.total) === 0) return out('ACC_EMPTY', '검수 항목을 작성하고 결과를 기록하세요', '오픈 전에 완료 기준과 미해결 항목을 점검하면 예상치 못한 이슈를 줄이고 안정적으로 프로젝트를 마무리할 수 있습니다. 검수 항목은 요구사항과 테스트를 묶어 만듭니다.', '검수 결과를 기록해 두면 전환·오픈을 정리하기 쉽습니다.', act('검수 항목 작성 →', u('/tests?tab=acceptance&new=1')), null, '검수가 끝나면 전환 계획과 오픈을 준비합니다.');
+        if (n(acc.rework)) return out('ACC_REWORK', '보완 필요한 검수를 처리하세요', `보완 필요 ${acc.rework}건이 있습니다. 보완한 뒤 다시 검수해 결과를 기록하세요.`, '보완이 끝나야 검수를 마무리할 수 있습니다.', act('보완 처리 →', u('/tests?tab=acceptance&status=REWORK_REQUIRED')), null, '검수가 모두 끝나면 전환을 준비합니다.');
+        if (n(acc.requested)) return out('ACC_PENDING', '검수 결과를 기록하세요', `검수 요청 ${acc.requested}건이 있습니다. 결과(승인·반려·보완)를 기록해야 미완료 항목을 빠짐없이 정리할 수 있습니다.`, '검수 결과(승인/반려/보완)를 기록해야 미완료 항목을 정리할 수 있습니다.', act('검수 결과 기록 →', u('/tests?tab=acceptance&status=REQUESTED')), null, '검수가 모두 끝나면 전환을 준비합니다.');
+        if (n(acc.draft)) return out('ACC_DRAFT', '작성 중인 검수의 결과를 기록하세요', `작성 중 검수 ${acc.draft}건이 있습니다. 고객 확인을 마쳤다면 바로 승인으로 기록하고, 아직이면 검수 요청 상태로 두세요.`, '검수 결과가 기록되어야 오픈 전에 남은 항목을 정리할 수 있습니다.', act('검수 결과 기록 →', u('/tests?tab=acceptance&status=DRAFT')), null, '검수 결과를 기록합니다.');
+        // Phase 6 US-2: one 검수 is not the whole scope — 1차·2차 검수가 범위 내 요구사항을 모두 덮으면 끝 (the activity can also be marked 완료 by hand)
+        if (n(acc.scope_target) && n(acc.scope_accepted) < n(acc.scope_target)) return out('ACC_SCOPE', '나머지 요구사항도 검수에 넣으세요', `${accScopeText(acc)}. 나머지 ${n(acc.scope_target) - n(acc.scope_accepted)}건을 검수에 묶어 결과를 기록하세요. 검수를 RELAI 밖에서 마쳤다면 검수 활동을 완료로 표시해도 됩니다.`, '범위 내 요구사항이 모두 검수에 들어가면 잔금 청구 근거가 정리됩니다.', act('검수 범위 보기', u('/tests?tab=acceptance&new=1')), null, '검수가 범위 전체를 덮으면 전환과 오픈을 진행합니다.');
       }
       const open = [];
       if (n(iss.active)) open.push(`열린 이슈 ${iss.active}건`);
@@ -174,7 +169,7 @@ export function projectGuidance(ctx) {
       // K25: after 오픈 the headline says so (with what was handed over) and points at 07
       if (goLiveDone(phase)) { const nc = goLive && Array.isArray(goLive.carryovers) ? goLive.carryovers.length : 0;
         return out('TRANSITION_RUN', `오픈 완료${nc ? ` · 운영 이관 ${nc}건` : ''}`, `오픈을 기록했습니다.${nc ? ` 운영 이관한 ${nc}건은 07 운영 단계에서 이어서 봅니다.` : ''} 남은 전환 업무를 정리하고 운영 및 유지보수 단계로 넘어가세요.`, '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('현황 보기 →', u('/overview')), actCta ? move : null, nextPhaseText); }
-      return out('TRANSITION_RUN', '검수가 승인되었습니다 — 전환과 오픈을 진행하세요', '검수가 승인되었습니다. 전환 계획·데이터 이관·사용자 교육을 마치고 오픈 후 안정화까지 기록해 두면 운영 이관이 매끄러워집니다.', '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('현황 보기 →', u('/overview')), actCta ? null : move ? act('현황 보기 →', u('/overview')) : null, nextPhaseText);
+      return out('TRANSITION_RUN', '검수가 끝났습니다 — 전환과 오픈을 진행하세요', '검수가 끝났습니다. 전환 계획·데이터 이관·사용자 교육을 마치고 오픈 후 안정화까지 기록해 두면 운영 이관이 매끄러워집니다.', '전환 및 오픈 단계의 필수 활동이 끝나면 운영 및 유지보수 단계로 이동합니다.', actCta || move || act('현황 보기 →', u('/overview')), actCta ? null : move ? act('현황 보기 →', u('/overview')) : null, nextPhaseText);
     }
     case 'OPERATIONS': {
       // Phase 7 US-4: what 오픈 handed over is one warn line with its owner count (never red) — not 독촉 numbers

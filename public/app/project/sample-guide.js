@@ -16,7 +16,7 @@ const loadCss = () => { if (document.querySelector(`link[href="${CSS_HREF}"]`)) 
 const li = (xs) => raw(xs.map((x) => html`<li>${x}</li>`).join(''));
 const SAMPLES = [
   { key: 'early', mark: 'A', label: '시작 단계', name: '다온생명 고객상담 챗봇 구축', where: '01 착수 완료 · 02 요구사항 정의 진행 중',
-    lead: '처음 2~4주에 무엇을 적어 두면 되는지 보여 주는 샘플입니다. 목표와 범위, 마일스톤을 정하고 고객 승인을 받은 뒤 요구사항을 모으는 중입니다.',
+    lead: '처음 2~4주에 무엇을 적어 두면 되는지 보여 주는 샘플입니다. 목표와 범위, 마일스톤을 정하고 고객과 확인한 뒤 요구사항을 모으는 중입니다.',
     moments: [
       { id: 'charter', phase: '01 착수', title: '프로젝트 개요 — 목표·성공 기준·적용 환경·산출물', path: '/definition',
         preview: () => html`<dl class="sg-kv">
@@ -30,12 +30,12 @@ const SAMPLES = [
         preview: () => html`<ol class="sg-tl">${raw([['착수보고', '1주차'], ['요구사항 확정', '5주차'], ['분석·설계 완료', '9주차'], ['오픈', '22주차', '홈페이지·앱 동시 오픈'], ['프로젝트 종료', '26주차']]
           .map(([t, w, n]) => html`<li><b>${t}</b><span>${w}</span>${raw(n ? html`<small>${n}</small>` : '')}</li>`).join(''))}</ol>`,
         why: '마일스톤은 작업 목록이 아니라 고객과 약속한 날짜입니다. 5개 안팎이면 충분합니다. 이 날짜가 WBS 일정의 기준이 되고, 밀릴 것 같으면 RELAI가 리스크로 먼저 알려 줍니다.' },
-      { id: 'approval', phase: '01 착수', title: '착수보고와 착수 결과 승인', path: '/definition/approval',
+      { id: 'approval', phase: '01 착수', title: '착수보고와 착수 결과 공유·확인', path: '/definition/approval',
         preview: () => html`<dl class="sg-kv">
           <dt>착수보고</dt><dd>본사 대회의실 · 참석 6명 · 안건 6개</dd>
           <dt>결정</dt><dd><ul>${li(['음성(ARS) 챗봇은 이번 범위에서 제외', '주간 회의는 매주 화요일 10시'])}</ul></dd>
-          <dt>승인</dt><dd><span class="chip chip--done">서명</span> 사업수행계획서 v1.0 서명본 수령 (스폰서 한도윤 본부장)</dd></dl>`,
-        why: '착수보고에서 정한 내용을 고객 스폰서에게 승인받아 근거(서명본, 회신 메일)를 남깁니다. 승인 기록이 있어야 이후 범위 다툼에서 "처음에 이렇게 합의했다"를 보여 줄 수 있습니다.' },
+          <dt>확인</dt><dd><span class="chip chip--done">✓ 체크</span> 착수보고에서 사업수행계획서로 스폰서 한도윤 본부장과 확인</dd></dl>`,
+        why: '착수보고에서 정한 내용을 고객 스폰서와 공유·확인했다면 체크해 둡니다. 승인 기록이나 증빙은 필요 없고, 한 번 맞춰 두면 이후 범위 이야기가 쉬워집니다.' },
       { id: 'requirements', phase: '02 요구사항 정의', title: '요구사항 — 범위 안·밖·미정을 나눠 확정', path: '/requirements',
         preview: () => html`<table class="sg-tb"><thead><tr><th>요구사항</th><th>범위</th><th>상태</th></tr></thead><tbody>${raw([
           ['FAQ 시나리오 자동 응답', '범위 안', '확정', 'done'], ['본인 인증 후 보험 계약 조회', '범위 안', '확정', 'done'], ['기간계(계약관리) 조회 연계', '범위 안', '검토 중', 'warn'],
@@ -58,12 +58,12 @@ const SAMPLES = [
           <p><b>대응(완화)</b> 이관 전 센터 전수 실사 1회 + 정제 규칙 확정. 리허설 2회로 건수·금액 대사.</p>
           <small>연결: 요구사항 「기존 WMS 데이터 이관」 · WBS 「이관 프로그램 개발」</small></div>`,
         why: '리스크는 아직 일어나지 않은 위험, 이슈는 이미 일어난 문제입니다. 리스크를 미리 적고 대응 방법과 검토일을 정해 두면, 터지기 전에 손을 쓸 수 있고 주간보고의 "의사결정 필요사항"에 자동으로 올라갑니다.' },
-      { id: 'change', phase: '04 구현', title: '변경 요청 — 영향을 적고 승인받은 뒤 반영', path: '/changes',
+      { id: 'change', phase: '04 구현', title: '변경 요청 — 영향을 적고 결정한 뒤 반영', path: '/changes',
         preview: () => html`<div class="sg-card"><div class="sg-card__h"><b>CR-001 당일 출고 건 우선 피킹 규칙 추가</b><span class="chip chip--done">승인</span></div>
           <p><b>이유</b> 당일 출고 약속(오후 3시 마감) 위반 건이 월 120건 발생</p>
           <div class="sg-chips"><span>일정 +3일</span><span>공수 +4 MD</span><span>요구사항 「웨이브 피킹」 수정</span><span>WBS 「웨이브 피킹 개발」 재작업</span></div>
-          <small>고객 승인: 강민서 PM 회신 메일 (공수 4MD 추가 승인)</small></div>`,
-        why: '기준선이 정해진 뒤의 추가·변경은 말로 받지 않고 변경 요청으로 남깁니다. 일정과 공수 영향을 먼저 적고 고객 승인을 받으면, 일정이 늘어난 이유가 기록으로 남아 완료보고서까지 이어집니다.' },
+          <small>✓ 고객 확인 · 강민서 PM과 공수 4MD 추가 협의</small></div>`,
+        why: '기준선이 정해진 뒤의 추가·변경은 말로 받지 않고 변경 요청으로 남깁니다. 일정과 공수 영향을 먼저 적고 반영 여부를 결정하면, 일정이 늘어난 이유가 기록으로 남아 완료보고서까지 이어집니다.' },
       { id: 'weekly', phase: '매주', title: '주간보고 — 쌓인 데이터로 자동 작성', path: '/reports',
         preview: (live) => html`<div class="sg-doc"><b>새솔유통 물류 WMS 고도화 주간보고</b>
           <ol>${li([`프로젝트 현황 — 단계 구현 · 상태 위험 (리스크 심각 1건)${typeof live.wbsProgress === 'number' ? ` · WBS 진행률 ${live.wbsProgress}%` : ''}`, '금주 완료 — ISS-001 PDA 화면 깨짐 해결', '진행 중 — PDA 화면 개발 85% · 웨이브 피킹 개발 60%', '이슈·리스크 — ISS-002 택배사 API 지연 · RSK-001 데이터 품질', '확인 및 의사결정 필요사항 — RSK-001, RSK-002', '차주 계획 — 종료 예정 작업, 이슈 기한, 리스크 검토일'])}</ol></div>`,
@@ -72,15 +72,15 @@ const SAMPLES = [
   { key: 'done', mark: 'C', label: '종료 직전', name: '한결건설 사내 그룹웨어 구축', where: '07 운영 · 종료만 남음',
     lead: '7단계를 모두 지난 프로젝트입니다. 검수·오픈·운영 인계를 거쳐 완료보고서와 교훈까지 남기는 끝맺음을 보여 줍니다.',
     moments: [
-      { id: 'acceptance', phase: '05 시험', title: '검수 / 인수 승인 — 요구사항 전체를 고객이 확인', path: '/tests?tab=acceptance',
+      { id: 'acceptance', phase: '05 시험', title: '검수 — 요구사항 전체를 고객과 확인', path: '/tests?tab=acceptance',
         preview: () => html`<div class="sg-card"><div class="sg-card__h"><b>최종 검수 — 범위 내 요구사항 7건</b><span class="chip chip--done">승인</span></div>
           <p>요구사항마다 만든 테스트를 통과한 뒤 검수를 요청했고, 고객 PM이 확인했습니다.</p>
-          <small>고객 승인: 검수 확인서 서명본 (이서연 PM)</small></div>`,
-        why: '검수는 착수 때 적은 성공 기준과 확정한 요구사항을 기준으로 받습니다. 서명이나 메일로 근거를 남겨 두면 "끝났다"를 객관적으로 보여 줄 수 있고, 잔금·종료 협의가 쉬워집니다.' },
+          <small>✓ 고객 확인 · 이서연 PM과 검수 회의에서 확인</small></div>`,
+        why: '검수는 착수 때 적은 성공 기준과 확정한 요구사항을 기준으로 받습니다. 결과를 기록하고 고객과 확인했으면 체크해 두면 "끝났다"를 함께 보여 줄 수 있고, 잔금·종료 협의가 쉬워집니다.' },
       { id: 'closing', phase: '07 운영', title: '운영 인계와 완료보고서 — 교훈까지 남기고 종료', path: '/reports', livePath: (live) => (live.completionId ? `/reports/${live.completionId}` : ''),
         preview: () => html`<dl class="sg-kv">
           <dt>운영 인계</dt><dd>운영 담당(정보시스템팀)에게 인계 완료</dd>
-          <dt>잘한 점</dt><dd>요구사항 확정 승인을 일찍 받아 범위 논쟁이 적었다 · 이관 리허설 2회로 오픈 당일 문제가 없었다</dd>
+          <dt>잘한 점</dt><dd>요구사항 확정 내용을 일찍 고객과 확인해 범위 논쟁이 적었다 · 이관 리허설 2회로 오픈 당일 문제가 없었다</dd>
           <dt>아쉬운 점</dt><dd>모바일 알림 지연을 시험 단계에서야 발견했다</dd>
           <dt>다음엔</dt><dd>푸시·알림은 설계 단계에서 부하 테스트를 먼저 한다</dd></dl>`,
         why: '오픈이 끝이 아닙니다. 운영 담당에게 인계하고, 완료보고서에 일정·범위·변경 결과와 교훈을 남겨야 다음 프로젝트가 같은 실수를 반복하지 않습니다. 이 샘플은 "프로젝트 종료" 한 번이면 끝나는 상태입니다.' },

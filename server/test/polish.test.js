@@ -63,23 +63,25 @@ test('K12 scheduleLines: a push then a pull-back in the same week → each line 
 });
 
 /* ---------- K1 · K25 What's Next copy ---------- */
-test('K1 approved definition edited → "변경 내용을 고객에게 다시 승인받으세요" + 승인 drawer CTA; K25 after 오픈 → "오픈 완료 · 운영 이관 N건" + next-phase CTA', () => {
+test('K1 checked definition edited → plain INIT_REVIEW re-check (no re-approval since 2026-10-21); K25 after 오픈 → "오픈 완료 · 운영 이관 N건" + next-phase CTA', () => {
   const g = (ctx) => projectGuidance({ project: { id: 'p1', workspace_id: 'w1' }, ...ctx });
   let r = g({ phase: { phase_key: 'INITIATION', name: '착수', sequence: 1 }, definition: { progress: { done: 5, total: 5 }, needs_review: ['SCOPE'], initiation_gate: { approval: { status: 'COMPLETED' } } } });
-  assert.equal(r.title, '변경 내용을 고객에게 다시 승인받으세요'); assert.equal(r.primary_action.href, '/app/projects/p1/definition?activity=APPROVAL');
+  assert.equal(r.rule, 'INIT_REVIEW'); assert.equal(r.title, '수정된 정의 항목을 다시 확인하세요'); assert.equal(r.primary_action.href, '/app/projects/p1/definition');
+  assert.doesNotMatch(JSON.stringify(r), /다시 승인받으세요/);
   r = g({ phase: { phase_key: 'INITIATION', name: '착수', sequence: 1 }, definition: { progress: { done: 5, total: 5 }, needs_review: ['SCOPE'], initiation_gate: { approval: { status: 'TODO' } } } });
-  assert.equal(r.rule, 'INIT_REVIEW');   // never approved → re-check, not re-approve
+  assert.equal(r.rule, 'INIT_REVIEW');   // unchecked → the same re-check
   const TR = { phase: { phase_key: 'TRANSITION_GO_LIVE', name: '전환 및 오픈', sequence: 6, steps: [{ step_key: 'ACCEPTANCE', state: 'COMPLETED' }, { step_key: 'GO_LIVE', state: 'COMPLETED' }] }, next_phase: { name: '운영 및 유지보수', sequence: 7 } };
   r = g({ ...TR, stats: { acceptances: { total: 1, accepted: 1 } }, go_live: { date: '2026-10-10', carryovers: [{}, {}] } });
   assert.equal(r.title, '오픈 완료 · 운영 이관 2건'); assert.equal(r.primary_action.href, '/app/projects/p1?move=next');
   r = g({ ...TR, phase: { ...TR.phase, steps: [TR.phase.steps[0]] }, stats: { acceptances: { total: 1, accepted: 1 } } });
-  assert.match(r.title, /검수가 승인되었습니다/);   // before 오픈: unchanged
+  assert.match(r.title, /검수가 끝났습니다 — 전환과 오픈을 진행하세요/);   // before 오픈 (wording: 승인 → 끝났습니다)
 });
 
 /* ---------- K2 · K7 · K30 copy ---------- */
-test('K2 stale-approval footer says 재승인 전까지는; K7 no doubled 확인; K30 empty 교훈 → 없음', () => {
-  assert.match(coverLines('t', 'n', [], planVersion({ status: 'REAPPROVAL' }).footer).join('\n'), /승인 후 변경된 초안\*\* — 재승인 전까지는/);
-  assert.match(coverLines('t', 'n', [], planVersion({ status: 'TODO' }).footer).join('\n'), /고객 승인 전에는/);
+test('K2 draft footer says 고객과 확인하기 전에는 (no 재승인 state); K7 no doubled 확인; K30 empty 교훈 → 없음', () => {
+  assert.doesNotMatch(coverLines('t', 'n', [], planVersion({ status: 'REAPPROVAL' }).footer).join('\n'), /재승인/);
+  assert.match(coverLines('t', 'n', [], planVersion({ status: 'TODO' }).footer).join('\n'), /\*\*초안\*\* — 고객과 확인하기 전에는 내용이 바뀔 수 있습니다\./);
+  assert.ok(!coverLines('t', 'n', [], planVersion({ status: 'COMPLETED' }).footer).join('\n').includes('초안'));
   assert.equal(testFromRequirement({ display_id: 'REQ-005', title: '입고 확인', criteria: [], description: '' }).title, 'REQ-005 입고 확인');
   assert.equal(testFromRequirement({ display_id: 'REQ-006', title: '입고 등록', criteria: [], description: '' }).title, 'REQ-006 입고 등록 확인');
   assert.equal(lessonsBody([{ label: '아쉬운 점', body: '' }]), '**아쉬운 점**\n없음');

@@ -13,10 +13,9 @@ import { bindCoach, coachMark } from '../onboarding/ui.js';
 import { drawerFoot, drawerHead, bindEscape, bindListNav, deskFoot, moreFields, navBtns } from '../shared/drawer.js';
 import { bindDtabs, dtabs } from '../shared/detail.js';
 import { state } from '../core/state.js';
-import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
+import { approvalFields, collectApproval, approvalBody, approvalStatusText } from '../shared/approval.js';
 import { md } from '../shared/kst-date.js';
 import { carryIndex, carryTag, carryLine } from '../project/golive.js';
-import { approverDefault } from '../shared/owner-picker.js';
 
 export async function changesPage(id) {
   const main = $('#main');
@@ -36,7 +35,7 @@ export async function changesPage(id) {
   const listQuery = () => { const q = params(); const out = new URLSearchParams(); for (const k of ['q', ...filterKeys]) if (q.get(k)) out.set(k, q.get(k)); if (q.get('archived')) out.set('include_archived', '1'); return out.toString() ? '?' + out : ''; };
 
   let rows = []; let summary = g.changes; let requesters = []; let people = []; let sel = null; let creating = params().get('new') === '1' && !archived;   /* archived / phone: no create form */ let dtab = 'info';
-  let apv = null; let apvMode = null;   // Phase 4 US-2: 고객 승인 Drawer — working copy of the approval record · 'approve' (검토 중 → 승인) | 'record' (승인 기록 추가)
+  let apv = null; let apvMode = null;   // 승인 Drawer — working copy of the optional 고객 확인 체크 · 'approve' (작성 중·검토 중 → 승인) | 'record' (체크만 수정)
   let reqOptions = null; // lazily loaded requirement list for the filter + picker
   const load = async () => { const d = await api('GET', cApi(listQuery())); rows = d.changes; summary = d.summary; requesters = d.requesters; people = d.people || []; g.changes = summary; };
   const loadSel = async (cid) => { sel = cid ? (await api('GET', cApi(`/${cid}`))).change : null; setParam('sel', cid); };
@@ -83,69 +82,62 @@ export async function changesPage(id) {
             <td class="num">${c.cost_impact ? fmtKRW(c.cost_impact) : raw('<span class="dim">-</span>')}</td>
             <td class="dim">${fmtShort(c.updated_at)}</td></tr>`).join(''))}</tbody></table>`
           : hasFilter ? emptyFiltered('변경 요청')
-          : emptyState({ title: '고객의 추가·변경 요청을 등록하면 일정·비용 영향과 승인을 함께 관리할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 변경 요청 등록' } }))}</div>
+          : emptyState({ title: '고객의 추가·변경 요청을 등록하면 일정·비용 영향과 결정을 함께 관리할 수 있습니다.', cta: archived ? null : { id: 'add2', label: '첫 변경 요청 등록' } }))}</div>
         <aside class="drawer ${sel && apv ? 'drawer--cr drawer--side' : desk && sel && !creating ? 'drawer--lg' : 'drawer--cr'}" id="drawer" ${sel || creating ? '' : 'hidden'} ${raw(sel && apv ? 'data-mode="approval"' : '')}>${raw(creating ? drawerCreate() : sel && apv ? drawerApproval() : sel ? drawerDetail() : '')}</aside>
       </div>
     </div>`;
     bind(); bindCoach(main);
   };
 
-  /* ---------- Phase 4 US-2: 변경 요청 승인 = 고객 승인 기록 (the 01·02 approval form) ---------- */
-  const CR_APPROVAL_METHODS = { SIGNED: '서명본 수령', EMAIL: '이메일 회신', REVIEW: '검토 회의에서 승인', OTHER: '기타' };
-  const who = (ca) => (ca && ca.approver ? `${ca.approver.name}${ca.approver.title ? ` ${ca.approver.title}` : ''}` : '');
-  /** "10/14 · 이수진 차장 · 이메일 회신" (list: under the ✓ 승인 pill). */
+  /* ---------- 변경 요청 승인 + 선택 사항인 고객 확인 체크 (2026-10-21: was 고객 승인 기록 with 승인자·승인일·방법·근거, all required) ---------- */
+  /** list: the check line under the ✓ 승인 pill ("✓ 고객 확인 · 김도윤 · 2026-10-14"). */
   const apvLine = (c, small = false) => {
-    if (!['APPROVED', 'IMPLEMENTED'].includes(c.status) || !c.customer_approval || !c.customer_approval.recorded) return '';
-    const ca = c.customer_approval; const t = `${md(ca.date)} · ${who(ca)} · ${ca.method_label}`;
+    if (!['APPROVED', 'IMPLEMENTED'].includes(c.status) || !c.customer_approval || !c.customer_approval.checked) return '';
+    const t = c.customer_approval.summary;
     return small ? html`<small class="crapv__l" data-crapv>${t}</small>` : t;
   };
-  /** Drawer status line: "고객 승인: 이수진 차장 · 10/14 · 이메일 회신 (기록: 김도윤)", or the grey 'no record' line + 승인 기록 추가. */
+  /** Drawer status line: the check line, or the grey 'not checked' line + 체크하기. */
   const approvedLine = (c) => {
     const ca = c.customer_approval || {};
-    if (ca.recorded) return html`<p class="crapv" data-crapv><span class="chip chip--done">✓ 승인</span> <b>고객 승인: ${who(ca)} · ${md(ca.date)} · ${ca.method_label}</b> <small class="dim">(기록: ${c.reviewed_by_name || '-'})</small></p>`;
     const ro = archived || Boolean(c.archived_at);
-    return html`<p class="crapv crapv--none" data-crapv-none><span class="dim">고객 승인 기록이 없습니다</span>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-apv-add>승인 기록 추가</button>')}</p>`;
+    if (ca.checked) return html`<p class="crapv" data-crapv><span class="chip chip--done">✓ 고객 확인</span> <b>${ca.summary.replace(/^✓ 고객 확인 · ?/, '')}</b>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-apv-add>수정</button>')}</p>`;
+    return html`<p class="crapv crapv--none" data-crapv-none><span class="dim">고객 확인 체크 안 함 (선택 사항)</span>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-apv-add>체크하기</button>')}</p>`;
   };
   const peopleList = () => html`<datalist id="cr-people">${raw(people.map((x) => html`<option value="${x.name}">${x.org || ''}${x.role ? ` · ${x.role}` : ''}</option>`).join(''))}</datalist>`;
-  const openApproval = (mode) => { apvMode = mode; apv = { add_to_stakeholders: true, ...(mode === 'record' && sel.customer_approval ? sel.customer_approval : {}) }; delete apv.approver; draw(); };
+  const openApproval = (mode) => { apvMode = mode; apv = { ...(sel.customer_approval || {}) }; if (mode === 'approve' && !apv.checked) apv.checked = false; draw(); };
   const closeApproval = () => { apv = null; apvMode = null; draw(); };
   const drawerApproval = () => {
     const c = sel; const live = (l) => l.filter((x) => !x.archived_at).length;
     const imp = [c.schedule_impact_days != null ? ['일정', fmtDays(c.schedule_impact_days)] : null, c.effort_impact_md != null ? ['공수', fmtMD(c.effort_impact_md)] : null, c.cost_impact != null ? ['비용', fmtKRW(c.cost_impact)] : null].filter(Boolean);
     const record = apvMode === 'record';
-    return html`<div class="wd__h"><div class="wd__ht"><b>변경 요청 고객 승인</b><small>${record ? '고객이 누가·언제·어떻게 승인했는지 기록합니다. 상태는 바뀌지 않습니다.' : '고객이 누가·언제·어떻게 승인했는지 기록합니다. 저장하면 이 변경 요청이 승인됩니다.'}</small></div><button class="wd__ib" id="apv-close" aria-label="닫기">×</button></div>
+    return html`<div class="wd__h"><div class="wd__ht"><b>${record ? '고객 확인 체크' : '변경 요청 승인'}</b><small>${record ? '고객과 협의·확인했는지 체크합니다. 상태는 바뀌지 않습니다.' : '이 변경을 반영하기로 결정합니다. 고객 확인 체크는 선택 사항입니다.'}</small></div><button class="wd__ib" id="apv-close" aria-label="닫기">×</button></div>
       <div class="drawer__b apv" data-approval-drawer>
-        <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b></div>
+        <div class="apv__what"><div class="apv__wh"><b>결정할 내용</b></div>
           <p class="crapv__t"><span class="mono">${c.display_id}</span> ${c.title}</p>
           <dl class="crapv__dl">${raw(imp.map(([k, v]) => html`<div><dt>영향 ${k}</dt><dd class="num">${v}</dd></div>`).join(''))}
-            <div><dt>연결 요구사항</dt><dd class="num">${live(c.requirements)}건</dd></div><div><dt>연결 작업</dt><dd class="num">${live(c.impacts)}건</dd></div></dl>
-          ${raw(!imp.length ? '<p class="hint" style="margin:6px 0 0">일정·공수·비용 영향이 입력되지 않았습니다. 고객에게 영향을 함께 알리면 결정이 빨라집니다.</p>' : '')}</div>
-        <div class="wd__form">${raw(approvalFields(apv, { people: c.stakeholders || [], methods: Object.entries(CR_APPROVAL_METHODS), approverHint: '<small class="dim">고객 결정권자 (고객사 PM 등)</small>', evidencePh: "예: 2026-10-14 이수진 차장 회신 메일 'CR-001 승인'" }))}</div>
-        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 저장할 수 있습니다. 직접 입력한 승인자는 01 관계자(고객사)에도 추가됩니다.</p>
+            <div><dt>연결 요구사항</dt><dd class="num">${live(c.requirements)}건</dd></div><div><dt>연결 작업</dt><dd class="num">${live(c.impacts)}건</dd></div></dl></div>
+        <div class="wd__form">${raw(approvalFields(apv, { label: '고객과 협의·확인했나요?', notePh: '예: 10/14 고객 PM과 통화로 공수 4MD 추가 합의' }))}</div>
+        <p class="hint">승인 기록이나 증빙은 필요 없습니다.</p>
       </div>
-      <div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${approvalStatusText(apv)}</span><span style="display:flex;gap:8px;margin-left:auto"><button type="button" class="btn btn--secondary btn--sm" id="apv-cancel">취소</button><button type="button" class="btn btn--primary btn--sm" id="apv-save">승인 기록 저장</button></span></div>`;
+      <div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${approvalStatusText(apv)}</span><span style="display:flex;gap:8px;margin-left:auto"><button type="button" class="btn btn--secondary btn--sm" id="apv-cancel">취소</button><button type="button" class="btn btn--primary btn--sm" id="apv-save">${record ? '저장' : '승인'}</button></span></div>`;
   };
   const bindApproval = () => {
     const d = $('#drawer'); const stat = $('#apv-stat'); const form = d.querySelector('.wd__form');
     const collect = () => { apv = collectApproval(form, apv); };
     $('#apv-close').onclick = closeApproval; $('#apv-cancel').onclick = closeApproval;
     bindEscape(closeApproval);
-    const asel = d.querySelector('[data-af="approver_id"]'); if (asel) asel.onchange = () => { collect(); draw(); };
-    form.addEventListener('input', () => { collect(); stat.textContent = approvalStatusText(apv); });
     form.addEventListener('change', () => { collect(); stat.textContent = approvalStatusText(apv); });
     $('#apv-save').onclick = async () => {
       collect();
-      if (showApprovalErrors(d, approvalErrors(apv))) { stat.textContent = approvalStatusText(apv); return; }   // inline, under each field (same as 01·02)
       const btn = $('#apv-save'); btn.disabled = true;
       try {
         const r = apvMode === 'record' ? await api('PATCH', cApi(`/${sel.id}/customer-approval`), { customer_approval: approvalBody(apv) })
           : await api('POST', cApi(`/${sel.id}/transition`), { action: 'approve', customer_approval: approvalBody(apv) });
-        toast(apvMode === 'record' ? '고객 승인 기록을 추가했습니다.' : '고객 승인을 기록하고 승인 처리했습니다.');
+        toast(apvMode === 'record' ? '저장했습니다.' : '승인 처리했습니다.');
         apv = null; apvMode = null; sel = r.change; summary = r.summary; g.changes = summary; await load(); draw();
       } catch (e) {
         btn.disabled = false;
-        const f = Object.fromEntries(Object.entries(e.fields || {}).filter(([k]) => k.startsWith('approval.')));
-        if (!showApprovalErrors(d, f)) { toast(e.fields && Object.keys(e.fields).length ? Object.values(e.fields)[0] : e.message); stat.textContent = e.message; }
+        toast(e.fields && Object.keys(e.fields).length ? Object.values(e.fields)[0] : e.message); stat.textContent = e.message;
       }
     };
   };
@@ -188,11 +180,9 @@ export async function changesPage(id) {
     const liveImp = c.impacts.filter((x) => !x.archived_at); const archImp = c.impacts.length - liveImp.length;
     const fieldsRo = ro || st === 'IMPLEMENTED' || st === 'REJECTED';
     const decision = () => {
-      if (st === 'DRAFT') return html`<div class="decision"><p>작성 중인 변경 요청입니다. 내용과 영향을 정리한 뒤 검토를 요청하세요.</p>${raw(ro || desk ? '' : '<button class="btn btn--primary" data-tr="submit">검토 요청</button>')}</div>`;
+      if (st === 'DRAFT') return html`<div class="decision"><p>작성 중인 변경 요청입니다. 영향을 정리한 뒤 바로 승인·반려하거나, 팀 검토가 필요하면 검토 요청으로 둡니다.</p>${raw(ro || desk ? '' : '<div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--secondary" data-tr="reject">반려</button><button class="btn btn--secondary" data-tr="submit">검토 요청</button></div>')}</div>`;
       if (st === 'UNDER_REVIEW') return html`<div class="decision decision--review"><p><b>검토 중인 변경 요청입니다.</b> ${c.submitted_at ? fmtShort(c.submitted_at) + ' 검토 요청' : ''}</p>
-        ${raw(c.approver_name ? html`<p class="hint">지정 승인자: <b>${c.approver_name}</b></p>` : '')}
-        ${raw(ro ? '' : c.review && !c.review.allowed ? html`<p class="hint">${c.review.reason === 'author' ? '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. 소유자·관리자 또는 지정 승인자가 결정합니다.' : '승인·반려는 소유자·관리자 또는 지정 승인자만 할 수 있습니다.'}</p>`
-          : html`<p class="hint" style="margin:0 0 8px">고객 결정을 받아 기록하세요. 승인은 고객이 누가·언제·어떻게 승인했는지와 함께 남습니다.</p>${raw(desk ? '' : '<div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--secondary" data-tr="reject">반려</button></div>')}`)}</div>`;
+        ${raw(ro ? '' : html`<p class="hint" style="margin:0 0 8px">반영할지 결정하세요. 고객과 협의했다면 승인할 때 체크해 둘 수 있습니다(선택).</p>${raw(desk ? '' : '<div class="actions" style="margin-top:0"><button class="btn btn--primary" data-tr="approve">승인</button><button class="btn btn--secondary" data-tr="reject">반려</button></div>')}`)}</div>`;
       if (st === 'APPROVED') {
         const firstReq = liveReq[0]; const firstImp = liveImp[0];
         return html`<div class="decision decision--ok">${raw(approvedLine(c))}${c.decision_note ? raw(html`<p><q>${c.decision_note}</q></p>`) : ''}
@@ -210,7 +200,7 @@ export async function changesPage(id) {
         case 'CREATED': return html`<b>${c.display_id}</b> 생성 <small>${h.changed_by_name || ''}</small>`;
         case 'ARCHIVED': return html`보관 처리 <small>${h.changed_by_name || ''}</small>`;
         case 'STATUS_CHANGED': return html`<b>${CR_STATUS[h.old_value] || h.old_value}</b> → <b>${CR_STATUS[h.new_value] || h.new_value}</b> <small>${h.changed_by_name || ''}</small>`;
-        case 'CUSTOMER_APPROVAL': return html`<b>고객 승인 기록</b> <q>${h.new_value || ''}</q> <small>${h.changed_by_name || ''}</small>`;
+        case 'CUSTOMER_APPROVAL': return html`<b>고객 확인 체크</b> <q>${h.new_value || ''}</q> <small>${h.changed_by_name || ''}</small>`;
         case 'REQUIREMENT_LINKED': return html`요구사항 연결 <q>${lt(h.new_value)}</q>`;
         case 'REQUIREMENT_UNLINKED': return html`요구사항 연결 해제 <q>${h.old_value}</q>`;
         case 'WBS_IMPACT_ADDED': return html`영향 WBS 추가 <q>${lt(h.new_value)}</q>`;
@@ -226,11 +216,10 @@ export async function changesPage(id) {
     const reqF = fld('요청자', html`<input class="input input--sm" data-field="requester_name" value="${c.requester_name}" maxlength="100" placeholder="이름" list="cr-people" autocomplete="off" ${dis}>${raw(peopleList())}`);
     const restF = fld('요청 사유', html`<textarea class="textarea" data-field="reason" maxlength="2000" style="min-height:56px;font-size:14px" placeholder="요청 사유" ${dis}>${c.reason}</textarea>`)
       + fld('요청자 조직', html`<input class="input input--sm" data-field="requester_organization" value="${c.requester_organization}" maxlength="100" placeholder="조직" ${dis}>`)
-      + fld('요청일', html`<input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${dis}>`)
-      + fld('내부 처리자', html`<select class="select select--sm" data-field="approver_user_id" title="소유자·관리자 외에 이 변경 요청을 처리할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">${approverDefault(members)}</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select>`);
+      + fld('요청일', html`<input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${dis}>`);
     /* R3b footer actions = the decision's buttons (검토 요청 · 반려 + 승인 · 반영 완료) */
-    const footActs = ro ? '' : st === 'DRAFT' ? '<button type="button" class="btn btn--primary btn--sm" data-tr="submit">검토 요청</button>'
-      : st === 'UNDER_REVIEW' && !(c.review && !c.review.allowed) ? '<button type="button" class="btn btn--secondary btn--sm" data-tr="reject">반려</button><button type="button" class="btn btn--primary btn--sm" data-tr="approve">승인</button>'
+    const footActs = ro ? '' : st === 'DRAFT' ? '<button type="button" class="btn btn--secondary btn--sm" data-tr="submit">검토 요청</button><button type="button" class="btn btn--secondary btn--sm" data-tr="reject">반려</button><button type="button" class="btn btn--primary btn--sm" data-tr="approve">승인</button>'
+      : st === 'UNDER_REVIEW' ? '<button type="button" class="btn btn--secondary btn--sm" data-tr="reject">반려</button><button type="button" class="btn btn--primary btn--sm" data-tr="approve">승인</button>'
       : st === 'APPROVED' ? '<button type="button" class="btn btn--primary btn--sm" data-tr="implement">반영 완료</button>' : '';
     const deskInfo = () => html`<div class="dstack">${raw(carryLine(carry, 'CR', c.id))}
       <input class="dtitle" data-field="title" value="${c.title}" maxlength="200" ${dis} aria-label="제목">
@@ -257,7 +246,6 @@ export async function changesPage(id) {
         <div class="dfield"><span>요청자 조직</span><div><input class="input input--sm" data-field="requester_organization" value="${c.requester_organization}" maxlength="100" placeholder="조직" ${fieldsRo ? 'disabled' : ''}></div></div>
         <div class="dfield"><span>우선순위</span><div><select class="select select--sm" data-field="priority" ${fieldsRo ? 'disabled' : ''}>${raw(opt(CR_PRIORITY, c.priority))}</select></div></div>
         <div class="dfield"><span>요청일</span><div><input class="input input--sm" type="date" data-field="requested_at" value="${c.requested_at || ''}" ${fieldsRo ? 'disabled' : ''}></div></div>
-        <div class="dfield"><span>내부 처리자</span><div><select class="select select--sm" data-field="approver_user_id" title="소유자·관리자 외에 이 변경 요청을 처리할 수 있는 멤버" ${fieldsRo || st === 'APPROVED' ? 'disabled' : ''}><option value="">${approverDefault(members)}</option>${raw(members.filter((m) => m.id !== c.created_by).map((m) => html`<option value="${m.id}" ${c.approver_user_id === m.id ? 'selected' : ''}>${m.name}</option>`).join(''))}</select></div></div>
       </div>
       <div class="dsave" id="dsave"></div>
 
@@ -361,7 +349,7 @@ export async function changesPage(id) {
     main.querySelectorAll('[data-tr]').forEach((b) => b.onclick = async () => {
       const a = b.dataset.tr;
       if (a === 'submit') { if (await act('POST', '/transition', { action: 'submit' })) toast('검토를 요청했습니다.'); return; }
-      if (a === 'approve') { openApproval('approve'); return; }   // US-2: the shared approval Drawer (승인자 · 승인일 · 방법 · 근거)
+      if (a === 'approve') { openApproval('approve'); return; }   // the shared check Drawer (고객 확인 체크 + 메모, both optional)
       if (a === 'reject') { const note = await promptDialog({ title: `${c.display_id} 반려`, label: '반려 사유', required: true, confirm: '반려', danger: true }); if (note === null) return; if (await act('POST', '/transition', { action: 'reject', decision_note: note })) toast('반려했습니다.'); return; }
       if (a === 'implement') {
         if (!(await implementDialog(c))) return;
@@ -395,11 +383,11 @@ export async function changesPage(id) {
   if (params().get('requirement')) await loadReqs();
   const initSel = params().get('sel');
   if (initSel && !creating) { try { await loadSel(initSel); } catch { setParam('sel', ''); } }
-  // US-2 guide CTA '승인 기록하기' (…?status=UNDER_REVIEW&approve=1): open the first 검토 중 CR straight in the approval Drawer
+  // guide CTA '변경 요청 결정 →' (…?status=UNDER_REVIEW&approve=1): open the first 검토 중 CR straight in the approval Drawer
   if (params().get('approve') === '1' && !creating) {
     setParam('approve', '');
     const first = sel && sel.status === 'UNDER_REVIEW' ? sel : rows.find((x) => x.status === 'UNDER_REVIEW');
-    if (first) { if (!sel || sel.id !== first.id) await loadSel(first.id); if (sel.review && sel.review.allowed && !archived) { apvMode = 'approve'; apv = { add_to_stakeholders: true }; } }
+    if (first) { if (!sel || sel.id !== first.id) await loadSel(first.id); if (!archived) { apvMode = 'approve'; apv = { checked: false }; } }
   }
   draw();
   if (creating) { const t = $('#c-title'); if (t) t.focus(); }

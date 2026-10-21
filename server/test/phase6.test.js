@@ -44,7 +44,7 @@ const mkTest = async (A, r, result = 'PASS') => {
 const stakeholders = (A) => A.c('PUT', `${A.purl}/definition`, { stakeholders: STAKE });
 
 /* ---------- US-1 ---------- */
-test('US-1 검수 승인: 4 fields or 422; saved record + ACCEPTED in one go; view · history · card; 승인 기록 추가 keeps the status; rework/reject unchanged', async () => {
+test('US-1 검수 승인: no record needed (no 422), optional 고객 확인 체크 saved + ACCEPTED in one go; view · history · card; check editable on any status; rework/reject unchanged', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await stakeholders(A);
   const R = await reqs(A, 2); await mkTest(A, R[0]); const tf = await mkTest(A, R[1], 'FAIL');
@@ -53,35 +53,39 @@ test('US-1 검수 승인: 4 fields or 422; saved record + ACCEPTED in one go; vi
   const a = (await A.c('POST', acc(A), { title: '1차 검수', requirements: [R[0].id, R[1].id] })).json.acceptance;
   await A.c('POST', acc(A, `/${a.id}/links`), { target_type: 'TEST', target_id: tf.id });
   await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'submit' });
-  let r = await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'accept' });
-  assert.equal(r.status, 422); assert.equal(r.json.error.code, 'customer_approval_required');
-  r = await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'accept', customer_approval: { ...APV, evidence: '' } });
-  assert.equal(r.status, 422); assert.ok(r.json.error.fields['approval.evidence']);
-  r = await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'accept', customer_approval: { ...APV, date: addDays(T, 1) } });
-  assert.equal(r.status, 400, 'future 승인일');
+  let r = await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'accept', customer_approval: { checked: true, date: addDays(T, 1) } });
+  assert.equal(r.status, 400, 'future 승인일 (legacy field) still validated');
   assert.equal((await A.c('GET', acc(A, `/${a.id}`))).json.acceptance.status, 'REQUESTED', 'nothing saved on refusal');
   // card before approval
   let x = (await A.c('GET', acc(A, `/${a.id}`))).json.acceptance;
   assert.deepEqual(x.scope_card, { requirements: 2, tests_pass: 0, excluded: 1, open_issues: 1 }, 'only the linked FAIL test → 통과 0; 열린 이슈 = project-wide');
-  r = await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'accept', customer_approval: APV });
+  r = await A.c('POST', acc(A, `/${a.id}/transition`), { action: 'accept', customer_approval: { checked: true, note: '서명본 수령' } });
   assert.equal(r.status, 200);
   x = r.json.acceptance;
   assert.equal(x.status, 'ACCEPTED'); assert.ok(x.accepted_at);
-  assert.equal(x.customer_approval.recorded, true); assert.equal(x.customer_approval.approver.name, '오지현'); assert.equal(x.customer_approval.method_label, '서명본 수령');
-  assert.equal(x.customer_approval.recorded_by_name, '홍길동');
-  assert.ok(x.history.some((h) => h.action_type === 'CUSTOMER_APPROVAL' && /오지현/.test(h.new_value)));
+  assert.equal(x.customer_approval.recorded, true); assert.equal(x.customer_approval.checked_by_name, '홍길동'); assert.ok(x.customer_approval.checked_at);
+  assert.equal(x.customer_approval.summary, `✓ 고객 확인 · 홍길동 · ${T} · 서명본 수령`);
+  assert.ok(x.history.some((h) => h.action_type === 'CUSTOMER_APPROVAL' && /서명본 수령/.test(h.new_value)));
   const list = (await A.c('GET', acc(A))).json.items;
-  assert.equal(list[0].customer_approval.recorded, true);
-  // 승인 기록 수정 (Q15-4): an existing record is replaced, and 이력 keeps the old record line (old → new)
-  r = await A.c('PATCH', acc(A, `/${a.id}/customer-approval`), { customer_approval: { ...APV, method: 'EMAIL', evidence: '회신 메일' } });
-  assert.equal(r.status, 200); assert.equal(r.json.acceptance.customer_approval.method_label, '이메일 회신'); assert.equal(r.json.acceptance.status, 'ACCEPTED');
+  assert.equal(list.find((i) => i.id === a.id).customer_approval.recorded, true);
+  // 확인 메모 수정: 이력 keeps the old line (old → new); status unchanged; who/when kept
+  r = await A.c('PATCH', acc(A, `/${a.id}/customer-approval`), { customer_approval: { checked: true, note: '회신 메일' } });
+  assert.equal(r.status, 200); assert.equal(r.json.acceptance.status, 'ACCEPTED'); assert.equal(r.json.acceptance.customer_approval.note, '회신 메일');
+  assert.equal(r.json.acceptance.customer_approval.checked_at, x.customer_approval.checked_at, 'who/when kept while it stays checked');
   const ed = r.json.acceptance.history.find((h) => h.action_type === 'CUSTOMER_APPROVAL' && h.old_value);
-  assert.ok(ed, 'edit row has old_value'); assert.match(ed.old_value, /서명본 수령/); assert.match(ed.new_value, /이메일 회신/);
-  // 승인 기록 추가: only on ACCEPTED; status unchanged; a directly entered approver joins 이해관계자
+  assert.ok(ed, 'edit row has old_value'); assert.match(ed.old_value, /서명본 수령/); assert.match(ed.new_value, /회신 메일/);
+  // accept without any record, straight from 작성 중 (DRAFT)
+  const plain = (await A.c('POST', acc(A), { title: '기록 없는 검수' })).json.acceptance;
+  r = await A.c('POST', acc(A, `/${plain.id}/transition`), { action: 'accept' });
+  assert.equal(r.status, 200, 'no 422 customer_approval_required'); assert.equal(r.json.acceptance.status, 'ACCEPTED');
+  assert.equal(r.json.acceptance.customer_approval.checked, false); assert.equal(r.json.acceptance.customer_approval.summary, '');
+  // the check may be set on any status (DRAFT / REQUESTED no longer 409)
   const old = (await A.c('POST', acc(A), { title: '예전 검수' })).json.acceptance;
-  assert.equal((await A.c('PATCH', acc(A, `/${old.id}/customer-approval`), { customer_approval: APV })).status, 409, 'DRAFT → use 승인');
+  r = await A.c('PATCH', acc(A, `/${old.id}/customer-approval`), { customer_approval: { checked: true } });
+  assert.equal(r.status, 200, 'DRAFT'); assert.equal(r.json.acceptance.status, 'DRAFT'); assert.equal(r.json.acceptance.customer_approval.checked, true);
   await A.c('POST', acc(A, `/${old.id}/transition`), { action: 'submit' });
-  assert.equal((await A.c('PATCH', acc(A, `/${old.id}/customer-approval`), { customer_approval: APV })).status, 409, 'REQUESTED → use 승인');
+  r = await A.c('PATCH', acc(A, `/${old.id}/customer-approval`), { customer_approval: { checked: false } });
+  assert.equal(r.status, 200, 'REQUESTED'); assert.equal(r.json.acceptance.status, 'REQUESTED'); assert.equal(r.json.acceptance.customer_approval.checked, false);
   const third = (await A.c('POST', acc(A), { title: '반려 흐름' })).json.acceptance;
   await A.c('POST', acc(A, `/${third.id}/transition`), { action: 'submit' });
   assert.equal((await A.c('POST', acc(A, `/${third.id}/transition`), { action: 'rework' })).status, 400, '보완 사유 필수 (unchanged)');
@@ -89,17 +93,20 @@ test('US-1 검수 승인: 4 fields or 422; saved record + ACCEPTED in one go; vi
   server.close();
 });
 
-test('US-1 legacy ACCEPTED without a record: grey line data + 승인 기록 추가 (direct approver → 이해관계자)', async () => {
+test('US-1 legacy ACCEPTED: a full pre-2026-10-21 record reads as checked; none → check can be added, status kept, no stakeholder added', async () => {
   const { server, client, db } = await boot();
   const A = await setup(client); await stakeholders(A);
   const a = (await A.c('POST', acc(A), { title: '예전 검수' })).json.acceptance;
-  await db.run(`UPDATE acceptances SET status = 'ACCEPTED', accepted_at = now() WHERE id = ?`, [a.id]);
+  await db.run(`UPDATE acceptances SET status = 'ACCEPTED', accepted_at = now(), customer_approval = ? WHERE id = ?`, [JSON.stringify(APV), a.id]);
   let x = (await A.c('GET', acc(A, `/${a.id}`))).json.acceptance;
+  assert.equal(x.customer_approval.recorded, true); assert.equal(x.customer_approval.approver.name, '오지현'); assert.equal(x.customer_approval.method_label, '서명본 수령');
+  await db.run(`UPDATE acceptances SET customer_approval = '{}' WHERE id = ?`, [a.id]);
+  x = (await A.c('GET', acc(A, `/${a.id}`))).json.acceptance;
   assert.equal(x.customer_approval.recorded, false);
-  const r = await A.c('PATCH', acc(A, `/${a.id}/customer-approval`), { customer_approval: { approver_name: '최현업', approver_title: '과장', date: T, method: 'EMAIL', evidence: '회신 메일', add_to_stakeholders: true } });
+  const r = await A.c('PATCH', acc(A, `/${a.id}/customer-approval`), { customer_approval: { checked: true, note: '최현업 과장 회신' } });
   assert.equal(r.status, 200); x = r.json.acceptance;
-  assert.equal(x.status, 'ACCEPTED'); assert.equal(x.customer_approval.recorded, true); assert.equal(x.customer_approval.approver.name, '최현업');
-  assert.ok(x.stakeholders.some((s) => s.name === '최현업' && s.org_type === 'CLIENT'));
+  assert.equal(x.status, 'ACCEPTED'); assert.equal(x.customer_approval.recorded, true); assert.equal(x.customer_approval.note, '최현업 과장 회신');
+  assert.ok(!x.stakeholders.some((s) => s.name === '최현업'), 'a check never adds a stakeholder');
   server.close();
 });
 
@@ -140,7 +147,7 @@ test('US-2 no in-scope confirmed requirement → no scope target (old rule: ever
   assert.equal(st({ total: 1, accepted: 1, scope_target: 0 }).state, 'COMPLETED');
   assert.equal(st({ total: 1, accepted: 1, scope_target: 15, scope_accepted: 1 }).state, 'IN_PROGRESS');
   assert.equal(st({ total: 2, accepted: 2, scope_target: 15, scope_accepted: 15 }).state, 'COMPLETED');
-  assert.match(st({ total: 2, accepted: 1, requested: 1, scope_target: 15, scope_accepted: 1 }).text, /검수 요청 1건이 고객 확인을 기다립니다\. 범위 내 요구사항 15건 중 1건이 승인된 검수에 들어 있습니다\./);
+  assert.match(st({ total: 2, accepted: 1, requested: 1, scope_target: 15, scope_accepted: 1 }).text, /검수 요청 1건의 결과를 기록하세요\. 범위 내 요구사항 15건 중 1건이 승인된 검수에 들어 있습니다\./);
 });
 
 /* ---------- US-3 ---------- */
@@ -324,13 +331,15 @@ test('migration 37: ACCEPTANCE texts, WEEKLY_REPORT inserted once right before G
 });
 
 /* ---------- 01 · 02 · 04 regression (shared approval code) ---------- */
-test('regression: 04 CR approval still 422 / saves; 01 approval record still saves', async () => {
+test('regression: 04 CR approval needs no record (no 422) and saves an optional check; 01 approval record still saves', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await stakeholders(A);
   const cr = (await A.c('POST', `${A.purl}/changes`, { title: 'CR' })).json.change;
   await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'submit' });
-  assert.equal((await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve' })).status, 422);
-  const r = await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve', customer_approval: APV });
+  let r = await A.c('POST', `${A.purl}/changes/${cr.id}/transition`, { action: 'approve' });
+  assert.equal(r.status, 200); assert.equal(r.json.change.status, 'APPROVED'); assert.equal(r.json.change.customer_approval.recorded, false);
+  const cr2 = (await A.c('POST', `${A.purl}/changes`, { title: 'CR2' })).json.change;
+  r = await A.c('POST', `${A.purl}/changes/${cr2.id}/transition`, { action: 'approve', customer_approval: { checked: true } });
   assert.equal(r.json.change.status, 'APPROVED'); assert.equal(r.json.change.customer_approval.recorded, true);
   assert.equal((await A.c('PUT', `${A.purl}/definition`, { approval: APV })).status, 200);
   server.close();
@@ -353,24 +362,21 @@ test('Q15-1 impossible calendar dates (2026-02-30) are refused: 오픈일, 검�
   server.close();
 });
 
-test('Q15-2 PATCH ACCEPTANCE → COMPLETED is 409 until the whole scope is accepted', async () => {
+test('Q15-2 PATCH ACCEPTANCE → COMPLETED by hand is allowed (no 409 acceptance_required); data-driven completion still works', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await stakeholders(A);
   const R = await reqs(A, 2);
   await toPhase(A, 'TRANSITION_GO_LIVE');
   const sid = step(await g(A), 'ACCEPTANCE').id;
-  let r = await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'COMPLETED' });
-  assert.equal(r.status, 409); assert.equal(r.json.error.code, 'acceptance_required');
-  const a1 = (await A.c('POST', acc(A), { title: '1차', requirements: [R[0].id] })).json.acceptance;
-  await A.c('POST', acc(A, `/${a1.id}/transition`), { action: 'submit' });
-  await A.c('POST', acc(A, `/${a1.id}/transition`), { action: 'accept', customer_approval: APV });
-  r = await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'COMPLETED' });
-  assert.equal(r.status, 409, '1/2 accepted → still refused');
   assert.notEqual(step(await g(A), 'ACCEPTANCE').state, 'COMPLETED');
-  const a2 = (await A.c('POST', acc(A), { title: '2차', requirements: [R[1].id] })).json.acceptance;
-  await A.c('POST', acc(A, `/${a2.id}/transition`), { action: 'submit' });
-  await A.c('POST', acc(A, `/${a2.id}/transition`), { action: 'accept', customer_approval: APV });
-  assert.equal((await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'COMPLETED' })).status, 200, '2/2 → allowed');
+  let r = await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'COMPLETED' });
+  assert.equal(r.status, 200, '0/2 accepted → may still be marked 완료 (검수 outside RELAI)');
   assert.equal((await A.c('PATCH', `${A.purl}/steps/${sid}`, { status: 'TODO' })).status, 200, 'reopening is not guarded');
+  const a1 = (await A.c('POST', acc(A), { title: '1차', requirements: [R[0].id] })).json.acceptance;
+  await A.c('POST', acc(A, `/${a1.id}/transition`), { action: 'accept' });
+  assert.notEqual(step(await g(A), 'ACCEPTANCE').state, 'COMPLETED', '1/2 accepted → not complete from data');
+  const a2 = (await A.c('POST', acc(A), { title: '2차', requirements: [R[1].id] })).json.acceptance;
+  await A.c('POST', acc(A, `/${a2.id}/transition`), { action: 'accept' });
+  assert.equal(step(await g(A), 'ACCEPTANCE').state, 'COMPLETED', '2/2 accepted → complete from data');
   server.close();
 });

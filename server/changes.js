@@ -5,7 +5,6 @@
 import { randomUUID } from 'node:crypto';
 import { ValidationError, isDate } from './validate.js';
 import { nextDisplayId, resolveLinkTarget, ensureNoDuplicate } from './common.js';
-import { POLICY } from './authz.js';
 import { OWNER_NAME_SQL } from './wbs-history.js';
 import * as D from './definition.js';
 
@@ -13,11 +12,11 @@ export const CR_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
 export const CR_STATUSES = ['DRAFT', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 export const RELATION_TYPES = ['MODIFIES', 'ADDS', 'REMOVES'];
 export const IMPACT_TYPES = ['SCHEDULE', 'SCOPE', 'REWORK', 'NEW_WORK', 'NONE'];
-/** Allowed transitions: action → [from, to]. */
+/** Allowed transitions: action → [from (one or a list), to]. 승인·반려 straight from 작성 중 too (2026-10-21: no 검토 요청 step required). */
 export const TRANSITIONS = {
   submit: ['DRAFT', 'UNDER_REVIEW'],
-  approve: ['UNDER_REVIEW', 'APPROVED'],
-  reject: ['UNDER_REVIEW', 'REJECTED'],
+  approve: [['DRAFT', 'UNDER_REVIEW'], 'APPROVED'],
+  reject: [['DRAFT', 'UNDER_REVIEW'], 'REJECTED'],
   implement: ['APPROVED', 'IMPLEMENTED'],
 };
 
@@ -29,44 +28,33 @@ const addHistory = async (db, crId, action, { field = null, oldValue = null, new
     VALUES (?,?,?,?,?,?,?,?)`, [randomUUID(), crId, action, field, oldValue, newValue, userId, ts]));
 const touch = async (db, crId, ts = now()) => (await db.run('UPDATE change_requests SET updated_at = ? WHERE id = ?', [ts, crId]));
 
-/* ---------- 고객 승인 기록 (Phase 4 US-2) — the 01·02 approval record reused for a change request ---------- */
-/** Same 4 methods as 02 (서명본 수령 · 이메일 회신 · 검토 회의에서 승인 · 기타). */
+/* ---------- 고객 확인 체크 (was Phase 4 US-2 고객 승인 기록; 진행 여부 체크 since 2026-10-21) ---------- */
+/** Legacy method labels for records written before the check (서명본 수령 · 이메일 회신 · 검토 회의에서 승인 · 기타). */
 export const CR_APPROVAL_METHODS = D.REQ_APPROVAL_METHODS;
 const parseJson = (v) => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
 export const stakeholdersOf = async (db, projectId) => { const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]); const v = r ? parseJson(r.stakeholders) : []; return Array.isArray(v) ? v : []; };
-/** Display model: { recorded, approver: {name,title}, date, method, method_label, evidence, conditions, summary: "이수진 차장 · 2026-10-14 · 이메일 회신" }. */
+/** Display model: { checked, note, checked_by_name, checked_at, recorded (= checked), summary: "✓ 고객 확인 · 김도윤 · 2026-10-14 · 메모" } + the legacy approver/date/method. */
 export function customerApprovalView(raw, stakeholders) {
   const a = D.approvalOf(typeof raw === 'string' ? parseJson(raw) : raw || {});
   const who = D.approverOf({ stakeholders }, a);
-  const recorded = Boolean(who && a.date && a.method && a.evidence);
-  const parts = []; if (who) parts.push(`${who.name}${who.title ? ` ${who.title}` : ''}`); if (a.date) parts.push(a.date); if (a.method) parts.push(CR_APPROVAL_METHODS[a.method] || a.method);
-  return { ...a, recorded, approver: who, method_label: CR_APPROVAL_METHODS[a.method] || '', summary: recorded ? parts.join(' · ') : '' };
+  const legacy = D.legacyApproved(a) ? [who ? `${who.name}${who.title ? ` ${who.title}` : ''}` : '', a.date, CR_APPROVAL_METHODS[a.method] || a.method].filter(Boolean).join(' · ') : '';
+  const day = a.checked_at ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(a.checked_at)) : '';
+  const summary = a.checked ? (a.checked_at ? ['✓ 고객 확인', a.checked_by_name, day, a.note].filter(Boolean).join(' · ') : ['✓ 고객 확인', legacy, a.note].filter(Boolean).join(' · ')) : '';
+  return { ...a, recorded: a.checked, approver: who, method_label: CR_APPROVAL_METHODS[a.method] || '', legacy_summary: legacy, summary };
 }
-/** 422 customer_approval_required — keyed like the shared form (approval.approver · approval.date · approval.method · approval.evidence). */
-export function approvalRequired(a, who) {
-  const f = {};
-  if (!who) f['approval.approver'] = a.approver_id ? '선택한 승인자가 관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.';
-  if (!a.date) f['approval.date'] = '승인일을 입력하세요.';
-  if (!a.method) f['approval.method'] = '승인 방법을 선택하세요.';
-  if (!a.evidence) f['approval.evidence'] = '승인 근거(문서번호·메일 제목·보관 위치 등)를 입력하세요.';
-  if (!Object.keys(f).length) return null;
-  const e = new ValidationError(f); e.status = 422; e.code = 'customer_approval_required'; e.message = '고객 승인 기록(승인자·승인일·승인 방법·근거)을 입력해야 승인할 수 있습니다.';
-  return e;
-}
-/** Validate + store the customer approval (all 4 fields required). A directly entered approver is added to 01 이해관계자 (고객사) like 01·02. */
+/** Nothing is required for a 고객 확인 체크 any more (2026-10-21). Kept for callers; always null. */
+export function approvalRequired() { return null; }
+/** Store the optional 고객 확인 체크 { checked, note } (who/when stamped). An absent body leaves the record as it was. */
 export async function saveCustomerApproval(db, project, cr, body, userId, ts = now()) {
-  if (!body || typeof body !== 'object') throw approvalRequired({}, null);
-  const { add_to_stakeholders: addSh, ...a } = D.cleanApproval(body, CR_APPROVAL_METHODS);   // 400 on a bad date / future date / unknown method
-  const stakeholders = await stakeholdersOf(db, project.id);
-  const err = approvalRequired(a, D.approverOf({ stakeholders }, a)); if (err) throw err;
-  if (!a.approver_id && a.approver_name && addSh) {
-    const sh = D.approverStakeholder(project, a, `변경 요청 승인 (${cr.display_id})`);
-    await D.appendStakeholder(db, project, sh, userId); a.approver_id = sh.id;
-  }
-  if (a.approver_id) { a.approver_name = ''; a.approver_title = ''; }
+  if (!body || typeof body !== 'object') return customerApprovalView(cr.customer_approval, await stakeholdersOf(db, project.id));
+  const { add_to_stakeholders: _addSh, ...sent } = D.cleanApproval(body, CR_APPROVAL_METHODS);   // 400 on a bad date / future date / unknown method
+  const raw = parseJson((await db.get('SELECT customer_approval FROM change_requests WHERE id = ?', [cr.id]))?.customer_approval);
+  const prev = customerApprovalView(raw, []);
+  const a = await D.stampCheck(db, D.approvalOf(raw), { ...raw, ...sent }, userId);
+  if (a.checked === prev.checked && (a.note || '') === (prev.note || '')) return prev;   // nothing changed → no history row
   await db.run('UPDATE change_requests SET customer_approval = ?, updated_at = ? WHERE id = ?', [JSON.stringify(a), ts, cr.id]);
   const view = customerApprovalView(a, await stakeholdersOf(db, project.id));
-  await addHistory(db, cr.id, 'CUSTOMER_APPROVAL', { field: 'customer_approval', newValue: view.summary }, userId, ts);
+  await addHistory(db, cr.id, 'CUSTOMER_APPROVAL', { field: 'customer_approval', oldValue: prev.checked ? prev.summary : null, newValue: view.checked ? view.summary : '고객 확인 체크 해제' }, userId, ts);
   return view;
 }
 
@@ -204,18 +192,13 @@ export async function updateChange(db, existing, input, userId) {
 }
 
 /**
- * Who may approve / reject. Rule: OWNER/ADMIN or the CR's designated approver, and never the member who wrote the CR
- * (four-eyes). Exception: a workspace with a single member has nobody else to ask, so its only member may decide.
- * Returns { allowed, reason } — reason: 'author' | 'role' | null.
+ * Who may approve / reject: any member who may edit the project (2026-10-21: the OWNER/ADMIN/지정 승인자 rule and the
+ * "never the author" four-eyes rule are gone — RELAI is the vendor team's own guide, not a sign-off tool). Returns { allowed, reason }.
  */
-export function reviewPermission(c, { userId, role, memberCount }) {
-  if (c.created_by === userId && memberCount > 1) return { allowed: false, reason: 'author' };
-  if (POLICY.change_approve.includes(role) || (c.approver_user_id && c.approver_user_id === userId)) return { allowed: true, reason: null };
-  return { allowed: false, reason: 'role' };
-}
+export function reviewPermission() { return { allowed: true, reason: null }; }
 
 /** Guarded workflow. Returns {error} on an invalid transition. */
-/** approve = 고객 승인 기록 + UNDER_REVIEW → APPROVED in one transaction (US-2); without the 4 approval fields → 422 customer_approval_required. */
+/** approve = (작성 중 | 검토 중) → APPROVED, with an optional 고객 확인 체크 { checked, note } saved in the same transaction. */
 export async function transition(db, existing, action, { note, customerApproval, project = null }, userId) {
   const t = TRANSITIONS[action];
   if (!t) return { error: 'bad_action' };
@@ -223,7 +206,7 @@ export async function transition(db, existing, action, { note, customerApproval,
   // Re-read the status under a row lock: `existing` was loaded before the transaction, so two approve / reject clicks
   // (or two approvers) would both pass a check against it and both write (integrity 2026-10-21).
   const cur = db.isTx ? await db.get('SELECT status, archived_at FROM change_requests WHERE id = ? FOR UPDATE', [existing.id]) : existing;
-  if (!cur || cur.archived_at || cur.status !== from) return { error: 'invalid_transition', from: cur ? cur.status : existing.status, to };
+  if (!cur || cur.archived_at || ![].concat(from).includes(cur.status)) return { error: 'invalid_transition', from: cur ? cur.status : existing.status, to };
   if (action === 'reject' && !str(note)) throw new ValidationError({ decision_note: '반려 사유를 입력해 주세요.' });
   const ts = now();
   if (action === 'approve') await saveCustomerApproval(db, project || { id: existing.project_id }, existing, customerApproval, userId, ts);
@@ -236,7 +219,7 @@ export async function transition(db, existing, action, { note, customerApproval,
   if (action === 'implement') { sets.push('implemented_at = ?'); vals.push(ts); }
   vals.push(existing.id);
   (await db.run(`UPDATE change_requests SET ${sets.join(', ')} WHERE id = ?`, [...vals]));
-  (await addHistory(db, existing.id, 'STATUS_CHANGED', { field: 'status', oldValue: from, newValue: to }, userId, ts));
+  (await addHistory(db, existing.id, 'STATUS_CHANGED', { field: 'status', oldValue: cur.status, newValue: to }, userId, ts));
   return { ok: true };
 }
 

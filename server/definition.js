@@ -76,10 +76,14 @@ const kickoffOf = (raw) => {
     agenda: k.agenda !== undefined ? k.agenda : KICKOFF_AGENDA_DEFAULT, minutes: k.minutes || '',
     decisions: Array.isArray(k.decisions) ? k.decisions : [], followups: Array.isArray(k.followups) ? k.followups : [] };
 };
+/** A record written before 2026-10-21 with all four approval fields counts as checked (no-approval: 승인 기록 → 진행 여부 체크). */
+export const legacyApproved = (a) => Boolean(a && (a.approver_id || a.approver_name) && a.date && a.method && a.evidence);
 export const approvalOf = (raw) => {
   const a = raw && typeof raw === 'object' ? raw : {};
   return { approver_id: a.approver_id || '', approver_name: a.approver_name || '', approver_title: a.approver_title || '', date: a.date || '', method: a.method || '',
-    evidence: a.evidence || '', conditions: a.conditions || '', baseline: a.baseline || null };
+    evidence: a.evidence || '', conditions: a.conditions || '', baseline: a.baseline || null,
+    // 진행 여부 체크 (2026-10-21): checked + optional one-line note; who/when are stamped by the server (stampCheck)
+    checked: typeof a.checked === 'boolean' ? a.checked : legacyApproved(a), note: a.note || '', checked_by: a.checked_by || null, checked_by_name: a.checked_by_name || '', checked_at: a.checked_at || null };
 };
 const envOf = (raw) => {
   const e = raw && typeof raw === 'object' ? raw : {};
@@ -196,17 +200,32 @@ export function cleanApproval(a, methods, field = 'approval') {
   else if (date && date > localToday()) f[`${field}.date`] = '승인일은 오늘 이후일 수 없습니다.';
   if (method && !methods[method]) f[`${field}.method`] = '승인 방법을 목록에서 선택하세요.';
   if (Object.keys(f).length) throw new ValidationError(f);
-  return { approver_id: str(a.approver_id, 64), approver_name: str(a.approver_name, 100), approver_title: str(a.approver_title, 100), date, method,
-    evidence: str(a.evidence, 300), conditions: str(a.conditions, 2000), add_to_stakeholders: a.add_to_stakeholders !== false };
-}
-/** What still blocks 완료 처리 of an approval record: 승인자 · 승인일 (≤ today) · 방법 · 근거. */
-export function approvalMissing(a, who) {
-  const out = [];
-  if (!who) out.push(a.approver_id ? '선택한 승인자가 관계자 목록에 없습니다. 승인자를 다시 선택하세요.' : '승인자를 선택하거나 직접 입력하세요.');
-  if (!a.date) out.push('승인일을 입력하세요.'); else if (a.date > localToday()) out.push('승인일은 오늘 이후일 수 없습니다.');
-  if (!a.method) out.push('승인 방법을 선택하세요.');
-  if (!a.evidence) out.push('승인 근거(문서번호·메일 제목·보관 위치 등)를 입력하세요.');
+  // Only the keys the caller sent: the check UI sends { checked, note }, so the legacy 승인자·승인일·방법·근거 of older records stay as they were.
+  const all = { approver_id: str(a.approver_id, 64), approver_name: str(a.approver_name, 100), approver_title: str(a.approver_title, 100), date, method,
+    evidence: str(a.evidence, 300), conditions: str(a.conditions, 2000), note: str(a.note, 300) };
+  const out = Object.fromEntries(Object.entries(all).filter(([k]) => a[k] !== undefined));
+  out.add_to_stakeholders = a.add_to_stakeholders !== false;
+  if (typeof a.checked === 'boolean') out.checked = a.checked;
   return out;
+}
+/** Nothing blocks a 진행 여부 체크 any more (2026-10-21: 승인 절차 제거). Kept so callers read one shape. */
+export function approvalMissing() { return []; }
+/** Who/when of a 진행 여부 체크: stamped when it turns on, cleared when it turns off, kept otherwise. `next.checked` undefined = unchanged. */
+export async function stampCheck(db, prev, next, userId) {
+  const was = Boolean(prev && prev.checked); const now = typeof next.checked === 'boolean' ? next.checked : was;
+  const out = { ...next, checked: now };
+  if (now && !was) {
+    const u = userId ? await db.get('SELECT name FROM users WHERE id = ?', [userId]) : null;
+    Object.assign(out, { checked_by: userId || null, checked_by_name: (u && u.name) || '', checked_at: new Date().toISOString() });
+  } else if (now) Object.assign(out, { checked_by: prev.checked_by || null, checked_by_name: prev.checked_by_name || '', checked_at: prev.checked_at || null });
+  else Object.assign(out, { checked_by: null, checked_by_name: '', checked_at: null });
+  return out;
+}
+/** "✓ 확인 · 홍길동 · 2026-10-21 · 메모" for a checked step (who/when = the step's completion), '' when unchecked. */
+export function checkSummary(completed, st, a = {}) {
+  if (!completed) return '';
+  const day = st && st.completed_at ? new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(st.completed_at)) : '';
+  return ['✓ 확인', (st && st.completed_by_name) || a.checked_by_name || '', day, a.note || ''].filter(Boolean).join(' · ');
 }
 /** A directly entered approver added to 이해관계자 (CLIENT). Not an edit of the 이해관계자 activity, so its section stamp is left alone. */
 export function approverStakeholder(project, a, area) {
@@ -281,11 +300,7 @@ export function sectionSummary(key, d, ctx = {}) {
       const parts = [`개최 ${when}`]; if ((k.attendees || []).length) parts.push(`참석 ${k.attendees.length}명`); if ((k.decisions || []).length) parts.push(`결정사항 ${k.decisions.length}건`);
       return parts.join(' · ');
     }
-    case 'APPROVAL': {
-      const a = d.approval || {}; const who = approverOf(d);
-      const parts = []; if (who) parts.push(`${who.name}${who.title ? ` ${who.title}` : ''}`); if (a.date) parts.push(a.date); if (a.method) parts.push(APPROVAL_METHODS[a.method]);
-      return parts.join(' · ');
-    }
+    case 'APPROVAL': return (d.approval || {}).note || '';
     default: return '';
   }
 }
@@ -314,13 +329,9 @@ export async function loadDefinition(db, project) {
     let changed = Boolean(completed && upd && st.completed_at && new Date(upd) > new Date(st.completed_at));
     let reapproval = false; let bypass = null;
     if (key === 'APPROVAL') {
-      // 승인 후 변경 감지: the approved content (fingerprint at 완료 처리) no longer matches → 다시 확인 필요 (spec US-2, C1)
-      reapproval = Boolean(completed && d.approval.baseline && d.approval.baseline !== approvalFingerprint(d));
-      changed = changed || reapproval;
-      bypass = completed ? null : parseBypass(st?.note);
-      // batch7 #5: the 01 gate asks no reason any more ("승인 없이 진행"); older notes keep their 사유
-      const bl = bypass && bypass.reason === NO_REASON ? NO_REASON : '승인 전 진행 · 사유 있음';
-      if (bypass) summary = summary ? `${bl} · ${summary}` : bl;
+      // 진행 여부 체크 (2026-10-21): no re-approval loop and no "[승인 전 진행]" reason any more — 체크 = 완료, who/when = the step's completed_by/at
+      changed = false;
+      summary = checkSummary(completed, st, d.approval);
     }
     if (key === 'KICKOFF' && completed) { const open = (d.kickoff.followups || []).filter((x) => !x.done).length; if (open) summary = `${summary} · 후속 조치 ${open}건 남음`; }
     return { key, label: SECTION_LABEL[key], step_id: st?.id || null, title: st?.title || SECTION_LABEL[key], description: st?.description || '',
@@ -336,7 +347,8 @@ export async function loadDefinition(db, project) {
   return { definition: d, sections, progress: { done, total: core.length, percent: Math.round((done / core.length) * 100) },
     needs_review: sections.filter((s) => s.changed_after_completion).map((s) => s.key),
     // 착수 gate state for guidance / Charter / export: approval status (TODO · COMPLETED · REAPPROVAL), approver, bypass reason
-    initiation_gate: { approval: apv ? { status: apv.status === 'COMPLETED' ? (apv.reapproval ? 'REAPPROVAL' : 'COMPLETED') : 'TODO', step_id: apv.step_id, bypass: apv.bypass, approver: approverOf(d), method_label: APPROVAL_METHODS[d.approval.method] || '' } : null,
+    initiation_gate: { approval: apv ? { status: apv.status === 'COMPLETED' ? (apv.reapproval ? 'REAPPROVAL' : 'COMPLETED') : 'TODO', step_id: apv.step_id, bypass: apv.bypass, approver: approverOf(d), method_label: APPROVAL_METHODS[d.approval.method] || '',
+      checked: apv.status === 'COMPLETED', summary: apv.summary, note: d.approval.note || '', checked_by_name: apv.completed_by_name || '', checked_at: apv.completed_at } : null,
       kickoff: kick ? { status: kick.status, step_id: kick.step_id } : null },
     project_dates: { planned_start_date: project.planned_start_date, planned_end_date: project.planned_end_date }, wbs_milestones: ms,
     // 프로젝트 기본 특성 live on projects (same values as the create form); shown and edited here, never part of a step's completion
@@ -369,7 +381,8 @@ export async function saveDefinition(db, project, body = {}, userId = null) {
   const touched = new Set(Object.keys(patch).map((k) => SECTION_OF[k]).filter(Boolean));
   if (patch.approval) {
     const prev = existing ? approvalOf(parse(existing.approval, {})) : approvalOf(null);
-    const { add_to_stakeholders: addSh, ...a } = patch.approval;
+    const { add_to_stakeholders: addSh, ...sent } = patch.approval;
+    const a = await stampCheck(db, prev, { ...parse(existing && existing.approval, {}), ...sent }, userId);
     // 직접 입력 승인자 → 이해관계자에도 추가 (기본 체크, spec C6). Not an edit of the 이해관계자 activity, so its section stamp is left alone.
     if (!a.approver_id && a.approver_name && addSh) {
       const list = patch.stakeholders || (existing ? parse(existing.stakeholders, []) : []);
@@ -406,16 +419,17 @@ export async function setSectionStatus(db, project, key, action, userId, body = 
   const model = await loadDefinition(db, project);
   const sec = model.sections.find((s) => s.key === key);
   if (!sec.step_id) return { error: 'not_found' };
-  if (action === 'reopen' || action === 'resume') { await updateStep(db, project, sec.step_id, { status: 'TODO' }, userId); return { ok: true }; }
+  const setCheck = async (on) => {   // 착수 결과 확인: the step status is the check; the record keeps who/when (stampCheck)
+    await ensureRow(db, project.id, userId); const raw = parse((await row(db, project.id)).approval, {});
+    await db.run('UPDATE project_definitions SET approval = ? WHERE project_id = ?', [JSON.stringify(await stampCheck(db, approvalOf(raw), { ...raw, checked: on }, userId)), project.id]);
+  };
+  if (action === 'reopen' || action === 'resume') { if (key === 'APPROVAL') await setCheck(false); await updateStep(db, project, sec.step_id, { status: 'TODO' }, userId); return { ok: true }; }
   if (action === 'skip') {
     if (!sec.skippable) throw new ValidationError({ section: '필수 업무는 건너뛸 수 없습니다.' });
     await updateStep(db, project, sec.step_id, { status: 'SKIPPED' }, userId); return { ok: true };
   }
   if (!sec.ready) throw new ValidationError({ section: sec.missing[0], missing: sec.missing.join('\n') });
-  if (key === 'APPROVAL') {   // remember what was approved → later edits to 목표·범위·일정·승인자 flag 다시 확인 필요
-    const d = model.definition;
-    await db.run('UPDATE project_definitions SET approval = ? WHERE project_id = ?', [JSON.stringify({ ...d.approval, baseline: approvalFingerprint(d) }), project.id]);
-  }
+  if (key === 'APPROVAL') await setCheck(true);
   await updateStep(db, project, sec.step_id, { status: 'COMPLETED' }, userId);   // confirm == complete again: completed_at moves past section_updated
   return { ok: true };
 }

@@ -63,6 +63,7 @@ export const VERIFY = { UNLINKED: '테스트 없음', IN_PROGRESS: '검증 중',
 export const VERIFY_CHIP = tones('verify');
 export const ACC_STATUS = { DRAFT: '작성 중', REQUESTED: '검수 요청', ACCEPTED: '승인', REWORK_REQUIRED: '보완 필요', REJECTED: '반려' };
 export const ACC_STATUS_CHIP = tones('acc');
-export const ACC_ACTIONS = { DRAFT: ['submit'], REQUESTED: ['accept', 'rework', 'reject'], REWORK_REQUIRED: ['resubmit'], ACCEPTED: [], REJECTED: [] };
+export const ACC_ACTIONS = { DRAFT: ['accept', 'submit', 'rework', 'reject'], REQUESTED: ['accept', 'rework', 'reject'],   // 2026-10-21: 승인 straight from 작성 중 (no 검수 요청 step required)
+  REWORK_REQUIRED: ['resubmit'], ACCEPTED: [], REJECTED: [] };
 export const ACC_ACTION_LABEL = { submit: '검수 요청', accept: '승인', rework: '보완 요청', reject: '반려', resubmit: '재요청' };
 export const testSummaryText = (s) => (s.total ? `${s.pass}/${s.total} 통과${s.fail ? ` · 실패 ${s.fail}` : ''}${s.not_run ? ` · 미실행 ${s.not_run}` : ''}` : '테스트 없음');

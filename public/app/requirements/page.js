@@ -20,7 +20,7 @@ import { confirmDialog, pickerDialog, showErrors, toast } from '../shared/dialog
 import { aiStatus } from '../shared/ai.js';
 import { openExtractDialog } from '../ai/extract.js';
 import { guardEdit, needsPrompt, needsAddPrompt, changePromptDialog, createChangeDraft, proposalLine } from './change-guard.js';
-import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
+import { approvalFields, collectApproval, approvalBody, approvalStatusText } from '../shared/approval.js';
 import { reqDocMenu, bindReqDocMenu } from '../project/initiation.js';
 import { josa } from '../shared/josa.js';
 import { toolMenu, tmItem, aiPrice } from '../shared/toolmenu.js';
@@ -409,27 +409,22 @@ export async function requirementsPage(id) {
     };
   };
 
-  /* ---------- 요구사항 기준선 승인 Drawer (?approval=1, Phase 2 US-1) — the 01 approval form, plus "미확정 함께 확정" ---------- */
-  const UNCONF_QS = '?scope=IN_SCOPE&status=DRAFT,REVIEWING,ON_HOLD,REJECTED';
+  /* ---------- 요구사항 확정 확인 Drawer (?approval=1) — 진행 여부 체크 since 2026-10-21 (was 기준선 승인), plus "미확정 함께 확정" ---------- */
   const drawApproval = () => {
     const b = baseline; const d = $('#drawer'); if (!b || !d) return;
-    if (!bw) bw = { add_to_stakeholders: true, ...b.approval };
-    const done = b.status === 'COMPLETED'; const lock = archived || done; const c = b.counts; const unconf = c.in_scope_unconfirmed;
-    const empty = !done && !c.in_scope;   // nothing in scope → no baseline to approve (Q6-2; the API refuses too)
-    const methods = Object.entries(b.methods);
-    d.className = 'drawer drawer--side'; d.dataset.mode = 'approval';   // the same right-side panel as 01 착수 결과 승인 (Q6-1)
-    d.innerHTML = html`<div class="wd__h"><div class="wd__ht"><b>요구사항 확정 승인(고객)${raw(done ? ' <span class="chip chip--done">승인 기록됨</span>' : '')}</b><small>확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 확정본이 됩니다.</small></div><button class="wd__ib" id="dclose" aria-label="닫기">×</button></div>
+    const done = b.status === 'COMPLETED';
+    if (!bw) bw = { ...b.approval, checked: done, checked_by_name: b.completed_by_name || b.approval.checked_by_name, checked_at: b.completed_at || b.approval.checked_at };
+    const lock = archived; const c = b.counts; const unconf = c.in_scope_unconfirmed;
+    d.className = 'drawer drawer--side'; d.dataset.mode = 'approval';   // the same right-side panel as 01 착수 결과 확인 (Q6-1)
+    d.innerHTML = html`<div class="wd__h"><div class="wd__ht"><b>요구사항 확정 내용 고객 확인${raw(done ? ' <span class="chip chip--done">✓ 체크됨</span>' : '')}</b><small>확정한 요구사항을 고객과 확인했는지 체크합니다. 승인 기록이나 증빙은 필요 없습니다.</small></div><button class="wd__ib" id="dclose" aria-label="닫기">×</button></div>
       <div class="drawer__b apv" data-approval-drawer>
-        ${raw(!done && b.bypass ? html`<div class="notice notice--soft">승인 전 진행 — 사유: ${b.bypass.reason} (${[b.bypass.date, b.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
-        ${raw(done ? html`<div class="notice">고객 승인이 기록되었습니다 · ${b.summary}</div>` : '')}
-        <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(reqDocMenu('요구사항 정의서 내려받기'))}</div>
-          <dl><div><dt>범위 내</dt><dd data-apv-in>${c.in_scope}건 (확정 ${c.in_scope_confirmed}건)</dd></div><div><dt>범위 외</dt><dd>${c.out_of_scope}건</dd></div></dl>${raw(empty ? '<p class="hint" data-apv-empty style="margin:6px 0 0">아직 범위 내 요구사항이 없습니다. 요구사항을 등록하고 범위 내로 분류한 뒤 승인을 기록하세요.</p>' : '')}</div>
-        <div class="wd__form">${raw(approvalFields(bw, { people: b.stakeholders, methods, disabled: lock, approverHint: '<small class="dim">고객 PM 또는 요구사항 승인 권한자</small>', evidencePh: "예: 2026-11-20 이수진 차장 회신 메일 '요구사항 정의서 v1.0 승인'" }))}</div>
-        ${raw(!lock && unconf ? html`<label class="toggle apv__confirm"><input type="checkbox" id="apv-confirm" ${confirmAll ? 'checked' : ''}> 범위 내 미확정 ${unconf}건을 함께 확정합니다</label>` : '')}
-        <div class="apv__block" id="apv-block" role="alert" hidden></div>
-        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 완료 처리할 수 있습니다. 승인 이후 확정된 요구사항을 바꾸면 변경 요청으로 처리하도록 안내합니다.</p>
+        <div class="apv__what"><div class="apv__wh"><b>확인할 내용</b>${raw(reqDocMenu('요구사항 정의서 내려받기'))}</div>
+          <dl><div><dt>범위 내</dt><dd data-apv-in>${c.in_scope}건 (확정 ${c.in_scope_confirmed}건)</dd></div><div><dt>범위 외</dt><dd>${c.out_of_scope}건</dd></div></dl></div>
+        <div class="wd__form">${raw(approvalFields(bw, { label: '확정한 요구사항을 고객과 확인했나요?', disabled: lock, notePh: '예: 11/20 요구사항 정의서 v1.0 메일로 공유, 회의에서 확인' }))}</div>
+        ${raw(!lock && !done && unconf ? html`<label class="toggle apv__confirm"><input type="checkbox" id="apv-confirm" ${confirmAll ? 'checked' : ''}> 체크할 때 범위 내 미확정 ${unconf}건도 함께 확정합니다</label>` : '')}
+        <p class="hint">체크하지 않아도 다음 단계로 넘어갈 수 있습니다. 확정된 요구사항을 나중에 바꾸면 변경 요청으로 처리하도록 안내합니다.</p>
       </div>
-      ${raw(archived ? '' : html`<div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${lock ? '' : approvalStatusText(bw)}</span><span style="display:flex;gap:8px;margin-left:auto">${raw(done ? '<button type="button" class="btn btn--ghost btn--sm" data-apv="reopen">완료 취소</button>' : html`<button type="button" class="btn btn--secondary btn--sm" data-apv="save">저장</button><button type="button" class="btn btn--primary btn--sm" data-apv="complete" ${empty ? 'disabled' : ''}>완료 처리</button>`)}</span></div>`)}`;
+      ${raw(archived ? '' : html`<div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${approvalStatusText(bw)}</span><span style="display:flex;gap:8px;margin-left:auto"><button type="button" class="btn btn--ghost btn--sm" data-apv="close">닫기</button><button type="button" class="btn btn--primary btn--sm" data-apv="save">저장</button></span></div>`)}`;
     bindApproval();
   };
   const bindApproval = () => {
@@ -437,33 +432,26 @@ export async function requirementsPage(id) {
     $('#dclose').onclick = closeDrawer;
     bindReqDocMenu(d, id);
     const collect = () => { const f = d.querySelector('.wd__form'); if (f) bw = collectApproval(f, bw); const cb = $('#apv-confirm'); if (cb) confirmAll = cb.checked; };
-    const asel = d.querySelector('[data-af="approver_id"]'); if (asel) asel.onchange = () => { collect(); drawApproval(); };
-    const cb = $('#apv-confirm'); if (cb) cb.onchange = () => { confirmAll = cb.checked; const bl = $('#apv-block'); bl.hidden = true; };
-    const fail = (e) => { const f = e.fields || {}; if (showApprovalErrors(d, Object.fromEntries(Object.entries(f).filter(([k]) => k.startsWith('approval.'))))) return; const msg = e.fields ? (f.section || Object.values(f)[0]) : e.message; toast(msg); if (stat) stat.textContent = msg; };
+    const cb = $('#apv-confirm'); if (cb) cb.onchange = () => { confirmAll = cb.checked; };
+    const fail = (e) => { const f = e.fields || {}; const msg = e.fields ? (f.section || Object.values(f)[0]) : e.message; toast(msg); if (stat) stat.textContent = msg; };
     const form = d.querySelector('.wd__form');
-    if (form && stat && !d.querySelector('[data-af]:disabled')) form.addEventListener('input', () => { collect(); stat.textContent = approvalStatusText(bw); });
-    if (form && stat && !d.querySelector('[data-af]:disabled')) form.addEventListener('change', () => { collect(); stat.textContent = approvalStatusText(bw); });
+    if (form && stat) form.addEventListener('change', () => { collect(); stat.textContent = approvalStatusText(bw); });
     const after = async (res) => { baseline = res.baseline; if (res.summary) summary = res.summary; if (res.guide) g = res.guide; };
     d.querySelectorAll('[data-apv]').forEach((btn) => { btn.onclick = async () => {
-      const act = btn.dataset.apv; collect(); if (stat) stat.textContent = '';
+      const act = btn.dataset.apv; if (act === 'close') return closeDrawer();
+      collect(); if (stat) stat.textContent = '';
+      const done = baseline.status === 'COMPLETED'; const body = approvalBody(bw);
       try {
-        if (act === 'save') { await after(await api('PUT', rApi('/baseline'), { approval: approvalBody(bw) })); bw = null; drawApproval(); toast('저장했습니다.'); const s2 = $('#apv-stat'); if (s2) s2.textContent = '저장됨'; return; }
-        if (act === 'reopen') {
-          if (!(await confirmDialog({ title: '완료를 취소할까요?', body: '승인 기록은 그대로 남고, 이 업무만 다시 "진행 중"으로 바뀝니다.', confirm: '완료 취소' }))) return;
-          await after(await api('POST', rApi('/baseline/reopen'), {})); bw = null; drawApproval(); toast('완료를 취소했습니다.'); return;
+        // 저장: checked → 완료 (+ 미확정 함께 확정 when ticked), unchecked → 완료 취소, otherwise only the 메모
+        if (body.checked && !done) {
+          const unconf = baseline.counts.in_scope_unconfirmed;
+          const res = await api('POST', rApi('/baseline/complete'), { approval: body, confirm_unconfirmed: Boolean(unconf && confirmAll) });
+          await after(res); bw = null;
+          toast(res.confirmed ? `체크하고 범위 내 미확정 ${res.confirmed}건을 확정했습니다.` : '체크했습니다.');
+          closeDrawer(); await load(); paintKpi(); draw(); return;
         }
-        if (showApprovalErrors(d, approvalErrors(bw))) { if (stat) stat.textContent = approvalStatusText(bw); return; }   // L-D2: inline, under each field
-        const unconf = baseline.counts.in_scope_unconfirmed;
-        if (unconf && !confirmAll) {   // 체크 OFF + 미확정 남음 → 막힘, nothing saved
-          const bl = $('#apv-block'); bl.hidden = false;
-          bl.innerHTML = html`범위 내 미확정 ${unconf}건이 있습니다. 먼저 확정하세요. <a class="link" href="${location.pathname}${UNCONF_QS}" data-unconf>미확정 보기 →</a>`;
-          bl.querySelector('[data-unconf]').onclick = async (e) => { e.preventDefault(); closeDrawer(); for (const k of filterKeys) setParam(k, ''); setParam('scope', 'IN_SCOPE'); setParam('status', 'DRAFT,REVIEWING,ON_HOLD,REJECTED'); await load(); draw(); };
-          return;
-        }
-        const res = await api('POST', rApi('/baseline/complete'), { approval: approvalBody(bw), confirm_unconfirmed: Boolean(unconf && confirmAll) });
-        await after(res); bw = null;
-        toast(res.confirmed ? `승인을 기록하고 범위 내 미확정 ${res.confirmed}건을 확정했습니다.` : '승인을 기록했습니다.');
-        closeDrawer(); await load(); paintKpi(); draw();
+        if (!body.checked && done) { await after(await api('POST', rApi('/baseline/reopen'), { approval: body })); bw = null; drawApproval(); toast('체크를 해제했습니다.'); return; }
+        await after(await api('PUT', rApi('/baseline'), { approval: body })); bw = null; drawApproval(); toast('저장했습니다.'); const s2 = $('#apv-stat'); if (s2) s2.textContent = '저장됨';
       } catch (e) { fail(e); }
     }; });
   };

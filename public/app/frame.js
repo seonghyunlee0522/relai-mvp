@@ -172,7 +172,7 @@ export function pageInfo(p, g, { tab = null, title = '', badges = null } = {}) {
   const d = DOORS(p.id).find((x) => x.key === door); const t = d.tabs.find((x) => x.key === tkey) || null;
   const curKey = g.current_phase ? g.current_phase.phase_key : null;
   const info = { door: d, tab: t, title: t ? t.label : d.label, purpose: t ? t.purpose : d.purpose, phase: t ? t.phase || curKey : null, crumb: null, badges: badges || {} };
-  const TITLES = { definition: '프로젝트 정의', requirements: '요구사항', 'req-trace': '요구사항 연결 현황', wbs: '일정 (WBS)', gantt: '간트 차트', 'wbs-trace': '요구사항–작업 연결', 'test-plan': '테스트 연결률', acceptance: '검수 / 인수 승인', docs: title || '공식 문서', health: '프로젝트 건강도' };
+  const TITLES = { definition: '프로젝트 정의', requirements: '요구사항', 'req-trace': '요구사항 연결 현황', wbs: '일정 (WBS)', gantt: '간트 차트', 'wbs-trace': '요구사항–작업 연결', 'test-plan': '테스트 연결률', acceptance: '검수 / 인수', docs: title || '공식 문서', health: '프로젝트 건강도' };
   if (t && TITLES[t.key]) info.title = TITLES[t.key];
   if (/\/checklist\/?$/.test(path)) {
     const a = checklistActivity(p.id, qs); const ph = a && (g.phases || []).find((x) => x.phase_key === a.phase);

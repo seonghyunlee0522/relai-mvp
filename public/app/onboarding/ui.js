@@ -45,10 +45,10 @@ export function bindChecklist(root) {
 /* ---------- Coach marks: one-time, dismissible context banners (not popovers) ---------- */
 export const COACH = {
   REQ_TRACE_INTRO: { title: '요구사항–WBS 연결', body: '요구사항을 열어 WBS 작업을 연결하면 어떤 작업이 어떤 요구사항을 수행하는지 추적할 수 있습니다. 확정된 요구사항은 모두 WBS와 연결하는 것이 목표입니다.' },
-  CHANGE_REQUEST_INTRO: { title: '변경 요청', body: '확정된 요구사항을 바꾸거나 추가하는 요청은 변경 요청으로 기록하고, 영향받는 요구사항·WBS와 일정 영향을 함께 관리합니다. 승인된 변경은 WBS에 반영한 뒤 "반영 완료"로 닫습니다.' },
+  CHANGE_REQUEST_INTRO: { title: '변경 요청', body: '확정된 요구사항을 바꾸거나 추가하는 요청은 변경 요청으로 기록하고, 영향받는 요구사항·WBS와 일정 영향을 함께 관리합니다. 반영하기로 결정(승인)한 변경은 WBS에 반영한 뒤 "반영 완료"로 닫습니다.' },
   ISSUE_RISK_INTRO: { title: '이슈와 리스크', body: '이슈는 이미 발생해 진행을 막는 문제, 리스크는 아직 발생하지 않았지만 영향을 줄 수 있는 위험입니다. 담당자·기한·심각도를 정해 두면 현황의 확인 필요 목록에 자동으로 올라옵니다.' },
   TESTING_INTRO: { title: '테스트', body: '범위 내 요구사항마다 테스트를 만들고 실행 결과(통과/실패/막힘)를 기록합니다. 실패는 바로 이슈로 등록할 수 있고, 테스트 연결률 탭에서 테스트가 없는 요구사항을 확인합니다.' },
-  ACCEPTANCE_INTRO: { title: '검수', body: '검수는 고객이 결과물을 확인하는 절차입니다. 대상 요구사항과 테스트를 묶어 검수를 요청하고 승인·반려·보완 결과를 기록하세요.' },
+  ACCEPTANCE_INTRO: { title: '검수', body: '검수는 결과물을 고객과 확인하는 단계입니다. 대상 요구사항과 테스트를 묶고 승인·반려·보완 결과를 기록하세요. 고객과 확인했으면 체크해 두면 됩니다.' },
   JIRA_OPTIONAL_INTRO: { title: '지라를 사용하고 있나요? (선택)', body: 'RELAI WBS와 지라 이슈를 연결하면 실행 상태를 자동으로 추적할 수 있습니다. 연결하지 않아도 프로젝트를 계속 진행할 수 있습니다.' },
   JIRA_EXECUTION_INTRO: { title: '지라 실행 연결 (선택)', body: '개발팀이 지라를 쓴다면 WBS 작업에 지라 이슈를 연결해 실행 상태를 자동으로 가져올 수 있습니다. 지라 없이도 WBS 진행률만으로 프로젝트를 진행할 수 있습니다.' },
   WEEKLY_REPORT_INTRO: { title: '주간보고', body: '프로젝트가 어느 정도 진행되면 주간보고를 생성해 진행 현황·이슈·다음 계획을 고객과 공유할 수 있습니다. 보고서는 현재 데이터로 자동 작성되고 수정할 수 있습니다.' },
@@ -73,7 +73,7 @@ export const PHASE_INTRO = {
   ANALYSIS_DESIGN: { what: '요구사항을 실행 가능한 작업(WBS)으로 구체화하고 담당자·일정·선후관계를 설계합니다.', outputs: ['WBS', '요구사항–WBS 연결', '담당자·일정·마일스톤'] },
   DEVELOPMENT: { what: '실행 계획대로 진행하면서 진척, 지연, 이슈, 변경 요청을 관리합니다.', outputs: ['진행 현황', '이슈', '변경 요청'] },
   TESTING: { what: '요구사항이 실제 시스템에 올바르게 구현되었는지 테스트로 검증하고 결함을 조치합니다.', outputs: ['테스트 케이스', '실행 결과', '실패 → 이슈'] },
-  TRANSITION_GO_LIVE: { what: '검수로 인수 승인을 받고 전환·교육·오픈·안정화를 진행합니다.', outputs: ['검수 승인', '전환 계획', '오픈'] },
+  TRANSITION_GO_LIVE: { what: '검수 결과를 기록하고 전환·교육·오픈·안정화를 진행합니다.', outputs: ['검수 결과', '전환 계획', '오픈'] },
   OPERATIONS: { what: '운영 조직에 이관하고 유지보수 체계와 종료 사항을 정리합니다.', outputs: ['운영 이관', '종료 정리'] },
 };
 export function phaseIntro(phaseKey, phaseName) {

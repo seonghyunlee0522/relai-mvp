@@ -51,7 +51,7 @@ const guideCard = (g, p, archived, created) => {
 };
 
 /* ---------- current phase activities (Process + Read view) ---------- */
-const GATE_KEYS = new Set(['KICKOFF', 'APPROVAL', 'BASELINE_APPROVAL']);   // 01 착수 / 02 기준선 gate rows show their one-line status (준비 중 3/4 · 승인 전 진행 · 사유 있음 …)
+const GATE_KEYS = new Set(['KICKOFF', 'APPROVAL', 'BASELINE_APPROVAL']);   // 01 착수 / 02 확정 확인 rows show their one-line status (준비 중 3/4 · ✓ 확인 · 홍길동 …)
 const stateCls = (a) => (a.state === 'COMPLETED' ? 'done' : a.state === 'SKIPPED' ? 'skip' : a.state === 'IN_PROGRESS' ? (a.crit ? 'crit' : 'prog') : 'todo');
 /** A row is clickable where action is due: the current activity (first open one), in-progress ones, and 착수 definition rows. Done / future / skipped rows are not.
  * State is shown once, by the badge on the right (no leading icon). `markable` = rows whose phase is current or already reached
@@ -329,7 +329,7 @@ export async function nextPage(id, main = $('#main')) {
     if (desk) fillSide(main, id);
     const move = async () => { if (await moveToPhase(p.id, g, g.next_phase, { next: true })) { g = await api('GET', wsApi(`/${id}`)); draw(); } };
     const nb = $('#next'); if (nb) nb.onclick = move;
-    // 단계 선택: another phase's list → make it the current phase (same dialogs, incl. the 착수 승인 gate)
+    // 단계 선택: another phase's list → make it the current phase (same dialogs)
     main.querySelectorAll('[data-dl]').forEach((b) => { b.onclick = async () => { try { const { download } = await import('../core/ui.js'); await download(b.dataset.dl); toast(/requirements\/export-doc/.test(b.dataset.dl) ? '요구사항 정의서를 내려받았습니다.' : '사업수행계획서를 내려받았습니다.'); } catch (e) { toast(e.message); } }; });
     bindPlanMenu(main, p.id);
     main.querySelectorAll('[data-move-next]').forEach((b) => { b.onclick = g.next_phase ? move : null; });

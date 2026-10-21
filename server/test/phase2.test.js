@@ -20,107 +20,118 @@ const step = (g, phase, key) => g.phases.find((x) => x.phase_key === phase).step
 const stepsOf = (key) => PHASE_BY_KEY[key].steps.map((s, i) => ({ id: `s${i}`, step_key: s.key, title: s.title, description: s.description, completion_criteria: s.completion_criteria, importance: s.importance, linked_feature_type: s.linked_feature_type, status: 'TODO', note: '' }));
 const stats = (requirements) => ({ requirements, wbs: {}, tests: {}, acceptances: {}, issues: {}, changes: {} });
 
-test('template: 02 = … CONFIRM → BASELINE_APPROVAL (필수) → INTERFACE (선택)', () => {
+test('template: 02 = … CONFIRM → BASELINE_APPROVAL (권장 진행 여부 체크) → INTERFACE (선택)', () => {
   const st = PHASE_BY_KEY.REQUIREMENTS.steps;
   assert.deepEqual(st.map((s) => s.key), ['COLLECT', 'CLASSIFY', 'PRIORITIZE', 'SCOPE_CHECK', 'CONFIRM', 'BASELINE_APPROVAL', 'INTERFACE']);
   const b = st.find((s) => s.key === 'BASELINE_APPROVAL');
-  assert.equal(b.title, '요구사항 확정 승인(고객)'); assert.equal(b.importance, 'REQUIRED'); assert.equal(b.linked_feature_type, 'requirements');
+  assert.equal(b.title, '요구사항 확정 내용 고객 확인'); assert.equal(b.importance, 'RECOMMENDED'); assert.equal(b.linked_feature_type, 'requirements');
+  assert.equal(b.completion_criteria, '진행 여부가 체크되어 있습니다.'); assert.doesNotMatch(b.description, /승인받고/);
 });
 
-test('US-1 기준선 승인: every field required, 승인일 ≤ today, not skippable (409), direct approver → 이해관계자 (01 untouched)', async () => {
+test('US-1 요구사항 확정 확인 (진행 여부 체크): nothing required, skippable (권장), who/when stamped, uncheck keeps the record; legacy approver → 이해관계자', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await toReq(A);
   await addReq(A, { title: 'R1', scope: 'IN_SCOPE', status: 'CONFIRMED' });
   let r = await A.c('GET', `${A.req}/baseline`); const b0 = r.json.baseline;
-  assert.equal(b0.status, 'TODO'); assert.deepEqual(Object.keys(b0.methods), ['SIGNED', 'EMAIL', 'REVIEW', 'OTHER']);
-  assert.equal(b0.methods.REVIEW, '검토 회의에서 승인');
-  // REQUIRED: PATCH steps {SKIPPED} → 409
-  assert.equal((await A.c('PATCH', `${A.purl}/steps/${b0.step_id}`, { status: 'SKIPPED' })).status, 409);
-  // each missing field blocks 완료 처리
-  r = await A.c('POST', `${A.req}/baseline/complete`, {}); assert.equal(r.status, 400); assert.match(r.json.error.fields.missing, /승인자[\s\S]*승인일[\s\S]*승인 방법[\s\S]*근거/);
-  for (const k of ['approver_name', 'date', 'method', 'evidence']) {
-    const a = { ...APV, [k]: '' }; r = await A.c('POST', `${A.req}/baseline/complete`, { approval: a }); assert.equal(r.status, 400, k);
-  }
+  assert.equal(b0.status, 'TODO'); assert.equal(b0.checked, false); assert.deepEqual(b0.missing, []); assert.equal(b0.summary, '');
+  assert.deepEqual(Object.keys(b0.methods), ['SIGNED', 'EMAIL', 'REVIEW', 'OTHER']); assert.equal(b0.methods.REVIEW, '검토 회의에서 승인');
+  // 권장: PATCH steps {SKIPPED} allowed (was 409 not_skippable), and back to TODO
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${b0.step_id}`, { status: 'SKIPPED' })).status, 200);
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${b0.step_id}`, { status: 'TODO' })).status, 200);
+  // legacy fields are still validated when sent
   r = await A.c('POST', `${A.req}/baseline/complete`, { approval: { ...APV, date: '2099-01-01' } }); assert.equal(r.status, 400); assert.equal(r.json.error.fields['approval.date'], '승인일은 오늘 이후일 수 없습니다.');
   assert.equal((await A.c('PUT', `${A.req}/baseline`, { approval: { method: 'KICKOFF' } })).status, 400, '01-only method is not a 02 method');
   r = await A.c('GET', `${A.req}/baseline`); assert.equal(r.json.baseline.status, 'TODO');
-  // 임시저장 then 완료 처리 with a directly entered approver (+ 이해관계자에도 추가 by default)
-  assert.equal((await A.c('PUT', `${A.req}/baseline`, { approval: { evidence: '메일' } })).status, 200);
+  // 체크 with nothing recorded → allowed (was 400 승인자·승인일·방법·근거 missing)
+  r = await A.c('POST', `${A.req}/baseline/complete`, {}); assert.equal(r.status, 200, JSON.stringify(r.json));
+  let b = r.json.baseline; assert.equal(b.status, 'COMPLETED'); assert.equal(b.checked, true);
+  assert.match(b.summary, /^✓ 확인 · 홍길동 · \d{4}-\d{2}-\d{2}$/); assert.equal(b.approval.checked_by_name, '홍길동'); assert.ok(b.approval.checked_at);
+  assert.equal(r.json.guide.guidance.rule, 'REQ_DONE');
+  let g = (await A.c('GET', A.purl)).json; assert.equal(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').state, 'COMPLETED');
+  assert.match(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').text, /^✓ 확인 · 홍길동/);
+  // 체크 해제 → TODO, who/when cleared
+  r = await A.c('POST', `${A.req}/baseline/reopen`, {}); assert.equal(r.json.baseline.status, 'TODO'); assert.equal(r.json.baseline.approval.checked, false); assert.equal(r.json.baseline.approval.checked_at, null);
+  // 메모 저장 then 체크; a legacy direct-entry approver sent along still becomes a CLIENT stakeholder (01 untouched)
+  assert.equal((await A.c('PUT', `${A.req}/baseline`, { approval: { note: '고객 PM 메일로 확인' } })).status, 200);
   r = await A.c('POST', `${A.req}/baseline/complete`, { approval: APV }); assert.equal(r.status, 200, JSON.stringify(r.json));
-  const b = r.json.baseline; assert.equal(b.status, 'COMPLETED'); assert.equal(b.approver.name, '이수진'); assert.equal(b.summary, '이수진 차장 · 2026-01-10 · 이메일 회신');
+  b = r.json.baseline; assert.equal(b.status, 'COMPLETED'); assert.equal(b.approver.name, '이수진'); assert.match(b.summary, /^✓ 확인 · 홍길동 · .* · 고객 PM 메일로 확인$/);
   const def = (await A.c('GET', `${A.purl}/definition`)).json;
   const sh = def.definition.stakeholders.find((s) => s.name === '이수진'); assert.ok(sh); assert.equal(sh.org_type, 'CLIENT'); assert.equal(sh.area, '요구사항 확정 승인');
   assert.equal(b.approval.approver_id, sh.id);
   assert.equal(def.sections.find((s) => s.key === 'STAKEHOLDERS').changed_after_completion, false);
-  assert.equal(r.json.guide.guidance.rule, 'REQ_DONE');
-  const g = (await A.c('GET', A.purl)).json; assert.equal(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').state, 'COMPLETED');
-  assert.match(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').text, /이수진 차장 · 2026-01-10 · 이메일 회신/);
-  // 완료 취소 → TODO, record kept
-  r = await A.c('POST', `${A.req}/baseline/reopen`, {}); assert.equal(r.json.baseline.status, 'TODO'); assert.equal(r.json.baseline.approval.evidence, APV.evidence);
+  // 체크 해제 → TODO, record kept
+  r = await A.c('POST', `${A.req}/baseline/reopen`, {}); assert.equal(r.json.baseline.status, 'TODO'); assert.equal(r.json.baseline.approval.evidence, APV.evidence); assert.equal(r.json.baseline.approval.note, '고객 PM 메일로 확인');
   server.close();
 });
 
-test('US-1 미확정 함께 확정: 3 unconfirmed + ON → all confirmed, CONFIRM + BASELINE_APPROVAL complete; OFF → blocked, nothing saved', async () => {
+test('US-1 미확정 함께 확정: OFF → checked anyway, nothing confirmed; ON → all confirmed, CONFIRM + BASELINE_APPROVAL complete', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await toReq(A);
   await addReq(A, { title: 'R1', scope: 'IN_SCOPE', status: 'CONFIRMED' });
   const open = [await addReq(A, { title: 'R2', scope: 'IN_SCOPE', status: 'DRAFT' }), await addReq(A, { title: 'R3', scope: 'IN_SCOPE', status: 'REVIEWING' }), await addReq(A, { title: 'R4', scope: 'IN_SCOPE', status: 'ON_HOLD' })];
   await addReq(A, { title: 'OUT', scope: 'OUT_OF_SCOPE', status: 'DRAFT' });
   let r = await A.c('GET', `${A.req}/baseline`); assert.deepEqual(r.json.baseline.counts, { total: 5, in_scope: 4, in_scope_confirmed: 1, in_scope_unconfirmed: 3, out_of_scope: 1 });
-  // OFF → 400 "범위 내 미확정 3건이 있습니다. 먼저 확정하세요", nothing stored (approval, statuses, step)
-  r = await A.c('POST', `${A.req}/baseline/complete`, { approval: APV, confirm_unconfirmed: false });
-  assert.equal(r.status, 400); assert.equal(r.json.error.fields.section, '범위 내 미확정 3건이 있습니다. 먼저 확정하세요.');
-  r = await A.c('GET', `${A.req}/baseline`); assert.equal(r.json.baseline.status, 'TODO'); assert.equal(r.json.baseline.approval.evidence, '', 'approval not saved');
-  assert.equal(r.json.baseline.counts.in_scope_unconfirmed, 3);
-  assert.equal((await A.c('GET', `${A.purl}/definition`)).json.definition.stakeholders.length, 0, 'approver not added either');
-  // ON → one save: approval + 3 confirmed + 완료
-  r = await A.c('POST', `${A.req}/baseline/complete`, { approval: APV, confirm_unconfirmed: true });
+  // OFF → allowed (was 400 "범위 내 미확정 3건"): the check is stored, the 3 stay unconfirmed, CONFIRM stays open
+  r = await A.c('POST', `${A.req}/baseline/complete`, { approval: { note: '1차 확인' }, confirm_unconfirmed: false });
+  assert.equal(r.status, 200, JSON.stringify(r.json)); assert.equal(r.json.confirmed, 0);
+  assert.equal(r.json.baseline.status, 'COMPLETED'); assert.equal(r.json.baseline.counts.in_scope_unconfirmed, 3);
+  for (const x of open) assert.notEqual((await A.c('GET', `${A.req}/${x.id}`)).json.requirement.status, 'CONFIRMED');
+  let g = (await A.c('GET', A.purl)).json;
+  assert.notEqual(step(g, 'REQUIREMENTS', 'CONFIRM').state, 'COMPLETED'); assert.equal(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').state, 'COMPLETED');
+  assert.equal(g.guidance.rule, 'REQ_CONFIRM');
+  // ON → one save: check + 3 confirmed + 완료
+  r = await A.c('POST', `${A.req}/baseline/complete`, { confirm_unconfirmed: true });
   assert.equal(r.status, 200, JSON.stringify(r.json)); assert.equal(r.json.confirmed, 3); assert.equal(r.json.summary.in_scope_confirmed, 4);
+  assert.equal(r.json.baseline.approval.note, '1차 확인', 'note kept');
   for (const x of open) { const d = (await A.c('GET', `${A.req}/${x.id}`)).json.requirement; assert.equal(d.status, 'CONFIRMED'); assert.ok(d.history.some((h) => h.field_name === 'status' && h.new_value === 'CONFIRMED')); }
   assert.equal((await A.c('GET', `${A.req}?scope=OUT_OF_SCOPE`)).json.requirements[0].status, 'DRAFT', '범위 외 untouched');
-  const g = (await A.c('GET', A.purl)).json;
+  g = (await A.c('GET', A.purl)).json;
   assert.equal(step(g, 'REQUIREMENTS', 'CONFIRM').state, 'COMPLETED'); assert.equal(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').state, 'COMPLETED');
   assert.equal(g.guidance.rule, 'REQ_DONE'); assert.match(g.guidance.description, /요구사항이 확정되었습니다/);
   server.close();
 });
 
-test('US-1 guidance ladder: REQ_CONFIRM (승인 기록하기 + 정의서) → REQ_APPROVE → REQ_DONE; 02→03 bypass reason → row text, note, document, LNB data', async () => {
+test('US-1 guidance ladder: REQ_CONFIRM (요구사항 확정하기 + 정의서) → REQ_CHECK → REQ_DONE; 02→03 never blocked, no bypass reason (row text, document, LNB data)', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await toReq(A);
   await addReq(A, { title: 'R1', scope: 'IN_SCOPE', status: 'DRAFT' });
   let g = (await A.c('GET', A.purl)).json;
-  assert.equal(g.guidance.rule, 'REQ_CONFIRM'); assert.equal(g.guidance.primary_action.label, '승인 기록하기'); assert.match(g.guidance.primary_action.href, /\/requirements\?approval=1$/);
-  assert.match(g.guidance.description, /요구사항 정의서를 고객에게 보내 검토받으세요\. 승인 회신을 받으면 승인 기록에서 한 번에 확정됩니다\./);
+  assert.equal(g.guidance.rule, 'REQ_CONFIRM'); assert.equal(g.guidance.primary_action.label, '요구사항 확정하기'); assert.match(g.guidance.primary_action.href, /\/requirements\?approval=1$/);
+  assert.match(g.guidance.description, /요구사항 정의서로 고객과 내용을 맞춘 뒤 확정하세요\. 확정 확인 화면에서 남은 요구사항을 한 번에 확정할 수 있습니다\./);
+  assert.doesNotMatch(g.guidance.description, /승인/);
   assert.equal(g.guidance.secondary_action.label, '요구사항 정의서 내려받기'); assert.match(g.guidance.secondary_action.href, /requirements\/export-doc\?format=pdf$/);
-  assert.equal(step(g, 'REQUIREMENTS', 'CONFIRM').cta.label, '승인 기록하기');
+  assert.equal(step(g, 'REQUIREMENTS', 'CONFIRM').cta.label, '요구사항 확정하기');
   const rid = (await A.c('GET', A.req)).json.requirements[0].id;
   await A.c('PATCH', `${A.req}/${rid}`, { status: 'CONFIRMED' });
   g = (await A.c('GET', A.purl)).json;
-  assert.equal(g.guidance.rule, 'REQ_APPROVE'); assert.equal(g.guidance.title, '확정한 요구사항을 고객에게 승인받으세요');
-  assert.equal(g.guidance.description, '고객이 승인한 요구사항이 설계·개발·테스트·검수의 기준이 됩니다. 요구사항 정의서를 보내고, 승인 회신을 받으면 기록하세요.');
+  assert.equal(g.guidance.rule, 'REQ_CHECK'); assert.equal(g.guidance.title, '확정한 요구사항을 고객과 확인했는지 체크하세요');
+  assert.equal(g.guidance.primary_action.label, '진행 여부 체크'); assert.match(g.guidance.description, /체크하지 않아도 다음 단계로 넘어갈 수 있습니다/);
   assert.ok(!/요구사항이 확정되었습니다/.test(JSON.stringify(g.guidance)));
-  assert.equal(g.current_phase.summary.gate_met, false);
-  // 02→03 without approval: the client writes the reason through the step note API, then activates (server never blocks)
+  assert.equal(g.current_phase.summary.gate_met, true, 'the check is 권장 — it never holds the gate');
+  // an old "[승인 전 진행]" note is just a note: no bypass, no 사유 text
   const st = step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL');
   assert.equal((await A.c('PATCH', `${A.purl}/steps/${st.id}`, { note: '[승인 전 진행] 고객 PM 출장으로 다음 주 회신 · 2026-10-15 · 홍길동' })).status, 200);
   const nx = g.phases.find((x) => x.phase_key === 'ANALYSIS_DESIGN');
   assert.equal((await A.c('POST', `${A.purl}/phases/${nx.id}/activate`, { reason: 'NEXT' })).status, 200);
   g = (await A.c('GET', A.purl)).json;
   const rq = g.phases.find((x) => x.phase_key === 'REQUIREMENTS');
-  assert.equal(rq.status, 'IN_PROGRESS'); assert.equal(rq.summary.required_open, 1);   // LNB/stepper: number + badge, no ✓ (F6 rule)
-  assert.equal(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').text, '승인 전 진행 · 사유 있음');
-  const b = (await A.c('GET', `${A.req}/baseline`)).json.baseline;
-  assert.deepEqual(b.bypass, { reason: '고객 PM 출장으로 다음 주 회신', date: '2026-10-15', name: '홍길동', count: 1 });
-  const doc = await A.c('GET', `${A.req}/export-doc?format=docx`, undefined, { raw: true });
-  const xml = await (await JSZip.loadAsync(doc.buf)).file('word/document.xml').async('string');
-  assert.match(xml, /미승인 — 사유: 고객 PM 출장으로 다음 주 회신/);
-  // approval recorded later → 02 gate met (✓ on the passed phase)
-  assert.equal((await A.c('POST', `${A.req}/baseline/complete`, { approval: APV })).status, 200);
-  g = (await A.c('GET', A.purl)).json; assert.equal(g.phases.find((x) => x.phase_key === 'REQUIREMENTS').summary.required_open, 0);
+  assert.equal(rq.summary.required_open, 0, 'an unchecked 권장 check is not a required open item');
+  assert.doesNotMatch(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').text, /승인 전 진행/);
+  let b = (await A.c('GET', `${A.req}/baseline`)).json.baseline;
+  assert.equal(b.bypass, null); assert.equal(b.status, 'TODO');
+  let doc = await A.c('GET', `${A.req}/export-doc?format=docx`, undefined, { raw: true });
+  let xml = await (await JSZip.loadAsync(doc.buf)).file('word/document.xml').async('string');
+  assert.ok(!xml.includes('미승인')); assert.ok(xml.includes('고객 확인: 아직 체크하지 않음'));
+  // checked later → shows on the row and in the document
+  assert.equal((await A.c('POST', `${A.req}/baseline/complete`, {})).status, 200);
+  g = (await A.c('GET', A.purl)).json; assert.equal(step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL').state, 'COMPLETED');
+  doc = await A.c('GET', `${A.req}/export-doc?format=docx`, undefined, { raw: true });
+  xml = await (await JSZip.loadAsync(doc.buf)).file('word/document.xml').async('string');
+  assert.ok(xml.includes('✓ 체크됨'));
   server.close();
 });
 
-test('US-2 요구사항 정의서: PDF + Word download, Korean, sections, type order, archived excluded, version/footer before and after approval', async () => {
+test('US-2 요구사항 정의서: PDF + Word download, Korean, sections, type order, archived excluded, version/footer before and after the check', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await toReq(A);
   await A.c('PUT', `${A.purl}/definition`, { goal: '계약 검토 리드타임 50% 단축', scope_in: ['국문 계약 검토'], scope_out: ['모바일 앱', 'OCR'] });
@@ -128,7 +139,7 @@ test('US-2 요구사항 정의서: PDF + Word download, Korean, sections, type o
   // empty project: fixed sentences, structure kept
   let docx = await A.c('GET', `${X}?format=docx`, undefined, { raw: true }); assert.equal(docx.status, 200);
   let xml = await (await JSZip.loadAsync(docx.buf)).file('word/document.xml').async('string');
-  for (const t of ['요구사항 정의서', '개정 이력', '1. 개요', '2. 범위 내 요구사항', '3. 범위 외 요구사항', '4. 승인', NO_IN_SCOPE, NO_OUT_OF_SCOPE, 'v0.9 (초안)', '승인 전 초안', '모바일 앱, OCR']) assert.ok(xml.includes(t), t);
+  for (const t of ['요구사항 정의서', '개정 이력', '1. 개요', '2. 범위 내 요구사항', '3. 범위 외 요구사항', '4. 확인', NO_IN_SCOPE, NO_OUT_OF_SCOPE, 'v0.9 (초안)', '고객과 확인하기 전에는', '고객 확인: 아직 체크하지 않음', '모바일 앱, OCR']) assert.ok(xml.includes(t), t);
   const nf = await addReq(A, { title: 'API 연계', scope: 'IN_SCOPE', status: 'CONFIRMED', type: 'INTERFACE' });
   const f1 = await addReq(A, { title: '로그인 | SSO', scope: 'IN_SCOPE', status: 'CONFIRMED', type: 'FUNCTIONAL', criteria: ['SSO 로그인 성공', '실패 시 안내'] });
   await addReq(A, { title: '모바일 앱', scope: 'OUT_OF_SCOPE', status: 'DRAFT' });
@@ -148,24 +159,26 @@ test('US-2 요구사항 정의서: PDF + Word download, Korean, sections, type o
   assert.ok(pdf.buf.includes(Buffer.from('NanumGothic')), 'Hangul font embedded');
   assert.equal((await A.c('GET', `${X}?format=hwp`)).status, 400);
   const B = await setup(client, 'b2@x.com'); assert.equal((await B.c('GET', `${X}?format=pdf`)).status, 404);
-  // approved → v1.0, no draft footer, approver + 승인일 in the 승인란
-  assert.equal((await A.c('POST', `${A.req}/baseline/complete`, { approval: APV })).status, 200);
+  assert.ok(!xml.includes('승인 전 초안'));
+  // checked (no record needed) → v1.0, no draft footer, who + note in the 확인란
+  assert.equal((await A.c('POST', `${A.req}/baseline/complete`, { approval: { note: '메일로 확인' } })).status, 200);
   docx = await A.c('GET', `${X}?format=docx`, undefined, { raw: true });
   assert.match(decodeURIComponent(docx.headers.get('content-disposition')), /_v1\.0_\d{8}\.docx/);
   xml = await (await JSZip.loadAsync(docx.buf)).file('word/document.xml').async('string');
-  assert.ok(xml.includes('v1.0')); assert.ok(!xml.includes('승인 전 초안')); assert.ok(xml.includes('이수진')); assert.ok(xml.includes('2026-01-10'));
+  assert.ok(xml.includes('v1.0')); assert.ok(!xml.includes('고객과 확인하기 전에는')); assert.ok(xml.includes('고객 확인: ✓ 체크됨 (홍길동 · ')); assert.ok(xml.includes('메일로 확인'));
   server.close();
 });
 
 test('US-2 markdown: revision row per state, tables parse, empty lists keep the structure', () => {
   const c = { profile: { name: 'P', client: 'C' }, goals: '목표 1\n목표 2', successCriteria: '', scope: { inScope: '- A\n- B', outOfScope: '' }, stakeholders: [{ category: 'OWN', name: '김피엠', role: 'PM' }] };
   const draft = buildReqDocMarkdown(c, [], { status: 'TODO', approval: { date: '' }, approver: null, bypass: null }, { workspaceName: 'W', author: '홍', today: '2026-10-15' });
-  assert.equal(draft.version, 'v0.9 (초안)'); assert.equal(draft.footer, '승인 전 초안'); assert.equal(draft.fileVersion, 'v0.9');
+  assert.equal(draft.version, 'v0.9 (초안)'); assert.equal(draft.footer, '초안'); assert.equal(draft.fileVersion, 'v0.9'); assert.match(draft.markdown, /고객 확인: 아직 체크하지 않음/);
   assert.match(draft.markdown, /\| v0\.9 \| 2026-10-15 \| 초안 \| 홍 \|/); assert.match(draft.markdown, /\| 프로젝트 목표 \| 목표 1 \|/); assert.match(draft.markdown, /\| 환경·조건 \| A, B \|/); assert.match(draft.markdown, /\| 적용 환경 \| 작성되지 않음 \|/);
   assert.ok(draft.markdown.includes(NO_IN_SCOPE)); assert.ok(draft.markdown.includes(NO_OUT_OF_SCOPE));
   assert.match(draft.markdown, /\| 수행사 \| 김피엠 \| PM \|/);
   const done = buildReqDocMarkdown(c, [{ id: '1', display_id: 'REQ-001', sequence_number: 1, title: 'T', type: 'SECURITY', priority: 'HIGH', scope: 'IN_SCOPE', criteria: [] }], { status: 'COMPLETED', approval: { date: '2026-01-10', evidence: 'e' }, approver: { name: '이', title: '차장' }, method_label: '이메일 회신', bypass: null }, { workspaceName: 'W', author: '홍', today: '2026-10-15' });
-  assert.equal(done.version, 'v1.0'); assert.equal(done.footer, ''); assert.match(done.markdown, /\| v1\.0 \| 2026-01-10 \| 승인 \| 홍 \|/);
+  assert.equal(done.version, 'v1.0'); assert.equal(done.footer, ''); assert.match(done.markdown, /\| v1\.0 \| 2026-01-10 \| 확정 \| 홍 \|/);
+  assert.match(done.markdown, /고객 확인: ✓ 체크됨 \(2026-01-10\)/); assert.doesNotMatch(done.markdown, /승인 방법|근거:/);
   const t = parseReportMarkdown(done.markdown).filter((x) => x.type === 'table').find((x) => x.header && x.header[0] === 'ID');
   assert.deepEqual(t.rows[0], ['REQ-001', 'T', '보안', '높음', '-', '-']);   // batch7 #11: 담당자 column (미지정 → -)
 });
@@ -195,14 +208,15 @@ test('US-3 API: CR draft linked to the requirement leaves it unchanged; an APPRO
   server.close();
 });
 
-test('US-4/5 activities: CONFIRM → 승인 기록, INTERFACE 권장 by traits (gate unchanged), COLLECT hint, BASELINE_APPROVAL states', () => {
+test('US-4/5 activities: CONFIRM → 요구사항 확정하기, INTERFACE 권장 by traits (gate unchanged), COLLECT hint, BASELINE_APPROVAL states', () => {
   const ctx = (requirements, extra = {}) => ({ pid: 'p1', stats: stats(requirements), definition: { sections: [] }, ...extra });
   let a = activityStates('REQUIREMENTS', stepsOf('REQUIREMENTS'), ctx({ total: 3, in_scope: 3, in_scope_confirmed: 1, non_functional: 0 }));
   let by = Object.fromEntries(a.map((x) => [x.step_key, x]));
-  assert.deepEqual(by.CONFIRM.cta, { label: '승인 기록하기', href: '/app/projects/p1/requirements?approval=1' });
+  assert.deepEqual(by.CONFIRM.cta, { label: '요구사항 확정하기', href: '/app/projects/p1/requirements?approval=1' });
   assert.equal(by.COLLECT.hint, COLLECT_HINT); assert.equal(COLLECT_HINT, '계약서·제안요청서(RFP)·인터뷰 등 출처를 빠짐없이 확인했나요?');
-  assert.equal(by.INTERFACE.importance, 'OPTIONAL'); assert.equal(by.BASELINE_APPROVAL.state, 'NOT_STARTED'); assert.equal(by.BASELINE_APPROVAL.cta.label, '승인 기록하기');
-  assert.equal(by.BASELINE_APPROVAL.manual, false, 'never completed by hand on What\'s Next');
+  assert.equal(by.INTERFACE.importance, 'OPTIONAL'); assert.equal(by.BASELINE_APPROVAL.state, 'NOT_STARTED'); assert.deepEqual(by.BASELINE_APPROVAL.cta, { label: '진행 여부 체크', href: '/app/projects/p1/requirements?approval=1' });
+  assert.equal(by.BASELINE_APPROVAL.importance, 'RECOMMENDED');
+  assert.equal(by.BASELINE_APPROVAL.manual, false, 'checked in the Drawer, not by hand on What\'s Next');
   const before = activitySummary(a);
   a = activityStates('REQUIREMENTS', stepsOf('REQUIREMENTS'), ctx({ total: 3, in_scope: 3, in_scope_confirmed: 1 }, { traits: { data_migration: 'TBD', has_external_integration: 'YES' } }));
   by = Object.fromEntries(a.map((x) => [x.step_key, x]));
@@ -210,8 +224,11 @@ test('US-4/5 activities: CONFIRM → 승인 기록, INTERFACE 권장 by traits (
   assert.deepEqual(activitySummary(a), before, 'gate unaffected');
   a = activityStates('REQUIREMENTS', stepsOf('REQUIREMENTS'), ctx({ total: 3 }, { traits: { data_migration: 'YES', has_external_integration: 'YES' } }));
   assert.match(a.find((x) => x.step_key === 'INTERFACE').description, /\(프로젝트 특성: 데이터 이관·외부 연계 있음\)$/);
-  a = activityStates('REQUIREMENTS', stepsOf('REQUIREMENTS'), ctx({ total: 3 }, { definition: { sections: [], req_baseline: { status: 'TODO', bypass: { reason: 'x' }, summary: '승인 전 진행 · 사유 있음' } } }));
-  assert.equal(a.find((x) => x.step_key === 'BASELINE_APPROVAL').text, '승인 전 진행 · 사유 있음');
+  // a legacy bypass no longer shows "승인 전 진행 · 사유 있음": unchecked is just not started
+  a = activityStates('REQUIREMENTS', stepsOf('REQUIREMENTS'), ctx({ total: 3 }, { definition: { sections: [], req_baseline: { status: 'TODO', bypass: { reason: 'x' }, summary: '' } } }));
+  assert.equal(a.find((x) => x.step_key === 'BASELINE_APPROVAL').text, '확정한 요구사항을 고객과 확인했다면 체크합니다. 승인 기록은 필요 없습니다.');
+  a = activityStates('REQUIREMENTS', stepsOf('REQUIREMENTS'), ctx({ total: 3 }, { definition: { sections: [], req_baseline: { status: 'COMPLETED', summary: '✓ 확인 · 홍길동 · 2026-10-21' } } }));
+  assert.equal(a.find((x) => x.step_key === 'BASELINE_APPROVAL').text, '✓ 확인 · 홍길동 · 2026-10-21');
 });
 
 test('US-4(5) 범위 확정 guidance shows the Charter 제외 범위 (hidden when empty)', () => {
@@ -246,40 +263,39 @@ test('migration 32: existing projects get BASELINE_APPROVAL right after CONFIRM 
   const rows = await db.all(`SELECT s.step_key, s.status, s.sequence, s.importance FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE p.project_id = ? AND p.phase_key = 'REQUIREMENTS' ORDER BY s.sequence`, [A.p.id]);
   assert.deepEqual(rows.map((x) => x.step_key), ['COLLECT', 'CLASSIFY', 'PRIORITIZE', 'SCOPE_CHECK', 'CONFIRM', 'BASELINE_APPROVAL', 'INTERFACE']);
   assert.deepEqual(rows.map((x) => x.sequence), [1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(rows[5].status, 'TODO'); assert.equal(rows[5].importance, 'REQUIRED');
+  assert.equal(rows[5].status, 'TODO'); assert.equal(rows[5].importance, 'RECOMMENDED');   // from the template: 권장 since 2026-10-21
   const g = (await A.c('GET', A.purl)).json; assert.equal(g.current_phase.phase_key, 'ANALYSIS_DESIGN', 'still in 03');
   assert.equal((await A.c('GET', `${A.req}/baseline`)).json.baseline.status, 'TODO');
   server.close();
 });
 
-test('Q6-6 generic PATCH steps {COMPLETED}: 01 APPROVAL / 02 BASELINE_APPROVAL refused (409) without an approval record; allowed with one', async () => {
+test('Q6-6 generic PATCH steps {COMPLETED}: 01 APPROVAL / 02 BASELINE_APPROVAL allowed without any record (no 409 approval_required)', async () => {
   const { server, client } = await boot();
   const A = await setup(client);
   let g = (await A.c('GET', A.purl)).json;
   const a01 = step(g, 'INITIATION', 'APPROVAL');
-  let r = await A.c('PATCH', `${A.purl}/steps/${a01.id}`, { status: 'COMPLETED' }); assert.equal(r.status, 409); assert.equal(r.json.error.code, 'approval_required');
-  g = (await A.c('GET', A.purl)).json; assert.equal(step(g, 'INITIATION', 'APPROVAL').status, 'TODO');
-  assert.equal((await A.c('PUT', `${A.purl}/definition`, { approval: APV })).status, 200);
-  assert.equal((await A.c('PATCH', `${A.purl}/steps/${a01.id}`, { status: 'COMPLETED' })).status, 200);
+  let r = await A.c('PATCH', `${A.purl}/steps/${a01.id}`, { status: 'COMPLETED' }); assert.equal(r.status, 200, JSON.stringify(r.json));
+  g = (await A.c('GET', A.purl)).json; assert.equal(step(g, 'INITIATION', 'APPROVAL').status, 'COMPLETED');
+  const c = (await A.c('GET', `${A.purl}/charter`)).json.charter; assert.equal(c.approval.status, 'COMPLETED'); assert.equal(c.approval.checked, true);
   await toReq(A);
   g = (await A.c('GET', A.purl)).json; const b02 = step(g, 'REQUIREMENTS', 'BASELINE_APPROVAL');
-  r = await A.c('PATCH', `${A.purl}/steps/${b02.id}`, { status: 'COMPLETED' }); assert.equal(r.status, 409); assert.equal(r.json.error.code, 'approval_required');
-  assert.equal((await A.c('GET', `${A.req}/baseline`)).json.baseline.status, 'TODO');
-  // a note-only PATCH and TODO still work
+  // a note-only PATCH still works
   assert.equal((await A.c('PATCH', `${A.purl}/steps/${b02.id}`, { note: '메모' })).status, 200);
-  await addReq(A, { title: 'R1', scope: 'IN_SCOPE', status: 'CONFIRMED' });
-  assert.equal((await A.c('PUT', `${A.req}/baseline`, { approval: APV })).status, 200);
-  assert.equal((await A.c('PATCH', `${A.purl}/steps/${b02.id}`, { status: 'COMPLETED' })).status, 200);
+  r = await A.c('PATCH', `${A.purl}/steps/${b02.id}`, { status: 'COMPLETED' }); assert.equal(r.status, 200, JSON.stringify(r.json));
+  let b = (await A.c('GET', `${A.req}/baseline`)).json.baseline; assert.equal(b.status, 'COMPLETED'); assert.equal(b.checked, true);
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${b02.id}`, { status: 'TODO' })).status, 200);
+  b = (await A.c('GET', `${A.req}/baseline`)).json.baseline; assert.equal(b.status, 'TODO');
   server.close();
 });
 
-test('Q6-2 no empty baseline: 0 in-scope requirements → 완료 처리 refused (400), nothing completed', async () => {
+test('Q6-2 empty baseline: 0 in-scope requirements → the check is still allowed (never refused), nothing confirmed', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await toReq(A);
   await addReq(A, { title: '범위 외', scope: 'OUT_OF_SCOPE' });
-  let r = await A.c('POST', `${A.req}/baseline/complete`, { approval: APV, confirm_unconfirmed: true }); assert.equal(r.status, 400); assert.match(r.json.error.fields.section, /범위 내 요구사항이 없습니다/);
-  r = await A.c('GET', `${A.req}/baseline`); assert.equal(r.json.baseline.status, 'TODO'); assert.equal(r.json.baseline.counts.in_scope, 0);
+  let r = await A.c('POST', `${A.req}/baseline/complete`, { confirm_unconfirmed: true }); assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.baseline.status, 'COMPLETED'); assert.equal(r.json.baseline.counts.in_scope, 0); assert.equal(r.json.confirmed, 0);
+  assert.equal((await A.c('GET', `${A.req}?scope=OUT_OF_SCOPE`)).json.requirements[0].status, 'DRAFT', '범위 외 untouched');
   await addReq(A, { title: 'R1', scope: 'IN_SCOPE' });
-  r = await A.c('POST', `${A.req}/baseline/complete`, { approval: APV, confirm_unconfirmed: true }); assert.equal(r.status, 200); assert.equal(r.json.baseline.status, 'COMPLETED');
+  r = await A.c('POST', `${A.req}/baseline/complete`, { confirm_unconfirmed: true }); assert.equal(r.status, 200); assert.equal(r.json.baseline.status, 'COMPLETED'); assert.equal(r.json.confirmed, 1);
   server.close();
 });

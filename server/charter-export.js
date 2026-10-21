@@ -7,10 +7,9 @@
  * and a first-time PM sees what to write rather than a bare "작성되지 않음".
  * 작성 예시 보기: the same builder fed with the 다온생명 sample (samples/fixtures.js) — see examplePlan().
  *
- * Version rule (no document versioning yet — just these three states):
- *   승인 전                 v0.9 (초안)                     footer "승인 전 초안"
- *   승인됨                  v1.0
- *   승인 후 변경 (확인 필요)  v1.0 → 변경됨 (재승인 필요)      footer "승인 후 변경된 초안"
+ * Version rule (no document versioning yet; 2026-10-21 the re-approval state is gone):
+ *   착수 결과 확인 체크 전   v0.9 (초안)    footer "초안"
+ *   체크됨                  v1.0
  */
 import { ORG_TYPE_LABEL } from './definition.js';
 import { table, textBlock, docVersion, coverLines, revisionRows, revisionTable, approvalLines } from './doc-export.js';
@@ -55,7 +54,6 @@ export async function wbsTopLevel(db, projectId) {
 /** Version label + footer for the approval state (TODO · COMPLETED · REAPPROVAL). */
 export function planVersion(approval) {
   const st = approval ? approval.status : 'TODO';
-  if (st === 'REAPPROVAL') return { version: 'v1.0 → 변경됨 (재승인 필요)', file: 'v1.0_변경됨', footer: '승인 후 변경된 초안' };
   return docVersion(st);
 }
 
@@ -76,7 +74,6 @@ export function buildPlanMarkdown(c, { workspaceName = '', author = '', today, w
   // One auto row that matches the document's state; no blank rows (no document versioning yet).
   const st = c.approval ? c.approval.status : 'TODO'; const approvedOn = (c.approval && c.approval.date) || today;
   const revs = revisionRows(st, { today, approvedOn, author });
-  if (st === 'REAPPROVAL') revs.push(['v1.0 → 변경됨', today, '승인 후 변경 (재승인 필요)', author]);
   L.push(revisionTable(revs));
 
   /* 3. 사업 개요 */
@@ -135,8 +132,8 @@ export function buildPlanMarkdown(c, { workspaceName = '', author = '', today, w
     } else L.push(k && k.datetime ? `착수보고회 예정: ${fmtDT(k.datetime)}${k.place ? ` · ${k.place}` : ''}` : '착수보고회 일정 미정');
   }
 
-  /* 11. 승인란 */
-  h2(`${!k || !k.skipped ? '9' : '8'}. 승인`);
+  /* 11. 확인란 (was 승인란) */
+  h2(`${!k || !k.skipped ? '9' : '8'}. 확인`);
   L.push(...approvalLines(c.approval || {}, { stakeholders: c.stakeholders || [], author }));
 
   return { title: `${pf.name} ${PLAN_TITLE}`, markdown: L.join('\n'), version: v.version, footer: v.footer, fileVersion: v.file };
