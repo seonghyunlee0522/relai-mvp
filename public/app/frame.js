@@ -40,7 +40,7 @@ function wireMenus() {
     if (b) { if (b.getAttribute('aria-expanded') === 'true') { closeDmenus(); return; } MENUS[b.dataset.dmenu](b); return; }
     if (!e.target.closest('.dmenu') || e.target.closest('a[data-link],[data-logout]')) closeDmenus();
   });
-  closeOnOutsideTap((t) => t.closest && t.closest('.dmenu, [data-dmenu]'), () => { if (document.querySelector('.dmenu')) closeDmenus(); });
+  closeOnOutsideTap((t) => t.closest && t.closest('.dmenu, [data-dmenu]'), () => { if (document.querySelector('.dmenu')) closeDmenus(); }, '.dmenu');
   document.addEventListener('keydown', (e) => {
     const m = e.target.closest && e.target.closest('.dmenu');
     if (e.key === 'Escape' && document.querySelector('.dmenu')) { const open = document.querySelector('[data-dmenu][aria-expanded="true"]'); closeDmenus(); if (open) open.focus(); return; }

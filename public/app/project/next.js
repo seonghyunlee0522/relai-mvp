@@ -295,7 +295,7 @@ if (typeof document !== 'undefined' && document.body && !document.body.dataset.n
     if (b) { e.stopPropagation(); const m = b.nextElementSibling; const open = m.hidden; closeAll(); m.hidden = !open; b.setAttribute('aria-expanded', String(open)); if (open) { const f = m.querySelector('a,button'); if (f) f.focus(); } return; }
     if (!e.target.closest('.np__menu')) closeAll(); else if (e.target.closest('a,button')) setTimeout(closeAll, 0);
   }, true);
-  closeOnOutsideTap((t) => t.closest && t.closest('.np__menu, [data-rowmore]'), () => { if (document.querySelector('.np__menu:not([hidden])')) closeAll(); });
+  closeOnOutsideTap((t) => t.closest && t.closest('.np__menu, [data-rowmore]'), () => { if (document.querySelector('.np__menu:not([hidden])')) closeAll(); }, '.np__menu:not([hidden])');
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.np__menu:not([hidden])')) { const m = document.querySelector('.np__menu:not([hidden])'); closeAll(); const b = m.previousElementSibling; if (b) b.focus(); } });
 }
 

@@ -254,7 +254,7 @@ export function createGrid(cfg) {
   if (!document.body.dataset.gpopBound) {
     document.body.dataset.gpopBound = '1';
     document.addEventListener('click', () => document.querySelectorAll('.gpop').forEach((p) => { p.hidden = true; }));
-    closeOnOutsideTap((t) => t.closest && t.closest('.gpop, [data-gcols]'), () => document.querySelectorAll('.gpop:not([hidden])').forEach((p) => { p.hidden = true; }));
+    closeOnOutsideTap((t) => t.closest && t.closest('.gpop, [data-gcols]'), () => document.querySelectorAll('.gpop:not([hidden])').forEach((p) => { p.hidden = true; }), '.gpop:not([hidden])');
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelectorAll('.gpop:not([hidden])').forEach((p) => { p.hidden = true; }); });
   }
 

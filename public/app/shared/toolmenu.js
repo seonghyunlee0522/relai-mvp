@@ -21,7 +21,7 @@ if (typeof document !== 'undefined' && document.body && !document.body.dataset.t
     if (!m) { if (!e.target.closest('.gpop')) closeAll(); return; }
     if (e.target.closest('.tmenu__i,[data-tm-close]')) closeAll();   // a plain row acts and closes; selects / checkboxes keep it open
   });
-  closeOnOutsideTap((t) => t.closest && t.closest('.tmenu, [data-tmore], .gpop'), () => { if (document.querySelector('.tmenu:not([hidden])')) closeAll(); });   // Jim mobile 10-21 #6
+  closeOnOutsideTap((t) => t.closest && t.closest('.tmenu, [data-tmore], .gpop'), () => { if (document.querySelector('.tmenu:not([hidden])')) closeAll(); }, '.tmenu:not([hidden])');   // Jim mobile 10-21 #6
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return; const m = document.querySelector('.tmenu:not([hidden])'); if (!m) return;
     const pop = m.querySelector('.gpop:not([hidden])'); if (pop) { e.stopPropagation(); pop.hidden = true; const b0 = pop.previousElementSibling; if (b0) b0.focus(); return; }   // a nested popover (컬럼) closes first

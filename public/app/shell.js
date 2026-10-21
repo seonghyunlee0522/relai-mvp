@@ -9,6 +9,7 @@ import { tour } from './onboarding/tour.js';
 import { ob } from './onboarding/state.js';
 import { verifyBanner, wireVerifyBanner } from './auth.js';
 import { isPhone } from './core/device.js';
+import { onTap } from './core/outside.js';
 import { mountGlobalRail, mountProjectRail, mountTopbar, setTopProject } from './frame.js';
 import { doorOf } from './shared/lifecycle.js';
 import { wireFeedback } from './feedback.js';
@@ -118,7 +119,7 @@ export async function shell(path, view, token = null) {
     $('#menu').onclick = toggleNav;
     wireVerifyBanner();
     wireHelp(root);
-    $('#sidescrim').onclick = closeNav;
+    onTap($('#sidescrim'), closeNav);   // 더보기 sheet scrim: touchend too (real iOS Safari, founder 10-21 #6)
   }
   const sh = $('.shell'); const side = $('#side');
   const ws = isWorkspacePath(path);

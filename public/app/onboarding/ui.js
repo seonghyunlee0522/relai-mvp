@@ -2,6 +2,7 @@
  * All of them are optional layers over the product: if onboarding state is unavailable they render nothing. */
 import { isPhone } from '../core/device.js';
 import { $, html, raw } from '../core/dom.js';
+import { isBackdrop, trackMenu } from '../core/outside.js';
 import { navigate } from '../core/router.js';
 import { state } from '../core/state.js';
 import { ob } from './state.js';
@@ -90,6 +91,8 @@ export function wireHelp(root = document) {
     b.onclick = (e) => { e.stopPropagation(); const open = $('#helpmenu'); if (open) { open.remove(); b.setAttribute('aria-expanded', 'false'); return; } openMenu(b); };
   });
 }
+// phone backdrop (core/outside.js): its tap is also a document click, so the open menu's own `close` runs and drops its listeners
+trackMenu('#helpmenu', () => { const m = $('#helpmenu'); if (m) m.remove(); document.querySelectorAll('.helpbtn[aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false')); });
 function openMenu(btn) {
   const o = ob.peek(); const support = (o && o.support_email) || '';
   const m = document.createElement('div'); m.id = 'helpmenu'; m.className = 'helpmenu'; m.setAttribute('role', 'menu');
@@ -98,7 +101,7 @@ function openMenu(btn) {
   document.body.append(m); btn.setAttribute('aria-expanded', 'true');
   const close = () => { m.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', close); document.removeEventListener('pointerdown', down, true); };
   // Jim mobile 10-21 #6: pointerdown too (iOS Safari may not deliver a blank-area tap as a document click); the menu and its ? button are left to their click handlers
-  const down = (e) => { if (!e.target.closest('#helpmenu, .helpbtn')) close(); };
+  const down = (e) => { if (!isBackdrop(e.target) && !e.target.closest('#helpmenu, .helpbtn')) close(); };
   setTimeout(() => { document.addEventListener('click', close); document.addEventListener('pointerdown', down, true); }, 0);
   m.querySelector('[data-h]').focus();
   m.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); btn.focus(); } });

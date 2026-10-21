@@ -3704,6 +3704,10 @@ html.is-phone .bl-tbl tbody td:nth-child(2){display:block;order:3;flex:0 0 100%;
 html.is-phone #bl-orders-tbl tbody td:nth-child(4),html.is-phone #bl-orders-tbl tbody td:nth-child(5){display:inline;order:4;font-size:13px}
 html.is-phone #bl-orders-tbl tbody td:nth-child(5):not(:empty)::before{content:'·';margin:0 6px;color:var(--text-3)}
 
+/* Founder's real iPhone 10-21 (#6 still failing): a phone menu gets a transparent full-viewport backdrop just below it (core/outside.js).
+   A real clickable element is what iOS Safari always delivers a tap to; it is removed when the menu closes. PC never gets one. */
+.menubackdrop{position:fixed;inset:0;background:transparent;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.sidescrim{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 /* Jim mobile 10-21 #4: small links / icons get a 44×44px tap area on phones (Apple HIG minimum). html.is-phone only — the PC layout is untouched. */
 html.is-phone :is(.sg-end a, .ovsec__ctx a, .ovsec__more, .pv__charter a, .actrow__h a, .appfoot a, .hc__attmore a, .sbanner p a, .hsum__smp a, .defsec__pg a, .home__credits){display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;vertical-align:middle;gap:.3em}
 html.is-phone .actrow__h{align-items:center}html.is-phone .actrow__h a{justify-content:flex-start}

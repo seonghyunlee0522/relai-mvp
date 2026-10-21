@@ -113,7 +113,7 @@ export function wireProjectActions() {
     else if (btn.dataset.act === 'reports') reportsMenu(btn, c);
     else if (btn.dataset.act === 'more') moreMenu(btn, c);
   });
-  closeOnOutsideTap((t) => t.closest && t.closest('.amenu, .wsh__act [data-act], .phead__act [data-act]'), () => { if (document.querySelector('.amenu')) closeMenus(); });
+  closeOnOutsideTap((t) => t.closest && t.closest('.amenu, .wsh__act [data-act], .phead__act [data-act]'), () => { if (document.querySelector('.amenu')) closeMenus(); }, '.amenu');   // .amenu--row (WBS row ⋯) too
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.querySelector('.amenu')) { const b = document.querySelector('[data-act][aria-expanded="true"]'); closeMenus(); if (b) b.focus(); return; }
     const m = e.target.closest && e.target.closest('.amenu');
