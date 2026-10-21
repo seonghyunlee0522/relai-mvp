@@ -17,7 +17,7 @@ import { download } from '../core/ui.js';
 import { openImport } from '../shared/importer.js';
 import { performerOptions, performerBody } from '../shared/owner-picker.js';
 import { todayKst, md } from '../shared/kst-date.js';
-import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
+import { approvalFields, collectApproval, approvalBody, approvalStatusText } from '../shared/approval.js';
 import { carryIndex, carryTag, carryLine } from '../project/golive.js';
 import { aiStatus } from '../shared/ai.js';
 import { openTestGenDialog } from '../ai/test-gen.js';
@@ -64,7 +64,7 @@ export async function testsPage(id) {
   if (isPhone()) showStatus = false;   // phone card = TC-006 + 최근 결과 / 제목 / 요구 · 담당 · 우선순위
   const before06 = ['INITIATION', 'REQUIREMENTS', 'ANALYSIS_DESIGN', 'DEVELOPMENT', 'TESTING'].includes(p.current_phase);   // US-7: 검수 탭 꼬리표 "06에서 진행"
   let performers = { team: [], clients: [] };
-  /* Phase 6 US-1: 검수 승인 = 고객 승인 기록 (the 01·02·04 approval Drawer, 4th reuse) — working copy · 'approve' (요청 → 승인) | 'record' (승인 기록 추가) */
+  /* 검수 승인 Drawer — working copy of the optional 고객 확인 체크 · 'approve' (작성 중·요청 → 승인) | 'record' (체크만 수정) */
   let apv = null; let apvMode = null;
   const carry = carryIndex(g);   // US-3: 운영 이관 tags (오픈 기록)
   /** '10/15' (Korea time) from an ISO timestamp (P2-9). */
@@ -80,7 +80,7 @@ export async function testsPage(id) {
         'test-plan': ts.verify_coverage !== null && ts.verify_coverage !== undefined ? html`<em class="stabs__n">${ts.verify_coverage}%</em>` : '' } }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 테스트와 검수는 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(T === 'acceptance' ? coachMark('ACCEPTANCE_INTRO') : coachMark('TESTING_INTRO'))}
-      <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객이 결과물을 확인하고 승인하는 검수를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">
+      <div class="rhead"><div class="seg seg--lg" role="tablist" title="${T === 'cases' ? '요구사항이 의도대로 동작하는지 확인하는 테스트를 관리합니다.' : T === 'acceptance' ? '고객과 결과물을 확인한 검수 결과를 관리합니다.' : '범위 내 요구사항마다 테스트가 연결되어 있는지, 결과는 어떤지 확인합니다.'}">
         <button class="${T === 'cases' ? 'is-on' : ''}" data-tab="cases" role="tab">테스트 케이스${raw(ts.total ? html`<em>${ts.total}</em>` : '')}</button>
         <button class="${T === 'acceptance' ? 'is-on' : ''}" data-tab="acceptance" role="tab">검수${raw(ac.in_progress ? html`<em>${ac.in_progress}</em>` : '')}${raw(before06 ? '<span class="tag-later">06에서 진행</span>' : '')}</button>
         <button class="${T === 'coverage' ? 'is-on' : ''}" data-tab="coverage" role="tab">테스트 연결률${raw(ts.verify_coverage !== null && ts.verify_coverage !== undefined ? html`<em>${ts.verify_coverage}%</em>` : '')}</button></div>
@@ -218,7 +218,7 @@ export async function testsPage(id) {
       case 'LINKED': return html`${h.field_name === 'REQUIREMENT' ? '요구사항' : h.field_name === 'TEST' ? '테스트' : 'WBS'} 연결 <q>${h.new_value}</q>`;
       case 'UNLINKED': return html`${h.field_name === 'REQUIREMENT' ? '요구사항' : h.field_name === 'TEST' ? '테스트' : 'WBS'} 연결 해제 <q>${h.old_value}</q>`;
       case 'STEPS_CHANGED': return html`테스트 절차 수정 <small>${h.changed_by_name || ''}</small>`;
-      case 'CUSTOMER_APPROVAL': return h.old_value ? html`고객 승인 기록 수정 <q>${h.old_value}</q> → <q>${h.new_value}</q> <small>${h.changed_by_name || ''}</small>` : html`고객 승인 기록 <q>${h.new_value}</q> <small>${h.changed_by_name || ''}</small>`;   // Phase 6 US-1
+      case 'CUSTOMER_APPROVAL': return h.old_value ? html`고객 확인 체크 수정 <q>${h.old_value}</q> → <q>${h.new_value}</q> <small>${h.changed_by_name || ''}</small>` : html`고객 확인 체크 <q>${h.new_value}</q> <small>${h.changed_by_name || ''}</small>`;   // Phase 6 US-1
       default: return html`<b>${lab[h.field_name] || h.field_name}</b> ${val(h.field_name, h.old_value)} → ${val(h.field_name, h.new_value)} <small>${h.changed_by_name || ''}</small>`;
     }
   };
@@ -286,54 +286,48 @@ export async function testsPage(id) {
     ${raw(desk ? deskFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, right: '<button type="button" class="btn btn--primary btn--sm" id="run" title="아래 실행 기록에 결과(통과 / 실패 / 막힘)를 입력합니다">테스트 실행</button>' }) : drawerFoot({ ro, meta: `등록 ${fmtShort(x.created_at)}`, label: '테스트 보관' }))}`;
   };
 
-  /* ---------- Phase 6 US-1: 검수 승인 = 고객 승인 기록 (공용 승인 Drawer) ---------- */
-  const ACC_APPROVAL_METHODS = { SIGNED: '서명본 수령', EMAIL: '이메일 회신', REVIEW: '검토 회의에서 승인', OTHER: '기타' };
-  const whoOf = (ca) => (ca && ca.approver ? `${ca.approver.name}${ca.approver.title ? ` ${ca.approver.title}` : ''}` : '');
-  /** list: "10/20 · 오지현 고객 PM · 서명본 수령" under the ✓ 승인 chip */
-  const accApvSmall = (x) => (x.status === 'ACCEPTED' && x.customer_approval && x.customer_approval.recorded ? html`<small class="crapv__l" data-accapv-l>${md(x.customer_approval.date)} · ${whoOf(x.customer_approval)} · ${x.customer_approval.method_label}</small>` : '');
-  /** Drawer: "✓ 승인 · 10/20 · 오지현 고객 PM · 서명본 수령 (기록: 정하늘)", or the grey 'no record' line + 승인 기록 추가 (status unchanged). */
+  /* ---------- 검수 승인 + 선택 사항인 고객 확인 체크 (2026-10-21: was 고객 승인 기록 with 승인자·승인일·방법·근거, all required) ---------- */
+  /** list: the check line under the ✓ 승인 chip ("✓ 고객 확인 · 정하늘 · 2026-10-20"). */
+  const accApvSmall = (x) => (x.status === 'ACCEPTED' && x.customer_approval && x.customer_approval.checked ? html`<small class="crapv__l" data-accapv-l>${x.customer_approval.summary}</small>` : '');
+  /** Drawer: the check line, or the grey 'not checked' line + 체크하기 (status unchanged). */
   const accApprovedLine = (x, ro) => {
     const ca = x.customer_approval || {};
-    if (ca.recorded) return html`<p class="crapv" data-accapv><span class="chip chip--done">✓ 승인</span> <b>${md(ca.date)} · ${whoOf(ca)} · ${ca.method_label}</b> <small class="dim">(기록: ${ca.recorded_by_name || '-'})</small>${raw(ro || x.status !== 'ACCEPTED' ? '' : ' · <button type="button" class="link linkbtn" data-acc-apv-edit>승인 기록 수정</button>')}${raw(ca.conditions ? html`<br><small class="dim">조건/보완: ${ca.conditions}</small>` : '')}</p>`;
-    return html`<p class="crapv crapv--none" data-accapv-none><span class="dim">고객 승인 기록이 없습니다</span>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-acc-apv-add>승인 기록 추가</button>')}</p>`;
+    if (ca.checked) return html`<p class="crapv" data-accapv><span class="chip chip--done">✓ 고객 확인</span> <b>${ca.summary.replace(/^✓ 고객 확인 · ?/, '')}</b>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-acc-apv-add>수정</button>')}</p>`;
+    return html`<p class="crapv crapv--none" data-accapv-none><span class="dim">고객 확인 체크 안 함 (선택 사항)</span>${raw(ro ? '' : ' · <button type="button" class="link linkbtn" data-acc-apv-add>체크하기</button>')}</p>`;
   };
   const carryLineOf = (type, xid) => carryLine(carry, type, xid);
-  const openApproval = (mode) => { apvMode = mode; apv = { add_to_stakeholders: true, ...(mode === 'record' && sel.customer_approval && sel.customer_approval.recorded ? sel.customer_approval : {}) }; delete apv.approver; delete apv.recorded; draw(); };
+  const openApproval = (mode) => { apvMode = mode; apv = { ...(sel.customer_approval || {}) }; if (mode === 'approve' && !apv.checked) apv.checked = false; draw(); };
   const closeApproval = () => { apv = null; apvMode = null; draw(); };
   const drawerAccApproval = () => {
     const x = sel; const c = x.scope_card || {}; const record = apvMode === 'record';
-    return html`<div class="wd__h"><div class="wd__ht"><b>검수 고객 승인</b><small>${record ? '고객이 누가·언제·어떻게 승인했는지 기록합니다. 상태는 바뀌지 않습니다.' : '고객이 누가·언제·어떻게 승인했는지 기록합니다. 저장하면 이 검수가 승인됩니다.'}</small></div><button class="wd__ib" id="apv-close" aria-label="닫기">×</button></div>
+    return html`<div class="wd__h"><div class="wd__ht"><b>${record ? '고객 확인 체크' : '검수 승인'}</b><small>${record ? '고객과 검수 결과를 확인했는지 체크합니다. 상태는 바뀌지 않습니다.' : '이 검수를 승인으로 기록합니다. 고객 확인 체크는 선택 사항입니다.'}</small></div><button class="wd__ib" id="apv-close" aria-label="닫기">×</button></div>
       <div class="drawer__b apv" data-approval-drawer>
-        <div class="apv__what accard"><div class="apv__wh"><b>검수받을 내용</b></div>
+        <div class="apv__what accard"><div class="apv__wh"><b>검수 내용</b></div>
           <p class="crapv__t"><span class="mono">${x.display_id}</span> ${x.title}</p>
           <dl data-acc-card><dt>요구사항</dt><dd>${c.requirements || 0}건</dd><dt>테스트 통과</dt><dd>${c.tests_pass || 0}건</dd><dt>테스트 제외 (05 사유)</dt><dd>${c.excluded || 0}건</dd>
             <dt>열린 이슈</dt><dd class="${c.open_issues ? 'is-warn' : ''}" data-acc-open>${c.open_issues || 0}건</dd></dl></div>
-        <div class="wd__form">${raw(approvalFields(apv, { people: x.stakeholders || [], methods: Object.entries(ACC_APPROVAL_METHODS), approverHint: '<small class="dim">고객 결정권자 (고객사 PM 등)</small>', evidencePh: '예: 검수확인서 서명본 10/20 수령, 문서번호 …' }))}</div>
-        <p class="hint">승인자·승인일·승인 방법·근거가 있어야 저장할 수 있습니다. 직접 입력한 승인자는 01 관계자(고객사)에도 추가됩니다.</p>
+        <div class="wd__form">${raw(approvalFields(apv, { label: '고객과 검수 결과를 확인했나요?', notePh: '예: 10/20 고객 PM과 검수 회의에서 확인' }))}</div>
+        <p class="hint">승인 기록이나 증빙은 필요 없습니다.</p>
       </div>
-      <div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${approvalStatusText(apv)}</span><span style="display:flex;gap:8px;margin-left:auto"><button type="button" class="btn btn--secondary btn--sm" id="apv-cancel">취소</button><button type="button" class="btn btn--primary btn--sm" id="apv-save">승인 기록 저장</button></span></div>`;
+      <div class="drawer__f"><span class="wd__stat hint" id="apv-stat">${approvalStatusText(apv)}</span><span style="display:flex;gap:8px;margin-left:auto"><button type="button" class="btn btn--secondary btn--sm" id="apv-cancel">취소</button><button type="button" class="btn btn--primary btn--sm" id="apv-save">${record ? '저장' : '승인'}</button></span></div>`;
   };
   const bindAccApproval = () => {
     const d = $('#drawer'); const stat = $('#apv-stat'); const form = d.querySelector('.wd__form');
     const collect = () => { apv = collectApproval(form, apv); };
     $('#apv-close').onclick = closeApproval; $('#apv-cancel').onclick = closeApproval;
     bindEscape(closeApproval);
-    const asel = d.querySelector('[data-af="approver_id"]'); if (asel) asel.onchange = () => { collect(); draw(); };
-    form.addEventListener('input', () => { collect(); stat.textContent = approvalStatusText(apv); });
     form.addEventListener('change', () => { collect(); stat.textContent = approvalStatusText(apv); });
     $('#apv-save').onclick = async () => {
       collect();
-      if (showApprovalErrors(d, approvalErrors(apv))) { stat.textContent = approvalStatusText(apv); return; }   // inline, under each field (same as 01·02·04)
       const btn = $('#apv-save'); btn.disabled = true;
       try {
         const r = apvMode === 'record' ? await api('PATCH', aApi(`/${sel.id}/customer-approval`), { customer_approval: approvalBody(apv) })
           : await api('POST', aApi(`/${sel.id}/transition`), { action: 'accept', customer_approval: approvalBody(apv) });
-        toast(apvMode === 'record' ? (sel.customer_approval && sel.customer_approval.recorded ? '고객 승인 기록을 수정했습니다.' : '고객 승인 기록을 추가했습니다.') : '고객 승인을 기록하고 검수를 승인했습니다.');
+        toast(apvMode === 'record' ? '저장했습니다.' : '검수를 승인했습니다.');
         apv = null; apvMode = null; sel = r.acceptance; ac = r.acceptances; g.acceptances = ac; await load(); draw();
       } catch (e) {
         btn.disabled = false;
-        const f = Object.fromEntries(Object.entries(e.fields || {}).filter(([k]) => k.startsWith('approval.')));
-        if (!showApprovalErrors(d, f)) { toast(e.fields && Object.keys(e.fields).length ? Object.values(e.fields)[0] : e.message); stat.textContent = e.message; }
+        toast(e.fields && Object.keys(e.fields).length ? Object.values(e.fields)[0] : e.message); stat.textContent = e.message;
       }
     };
   };
@@ -360,7 +354,7 @@ export async function testsPage(id) {
       <div class="dsave" id="dsave"></div>
       ${raw(x.decision_note ? html`<div class="decision ${x.status === 'ACCEPTED' ? 'decision--ok' : x.status === 'REJECTED' || x.status === 'REWORK_REQUIRED' ? 'decision--no' : ''}"><p><b>결정 사유</b></p><p><q>${x.decision_note}</q></p></div>` : '')}
       ${raw(actions.length ? html`<div class="decision decision--review">
-        ${raw(x.status === 'DRAFT' ? '<p><b>검수 준비가 끝났나요?</b> 대상 요구사항과 테스트를 연결한 뒤 고객에게 검수를 요청하세요.</p>' : x.status === 'REQUESTED' ? html`<p><b>고객 검수 결과를 기록하세요.</b>${raw(failTests.length || openIssues.length ? html` <span class="warn-inline">실패 테스트 ${failTests.length}건${openIssues.length ? ` · 처리 중인 이슈 ${openIssues.length}건` : ''}이 남아 있습니다.</span>` : ' 연결된 테스트에 남은 실패가 없습니다.')}</p>` : '<p><b>보완이 끝났나요?</b> 보완 사항을 처리한 뒤 다시 검수를 요청하세요.</p>')}
+        ${raw(x.status === 'DRAFT' ? '<p><b>검수 결과를 기록하세요.</b> 대상 요구사항과 테스트를 연결한 뒤 바로 승인·보완·반려로 기록하거나, 아직 진행 중이면 검수 요청 상태로 둡니다.</p>' : x.status === 'REQUESTED' ? html`<p><b>고객 검수 결과를 기록하세요.</b>${raw(failTests.length || openIssues.length ? html` <span class="warn-inline">실패 테스트 ${failTests.length}건${openIssues.length ? ` · 처리 중인 이슈 ${openIssues.length}건` : ''}이 남아 있습니다.</span>` : ' 연결된 테스트에 남은 실패가 없습니다.')}</p>` : '<p><b>보완이 끝났나요?</b> 보완 사항을 처리한 뒤 다시 검수를 요청하세요.</p>')}
         ${raw(desk ? '' : html`<div class="actions" style="margin-top:0">${raw(actions.map(accBtn).join(''))}</div>`)}</div>` : '')}
       </section>
       <section data-pane="links" ${dtab === 'links' ? '' : 'hidden'}>
@@ -600,7 +594,7 @@ export async function testsPage(id) {
       const a = b.dataset.act; let note = '';
       const fails = x.tests.filter((t) => !t.archived_at && t.last_result === 'FAIL').length;
       if (a === 'submit' || a === 'resubmit') { if (!(await confirmDialog({ title: a === 'submit' ? '고객에게 검수를 요청할까요?' : '검수를 다시 요청할까요?', body: `${x.display_id}의 상태가 '검수 요청'으로 바뀌고 요청일이 기록됩니다.${fails ? ` 연결된 테스트 중 실패 ${fails}건이 남아 있습니다.` : ''}`, confirm: ACC_ACTION_LABEL[a] }))) return; }
-      else if (a === 'accept') { openApproval('approve'); return; }   // US-1: the shared approval Drawer (승인자 · 승인일 · 방법 · 근거)
+      else if (a === 'accept') { openApproval('approve'); return; }   // the shared check Drawer (고객 확인 체크 + 메모, both optional)
       else { note = await promptDialog({ title: a === 'reject' ? `${x.display_id} 반려` : `${x.display_id} 보완 요청`, body: a === 'reject' ? '반려 사유는 필수입니다. 반려된 검수는 다시 진행할 수 없습니다.' : '어떤 항목을 보완해야 하는지 적어두면 다음 요청 때 기준이 됩니다.', label: a === 'reject' ? '반려 사유' : '보완 요청 사유', required: true, confirm: ACC_ACTION_LABEL[a], danger: a === 'reject' }); if (note === null) return; }
       try { await apply(await api('POST', aApi(`/${x.id}/transition`), { action: a, decision_note: note })); toast(`${ACC_ACTION_LABEL[a]} 처리했습니다.`); } catch (e) { toast(e.fields ? Object.values(e.fields)[0] : e.message); }
     });
