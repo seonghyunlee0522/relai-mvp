@@ -11,7 +11,7 @@ import { skeletonPlan } from '../wbs-skeleton.js';
 
 const T = todayKst();
 const STAKE = [{ id: 'sh-pm', name: '정하늘', org_type: 'OWN', org: '수행사', role: 'PM' }, { id: 'sh-cl', name: '오지현', org_type: 'CLIENT', org: 'ACME', role: '고객 PM' }];
-const APV = { approver_id: 'sh-cl', date: addDays(T, -1), method: 'SIGNED', evidence: '검수확인서 서명본 수령' };
+const CHECK = { checked: true, note: '검수확인서 서명본 수령' };   // 고객 확인 체크 (진행 여부 체크, 2026-10-21) — no 승인자·승인일·방법·근거
 const proj = async (db, A) => db.get('SELECT * FROM projects WHERE id = ?', [A.p.id]);
 const item = async (A, id) => (await A.c('GET', `${A.wbs}/${id}`)).json.item;
 const ms = async (A, title, date) => (await A.c('POST', A.wbs, { item_type: 'MILESTONE', title, milestone_date: date })).json.item;
@@ -57,13 +57,13 @@ test('F3: design gate, whole-scope acceptance and go-live complete their milesto
   await db.run(`UPDATE project_phases SET status = 'COMPLETED', completed_at = now() WHERE project_id = ? AND phase_key = 'ANALYSIS_DESIGN'`, [A.p.id]);
   assert.equal(await syncMilestones(db, await proj(db, A)), 1);
   assert.equal((await item(A, d.id)).status, 'COMPLETED'); assert.equal(String((await item(A, d.id)).actual_end_date).slice(0, 10), T);
-  // whole scope accepted through the API → 최종 검수 완료 with the approval date
+  // whole scope accepted through the API → 최종 검수 완료 with the day it was accepted (no 승인일 is recorded any more)
   const rq = (await A.c('POST', A.req, { title: '로그인', scope: 'IN_SCOPE' })).json.requirement;
   await A.c('PATCH', `${A.req}/${rq.id}`, { status: 'CONFIRMED' });
   const acc = (await A.c('POST', `${A.purl}/acceptances`, { title: '최종 검수', requirements: [rq.id] })).json.acceptance;
   await A.c('POST', `${A.purl}/acceptances/${acc.id}/transition`, { action: 'submit' });
-  assert.equal((await A.c('POST', `${A.purl}/acceptances/${acc.id}/transition`, { action: 'accept', customer_approval: APV })).status, 200);
-  const a2 = await item(A, a.id); assert.equal(a2.status, 'COMPLETED'); assert.equal(String(a2.actual_end_date).slice(0, 10), APV.date);
+  assert.equal((await A.c('POST', `${A.purl}/acceptances/${acc.id}/transition`, { action: 'accept', customer_approval: CHECK })).status, 200);
+  const a2 = await item(A, a.id); assert.equal(a2.status, 'COMPLETED'); assert.equal(String(a2.actual_end_date).slice(0, 10), T);
   // go-live recorded → 오픈 완료 with the go-live date
   await db.run('UPDATE project_definitions SET go_live = ? WHERE project_id = ?', [JSON.stringify({ date: addDays(T, -2), carryovers: [] }), A.p.id]);
   assert.equal(await syncMilestones(db, await proj(db, A)), 1);

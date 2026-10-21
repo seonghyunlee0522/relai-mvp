@@ -43,8 +43,8 @@ test('new project (Lifecycle V2): 7 phases with importance-tagged activities, fi
   assert.deepEqual(g.phases.map((p) => p.name), ['착수', '요구사항 정의', '분석·설계', '구현', '시험', '전환 및 오픈', '운영 및 유지보수']);
   assert.ok(g.phases.every((p) => p.steps.length >= 5 && p.steps.every((s) => s.completion_criteria && ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'].includes(s.importance) && ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'SKIPPED'].includes(s.state))));
   assert.ok(g.phases.every((p) => p.steps.some((s) => s.importance === 'REQUIRED')), 'every phase has a REQUIRED gate');
-  // 검수 / 인수 승인 is the first activity of 06 전환 및 오픈 (§6)
-  const tr = g.phases.find((p) => p.phase_key === 'TRANSITION_GO_LIVE'); assert.equal(tr.steps[0].step_key, 'ACCEPTANCE'); assert.equal(tr.steps[0].title, '검수 / 인수 승인'); assert.equal(tr.steps[0].importance, 'REQUIRED');
+  // 검수 / 인수 is the first activity of 06 전환 및 오픈 (§6; '승인' dropped from the title 2026-10-21)
+  const tr = g.phases.find((p) => p.phase_key === 'TRANSITION_GO_LIVE'); assert.equal(tr.steps[0].step_key, 'ACCEPTANCE'); assert.equal(tr.steps[0].title, '검수 / 인수'); assert.equal(tr.steps[0].importance, 'REQUIRED');
   // summary is REQUIRED-based, never a percentage
   assert.deepEqual(Object.keys(g.phases[0].summary).sort(), ['completed', 'gate_met', 'required_done', 'required_open', 'required_total', 'skipped', 'total']);
   assert.ok(!('progress' in g) && !('progress' in g.phases[0]) && !('percent' in g.phases[0].summary));
@@ -90,8 +90,8 @@ test('transitions: next with REQUIRED gate met → COMPLETED; incomplete → sta
   const { server, client } = await boot();
   const { c, url } = await userWithProject(client);
   let g = (await c('GET', url)).json;
-  // 착수 결과 승인 completes only with an approval record (Q6-6), so record one first
-  assert.equal((await c('PUT', `${url}/definition`, { approval: { approver_name: '김고객', approver_title: '부장', date: '2026-01-10', method: 'EMAIL', evidence: '승인 메일' } })).status, 200);
+  // 착수 결과 확인 is a 권장 진행 여부 체크 (2026-10-21): no approval record is needed before moving on
+  assert.equal(g.phases[0].steps.find((s) => s.step_key === 'APPROVAL').importance, 'RECOMMENDED');
   for (const s of g.phases[0].steps.filter((x) => x.importance === 'REQUIRED')) await c('PATCH', `${url}/steps/${s.id}`, { status: 'COMPLETED' });   // RECOMMENDED may stay open
   g = (await c('POST', `${url}/phases/${g.phases[1].id}/activate`, { reason: 'NEXT' })).json;
   assert.equal(g.project.current_phase, 'REQUIREMENTS');

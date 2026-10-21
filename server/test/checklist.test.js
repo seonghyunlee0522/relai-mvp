@@ -118,8 +118,13 @@ test('end to end: 06 전환·오픈 and 07 운영 can be completed (checklists +
   // REQUIRED manual activities still cannot be skipped
   assert.equal((await A.c('PATCH', `${A.purl}/steps/${step(g, 'GO_LIVE').id}`, { status: 'SKIPPED' })).status, 409);
 
-  // ACCEPTANCE is data-driven (검수 screen; hand-marking is 409 until the scope is accepted): seed one accepted 검수 to isolate 06's manual activities
-  assert.equal((await A.c('PATCH', `${A.purl}/steps/${step(g, 'ACCEPTANCE').id}`, { status: 'COMPLETED' })).status, 409);
+  // ACCEPTANCE may be hand-marked 완료 (2026-10-21: no 409 acceptance_required gate — 검수 done outside RELAI); undo it, then
+  // seed one accepted 검수 so the data-driven ✓ isolates 06's manual activities
+  const accStep = step(g, 'ACCEPTANCE').id;
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${accStep}`, { status: 'COMPLETED' })).status, 200);
+  g = (await A.c('GET', A.purl)).json; assert.equal(step(g, 'ACCEPTANCE').state, 'COMPLETED');
+  assert.equal((await A.c('PATCH', `${A.purl}/steps/${accStep}`, { status: 'TODO' })).status, 200);
+  g = (await A.c('GET', A.purl)).json; assert.notEqual(step(g, 'ACCEPTANCE').state, 'COMPLETED');
   const acc = (await A.c('POST', `${A.purl}/acceptances`, { title: '검수' })).json.acceptance;
   await db.run(`UPDATE acceptances SET status = 'ACCEPTED', accepted_at = now() WHERE id = ?`, [acc.id]);
   g = (await A.c('GET', A.purl)).json;

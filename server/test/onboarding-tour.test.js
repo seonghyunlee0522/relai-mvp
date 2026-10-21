@@ -113,8 +113,8 @@ test('feature guides: seen once → hidden; reset shows again; unknown key 404; 
 test('guidance engine (pure rules, Lifecycle V2): INITIATION / REQUIREMENTS / ANALYSIS_DESIGN / DEVELOPMENT / TESTING / TRANSITION_GO_LIVE / OPERATIONS; task-centred CTAs; Jira & AI never required', () => {
   const base = { project: { id: 'p1', current_phase: 'INITIATION' }, next_phase: { name: '요구사항 정의', sequence: 2 }, stats: {} };
   const g = (over) => projectGuidance({ ...base, ...over });
-  // CTAs that open a dialog on arrival carry no arrow (Phase 2 Q6-3 '승인 기록하기', Phase 3 US-2 'WBS 뼈대 만들기'); navigation CTAs end with →
-  const OPENS_DIALOG = new Set(['승인 기록하기', 'WBS 뼈대 만들기']);
+  // CTAs that open a dialog on arrival carry no arrow (Phase 2 Q6-3 '요구사항 확정하기' / '진행 여부 체크', Phase 3 US-2 'WBS 뼈대 만들기'); navigation CTAs end with →
+  const OPENS_DIALOG = new Set(['요구사항 확정하기', '진행 여부 체크', 'WBS 뼈대 만들기']);
   const arrow = (a) => a && (a.label.endsWith('→') || OPENS_DIALOG.has(a.label)) && !/로 이동/.test(a.label);
   // INITIATION
   let r = g({ phase: { phase_key: 'INITIATION', name: '착수', sequence: 1 }, definition: { progress: { done: 0, total: 5 }, needs_review: [] } });
@@ -128,7 +128,7 @@ test('guidance engine (pure rules, Lifecycle V2): INITIATION / REQUIREMENTS / AN
   r = g({ ...RQ, stats: { requirements: { total: 0 } } }); assert.equal(r.rule, 'REQ_EMPTY'); assert.equal(r.primary_action.label, '요구사항 입력 시작 →'); assert.equal(r.primary_action.href, '/app/projects/p1/requirements?new=1'); assert.equal(r.secondary_action, null, 'Excel import is chosen inside Requirements, not from What’s Next');
   r = g({ ...RQ, stats: { requirements: { total: 3, type_unspecified: 2 } } }); assert.equal(r.rule, 'REQ_CLASSIFY'); assert.equal(r.primary_action.label, '요구사항 분류 →');
   r = g({ ...RQ, stats: { requirements: { total: 3, type_unspecified: 0, scope_undecided: 1 } } }); assert.equal(r.rule, 'REQ_SCOPE');
-  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 0, type_unspecified: 0, priority_unspecified: 0, scope_undecided: 0 } } }); assert.equal(r.rule, 'REQ_CONFIRM'); assert.equal(r.primary_action.label, '승인 기록하기');   // Phase 2 US-4(7): 승인 기록 confirms the rest
+  r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 0, type_unspecified: 0, priority_unspecified: 0, scope_undecided: 0 } } }); assert.equal(r.rule, 'REQ_CONFIRM'); assert.equal(r.primary_action.label, '요구사항 확정하기'); assert.ok(arrow(r.primary_action));   // Phase 2 US-4(7): the 확정 확인 Drawer confirms the rest
   r = g({ ...RQ, stats: { requirements: { total: 3, in_scope: 3, in_scope_confirmed: 3 }, wbs: { tasks: 0 } } }); assert.equal(r.rule, 'REQ_DONE'); assert.equal(r.primary_action.href, '/app/projects/p1?move=next');
   // ANALYSIS_DESIGN: WBS empty → trace → assign → plan → done
   const AD = { phase: { phase_key: 'ANALYSIS_DESIGN', name: '분석·설계', sequence: 3 }, next_phase: { name: '구현', sequence: 4 } };
@@ -175,13 +175,14 @@ test('guidance via API: embedded in project GET, standalone endpoint, follows re
   let g = (await A.c('GET', A.purl)).json;
   assert.equal(g.guidance.rule, 'INIT_DEFINE'); assert.equal(g.guidance.current_phase.key, 'INITIATION');
   await completeDefinition(A);
-  g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'INIT_KICKOFF');   // Phase 1 v2: 정의 → 착수보고회 → 승인
+  g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'INIT_KICKOFF');   // Phase 1 v2: 정의 → 착수보고회 → 착수 결과 확인 체크
   const ph = (await A.c('GET', A.purl)).json.phases.find((x) => x.phase_key === 'REQUIREMENTS');
   await A.c('POST', `${A.purl}/phases/${ph.id}/activate`, { reason: 'NEXT' });
   g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'REQ_EMPTY');
   await A.c('POST', A.req, { title: 'R1', scope: 'IN_SCOPE', status: 'CONFIRMED', type: 'FUNCTIONAL', priority: 'HIGH' });
-  g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'REQ_APPROVE');   // Phase 2: 기준선 승인 before REQ_DONE
-  assert.equal((await A.c('POST', `${A.req}/baseline/complete`, { approval: { approver_name: '고객', date: '2026-01-10', method: 'EMAIL', evidence: '메일' } })).status, 200);
+  g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'REQ_CHECK');   // 요구사항 확정 확인 체크 (권장) before REQ_DONE
+  assert.equal(g.primary_action.label, '진행 여부 체크');
+  assert.equal((await A.c('POST', `${A.req}/baseline/complete`, {})).status, 200);   // no approval record needed
   g = (await A.c('GET', `${A.purl}/guidance`)).json.guidance; assert.equal(g.rule, 'REQ_DONE');
   const B = await setup(client, 'gd2@x.com');
   assert.equal((await B.c('GET', `${A.purl}/guidance`)).status, 404);
