@@ -3708,6 +3708,32 @@ html.is-phone #bl-orders-tbl tbody td:nth-child(5):not(:empty)::before{content:'
    A real clickable element is what iOS Safari always delivers a tap to; it is removed when the menu closes. PC never gets one. */
 .menubackdrop{position:fixed;inset:0;background:transparent;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .sidescrim{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+/* 관리자 › AI 프롬프트 (admin/ai-prompts.js) */
+.aprm__lead{margin:-6px 0 12px}
+.aprm__tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.aprm__tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px;font:inherit;font-weight:600;color:var(--text-2);cursor:pointer}
+.aprm__tab.is-on{color:var(--navy);border-bottom-color:var(--blue,#2563eb)}
+.aprm__h2{margin-left:auto}
+.aprm__ed{padding:12px 14px;display:grid;gap:8px}
+.aprm__ta{min-height:420px;resize:vertical;width:100%}
+.acode{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}
+pre.acode{margin:0;padding:10px 14px;background:var(--bg-alt);border-top:1px solid var(--border-soft);max-height:420px;overflow:auto}
+pre.acode--tall{max-height:640px}
+.aprm__meta{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:var(--fs-xs);color:var(--text-2)}.aprm__meta code{font-family:var(--mono,monospace);background:var(--bg-alt);padding:0 4px;border-radius:4px}
+#pcount.is-over{color:var(--danger-fg);font-weight:700}
+.aprm__acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.aprm__sp{flex:1}
+.aprm__warn{background:var(--warn-bg);color:var(--warn-fg);border-radius:var(--r-md,8px);padding:8px 12px;margin:8px 0;font-size:var(--fs-sm)}.aprm__warn ul{margin:4px 0 0 18px;padding:0}
+.aprm__ul{margin:6px 14px 0 32px}
+.aprm__pv{padding:10px 14px;display:grid;gap:10px}.aprm__pv .adl{padding:0}
+.aprm__pvf{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}.aprm__pvf #pq{flex:1 1 200px}.aprm__pvf select{flex:2 1 260px;max-width:100%}.aprm__pvf textarea{flex:1 1 100%}
+.aprm__h4{font-size:var(--fs-sm);margin:6px 0 4px;color:var(--navy)}
+.aprm__pv pre.acode{border:1px solid var(--border-soft);border-radius:var(--r-md,8px)}
+.adiff{font-family:var(--mono,monospace);font-size:12.5px;line-height:1.5;max-height:420px;overflow:auto;padding:6px 0}
+.adiff__l{display:grid;grid-template-columns:22px minmax(0,1fr);padding:0 14px 0 6px}.adiff__l i{font-style:normal;color:var(--text-3);user-select:none}.adiff__l span{white-space:pre-wrap;overflow-wrap:anywhere}
+.adiff__l--add{background:var(--ok-bg);color:var(--ok-fg)}.adiff__l--del{background:var(--danger-bg);color:var(--danger-fg);text-decoration:line-through;text-decoration-color:rgba(180,35,24,.35)}.adiff__l--fold{color:var(--text-3);font-style:italic}
+#pdiff>.hint{padding:8px 14px 0;margin:0}
+@media (max-width:767px){.aprm__ta{min-height:300px}#ptab .adl{grid-template-columns:minmax(0,1fr)}#ptab .adl dt{margin-top:4px}}
+
 /* Jim mobile 10-21 #4: small links / icons get a 44×44px tap area on phones (Apple HIG minimum). html.is-phone only — the PC layout is untouched. */
 html.is-phone :is(.sg-end a, .ovsec__ctx a, .ovsec__more, .pv__charter a, .actrow__h a, .appfoot a, .hc__attmore a, .sbanner p a, .hsum__smp a, .defsec__pg a, .home__credits){display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;vertical-align:middle;gap:.3em}
 html.is-phone .actrow__h{align-items:center}html.is-phone .actrow__h a{justify-content:flex-start}

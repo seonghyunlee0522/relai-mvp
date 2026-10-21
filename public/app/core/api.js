@@ -3,7 +3,8 @@ import { isPhone, PHONE_MSG } from './device.js';
 
 /** Writes a phone may still send (spec §2): sign-in/out and account mail, invitations, onboarding tips and guide hints. */
 const PHONE_WRITE_OK = [/^\/api\/auth\//, /^\/api\/invitations\//, /\/onboarding\//, /^\/api\/guides\//, /^\/api\/feedback$/,
-  /\/billing\/cancel$/, /\/billing\/changes\/[^/]+\/cancel$/];   // 의견 남기기 works in view mode too; 해지 / 예약 취소 too (해지는 어디서나 — 전자상거래법 §21의2, pricing v3 T3)
+  /\/billing\/cancel$/, /\/billing\/changes\/[^/]+\/cancel$/,
+  /^\/api\/admin\/ai\/prompts\/[A-Z_]+\/(check|preview)$/];   // 관리자 › AI 프롬프트 check / 전송 내용 미리보기 write nothing (saving stays desktop-only); 의견 남기기 works in view mode too; 해지 / 예약 취소 too (해지는 어디서나 — 전자상거래법 §21의2, pricing v3 T3)
 /** Phone = view mode: one toast, however many callers catch and re-toast the same error. */
 function phoneReadOnly() {
   if (!document.querySelector('.toast--ro')) { const t = document.createElement('div'); t.className = 'toast toast--ro'; t.setAttribute('role', 'status'); t.textContent = PHONE_MSG; document.body.append(t); setTimeout(() => t.remove(), 2600); }

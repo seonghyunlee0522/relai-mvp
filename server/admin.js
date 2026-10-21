@@ -21,7 +21,7 @@ export const SYSTEM_ROLES = ['NONE', 'SYSTEM_ADMIN'];
 export const AUDIT_ACTIONS = ['SERVICE_ORDERS_VIEW', 'DELIVERABLE_CATALOG_CREATE', 'DELIVERABLE_CATALOG_UPDATE', 'FEEDBACK_UPDATE', 'PROMOTION_CREATE', 'PROMOTION_UPDATE', 'PROMOTION_DELETE', 'SUSPEND_USER', 'REACTIVATE_USER', 'SUSPEND_WORKSPACE', 'REACTIVATE_WORKSPACE', 'GRANT_AI_CREDITS', 'ADJUST_AI_CREDITS', 'CREDIT_REFUND', 'REFUND_PAYMENT',
   'PLATFORM_INVITE_CREATED', 'PLATFORM_INVITE_RESENT', 'PLATFORM_INVITE_REVOKED', 'PLATFORM_INVITE_ACCEPTED', 'WORKSPACE_INVITE_CREATED', 'WORKSPACE_INVITE_RESENT', 'WORKSPACE_INVITE_REVOKED', 'WORKSPACE_INVITE_ACCEPTED',
   'GOOGLE_IDENTITY_LINKED', 'USER_CREATED', 'SYSTEM_ADMIN_BOOTSTRAP', 'WORKSPACE_CREATED_FROM_INVITE',
-  'ONBOARDING_STARTED', 'ONBOARDING_SKIPPED', 'ONBOARDING_COMPLETED', 'FIRST_PROJECT_CREATED', 'FIRST_REQUIREMENT_CREATED', 'FIRST_WBS_CREATED', 'EMAIL_TEST', 'PURGE_TEST_ACCOUNTS'];
+  'ONBOARDING_STARTED', 'ONBOARDING_SKIPPED', 'ONBOARDING_COMPLETED', 'FIRST_PROJECT_CREATED', 'FIRST_REQUIREMENT_CREATED', 'FIRST_WBS_CREATED', 'EMAIL_TEST', 'PURGE_TEST_ACCOUNTS', 'AI_PROMPT_UPDATE', 'AI_PROMPT_PREVIEW'];
 export const ACTIVATION = ['REGISTERED', 'WORKSPACE_CREATED', 'PROJECT_CREATED', 'ACTIVE_USER'];
 const ACTIVE_WINDOW_DAYS = 14;
 
@@ -196,7 +196,7 @@ export async function listAudit(db, q = {}) {
   const where = []; const params = [];
   const action = oneOf(q.action, AUDIT_ACTIONS); if (action) { where.push('a.action = ?'); params.push(action); }
   if (q.admin) { where.push('(a.admin_user_id = ? OR adm.email ILIKE ?)'); params.push(String(q.admin), like(q.admin)); }
-  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT', 'PROMOTION', 'FEEDBACK', 'EMAIL', 'DELIVERABLE', 'SYSTEM']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
+  const tt = oneOf(q.target_type, ['USER', 'WORKSPACE', 'SUBSCRIPTION', 'PAYMENT', 'INVITATION', 'PROJECT', 'PROMOTION', 'FEEDBACK', 'EMAIL', 'DELIVERABLE', 'AI_PROMPT', 'SYSTEM']); if (tt) { where.push('a.target_type = ?'); params.push(tt); }
   // Operator actions by default; account/invitation events raised by regular users (Phase 13) are a separate view (actor_kind=USER) or `all`.
   const ak = q.actor_kind === 'all' ? '' : oneOf(q.actor_kind, ['ADMIN', 'USER']) || 'ADMIN';
   if (ak && !q.target_id) { where.push('a.actor_kind = ?'); params.push(ak); }
