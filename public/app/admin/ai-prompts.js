@@ -15,6 +15,9 @@ const ACTION = { SAVE: '저장', RESET: '기본값으로', RESTORE: '복원' };
 const lastChange = (c) => (c ? html`${fmtD(c.at)} · ${who(c.by)} <small class="muted">(${ACTION[c.action] || c.action})</small>` : '<span class="muted">변경 없음 (코드 기본값)</span>');
 const pre = (text, cls = '') => html`<pre class="acode ${cls}">${text}</pre>`;
 const json = (v) => JSON.stringify(v, null, 2);
+/** Unsaved editor text per key: survives the re-render a resize / rotation triggers; cleared on save, reset, restore and 편집 취소. */
+const drafts = new Map();
+const previews = new Map();   // last 전송 내용 미리보기 per key, kept across re-renders the same way
 
 export async function adminPromptsPage(main = $('#main')) {
   document.title = 'AI 프롬프트 — RELAI 관리자';
@@ -57,8 +60,8 @@ const diffHtml = (a, b) => {
 };
 
 export async function adminPromptPage(key, main = $('#main')) {
-  let p; let preview = null; let draft = null; let tab = 'edit'; let lastProject = '';
-  const load = async () => { p = await api('GET', `/api/admin/ai/prompts/${key}`); draft = p.body; };
+  let p; let preview = previews.get(key) || null; let draft = null; let tab = 'edit'; let lastProject = preview?.project.id || '';
+  const load = async () => { p = await api('GET', `/api/admin/ai/prompts/${key}`); draft = drafts.get(key) ?? p.body; };
   try { await load(); } catch (e) { main.innerHTML = errorBlock(e); return; }
   document.title = `${p.label} — AI 프롬프트 — RELAI 관리자`;
   const phone = isPhone();
@@ -119,6 +122,7 @@ export async function adminPromptPage(key, main = $('#main')) {
     <dl class="adl"><dt>프로젝트</dt><dd>${r.project.name} <small class="muted">(${r.project.workspace})</small></dd><dt>사용한 데이터</dt><dd>${r.used}</dd>
       <dt>크기</dt><dd>시스템 ${n(r.chars.system)}자 · 사용자 메시지 ${n(r.chars.user)}자${raw(r.input_too_large ? ` ${chip('warn', '입력 한도 초과 — 실제로는 거절됩니다')}` : '')}</dd>
       <dt>보낼 곳</dt><dd><code>${r.request.endpoint}</code></dd></dl>
+    <h4 class="aprm__h4">시스템 프롬프트</h4>${raw(pre(r.system))}
     <h4 class="aprm__h4">사용자 메시지</h4>${raw(pre(r.user, 'acode--tall'))}
     <h4 class="aprm__h4">요청 본문 (JSON, API 키 제외)</h4>${raw(pre(json(r.request.body), 'acode--tall'))}`;
 
@@ -136,7 +140,7 @@ export async function adminPromptPage(key, main = $('#main')) {
 
   const showDiff = (base, label) => { $('#pdiff').innerHTML = html`<p class="hint">${label}</p>${raw(diffHtml(base, $('#pt').value))}`; };
   const refreshEdit = () => {
-    const t = $('#pt').value; draft = t;
+    const t = $('#pt').value; draft = t; if (t === p.body) drafts.delete(key); else drafts.set(key, t);
     $('#pcount').textContent = `${t.length.toLocaleString('ko-KR')} / ${p.max_chars.toLocaleString('ko-KR')}자${t === p.body ? '' : ' · 저장 안 됨'}`;
     $('#pcount').classList.toggle('is-over', t.length > p.max_chars);
     showDiff(p.body, '왼쪽 −: 지금 저장된 내용, +: 편집 중인 내용');
@@ -161,14 +165,14 @@ export async function adminPromptPage(key, main = $('#main')) {
         ${raw(chk.warnings.length ? html`<div class="aprm__warn"><b>확인해 주세요</b><ul>${raw(chk.warnings.map((w) => html`<li>${w}</li>`).join(''))}</ul></div>` : '')}
         <p class="hint">글자 수 ${n(p.body.length)} → ${n(body.length)} · 이전 버전은 변경 이력에서 언제든 복원할 수 있습니다.</p>` });
       if (!ok) return;
-      try { const r = await api('PUT', `/api/admin/ai/prompts/${key}`, { body, base_version: p.version }); toast(`저장했습니다 (v${r.version}). 약 1분 안에 모든 워크스페이스에 적용됩니다.`); await load(); draw(); }
+      try { const r = await api('PUT', `/api/admin/ai/prompts/${key}`, { body, base_version: p.version }); drafts.delete(key); toast(`저장했습니다 (v${r.version}). 약 1분 안에 모든 워크스페이스에 적용됩니다.`); await load(); draw(); }
       catch (e) { if (!(await conflict(e, body))) fail(e); }
     };
     $('#p-default').onclick = async () => {
       const ok = await confirmDialog({ title: '코드 기본값으로 되돌릴까요?', confirm: '기본값으로 되돌리기', danger: true, bodyHtml: html`
         <p><b>${affectedText()}</b>이(가) 코드에 들어 있는 기본 프롬프트를 다시 씁니다. 모든 워크스페이스에 약 1분 안에 적용됩니다.</p><p class="hint">지금 내용은 변경 이력에 남아 복원할 수 있습니다.</p>` });
       if (!ok) return;
-      try { await api('POST', `/api/admin/ai/prompts/${key}/reset`, { base_version: p.version }); toast('기본값으로 되돌렸습니다.'); await load(); draw(); }
+      try { await api('POST', `/api/admin/ai/prompts/${key}/reset`, { base_version: p.version }); drafts.delete(key); toast('기본값으로 되돌렸습니다.'); await load(); draw(); }
       catch (e) { if (!(await conflict(e, ta.value))) fail(e); }
     };
     main.querySelectorAll('[data-vview]').forEach((b) => { b.onclick = () => { const v = p.versions.find((x) => String(x.version) === b.dataset.vview); showDiff(v.body, `−: v${v.version}, +: 편집 중인 내용`); $('#pdiff').scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
@@ -177,7 +181,7 @@ export async function adminPromptPage(key, main = $('#main')) {
       const ok = await confirmDialog({ title: `v${v}으로 복원할까요?`, confirm: '복원하고 적용', danger: true, bodyHtml: html`
         <p>v${v}의 내용을 새 버전으로 저장합니다. <b>${affectedText()}</b>에 적용되며 모든 워크스페이스에 약 1분 안에 반영됩니다.</p>` });
       if (!ok) return;
-      try { await api('POST', `/api/admin/ai/prompts/${key}/restore`, { version: v, base_version: p.version }); toast(`v${v} 내용으로 복원했습니다.`); await load(); draw(); }
+      try { await api('POST', `/api/admin/ai/prompts/${key}/restore`, { version: v, base_version: p.version }); drafts.delete(key); toast(`v${v} 내용으로 복원했습니다.`); await load(); draw(); }
       catch (e) { if (!(await conflict(e, ta.value))) fail(e); }
     }; });
   };
@@ -198,7 +202,7 @@ export async function adminPromptPage(key, main = $('#main')) {
       lastProject = sel.value; btn.disabled = true; $('#pvout').innerHTML = '<div class="loading">만드는 중…</div>';
       try {
         preview = await api('POST', `/api/admin/ai/prompts/${key}/preview`, { project_id: sel.value, text: $('#ptext')?.value || '', question: $('#pqst')?.value || '' });
-        $('#pvout').innerHTML = previewHtml(preview);
+        previews.set(key, preview); $('#pvout').innerHTML = previewHtml(preview);
       } catch (e) { $('#pvout').innerHTML = errorBlock(e); }
       btn.disabled = false;
     };
