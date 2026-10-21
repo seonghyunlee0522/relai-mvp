@@ -16,6 +16,7 @@ import { mountAdminFeedbackRoutes } from './feedback.js';
 import { mountAdminEmailTestRoutes } from './email/admin-test.js';
 import { mountAdminDeliverableRoutes } from './deliverables.js';
 import { mountAdminPurgeRoutes } from './purge.js';
+import { mountAdminPromptRoutes } from './ai/prompt-admin.js';
 
 export const isSystemAdmin = (user) => Boolean(user && user.system_role === 'SYSTEM_ADMIN');
 
@@ -85,6 +86,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* 테스트 계정 정리 (one-off, founder 2026-10-20): dry run + purge of every user but the operator. */
   mountAdminPurgeRoutes(app, db, { guard, wrap, fail });
+
+  /* AI 프롬프트 (migration 68): operator-edited prompts (DB, ~60 s cache) + 전송 내용 보기 / payload preview (no AI call). */
+  mountAdminPromptRoutes(app, db, { guard, wrap, fail });
 
   app.get('/api/admin/audit', guard, wrap(async (req, res) => res.json(await A.listAudit(db, req.query))));
 
