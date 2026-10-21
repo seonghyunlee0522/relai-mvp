@@ -27,7 +27,7 @@ export async function projectFormPage(id) {
     <div class="page__head"><div><h1>${editing ? (ro ? '프로젝트 정보' : '프로젝트 정보 수정') : '새 프로젝트 시작하기'}</h1>
       ${raw(editing ? '' : '<p>기본 정보와 프로젝트 유형만 정하면 됩니다. 목표·범위·관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
     ${raw(ro ? '<div class="notice" data-ro-notice>프로젝트 정보는 관리자만 수정할 수 있습니다. 내용은 조회만 할 수 있습니다.</div>' : '')}
-    <form class="panel form-panel pform" id="f" novalidate ${ro ? '' : 'data-keep-draft'}>
+    <form class="panel form-panel pform" id="f" novalidate data-keep-draft>
       <div class="form-err full" role="alert" hidden></div>
       <div class="pform__sec full"><b>프로젝트 기본 정보</b></div>
       <div class="field full"><label for="name">프로젝트 이름 <span class="req">*</span></label>
