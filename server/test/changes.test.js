@@ -102,14 +102,22 @@ test('workflow: submit → approve/reject → implement; guards; reviewer record
   const S = await setup(client);
   const a = (await S.c('POST', S.cr, { title: 'A' })).json.change;
   const b = (await S.c('POST', S.cr, { title: 'B' })).json.change;
-  const tr = (id, action, note) => S.c('POST', `${S.cr}/${id}/transition`, { action, decision_note: note, ...(action === 'approve' ? { customer_approval: { approver_name: '이수진', approver_title: '차장', date: '2026-01-02', method: 'EMAIL', evidence: '회신 메일' } } : {}) });
-  assert.equal((await tr(a.id, 'approve')).status, 409);   // DRAFT cannot be approved
+  const d = (await S.c('POST', S.cr, { title: 'D' })).json.change;
+  const e = (await S.c('POST', S.cr, { title: 'E' })).json.change;
+  const tr = (id, action, note) => S.c('POST', `${S.cr}/${id}/transition`, { action, decision_note: note, ...(action === 'approve' ? { customer_approval: { checked: true, note: '회신 메일' } } : {}) });
+  // 2026-10-21: approve / reject straight from 작성 중 (DRAFT) — no review step required
+  let r = await tr(d.id, 'approve'); assert.equal(r.status, 200); assert.equal(r.json.change.status, 'APPROVED'); assert.ok(r.json.change.approved_at);
+  assert.deepEqual(r.json.change.history.filter((h) => h.action_type === 'STATUS_CHANGED').map((h) => `${h.old_value}→${h.new_value}`), ['DRAFT→APPROVED']);
+  assert.equal((await tr(e.id, 'reject', '')).status, 400, 'reason required from DRAFT too');
+  r = await tr(e.id, 'reject', '중복'); assert.equal(r.status, 200); assert.equal(r.json.change.status, 'REJECTED');
   assert.equal((await tr(a.id, 'implement')).status, 409);
   assert.equal((await tr(a.id, 'bogus')).status, 400);
-  let r = await tr(a.id, 'submit'); assert.equal(r.json.change.status, 'UNDER_REVIEW'); assert.ok(r.json.change.submitted_at);
+  r = await tr(a.id, 'submit'); assert.equal(r.json.change.status, 'UNDER_REVIEW'); assert.ok(r.json.change.submitted_at);
   assert.equal((await tr(a.id, 'submit')).status, 409);
   r = await tr(a.id, 'approve', '범위 내 처리 가능');
   assert.equal(r.json.change.status, 'APPROVED'); assert.equal(r.json.change.reviewed_by, S.uid); assert.equal(r.json.change.reviewed_by_name, '홍길동'); assert.ok(r.json.change.approved_at); assert.equal(r.json.change.decision_note, '범위 내 처리 가능');
+  assert.equal(r.json.change.customer_approval.checked, true); assert.equal(r.json.change.customer_approval.note, '회신 메일');
+  assert.equal((await tr(a.id, 'approve')).status, 409, 'already APPROVED');
   assert.equal((await tr(a.id, 'reject', 'x')).status, 409);
   r = await tr(a.id, 'implement'); assert.equal(r.json.change.status, 'IMPLEMENTED'); assert.ok(r.json.change.implemented_at);
   assert.deepEqual(r.json.change.history.filter((h) => h.action_type === 'STATUS_CHANGED').map((h) => `${h.old_value}→${h.new_value}`), ['APPROVED→IMPLEMENTED', 'UNDER_REVIEW→APPROVED', 'DRAFT→UNDER_REVIEW']);

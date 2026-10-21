@@ -15,7 +15,7 @@ const STAKE = [
   { id: 'sh-cl', name: '오지현', org_type: 'CLIENT', org: 'ACME', role: '고객 PM' },
   { id: 'sh-ops', name: '김운영', org_type: 'CLIENT', org: 'ACME', role: '운영 담당' },
 ];
-const APV = { approver_id: 'sh-cl', date: addDays(T, -5), method: 'SIGNED', evidence: '검수확인서 서명본 수령' };
+const APV = { checked: true, note: '서명본 수령' };   // 고객 확인 체크 (2026-10-21: was a 4-field 승인 기록)
 const g = async (A) => (await A.c('GET', A.purl)).json;
 const ph = (G, key) => G.phases.find((x) => x.phase_key === key);
 const st = (G, key, phase = 'OPERATIONS') => ph(G, phase).steps.find((s) => s.step_key === key);
@@ -39,7 +39,7 @@ const mkTest = async (A, r, result = 'PASS') => {
 };
 
 /** A project with data through 06: 목표 · 요구사항 (범위 내 2 + 범위 밖 1) · 테스트 (통과 · 제외 · 결함 이슈 해결) · 오픈 milestone pushed +5일 with a reason ·
- * 변경 요청 승인 → 반영 + 승인 후 미반영 1건 · 검수 승인 (고객 승인 기록) · 오픈 with 운영 이관 ISS + CR → 07. */
+ * 변경 요청 승인 → 반영 + 승인 후 미반영 1건 · 검수 승인 (고객 확인 체크) · 오픈 with 운영 이관 ISS + CR → 07. */
 async function ready07(A, { carry = true } = {}) {
   await A.c('PUT', `${A.purl}/definition`, { stakeholders: STAKE, goal: '주문 처리 시간을 30% 줄인다\n둘째 줄' });
   const r1 = await mkReq(A, '주문 조회'); const r2 = await mkReq(A, '정산 리포트'); await mkReq(A, '모바일 앱', { scope: 'OUT_OF_SCOPE', confirm: false });
@@ -59,7 +59,7 @@ async function ready07(A, { carry = true } = {}) {
   await A.c('POST', `${A.purl}/changes/${cr1.id}/transition`, { action: 'implement' });
   const cr2 = (await A.c('POST', `${A.purl}/changes`, { title: '엑셀 내려받기 추가' })).json.change;
   await A.c('POST', `${A.purl}/changes/${cr2.id}/transition`, { action: 'submit' });
-  await A.c('POST', `${A.purl}/changes/${cr2.id}/transition`, { action: 'approve', customer_approval: APV });
+  await A.c('POST', `${A.purl}/changes/${cr2.id}/transition`, { action: 'approve' });   // no check: approval needs no record
   await toPhase(A, 'TRANSITION_GO_LIVE');
   const acc = (await A.c('POST', `${A.purl}/acceptances`, { title: '1차 검수', requirements: [r1.id, r2.id] })).json.acceptance;
   await A.c('POST', `${A.purl}/acceptances/${acc.id}/transition`, { action: 'submit' });
@@ -98,7 +98,7 @@ test('US-1 완료보고서: 7 sections filled with numbers; one per project; fin
   assert.match(S.schedule.body, /미룬 작업 1건 · 최초 계획 대비 총 \+5일/); assert.match(S.schedule.body, /\+5일 · 고객 데이터 이관 지연/);
   assert.match(S.quality.body, /테스트 1건 · 최근 통과 1건 · 제외 1건/); assert.match(S.quality.body, /제외 사유: 고객 정산팀이 수기로 확인/);
   assert.match(S.quality.body, /테스트에서 나온 이슈 1건 \(해결 1건\)/);
-  assert.match(S.acceptance.body, new RegExp(`${F.acc.display_id} 1차 검수 — 오지현 고객 PM · ${APV.date} · 서명본 수령`));
+  assert.match(S.acceptance.body, new RegExp(`${F.acc.display_id} 1차 검수 — ✓ 고객 확인 · 홍길동 · ${T} · 서명본 수령`)); assert.doesNotMatch(S.acceptance.body, /고객 확인 미체크|고객 승인 기록 없음/);
   assert.match(S.carryover.body, /운영 인수: 김운영\(고객사\)/); assert.match(S.carryover.body, /운영 이관 2건/);
   assert.match(S.carryover.body, new RegExp(`${F.issue.display_id} 야간 배치 지연 — .* · 운영 담당 김운영\\(고객사\\)`));
   assert.match(S.carryover.body, new RegExp(`${F.cr2.display_id} .* · 운영 담당 미정`));
@@ -129,6 +129,18 @@ test('US-1 완료보고서: 7 sections filled with numbers; one per project; fin
   // listed with the weekly reports, typed
   const list = (await A.c('GET', `${A.purl}/weekly-reports`)).json.items;
   assert.equal(list.find((x) => x.id === rep.id).report_type, 'COMPLETION');
+  server.close();
+});
+
+test('US-1 완료보고서 검수 절: an accepted 검수 without the 고객 확인 체크 reads "고객 확인 미체크"', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client);
+  const a = (await A.c('POST', `${A.purl}/acceptances`, { title: '체크 없는 검수' })).json.acceptance;
+  assert.equal((await A.c('POST', `${A.purl}/acceptances/${a.id}/transition`, { action: 'accept' })).status, 200, 'no record needed, from 작성 중');
+  await toPhase(A, 'OPERATIONS');
+  const rep = (await A.c('POST', `${A.purl}/weekly-reports/completion`, {})).json.report;
+  const acc = rep.structured_content.sections.find((s) => s.key === 'acceptance');
+  assert.match(acc.body, new RegExp(`${a.display_id} 체크 없는 검수 — 고객 확인 미체크`));
   server.close();
 });
 

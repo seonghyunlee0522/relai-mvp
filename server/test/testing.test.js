@@ -197,7 +197,7 @@ test('acceptances: ACC-001, transitions, decision note, links, test summary, lis
   assert.equal(r.json.acceptances.target_fail_tests, 1); assert.equal(r.json.acceptances.target_requirements, 1);
   // transitions
   const tr = (action, body = {}) => A.c('POST', `${A.ac}/${a.id}/transition`, { action, ...body });
-  assert.equal((await tr('accept')).status, 409);
+  assert.equal((await tr('reject')).status, 400, 'DRAFT may be rejected (2026-10-21) but a note is still required');
   assert.equal((await tr('fly')).status, 400);
   r = await tr('submit'); assert.equal(r.json.acceptance.status, 'REQUESTED'); assert.ok(r.json.acceptance.requested_at);
   assert.equal((await tr('rework')).status, 400); // note required
@@ -205,8 +205,9 @@ test('acceptances: ACC-001, transitions, decision note, links, test summary, lis
   assert.equal((await tr('accept')).status, 409);
   r = await tr('resubmit'); assert.equal(r.json.acceptance.status, 'REQUESTED');
   assert.equal((await tr('reject')).status, 400);
-  assert.equal((await tr('accept')).status, 422);   // Phase 6 US-1: 고객 승인 기록 required
-  r = await tr('accept', { customer_approval: { approver_name: '고객 담당', date: '2026-01-05', method: 'EMAIL', evidence: '회신 메일' } }); assert.equal(r.json.acceptance.status, 'ACCEPTED'); assert.ok(r.json.acceptance.accepted_at);
+  r = await tr('accept');   // 2026-10-21: no 고객 승인 기록 required (was 422); the 고객 확인 체크 is optional
+  assert.equal(r.status, 200); assert.equal(r.json.acceptance.status, 'ACCEPTED'); assert.ok(r.json.acceptance.accepted_at);
+  assert.equal(r.json.acceptance.customer_approval.checked, false);
   assert.equal((await tr('submit')).status, 409);
   assert.ok(r.json.acceptance.history.filter((h) => h.action_type === 'STATUS_CHANGED').length >= 4);
   // reject path on ACC-002
@@ -231,5 +232,9 @@ test('acceptances: ACC-001, transitions, decision note, links, test summary, lis
   assert.equal((await A.c('GET', A.ac)).json.items.length, 1);
   assert.equal((await A.c('PATCH', `${A.ac}/${a2.id}`, { title: 'y' })).status, 409);
   assert.equal((await B.c('GET', `${A.ac}/${a.id}`)).status, 404);
+  // accept straight from 작성 중 (DRAFT) with the optional check
+  const a3 = (await A.c('POST', A.ac, { title: '바로 승인' })).json.acceptance;
+  r = await A.c('POST', `${A.ac}/${a3.id}/transition`, { action: 'accept', customer_approval: { checked: true, note: '현장 확인' } });
+  assert.equal(r.status, 200); assert.equal(r.json.acceptance.status, 'ACCEPTED'); assert.equal(r.json.acceptance.customer_approval.checked, true); assert.equal(r.json.acceptance.customer_approval.note, '현장 확인');
   server.close();
 });

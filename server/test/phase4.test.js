@@ -133,51 +133,59 @@ test('US-1 weekly report: "이번 주 일정 변경 1건 (총 +7일)" + reason l
 });
 
 /* ---------- US-2 ---------- */
-test('US-2 CR approve = customer approval record: 422 without it, stored + APPROVED in one go, direct approver → 이해관계자', async () => {
+test('US-2 CR approve: no record needed (고객 확인 체크 optional, no 422); check + note stored + APPROVED in one go; who/when stamped', async () => {
   const { server, client } = await boot();
   const A = await setup(client); await A.c('PUT', `${A.purl}/definition`, { stakeholders: TEAM }); await toPhase(A, 'DEVELOPMENT');
   const cr = (await A.c('POST', `${A.purl}/changes`, { title: 'MFA 추가', requester_name: '이고객' })).json.change;
-  const tr = (body) => A.c('POST', `${A.purl}/changes/${cr.id}/transition`, body);
-  assert.equal((await tr({ action: 'submit' })).status, 200);
-  let r = await tr({ action: 'approve' });
-  assert.equal(r.status, 422); assert.equal(r.json.error.code, 'customer_approval_required');
-  assert.deepEqual(Object.keys(r.json.error.fields).sort(), ['approval.approver', 'approval.date', 'approval.evidence', 'approval.method']);
-  r = await tr({ action: 'approve', customer_approval: { ...CA, evidence: '' } });
-  assert.equal(r.status, 422); assert.deepEqual(Object.keys(r.json.error.fields), ['approval.evidence']);
-  r = await tr({ action: 'approve', customer_approval: { ...CA, date: d(1) } });
+  const tr = (id, body) => A.c('POST', `${A.purl}/changes/${id}/transition`, body);
+  assert.equal((await tr(cr.id, { action: 'submit' })).status, 200);
+  // a bad legacy date is still a 400 and nothing is saved
+  let r = await tr(cr.id, { action: 'approve', customer_approval: { checked: true, date: d(1) } });
   assert.equal(r.status, 400); assert.ok(r.json.error.fields['approval.date'], '승인일 미래 불가');
   assert.equal((await A.c('GET', `${A.purl}/changes/${cr.id}`)).json.change.status, 'UNDER_REVIEW', 'nothing saved');
-  r = await tr({ action: 'approve', customer_approval: CA });
+  // approve with the optional check + note
+  r = await tr(cr.id, { action: 'approve', customer_approval: { checked: true, note: '이수진 차장 메일 회신' } });
   assert.equal(r.status, 200); const c = r.json.change;
-  assert.equal(c.status, 'APPROVED'); assert.equal(c.customer_approval.recorded, true);
-  assert.equal(c.customer_approval.summary, `이수진 차장 · ${T} · 이메일 회신`);
+  assert.equal(c.status, 'APPROVED'); assert.equal(c.customer_approval.checked, true); assert.equal(c.customer_approval.recorded, true);
+  assert.equal(c.customer_approval.checked_by_name, '홍길동'); assert.ok(c.customer_approval.checked_at, 'when stamped');
+  assert.equal(c.customer_approval.summary, `✓ 고객 확인 · 홍길동 · ${T} · 이수진 차장 메일 회신`);
   assert.ok(c.history.some((h) => h.action_type === 'CUSTOMER_APPROVAL'));
   const def = (await A.c('GET', `${A.purl}/definition`)).json;
-  const sh = (def.definition || def).stakeholders.find((x) => x.name === '이수진');
-  assert.ok(sh, 'added to 이해관계자'); assert.equal(sh.org_type, 'CLIENT'); assert.equal(c.customer_approval.approver_id, sh.id);
+  assert.ok(!(def.definition || def).stakeholders.some((x) => x.name === '이수진'), 'a check never adds a stakeholder');
   const list = (await A.c('GET', `${A.purl}/changes`)).json.changes;
-  assert.equal(list[0].customer_approval.summary, c.customer_approval.summary, 'list shows approver · date · method');
-  // a stakeholder as approver
+  assert.equal(list.find((x) => x.id === cr.id).customer_approval.summary, c.customer_approval.summary, 'list shows the check summary');
+  // no record at all: approve straight from 작성 중 (DRAFT), check stays off
   const cr2 = (await A.c('POST', `${A.purl}/changes`, { title: '보고서 추가' })).json.change;
-  await A.c('POST', `${A.purl}/changes/${cr2.id}/transition`, { action: 'submit' });
-  r = await A.c('POST', `${A.purl}/changes/${cr2.id}/transition`, { action: 'approve', customer_approval: { approver_id: 'sh-cl', date: T, method: 'REVIEW', evidence: '회의록' } });
-  assert.equal(r.status, 200); assert.equal(r.json.change.customer_approval.summary, `이고객 고객 PM · ${T} · 검토 회의에서 승인`);
+  r = await tr(cr2.id, { action: 'approve' });
+  assert.equal(r.status, 200, 'no 422 customer_approval_required'); assert.equal(r.json.change.status, 'APPROVED');
+  assert.equal(r.json.change.customer_approval.checked, false); assert.equal(r.json.change.customer_approval.summary, '');
+  assert.ok(!r.json.change.history.some((h) => h.action_type === 'CUSTOMER_APPROVAL'), 'no check → no check history row');
   assert.deepEqual(r.json.change.stakeholders.map((x) => x.name).slice(0, 3), ['최민석', '박협력', '이고객'], 'Drawer gets the 01 stakeholders (requester autocomplete)');
   server.close();
 });
 
-test('US-2 legacy APPROVED CR: no record → 승인 기록 추가 saves it, status unchanged; UNDER_REVIEW refuses (409)', async () => {
+test('US-2 고객 확인 체크 editable on any CR via PATCH customer-approval (no 409 by status); legacy 4-field record reads as checked', async () => {
   const { server, client, db } = await boot();
   const A = await setup(client); await toPhase(A, 'DEVELOPMENT');
   const cr = (await A.c('POST', `${A.purl}/changes`, { title: '옛 CR' })).json.change;
-  let r = await A.c('PATCH', `${A.purl}/changes/${cr.id}/customer-approval`, { customer_approval: CA });
-  assert.equal(r.status, 409);
-  await db.run(`UPDATE change_requests SET status = 'IMPLEMENTED', customer_approval = '{}' WHERE id = ?`, [cr.id]);
+  const put = (body) => A.c('PATCH', `${A.purl}/changes/${cr.id}/customer-approval`, { customer_approval: body });
+  let r = await put({ checked: true, note: '구두 확인' });
+  assert.equal(r.status, 200, 'DRAFT CR may be checked (was 409)');
+  r = await A.c('GET', `${A.purl}/changes/${cr.id}`);
+  assert.equal(r.json.change.status, 'DRAFT', 'status unchanged'); assert.equal(r.json.change.customer_approval.checked, true); assert.equal(r.json.change.customer_approval.note, '구두 확인');
+  r = await put({ checked: false });
+  assert.equal(r.status, 200); r = await A.c('GET', `${A.purl}/changes/${cr.id}`);
+  assert.equal(r.json.change.customer_approval.checked, false); assert.equal(r.json.change.customer_approval.checked_by_name, '', 'who/when cleared on uncheck');
+  assert.ok(r.json.change.history.some((h) => h.action_type === 'CUSTOMER_APPROVAL' && h.new_value === '고객 확인 체크 해제'));
+  // legacy IMPLEMENTED CR with a full pre-2026-10-21 record counts as checked; without one, a check can be added and status stays
+  await db.run(`UPDATE change_requests SET status = 'IMPLEMENTED', customer_approval = ? WHERE id = ?`, [JSON.stringify(CA), cr.id]);
+  r = await A.c('GET', `${A.purl}/changes/${cr.id}`); assert.equal(r.json.change.customer_approval.recorded, true);
+  assert.match(r.json.change.customer_approval.summary, /^✓ 고객 확인 · 이수진 차장 · .* · 이메일 회신$/);
+  await db.run(`UPDATE change_requests SET customer_approval = '{}' WHERE id = ?`, [cr.id]);
   r = await A.c('GET', `${A.purl}/changes/${cr.id}`); assert.equal(r.json.change.customer_approval.recorded, false);
-  r = await A.c('PATCH', `${A.purl}/changes/${cr.id}/customer-approval`, { customer_approval: { ...CA, method: '' } });
-  assert.equal(r.status, 422);
-  r = await A.c('PATCH', `${A.purl}/changes/${cr.id}/customer-approval`, { customer_approval: CA });
-  assert.equal(r.status, 200); assert.equal(r.json.change.status, 'IMPLEMENTED'); assert.equal(r.json.change.customer_approval.recorded, true);
+  r = await put({ checked: true });
+  assert.equal(r.status, 200); r = await A.c('GET', `${A.purl}/changes/${cr.id}`);
+  assert.equal(r.json.change.status, 'IMPLEMENTED'); assert.equal(r.json.change.customer_approval.recorded, true);
   server.close();
 });
 
