@@ -21,12 +21,15 @@ async function boot() {
  * lower it. Idle clients close after 5 s and attachDatabasePool keeps the instance alive until they have, so a suspended
  * instance never holds a Neon connection. */
 const POOL_MAX = Math.max(1, Math.min(Number(process.env.DB_POOL_MAX) || 2, 2));
+/* No query or open transaction may outlive the function (maxDuration 60 s): past this Postgres cancels it (503 db_timeout) and the
+ * connection goes back to the pool instead of staying busy on Neon after Vercel has given up on the request. */
+const STATEMENT_TIMEOUT_MS = Math.max(1_000, Number(process.env.DB_STATEMENT_TIMEOUT_MS) || 30_000);
 const transient = (e) => /couldn't connect to compute node|connection slots|too many connections|out of memory|ECONNREFUSED|ECONNRESET|ETIMEDOUT|timeout exceeded when trying to connect|Connection terminated/i.test(`${e && e.message} ${e && e.code}`)
   || ['53300', '53200', '57P01', '57P03', '08006', '08001'].includes(e && e.code);
 /** A Neon compute that is waking up or briefly full refuses connections: retry with backoff instead of a 500 at once. */
 async function openWithRetry(url, delays = [300, 1000, 2500]) {
   for (let i = 0; ; i++) {
-    try { return await openDb({ url, max: POOL_MAX, idleTimeoutMillis: 5_000, connectionTimeoutMillis: 5_000, onPool: attachDatabasePool }); }
+    try { return await openDb({ url, max: POOL_MAX, idleTimeoutMillis: 5_000, connectionTimeoutMillis: 5_000, statementTimeoutMs: STATEMENT_TIMEOUT_MS, onPool: attachDatabasePool }); }
     catch (e) {
       if (i >= delays.length || !transient(e)) throw e;   // openDb already ended this attempt's pool
       console.warn(`[vercel] boot: db not ready (${e.code || ''} ${e.message}), retry ${i + 1} in ${delays[i]}ms`);

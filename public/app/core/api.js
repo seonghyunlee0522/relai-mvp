@@ -13,19 +13,27 @@ function phoneReadOnly() {
 
 export async function api(method, url, body) {
   if (method !== 'GET' && isPhone() && !PHONE_WRITE_OK.some((re) => re.test(url))) throw phoneReadOnly();
-  const res = await fetch(url, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-    credentials: 'same-origin',
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+  } catch {   // offline / connection cut: the browser's own text ('Failed to fetch', 'Load failed') must not reach the toast
+    const e = new Error(method === 'GET' ? '네트워크 연결이 불안정합니다. 연결을 확인한 뒤 다시 시도해 주세요.'
+      : '네트워크 연결이 끊겨 저장 여부를 확인하지 못했습니다. 새로고침해서 반영됐는지 확인한 뒤 다시 시도해 주세요.');
+    e.status = 0; e.code = 'network'; e.fields = {}; e.error = null;
+    throw e;
+  }
   let data = null;
   try { data = await res.json(); } catch { /* empty */ }
   if (!res.ok) {
     if (res.status === 401 && !location.pathname.match(/^\/(login|signup|invite)/)) { location.href = '/login'; }
     if (res.status === 403 && data?.error?.code === 'account_suspended') { location.href = '/login?suspended=1'; }
     if (res.status === 402 && ['plan_limit_reached', 'AI_CREDIT_INSUFFICIENT'].includes(data?.error?.code)) window.dispatchEvent(new CustomEvent('relai:plan-limit', { detail: data.error }));   // shared/upgrade.js → plans page
-    const e = new Error(data?.error?.message || '요청을 처리하지 못했습니다.');
+    const e = new Error(data?.error?.message || (res.status >= 500 ? '서버가 잠시 응답하지 못했습니다. 잠시 후 다시 시도해 주세요.' : '요청을 처리하지 못했습니다.'));   // 5xx without JSON = boot 503 / platform error page
     e.status = res.status; e.code = data?.error?.code; e.fields = data?.error?.fields || {}; e.error = data?.error || null;   // full error payload (AI credit balance/required etc.)
     throw e;
   }

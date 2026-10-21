@@ -4,7 +4,7 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import pg from 'pg';
-const OUT = process.env.OUT || '.'; const LB = 'http://127.0.0.1:4100';
+const OUT = process.env.OUT || '.'; const LB = `http://127.0.0.1:${process.env.LB_PORT || 4100}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ctl = (q) => fetch(`http://127.0.0.1:55492${q}`).then((r) => r.json());
 const ai = (m) => fetch(`http://127.0.0.1:4199/__mode?m=${m}`).then((r) => r.text());
@@ -54,7 +54,7 @@ await probe('home right after kill', 'GET', HOME); await probe('home again', 'GE
 
 scenario = 'S5 connection slots exhausted (53300)';
 const hogs = []; for (let i = 0; i < 120; i++) { const c = new pg.Client({ connectionString: 'postgres://hog:sim@127.0.0.1:55490/relai_fault' }); try { await c.connect(); hogs.push(c); } catch { break; } }
-rows.push({ scenario, label: 'hog connections held', value: hogs.length }); console.log('hogs', hogs.length);
+rows.push({ scenario, label: 'hog connections held', value: hogs.length, dbMem: execFileSync('docker', ['stats', '--no-stream', '--format', '{{.MemUsage}}', 'relai-neonsim']).toString().trim() }); console.log('hogs', hogs.length);
 await ctl('/kill'); await sleep(300);
 await probe('home', 'GET', HOME); await probe('req create', 'POST', `${P}/requirements`, { title: '슬롯 부족 중 저장', type: 'FUNCTIONAL', priority: 'MEDIUM' }); await probe('health', 'GET', '/health');
 for (const c of hogs) await c.end().catch(() => {});
