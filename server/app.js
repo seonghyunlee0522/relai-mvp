@@ -784,12 +784,12 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     await tx(db, (d) => RB.saveBaseline(d, project, req.body, req.user.id));
     res.json({ baseline: await RB.loadBaseline(db, project) });
   }));
-  // complete = 승인 기록 + (confirm_unconfirmed) 범위 내 미확정 일괄 확정 + 완료, all or nothing; reopen = 완료 취소
+  // complete = 진행 여부 체크 + (confirm_unconfirmed) 범위 내 미확정 일괄 확정 + 완료, all or nothing; reopen = 체크 해제
   app.post(`${rbase}/baseline/:action(complete|reopen)`, guard, wrap(async (req, res) => {
     const project = (await loadProject(req, res)); if (!project || !mutable(res, project)) return;
-    const body = req.params.action === 'complete' && req.body && typeof req.body === 'object' ? req.body : null;
+    const body = req.body && typeof req.body === 'object' ? req.body : null;
     const r = await tx(db, (d) => RB.setBaselineStatus(d, project, req.params.action, req.user.id, body));
-    if (r.error === 'not_found') return fail(res, 404, 'not_found', '요구사항 확정 승인 업무를 찾을 수 없습니다.');
+    if (r.error === 'not_found') return fail(res, 404, 'not_found', '요구사항 확정 확인 업무를 찾을 수 없습니다.');
     res.json({ baseline: await RB.loadBaseline(db, project), confirmed: r.confirmed || 0, summary: await R.requirementStats(db, project.id), guide: await guideResponse(project) });
   }));
   // 요구사항 정의서 download (PDF / Word) — read-only like the 사업수행계획서 export

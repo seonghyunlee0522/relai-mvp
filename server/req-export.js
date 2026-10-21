@@ -4,8 +4,8 @@
  *
  * Fixed structure (an empty part prints a fixed sentence instead of disappearing):
  *   표지 → 개정 이력 → 1. 개요 (목표 1줄 · 적용 환경 · 환경·조건, batch7 #2) → 2. 범위 내 요구사항 (ID · 제목 · 유형 · 우선순위 · 담당자 · 완료 조건, 유형별)
- *   → 3. 범위 외 요구사항 (ID · 제목) → 4. 승인 (고객사 승인자 · 승인일 / 수행사 PM, 서명 칸 비움; 승인 전 진행 사유)
- * Version: 승인 전 v0.9 (초안) + footer "승인 전 초안" · 승인 후 v1.0 (02 has no re-approval state). Archived requirements are left out.
+ *   → 3. 범위 외 요구사항 (ID · 제목) → 4. 확인 (고객사 / 수행사 PM, 서명 칸 비움 + 진행 여부 체크 줄)
+ * Version: 체크 전 v0.9 (초안) + footer "초안" · 체크 후 v1.0. Archived requirements are left out.
  */
 import { REQ_TYPE, REQ_PRIORITY } from '../public/app/shared/constants.js';
 import { REQ_TYPES } from './requirements.js';
@@ -48,9 +48,10 @@ export function buildReqDocMarkdown(c, reqs, baseline, { workspaceName = '', aut
   h2('3. 범위 외 요구사항');
   L.push(outScope.length ? table(['ID', '제목'], outScope.map((r) => [r.display_id, r.title])) : NO_OUT_OF_SCOPE);
 
-  h2('4. 승인');
-  L.push(...approvalLines({ status: baseline.status, date: baseline.approval.date, approver: baseline.approver, method_label: baseline.method_label,
-    evidence: baseline.approval.evidence, conditions: baseline.approval.conditions, bypass: baseline.bypass }, { stakeholders: c.stakeholders || [], author }));
+  h2('4. 확인');
+  const day = baseline.completed_at ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(baseline.completed_at)) : '';
+  L.push(...approvalLines({ status: baseline.status, date: baseline.approval.date || day, approver: baseline.approver, checked_by_name: baseline.completed_by_name || '', checked_on: day,
+    note: baseline.approval.note, conditions: baseline.approval.conditions }, { stakeholders: c.stakeholders || [], author }));
 
   return { title: `${pf.name} ${REQ_DOC_TITLE}`, markdown: L.join('\n'), version: v.version, footer: v.footer, fileVersion: v.file };
 }

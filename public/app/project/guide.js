@@ -59,9 +59,8 @@ export const projectHead = (p, g, { tab = null, title = '', badges = null } = {}
 
 /**
  * Dialogs for changing the current phase. Resolves true when the transition went through.
- * Every way out of 01 착수 / 02 요구사항 정의 (What's Next button, ?move=next from the guide) passes here, so the
- * approval soft gates live here (APPROVAL_GATES): 착수 결과 승인 / 요구사항 기준선 승인 not complete → record it first, or leave
- * a reason (stored in the gate step note as "[승인 전 진행] 사유 · 날짜 · 이름"). The server never blocks (확인 후 허용). */
+ * Every phase move (What's Next button, ?move=next from the guide) passes here, so the soft gates live here (APPROVAL_GATES —
+ * only 05→06 테스트 준비 since 2026-10-21; 착수 결과 / 요구사항 확정 확인 are 진행 여부 체크 and never stop a move). The server never blocks. */
 /** REQUIRED activities still open in the phases before `target` (same rule as server/closing.js priorGaps — 완료보고서 6절 uses that number). */
 export const priorGaps = (g, target) => (g.phases || []).filter((p) => p.sequence < target.sequence)
   .flatMap((p) => (p.steps || []).filter((a) => a.importance === 'REQUIRED' && a.state !== 'COMPLETED' && a.state !== 'SKIPPED').map((a) => ({ sequence: p.sequence, phase_name: p.name, title: a.title, href: a.cta ? a.cta.href : null })));

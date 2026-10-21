@@ -34,7 +34,7 @@ export async function skeletonPlan(db, project) {
   // batch7 B3: one group per fixed phase node (the tasks go under the node; nothing new at the root). 안정화 is a 전환·오픈 task now.
   const groups = [
     { key: 'INITIATION', title: '착수', phase: 'INITIATION', plan: 'INITIATION', tasks: ['착수보고회', '사업수행계획서 작성'].map((title) => ({ title })) },
-    { key: 'REQUIREMENTS', title: '요구사항 정의', phase: 'REQUIREMENTS', plan: 'REQUIREMENTS', tasks: ['요구사항 수집·정의', '요구사항 기준선 승인'].map((title) => ({ title })) },
+    { key: 'REQUIREMENTS', title: '요구사항 정의', phase: 'REQUIREMENTS', plan: 'REQUIREMENTS', tasks: ['요구사항 수집·정의', '요구사항 확정 확인'].map((title) => ({ title })) },
     { key: 'ANALYSIS_DESIGN', title: '분석·설계', phase: 'ANALYSIS_DESIGN', plan: 'ANALYSIS_DESIGN', tasks: ['상세 요구사항 분석', '화면 설계', 'DB 설계', ...(yes('has_external_integration') ? ['인터페이스 설계'] : [])].map((title) => ({ title })) },
     ...(wantsDm(project) ? [{ key: 'DATA_MIGRATION', title: '데이터 이관', phase: 'TRANSITION_GO_LIVE', plan: 'DATA_MIGRATION', tasks: ['이관 대상 분석·매핑', '데이터 이관·검증'].map((title) => ({ title })) }] : []),
     { key: 'DEVELOPMENT', title: '구현', phase: 'DEVELOPMENT', plan: 'DEVELOPMENT', tasks: reqs.length ? reqs.map((r) => ({ title: `${r.display_id} ${r.title}`.slice(0, 200), requirement_id: r.id })) : [{ title: '기능 구현' }] },

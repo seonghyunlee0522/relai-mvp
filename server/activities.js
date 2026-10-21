@@ -272,6 +272,8 @@ export function interfaceEmphasis(traits) {
 const DM_IMPORTANCE = { YES: 'REQUIRED', TBD: 'RECOMMENDED', NO: 'OPTIONAL' };
 export function effectiveImportance(phaseKey, stepKey, stored, traits) {
   if (phaseKey === 'TRANSITION_GO_LIVE' && stepKey === 'DATA_MIGRATION' && traits && DM_IMPORTANCE[traits.data_migration]) return DM_IMPORTANCE[traits.data_migration];
+  // 진행 여부 체크 (2026-10-21) is never 필수, whatever an older row says (migration 69 also rewrites the rows)
+  if ((stepKey === 'APPROVAL' || stepKey === 'BASELINE_APPROVAL') && stored === 'REQUIRED') return 'RECOMMENDED';
   return stored;
 }
 

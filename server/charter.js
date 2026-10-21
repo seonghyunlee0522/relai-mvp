@@ -78,7 +78,10 @@ function kickoffBlock(model, d) {
 function approvalBlock(model, d) {
   const g = model.initiation_gate && model.initiation_gate.approval; if (!g) return null;
   const a = d.approval || {};
-  return { status: g.status, approver: g.approver, date: a.date || '', method: a.method || '', method_label: g.method_label, evidence: a.evidence || '', conditions: a.conditions || '', bypass: g.bypass };
+  // 진행 여부 체크 (2026-10-21): checked = step done; date = the check day (legacy records keep their 승인일)
+  const day = g.checked_at ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(g.checked_at)) : '';
+  return { status: g.status, approver: g.approver, date: a.date || day, method: a.method || '', method_label: g.method_label, evidence: a.evidence || '', conditions: a.conditions || '', bypass: null,
+    checked: Boolean(g.checked), checked_by_name: g.checked_by_name || '', checked_on: day, note: a.note || '', summary: g.summary || '' };
 }
 
 /* ---------- AI prompt block ---------- */

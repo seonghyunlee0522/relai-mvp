@@ -28,8 +28,8 @@ export function diffLine(r, field, before, after) {
 export function changePromptDialog({ adding = false, diff = '' } = {}) {
   return new Promise((resolve) => {
     const el = document.createElement('div'); el.className = 'scrim';
-    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cgT" data-dialog="req-change" tabindex="-1"><h3 id="cgT">${adding ? '승인된 요구사항에 새 요구사항을 추가하려 합니다' : '확정된 요구사항을 바꾸려 합니다'}</h3>
-      <div class="dialog__b">${adding ? '고객이 새로 요청한 요구사항이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 원래 승인 범위에 있었는데 빠뜨린 것이면 그냥 추가해도 됩니다.' : '고객 요청으로 내용이 바뀌는 것이면 변경 요청으로 등록해 영향(일정·공수)을 검토하고 승인받으세요. 오타·표현 수정이면 그냥 저장해도 됩니다.'}</div>${raw(diff ? html`<p class="dialog__diff" data-diff>${diff}</p>` : '')}
+    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cgT" data-dialog="req-change" tabindex="-1"><h3 id="cgT">${adding ? '확정된 요구사항에 새 요구사항을 추가하려 합니다' : '확정된 요구사항을 바꾸려 합니다'}</h3>
+      <div class="dialog__b">${adding ? '고객이 새로 요청한 요구사항이면 변경 요청으로 등록해 영향(일정·공수)을 정리하고 반영 여부를 결정하세요. 원래 범위에 있었는데 빠뜨린 것이면 그냥 추가해도 됩니다.' : '고객 요청으로 내용이 바뀌는 것이면 변경 요청으로 등록해 영향(일정·공수)을 정리하고 반영 여부를 결정하세요. 오타·표현 수정이면 그냥 저장해도 됩니다.'}</div>${raw(diff ? html`<p class="dialog__diff" data-diff>${diff}</p>` : '')}
       <div class="actions actions--stack"><button class="btn btn--ghost" data-v="cancel">취소</button><span class="actions__sp"></span><button class="btn btn--secondary" data-v="save">${adding ? '그냥 추가' : '단순 수정으로 저장'}</button><button class="btn btn--primary" data-v="cr">변경 요청 만들기</button></div></div>`;
     const done = (v) => { el.remove(); resolve(v); };
     el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; } done(b.dataset.v === 'cancel' ? null : b.dataset.v); });
@@ -46,9 +46,9 @@ export async function createChangeDraft(pid, { title, lines, requirementIds = []
   const c = res.change;
   // R3b F9: open the new CR's drawer right away (after the caller's synchronous clean-up); bulk edits that keep working pass open:false → toast link
   const go = () => navigate(`/app/projects/${pid}/changes?sel=${c.id}`);
-  if (!open) { toastAction(`변경 요청 ${c.display_id} 초안을 만들었습니다. 승인되면 요구사항을 수정하세요.`, { label: '변경 요청 열기', ms: 12000, onAction: go }); return c; }
+  if (!open) { toastAction(`변경 요청 ${c.display_id} 초안을 만들었습니다. 반영하기로 결정(승인)하면 요구사항을 수정하세요.`, { label: '변경 요청 열기', ms: 12000, onAction: go }); return c; }
   const back = location.pathname + location.search;
-  setTimeout(() => { go(); toastAction(`변경 요청 ${c.display_id} 초안을 만들었습니다. 승인되면 요구사항을 수정하세요.`, { label: '요구사항으로 돌아가기', ms: 8000, onAction: () => navigate(back) }); }, 0);
+  setTimeout(() => { go(); toastAction(`변경 요청 ${c.display_id} 초안을 만들었습니다. 반영하기로 결정(승인)하면 요구사항을 수정하세요.`, { label: '요구사항으로 돌아가기', ms: 8000, onAction: () => navigate(back) }); }, 0);
   return c;
 }
 

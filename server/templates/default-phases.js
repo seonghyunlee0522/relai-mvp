@@ -15,7 +15,9 @@ export const TEST_PLAN_TITLE = '요구사항별 테스트 준비';
 export const TEST_PLAN_DESCRIPTION = '범위 내 확정 요구사항마다 테스트를 연결합니다. 테스트 대신 다른 방법으로 확인한다면 제외 사유를 남깁니다.';
 export const TEST_PLAN_CRITERIA = '범위 내 요구사항이 모두 테스트와 연결되었거나 제외 사유가 있습니다.';
 /** 06 ACCEPTANCE (Phase 6 US-2): 완료 = 범위 내 확정 요구사항이 모두 승인된 검수에 들어 있음. Migration 37 copies these into existing projects. */
-export const ACCEPTANCE_DESCRIPTION = '범위 내 확정 요구사항을 검수에 묶어 고객 검수를 요청하고, 고객 승인(누가·언제·어떻게)을 기록합니다. 1차·2차로 나눠도 합계로 판단합니다.';
+export const ACCEPTANCE_DESCRIPTION_V1 = '범위 내 확정 요구사항을 검수에 묶어 고객 검수를 요청하고, 고객 승인(누가·언제·어떻게)을 기록합니다. 1차·2차로 나눠도 합계로 판단합니다.';
+/** 2026-10-21 (승인 절차 제거): no customer sign-off record — the result is recorded and an optional 고객 확인 is a checkbox. Migration 69. */
+export const ACCEPTANCE_DESCRIPTION = '범위 내 확정 요구사항을 검수에 묶어 결과(승인·보완·반려)를 기록합니다. 고객과 확인했으면 체크해 둡니다. 1차·2차로 나눠도 합계로 판단합니다.';
 export const ACCEPTANCE_CRITERIA = '범위 내 확정 요구사항이 모두 승인된 검수에 들어 있습니다.';
 /* Phase 7 (migration 38): 07 운영 및 유지보수 copy */
 export const OPERATIONS_DESCRIPTION = '운영 조직에 인수인계하고, 완료보고서로 결과를 정리한 뒤 프로젝트를 종료합니다.';
@@ -33,9 +35,22 @@ export const IMPORTANCE = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
 export const IMPORTANCE_LABEL = { REQUIRED: '필수', RECOMMENDED: '권장', OPTIONAL: '선택' };
 /** 착수보고회(KICKOFF) importance — one constant so it can flip to REQUIRED (spec Phase 1 D1/Q1). Migration 31 copies it into existing projects. */
 export const KICKOFF_IMPORTANCE = 'RECOMMENDED';
-/** 착수 결과 승인(APPROVAL) importance (batch7 #5): 권장 — RELAI is not a customer-shared tool, so an internal project or a startup is never
- * held at 01 waiting for a signature. Migration 49 copies it into existing projects' open APPROVAL steps. 02 요구사항 확정 승인 stays 필수. */
+/** 착수 결과 확인(APPROVAL) importance (batch7 #5): 권장 — RELAI is not a customer-shared tool, so an internal project or a startup is never
+ * held at 01 waiting for a signature. Migration 49 copies it into existing projects' open APPROVAL steps. */
 export const APPROVAL_IMPORTANCE = 'RECOMMENDED';
+/** 2026-10-21 founder: "승인 받는 절차는 모두 제거 … 진행했는지 여부를 체크". The two former approval activities are 진행 여부 체크 (권장).
+ * [step_key, old seeded {title, description, criteria}, new {title, description, criteria}] — migration 69 rewrites rows still holding the old text. */
+export const CHECK_STEP_COPY = [
+  ['APPROVAL', { title: '착수 결과 승인(고객·스폰서)', description: '정리한 목표·범위·일정·추진 조직을 고객이나 스폰서에게 승인받고 그 근거를 남깁니다.', criteria: '승인자·승인일·승인 방법·근거가 기록되어 있습니다.' },
+    { title: '착수 결과 공유·확인', description: '정리한 목표·범위·일정·추진 조직을 고객이나 스폰서와 공유하고 확인했는지 체크합니다. 승인 기록이나 증빙은 필요 없습니다.', criteria: '진행 여부가 체크되어 있습니다.' }],
+  ['BASELINE_APPROVAL', { title: '요구사항 확정 승인(고객)', description: '확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 기준이 됩니다.', criteria: '승인자·승인일·방법·근거가 기록되어 있습니다.' },
+    { title: '요구사항 확정 내용 고객 확인', description: '확정한 요구사항을 고객과 확인했는지 체크합니다. 승인 기록이나 증빙은 필요 없습니다. 확정한 요구사항이 이후 설계·개발·검수의 기준이 됩니다.', criteria: '진행 여부가 체크되어 있습니다.' }],
+];
+const COPY = Object.fromEntries(CHECK_STEP_COPY.map(([k, , n]) => [k, n]));
+export const ACCEPTANCE_TITLE_V1 = '검수 / 인수 승인';
+export const ACCEPTANCE_TITLE = '검수 / 인수';
+export const TRANSITION_DESCRIPTION_V1 = '검수로 인수 승인을 받고, 전환 계획·데이터 이관·교육을 거쳐 서비스를 오픈하고 안정화합니다.';
+export const TRANSITION_DESCRIPTION = '검수 결과를 기록하고, 전환 계획·데이터 이관·교육을 거쳐 서비스를 오픈하고 안정화합니다.';
 
 /** 03 분석·설계 phase description; the last sentence is Phase 3 US-6 (migration 33 copies it into existing projects). */
 export const ANALYSIS_DESIGN_DESCRIPTION_V1 = '요구사항의 “무엇”을 실행 가능한 “어떻게”로 구체화하고, 요구사항 기반 WBS와 실행 계획을 세웁니다.';
@@ -55,7 +70,7 @@ export const DEFAULT_PHASES = [
       A('MILESTONES', '상위 일정 / 마일스톤 확인', '프로젝트 시작일·종료 예정일과 반드시 지켜야 하는 주요 시점을 정리합니다. WBS의 세부 일정과는 구분되는 프로젝트 수준의 개략 일정입니다.', '주요 일정 또는 마일스톤이 1개 이상 작성되어 있습니다.', 'REQUIRED', 'definition'),
       A('OPERATIONS', '프로젝트 운영 방식 확인', '회의, 보고, 의사결정, 커뮤니케이션 방식을 정합니다.', '운영 방식 항목이 작성되어 있습니다.', 'RECOMMENDED', 'definition'),
       A('KICKOFF', '착수보고회 준비·개최', '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고 결과를 기록합니다.', '착수보고회가 열렸고 회의록 요약 또는 결정사항이 기록되어 있습니다.', KICKOFF_IMPORTANCE, 'definition'),
-      A('APPROVAL', '착수 결과 승인(고객·스폰서)', '정리한 목표·범위·일정·추진 조직을 고객이나 스폰서에게 승인받고 그 근거를 남깁니다.', '승인자·승인일·승인 방법·근거가 기록되어 있습니다.', APPROVAL_IMPORTANCE, 'definition'),
+      A('APPROVAL', COPY.APPROVAL.title, COPY.APPROVAL.description, COPY.APPROVAL.criteria, APPROVAL_IMPORTANCE, 'definition'),
     ],
   },
   {
@@ -67,7 +82,7 @@ export const DEFAULT_PHASES = [
       A('PRIORITIZE', '우선순위 설정', '반드시 필요한 것과 있으면 좋은 것을 구분해 우선순위를 정합니다.', '모든 요구사항에 우선순위가 지정되어 있습니다.', 'RECOMMENDED', 'requirements'),
       A('SCOPE_CHECK', '범위 확정', '각 요구사항이 이번 범위 안에 있는지 결정하고, 범위 밖 항목은 별도로 표시합니다.', '범위가 결정되지 않은 요구사항이 없습니다.', 'REQUIRED', 'requirements'),
       A('CONFIRM', '요구사항 확정', '정리된 요구사항을 고객과 확인하고 확정합니다. 확정 이후의 변경은 변경 요청으로 관리합니다.', '범위 내 요구사항이 모두 확정 상태입니다.', 'REQUIRED', 'requirements'),
-      A('BASELINE_APPROVAL', '요구사항 확정 승인(고객)', '확정한 요구사항을 고객에게 보내 승인받고 그 근거를 남깁니다. 승인된 요구사항이 이후 설계·개발·검수의 기준이 됩니다.', '승인자·승인일·방법·근거가 기록되어 있습니다.', 'REQUIRED', 'requirements'),
+      A('BASELINE_APPROVAL', COPY.BASELINE_APPROVAL.title, COPY.BASELINE_APPROVAL.description, COPY.BASELINE_APPROVAL.criteria, 'RECOMMENDED', 'requirements'),
       A('INTERFACE', '인터페이스 · 데이터 · 보안 요구사항 정리', '외부 연계, 데이터, 보안, 인프라 등 비기능 영역의 요구사항을 별도로 확인합니다.', '인터페이스·데이터·보안 유형의 요구사항이 정리되어 있습니다.', 'OPTIONAL', 'requirements'),
     ],
   },
@@ -110,9 +125,9 @@ export const DEFAULT_PHASES = [
   },
   {
     key: 'TRANSITION_GO_LIVE', name: '전환 및 오픈', short: '전환·오픈', en: 'Transition & Go-Live',
-    description: '검수로 인수 승인을 받고, 전환 계획·데이터 이관·교육을 거쳐 서비스를 오픈하고 안정화합니다.',
+    description: TRANSITION_DESCRIPTION,
     steps: [
-      A('ACCEPTANCE', '검수 / 인수 승인', ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA, 'REQUIRED', 'acceptance'),   // Phase 6 US-2 (migration 37)
+      A('ACCEPTANCE', ACCEPTANCE_TITLE, ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA, 'REQUIRED', 'acceptance'),   // Phase 6 US-2 (migration 37)
       A('CUTOVER_PLAN', '전환 계획 수립', '운영 환경 전환 순서, 일정, 담당, 롤백 기준을 정리합니다.', '전환 계획이 정리되어 있습니다.', 'REQUIRED', null),
       A('DATA_MIGRATION', '데이터 이관', '이관 대상 데이터의 매핑, 리허설, 본 이관과 검증을 수행합니다.', '데이터 이관과 검증이 완료되어 있습니다.', 'OPTIONAL', null),
       A('TRAINING', '사용자 교육 / 매뉴얼', '사용자와 운영자에게 안내 자료를 전달하고 필요한 교육을 진행합니다.', '교육 또는 매뉴얼 전달이 완료되어 있습니다.', 'RECOMMENDED', null),

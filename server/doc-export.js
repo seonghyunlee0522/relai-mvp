@@ -24,23 +24,22 @@ export const textBlock = (text, empty = NONE) => {
 /** v0.9 초안 / v1.0 for an approval status (TODO · COMPLETED). */
 export function docVersion(status) {
   if (status === 'COMPLETED') return { version: 'v1.0', file: 'v1.0', footer: '' };
-  return { version: 'v0.9 (초안)', file: 'v0.9', footer: '승인 전 초안' };
+  return { version: 'v0.9 (초안)', file: 'v0.9', footer: '초안' };
 }
 /** 표지: title, project name in bold, key/value table, the draft notice when not approved, then a page break. */
 export function coverLines(title, name, pairs, footer) {
   const L = [`# ${title}`, '', `**${name}**`, '', kv(pairs)];
-  // K2: a changed approved document is waiting for 재승인, not a first 승인
-  if (footer) L.push('', `**${footer}** — ${/승인 후 변경/.test(footer) ? '재승인 전까지는' : '고객 승인 전에는'} 내용이 바뀔 수 있습니다.`);
+  if (footer) L.push('', `**${footer}** — 고객과 확인하기 전에는 내용이 바뀔 수 있습니다.`);
   L.push('', '<!-- pagebreak -->');
   return L;
 }
 /** The one auto 개정 이력 row matching the document state (approved on its 승인일, otherwise today's draft). */
-export const revisionRows = (status, { today, approvedOn, author }) => (status === 'TODO' ? [['v0.9', today, '초안', author]] : [['v1.0', approvedOn || today, '승인', author]]);
+export const revisionRows = (status, { today, approvedOn, author }) => (status === 'TODO' ? [['v0.9', today, '초안', author]] : [['v1.0', approvedOn || today, '확정', author]]);
 export const revisionTable = (rows) => table(['버전', '일자', '내용', '작성자'], rows);
 
 /**
- * 승인란: 고객사 approver (name/title, date once approved) and 수행사 PM; 서명 칸 always blank.
- * a = { status, date, approver: { name, title }, method_label, evidence, conditions, bypass }.
+ * 확인란: 고객사 (name/title of a legacy approver, else blank) and 수행사 PM; 서명 칸 always blank (paper convention only — RELAI asks for no
+ * sign-off since 2026-10-21). Below it the 진행 여부 체크 line. a = { status, date, approver, checked_by_name, checked_on, note, conditions, … }.
  */
 export function approvalLines(a, { stakeholders = [], author = '' } = {}) {
   const who = a.approver; const done = a.status === 'COMPLETED' || a.status === 'REAPPROVAL';
@@ -49,10 +48,7 @@ export function approvalLines(a, { stakeholders = [], author = '' } = {}) {
     ['고객사', who ? who.name : null, who ? who.title : null, null, done ? a.date : null],
     ['수행사', pm ? pm.name : author, pm ? pm.role : 'PM', null, null],
   ])];
-  if (done) L.push('', `승인 방법: ${a.method_label || '-'} · 근거: ${a.evidence || '-'}`);
-  if (a.status === 'REAPPROVAL') L.push('', '**승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.**');
+  L.push('', done ? `고객 확인: ✓ 체크됨${[a.checked_by_name, a.checked_on || a.date].some(Boolean) ? ` (${[a.checked_by_name, a.checked_on || a.date].filter(Boolean).join(' · ')})` : ''}${a.note ? ` · ${a.note}` : ''}` : '고객 확인: 아직 체크하지 않음');
   if (a.conditions) L.push('', '**조건 / 보완 요청**', textBlock(a.conditions));
-  // 01 착수 승인 is 권장 since batch7 #5: the gate writes the fixed reason '승인 없이 진행' instead of asking one
-  if (!done && a.bypass) L.push('', `**미승인 — ${a.bypass.reason === '승인 없이 진행' ? '승인 없이 진행' : `사유: ${a.bypass.reason}`}** (${[a.bypass.date, a.bypass.name].filter(Boolean).join(' · ')})`);
   return L;
 }

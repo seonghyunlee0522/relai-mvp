@@ -27,8 +27,8 @@ import { ACTIVITY_STATE } from '../shared/constants.js';
 import { TRAIT_FIELDS } from '../shared/project-traits.js';
 import { traitFields, traitGrid, wireTraitFields } from '../shared/trait-fields.js';
 import { josa } from '../shared/josa.js';
-import { planMenu, bindPlanMenu, isMeasurable, noApprovalLine, NO_REASON } from './initiation.js';
-import { approvalFields, collectApproval, approvalBody, approvalErrors, approvalStatusText, showApprovalErrors } from '../shared/approval.js';
+import { planMenu, bindPlanMenu, isMeasurable, noApprovalLine } from './initiation.js';
+import { approvalFields, collectApproval, approvalBody, approvalStatusText } from '../shared/approval.js';
 import { DEFINITION_SLUG, DEFINITION_TABS, definitionHref } from '../shared/lifecycle.js';
 import { charterParts } from './charter.js';
 import { ENV_GROUPS, ENV_TEXT, ENV_STATUS } from '../shared/environments.js';
@@ -64,12 +64,11 @@ const PURPOSE = {
   MILESTONES: '시작·종료 예정일과 반드시 지켜야 할 시점을 정리합니다. WBS의 세부 일정과는 다른 상위 일정입니다.',
   OPERATIONS: '회의·보고·소통·의사결정·변경관리·검수 방식을 정해 프로젝트 운영 규칙을 공유합니다.',
   KICKOFF: '고객과 수행팀이 목표·범위·일정을 처음 공식적으로 확인하는 착수보고회를 준비하고, 결과를 기록합니다.',
-  APPROVAL: '정리한 착수 결과를 고객·스폰서에게 승인받고 근거를 남깁니다. 승인된 내용이 이후 요구사항·변경·검수의 기준입니다.',
+  APPROVAL: '정리한 착수 결과를 고객·스폰서와 공유·확인했는지 체크합니다. 승인 기록이나 증빙은 필요 없습니다.',
 };
-const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '적용 환경 선택 →', STAKEHOLDERS: '관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →', KICKOFF: '착수보고회 준비 →', APPROVAL: '승인 기록 →' };
+const CTA_LABEL = { GOALS: '프로젝트 목표 입력 →', SCOPE: '적용 환경 선택 →', STAKEHOLDERS: '관계자 입력 →', MILESTONES: '상위 일정 입력 →', OPERATIONS: '운영 방식 입력 →', KICKOFF: '착수보고회 준비 →', APPROVAL: '진행 여부 체크 →' };
 const WIDE = new Set(['SCOPE', 'STAKEHOLDERS', 'MILESTONES', 'KICKOFF', 'APPROVAL']);
 const SECTION_FIELDS = { PROFILE: TRAIT_FIELDS, GOALS: ['goal', 'success_criteria'], SCOPE: ['environments', 'scope_in', 'scope_out', 'assumptions', 'constraints', 'initial_risks'], STAKEHOLDERS: ['stakeholders'], MILESTONES: ['key_dates'], OPERATIONS: ['operations', 'change_management', 'acceptance'], KICKOFF: ['kickoff'], APPROVAL: ['approval'] };
-const METHODS = [['SIGNED', '서명본 수령'], ['EMAIL', '이메일 회신'], ['KICKOFF', '착수보고회에서 승인'], ['OTHER', '기타']];
 const KICKOFF_WORDS = /킥오프|착수\s*보고/;
 const mmdd = (d) => (d ? `${d.slice(5, 7)}/${d.slice(8, 10)}` : '');
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -79,10 +78,10 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 const rowState = (s) => (s.status === 'COMPLETED' ? (s.changed_after_completion ? 'review' : 'done') : s.status === 'SKIPPED' ? 'skip' : s.has_data ? 'prog' : 'todo');
 const STATE_LABEL = { done: '완료', skip: '건너뜀', review: '확인 필요', prog: '진행 중', todo: '미시작' };
 const STATE_ICON = { done: '✓', skip: '—', review: '!', prog: '●', todo: '○' };
-const TAB_LABEL = { '': '개요', goals: '목표·범위', stakeholders: '관계자', milestones: '상위 일정', operations: '운영 방식', kickoff: '착수보고회', approval: '착수 승인' };
+const TAB_LABEL = { '': '개요', goals: '목표·범위', stakeholders: '관계자', milestones: '상위 일정', operations: '운영 방식', kickoff: '착수보고회', approval: '착수 확인' };
 const IMPORTANCE = { REQUIRED: '필수', RECOMMENDED: '권장' };
 /** 저장 → 자동 완료 toast (batch7 #10). */
-const DONE_TOAST = { GOALS: '목표와 성공 기준 작성을 완료했습니다.', SCOPE: '수행 범위 · 적용 환경 정리를 완료했습니다.', STAKEHOLDERS: '관계자 확인을 완료했습니다.', MILESTONES: '상위 일정 확인을 완료했습니다.', OPERATIONS: '운영 방식 확인을 완료했습니다.', KICKOFF: '착수보고회 기록을 완료했습니다.', APPROVAL: '착수 결과 승인 기록을 완료했습니다.' };
+const DONE_TOAST = { GOALS: '목표와 성공 기준 작성을 완료했습니다.', SCOPE: '수행 범위 · 적용 환경 정리를 완료했습니다.', STAKEHOLDERS: '관계자 확인을 완료했습니다.', MILESTONES: '상위 일정 확인을 완료했습니다.', OPERATIONS: '운영 방식 확인을 완료했습니다.', KICKOFF: '착수보고회 기록을 완료했습니다.', APPROVAL: '착수 결과 공유·확인을 체크했습니다.' };
 const isOpenWork = (s) => s && s.status !== 'COMPLETED' && s.status !== 'SKIPPED';
 
 export async function definitionPage(id, slug = '') {
@@ -103,11 +102,9 @@ export async function definitionPage(id, slug = '') {
   const u = `/app/projects/${p.id}`;
   const fresh = () => {   // definition + 프로젝트 기본 특성 (stored on the project)
     const x = { ...clone(m.definition), ...clone(m.project_traits) };
-    x.approval = { add_to_stakeholders: true, ...x.approval };
+    x.approval = { ...x.approval, checked: Boolean(sec('APPROVAL') && sec('APPROVAL').status === 'COMPLETED') };   // 진행 여부 체크 = the activity's 완료
     // 착수보고회 일시: prefilled from a 킥오프 / 착수보고 milestone (never a new milestone — spec US-1)
     if (!x.kickoff.datetime) { const kd = (x.key_dates || []).find((k) => k.date && KICKOFF_WORDS.test(k.title || '')); if (kd) { x.kickoff.datetime = `${kd.date}T10:00`; x.kickoff._prefilled = kd.title; } }
-    // KICKOFF 완료 → '착수보고회에서 승인' 기본 선택
-    if (!x.approval.method && sec('KICKOFF') && sec('KICKOFF').status === 'COMPLETED') x.approval.method = 'KICKOFF';
     return x;
   };
   const sec = (k) => m.sections.find((s) => s.key === k);
@@ -133,7 +130,7 @@ export async function definitionPage(id, slug = '') {
     const isCurrentPhase = ph && ph.is_current; const nx = g.next_phase;
     const review = m.sections.find((s) => s.status === 'COMPLETED' && s.changed_after_completion);
     const nowRow = ro ? '' : review && !cur
-      ? html`<div class="pv__now"><div><span class="pv__k">현재 해야 할 일</span><b>${josa(review.title, '을')} 다시 확인하세요.</b><p>${review.reapproval ? '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.' : '완료 처리 후 내용이 수정되었습니다. 확인 후 다시 완료 처리합니다.'}</p></div><button type="button" class="btn btn--primary" data-open="${review.key}">다시 확인 →</button></div>`
+      ? html`<div class="pv__now"><div><span class="pv__k">현재 해야 할 일</span><b>${josa(review.title, '을')} 다시 확인하세요.</b><p>완료 처리 후 내용이 수정되었습니다. 확인 후 다시 완료 처리합니다.</p></div><button type="button" class="btn btn--primary" data-open="${review.key}">다시 확인 →</button></div>`
       : curSec ? html`<div class="pv__now"><div><span class="pv__k">현재 해야 할 일</span><b>${curSec.title}</b><p>${PURPOSE[cur] || curSec.description}</p></div><button type="button" class="btn btn--primary" data-open="${cur}">${curSec.has_data ? '계속 작성 →' : CTA_LABEL[cur]}</button></div>`
       : html`<div class="pv__now pv__now--done"><div><span class="pv__k">착수 단계</span><b>착수 단계의 필요한 업무가 정리되었습니다.</b><p>${isCurrentPhase && nx ? `아래에서 다음 단계 ${no2(nx.sequence)} ${josa(nx.name, '으로')} 진행할 수 있습니다.` : '내용은 각 업무를 선택해 다시 볼 수 있습니다.'}</p></div></div>`;
     const rows = m.sections.map((s) => {   // a row = its tab (a link), the CTA = its tab with the drawer open
@@ -168,7 +165,7 @@ export async function definitionPage(id, slug = '') {
   /* ---------- Task tab: what has been entered for this tab's task(s) (P1-1) ---------- */
   const tabIdx = DEFINITION_TABS.findIndex(([x]) => x === slug);
   const tabHref = (x) => (x ? `${u}/definition/${x}` : `${u}/definition`);
-  /** The task after `key` in work order: same tab → its drawer; another tab → that tab; after 착수 승인 → 개요. */
+  /** The task after `key` in work order: same tab → its drawer; another tab → that tab; after 착수 확인 → 개요. */
   const nextTask = (key) => {
     const flat = DEFINITION_TABS.flatMap(([x, keys]) => keys.map((k) => [x, k])); const i = flat.findIndex(([, k]) => k === key);
     const nx = flat[i + 1]; if (!nx) return { label: '개요로', href: tabHref('') };
@@ -236,7 +233,7 @@ export async function definitionPage(id, slug = '') {
         <p class="hint">지원 환경(기기 또는 브라우저)을 1개 이상 고르고 저장하면 완료됩니다. 산출물·전제·제약·리스크는 선택 항목입니다.</p>`;
       case 'STAKEHOLDERS': return html`${raw(hierarchy(d.stakeholders))}
         <div class="def__tools">${raw(ro ? '' : html`<button type="button" class="btn btn--secondary btn--sm" id="sh-add">+ 직접 추가</button><button type="button" class="btn btn--secondary btn--sm" id="sh-xl">Excel 업로드</button><button type="button" class="link linkbtn def__tpl" id="sh-tpl">등록 템플릿 내려받기</button>`)}</div>
-        <div class="def__tblwrap"><p class="hint def__shhelp">고객 측 의사결정자(스폰서)와 실무 책임자(고객 PM)를 꼭 넣으세요. 승인자로 선택됩니다.</p>
+        <div class="def__tblwrap"><p class="hint def__shhelp">고객 측 의사결정자(스폰서)와 실무 책임자(고객 PM)를 꼭 넣으세요.</p>
         <table class="def__tbl def__tbl--sh"><thead><tr><th>조직 구분</th><th>조직(회사)</th><th>부서</th><th>이름</th><th>역할</th><th>주요 책임</th><th></th></tr></thead>
           <tbody>${raw(d.stakeholders.map((x) => html`<tr data-sh="${x.id}">
             <td><select class="select select--sm" data-shf="org_type" ${ro ? 'disabled' : ''}><option value="" ${x.org_type ? '' : 'selected'}>선택</option>${raw(Object.entries(ORG_TYPE).map(([v, l]) => html`<option value="${v}" ${x.org_type === v ? 'selected' : ''}>${l}</option>`).join(''))}</select></td>
@@ -244,7 +241,7 @@ export async function definitionPage(id, slug = '') {
             <td><input class="input input--sm" data-shf="department" value="${x.department || ''}" maxlength="100" placeholder="부서" ${ro ? 'disabled' : ''}></td>
             <td><input class="input input--sm" data-shf="name" value="${x.name || ''}" maxlength="100" placeholder="이름" ${ro ? 'disabled' : ''}></td>
             <td><input class="input input--sm" data-shf="role" value="${x.role || ''}" maxlength="100" placeholder="예: 고객 PM" ${ro ? 'disabled' : ''}></td>
-            <td><input class="input input--sm" data-shf="area" value="${x.area || ''}" maxlength="200" placeholder="예: 요구사항 최종 승인" ${ro ? 'disabled' : ''}></td>
+            <td><input class="input input--sm" data-shf="area" value="${x.area || ''}" maxlength="200" placeholder="예: 요구사항 최종 확인" ${ro ? 'disabled' : ''}></td>
             <td>${raw(ro ? '' : html`<button type="button" class="def__x" data-shdel="${x.id}" aria-label="삭제">×</button>`)}</td></tr>`).join(''))}
           ${raw(d.stakeholders.length ? '' : '<tr class="def__empty"><td colspan="7">아직 등록된 관계자가 없습니다. 직접 추가하거나 Excel 템플릿으로 한 번에 등록하세요.</td></tr>')}</tbody></table></div>
         <p class="hint">완료 처리하려면 조직 구분과 이름이 있는 관계자를 1명 이상 등록합니다.</p>`;
@@ -324,21 +321,18 @@ export async function definitionPage(id, slug = '') {
       <div class="field" data-field="kickoff.followups"><label>후속 조치 <small class="dim">내용 · 담당자 · 기한</small></label>${raw(klist('followups', k.followups, (it) => html`<input type="checkbox" data-klf="done" ${it.done ? 'checked' : ''} ${dis} aria-label="완료"><input class="input input--sm kl__text" data-klf="text" value="${it.text}" maxlength="300" placeholder="예: 회의록 송부" ${dis}><input class="input input--sm kl__owner" data-klf="owner" value="${it.owner || ''}" maxlength="100" placeholder="담당자" ${dis}><input class="input input--sm kl__due" type="date" data-klf="due" value="${it.due || ''}" ${dis}>`, '+ 후속 조치 추가'))}</div>
       <p class="hint">완료 처리하려면 일시가 지났고(개최됨), 회의록 요약 또는 결정사항이 1개 이상 있어야 합니다. 사내 소규모 과제처럼 착수보고회가 없으면 건너뛸 수 있습니다.</p>`;
   };
-  /* ---------- 착수 결과 승인 (US-2) ---------- */
+  /* ---------- 착수 결과 공유·확인 — 진행 여부 체크 (2026-10-21; was 착수 결과 승인 with 승인자·승인일·방법·근거) ---------- */
   const approvalForm = () => {
-    const a = d.approval; const s = sec('APPROVAL'); const kick = sec('KICKOFF');
-    const methods = METHODS.filter(([k]) => k !== 'KICKOFF' || !kick || kick.status !== 'SKIPPED');
+    const a = d.approval; const s = sec('APPROVAL');
     const pd = m.project_dates;
     const nOrg = (t) => (d.stakeholders || []).filter((x) => x.org_type === t).length;
-    return html`${raw(s && s.reapproval ? '<div class="notice notice--warn">승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요. 다시 승인받은 뒤 <b>다시 승인 완료</b>를 누릅니다.</div>' : '')}
-      ${raw(s && s.bypass ? html`<div class="notice notice--soft">승인 전 진행 — ${s.bypass.reason === NO_REASON ? NO_REASON : `사유: ${s.bypass.reason}`} (${[s.bypass.date, s.bypass.name].filter(Boolean).join(' · ')}). 승인을 받으면 아래에 기록하세요.</div>` : '')}
-      <div class="apv__what"><div class="apv__wh"><b>승인받을 내용</b>${raw(planMenu())}</div>
+    return html`<div class="apv__what"><div class="apv__wh"><b>공유·확인할 내용</b>${raw(planMenu())}</div>
         <dl><div><dt>목표</dt><dd>${d.goal || (d.success_criteria[0] && d.success_criteria[0].text) || '작성되지 않음'}</dd></div>
         <div><dt>범위</dt><dd>${d.scope_in.length ? `수행 ${d.scope_in.length}건 (${d.scope_in.slice(0, 2).map((x) => x.text).join(', ')}${d.scope_in.length > 2 ? ' …' : ''})${d.scope_out.length ? ` · 제외 ${d.scope_out.length}건` : ''}` : '작성되지 않음'}</dd></div>
         <div><dt>일정</dt><dd>${pd.planned_start_date ? `${fmtShort(pd.planned_start_date)} ~ ${fmtShort(pd.planned_end_date)}` : '기간 미정'}${d.key_dates.length ? ` · 마일스톤 ${d.key_dates.length}건` : ''}</dd></div>
         <div><dt>추진 조직</dt><dd>${(d.stakeholders || []).length ? ['CLIENT', 'OWN', 'PARTNER', 'OTHER'].filter((t) => nOrg(t)).map((t) => `${ORG_TYPE[t]} ${nOrg(t)}명`).join(' · ') : '작성되지 않음'}</dd></div></dl></div>
-      ${raw(approvalFields(a, { people: d.stakeholders || [], methods, disabled: ro, approverHint: html`<small class="dim">스폰서 또는 고객 PM</small>`, evidencePh: "예: 2026-11-03 이수진 차장 회신 메일 '사업수행계획서 v1.0 승인'" }))}
-      <p class="hint">승인자·승인일·승인 방법·근거가 있어야 완료 처리할 수 있습니다. 승인 후 목표·범위·일정이나 승인자 정보가 바뀌면 '확인 필요'로 표시됩니다.</p>`;
+      ${raw(approvalFields({ ...a, checked_by_name: (s && s.completed_by_name) || a.checked_by_name, checked_at: (s && s.completed_at) || a.checked_at }, { label: '착수 결과를 고객·스폰서와 공유·확인했나요?', disabled: ro, notePh: '예: 11/03 착수보고회에서 사업수행계획서로 확인' }))}
+      <p class="hint">승인 기록이나 증빙은 필요 없습니다. 진행했으면 체크하고 저장하세요. 체크하지 않아도 다음 단계로 넘어갈 수 있습니다.</p>`;
   };
   /** 프로젝트 기본 특성: same drawer and save flow, but not an activity — no 완료 처리 / 건너뛰기, saving never completes anything. */
   const profileDrawer = () => html`<aside class="wdrawer ${open.full ? 'wdrawer--full' : ''}" id="wdrawer" role="dialog" aria-labelledby="wdT">
@@ -355,12 +349,11 @@ export async function definitionPage(id, slug = '') {
     const body = skipped
       ? html`<div class="wd__skipped"><i class="st st--skip" aria-hidden="true">—</i><div><b>이 업무는 건너뛴 상태입니다.</b><p>이번 프로젝트에서는 수행하지 않는 것으로 기록되어 있습니다. 필요해지면 다시 시작할 수 있습니다.</p>${raw(ro ? '' : '<button type="button" class="btn btn--primary btn--sm" data-wact="resume">업무 다시 시작 →</button>')}</div></div>`
       : html`${raw(st === 'review' ? '<div class="notice notice--soft">완료 처리 후 내용이 수정되었습니다. 확인한 뒤 다시 완료 처리하세요.</div>' : '')}<div class="wd__form" data-sec="${s.key}">${raw(form(s.key))}</div>`;
-    // batch7 #10: [닫기] [저장] only — 저장 completes once the minimum content is there; 다시 승인받은 뒤의 확인은 승인 서랍에만 남김
+    // batch7 #10: [닫기] [저장] only — 저장 completes once the minimum content is there (착수 결과 확인: once the box is checked)
     const foot = ro || skipped ? '' : html`<div class="wd__f">
-      ${raw(s.skippable && !completed ? '<button type="button" class="link linkbtn wd__skip" data-wact="skip">↷ 이 업무 건너뛰기</button>' : s.key === 'APPROVAL' && !completed ? html`<span class="wd__stat hint" id="apv-stat">${approvalStatusText(d.approval || {})}</span>` : '<span></span>')}
+      ${raw(s.skippable && !completed ? '<button type="button" class="link linkbtn wd__skip" data-wact="skip">↷ 이 업무 건너뛰기</button>' : s.key === 'APPROVAL' ? html`<span class="wd__stat hint" id="apv-stat">${approvalStatusText(d.approval || {})}</span>` : '<span></span>')}
       <span class="wd__btns"><span class="wd__stat" id="wd-stat">${dirty ? '저장되지 않은 변경' : ''}</span>
         <button type="button" class="btn btn--ghost btn--sm" data-wact="close">닫기</button>
-        ${raw(s.key === 'APPROVAL' && s.reapproval ? '<button type="button" class="btn btn--secondary btn--sm" data-wact="confirm">다시 승인 완료</button>' : '')}
         <button type="button" class="btn btn--primary btn--sm" data-wact="save">저장</button></span></div>`;
     // 상태 칩 (header): 완료 → menu with 완료 취소
     const chip = ro || skipped ? '' : completed ? html`<details class="pmenu wd__chip" data-stchip><summary class="chip chip--done">${st === 'review' ? '확인 필요' : '완료'} ▾</summary><div class="pmenu__list" role="menu"><button type="button" role="menuitem" data-wact="reopen">완료 취소</button></div></details>`
@@ -440,7 +433,7 @@ export async function definitionPage(id, slug = '') {
 
   /* ---------- actions ---------- */
   /** 저장 (batch7 #10): save; then, when the section now meets its minimum, complete it (or re-stamp a completed one) in the same click.
-   * 착수 승인 once completed is only saved — a change there stays '확인 필요' until 다시 승인 완료 (re-approval detection kept). */
+   * 착수 결과 확인 (진행 여부 체크): checked → 완료, unchecked → back to 미완료; nothing else is required. */
   const save = async () => {
     collect(); const key = open.key; const st = $('#wd-stat'); if (st) st.textContent = '저장 중…';
     try {
@@ -448,13 +441,16 @@ export async function definitionPage(id, slug = '') {
       m = await api('PUT', wsApi(`/${id}/definition`), sectionBody(key));
       if (key === 'PROFILE') { d = { ...d, ...fresh() }; dirty = false; await reload(); refreshView(); const s2 = $('#wd-stat'); if (s2) s2.textContent = '저장됨'; toast('프로젝트 기본 특성을 저장했습니다.'); return; }
       const s1 = sec(key); dirty = false;
-      const auto = s1.ready && (s1.status === 'TODO' ? 'complete' : s1.status === 'COMPLETED' && s1.changed_after_completion && key !== 'APPROVAL' ? 'confirm' : null);
+      const checked = Boolean(d.approval && d.approval.checked);
+      const auto = key === 'APPROVAL' ? (checked && s1.status === 'TODO' ? 'complete' : !checked && s1.status === 'COMPLETED' ? 'reopen' : null)
+        : s1.ready && (s1.status === 'TODO' ? 'complete' : s1.status === 'COMPLETED' && s1.changed_after_completion ? 'confirm' : null);
       if (auto) { const r = await api('POST', wsApi(`/${id}/definition/sections/${key}/${auto}`), {}); g = r.guide; delete r.guide; m = r; }
       await loadCharter().catch(() => {});
       const s2 = sec(key);
       if (auto === 'complete') { open = null; setUrl(); draw(); toast(DONE_TOAST[key] || `${josa(s2.title, '을')} 완료했습니다.`); return; }
+      if (auto === 'reopen') { open = null; setUrl(); draw(); toast('체크를 해제했습니다.'); return; }
       d = { ...d, ...fresh() }; drawDrawer(); refreshView();
-      const msg = s2.status === 'COMPLETED' ? (s2.reapproval ? '저장했습니다 · 승인 후 바뀐 내용은 고객에게 다시 확인받으세요.' : '저장했습니다.') : s2.status === 'SKIPPED' ? '저장했습니다.' : `저장했습니다 · ${s2.missing[0] || ''}`.replace(/ · $/, '');
+      const msg = s2.status === 'COMPLETED' ? '저장했습니다.' : s2.status === 'SKIPPED' ? '저장했습니다.' : `저장했습니다 · ${s2.missing[0] || ''}`.replace(/ · $/, '');
       const s3 = $('#wd-stat'); if (s3) s3.textContent = '저장됨'; toast(msg);
     } catch (e) { err(e); }
   };
@@ -466,13 +462,11 @@ export async function definitionPage(id, slug = '') {
     if (action === 'close') return closeDrawer();
     if (action === 'reopen' && !(await confirmDialog({ title: '완료를 취소할까요?', body: '작성한 내용은 그대로 남고, 이 업무만 다시 "진행 중"으로 바뀝니다.', confirm: '완료 취소' }))) return;
     collect();
-    const wd = $('#wdrawer');
-    if (key === 'APPROVAL' && action === 'complete' && wd && showApprovalErrors(wd, approvalErrors(d.approval || {}))) return;   // L-D2: inline, under each field
     const body = ['complete', 'confirm'].includes(action) ? sectionBody(key) : {};   // 완료 처리 = 저장 + 검증 + COMPLETED, one click
     try {
       const r = await api('POST', wsApi(`/${id}/definition/sections/${key}/${action}`), body);
       g = r.guide; delete r.guide; m = r; dirty = false; await loadCharter().catch(() => {});
-      if (action === 'complete' || action === 'confirm' || action === 'skip') { open = null; setUrl(); draw(); toast(action === 'skip' ? '이 업무를 건너뛰었습니다.' : action === 'confirm' ? '다시 승인받은 내용으로 확인했습니다.' : '완료 처리했습니다.'); }
+      if (action === 'complete' || action === 'confirm' || action === 'skip') { open = null; setUrl(); draw(); toast(action === 'skip' ? '이 업무를 건너뛰었습니다.' : action === 'confirm' ? '다시 확인했습니다.' : '완료 처리했습니다.'); }
       else { d = fresh(); draw(); toast(action === 'resume' ? '업무를 다시 시작합니다.' : '완료를 취소했습니다.'); }
     } catch (e) { err(e); }
   };
@@ -560,7 +554,6 @@ export async function definitionPage(id, slug = '') {
     el.querySelectorAll('[data-kladd]').forEach((b) => b.onclick = () => { collect(); const kind = b.dataset.kladd; d.kickoff[kind] = [...d.kickoff[kind], kind === 'followups' ? { id: uid(), text: '', owner: '', due: '', done: false } : kind === 'prep' ? { id: uid(), text: '', done: false } : { id: uid(), text: '' }]; markDirty(); drawDrawer(); const last = [...$('#wdrawer').querySelectorAll(`[data-kl="${kind}"] [data-klf="text"]`)].pop(); if (last) last.focus(); });
     el.querySelectorAll('[data-kldel]').forEach((b) => b.onclick = () => { collect(); d.kickoff[b.dataset.kldel] = d.kickoff[b.dataset.kldel].filter((x) => x.id !== b.dataset.id); markDirty(); drawDrawer(); });
     el.querySelectorAll('[data-kl="prep"] [data-klf="done"]').forEach((x) => x.addEventListener('change', () => { collect(); drawDrawer(); }));
-    const asel = el.querySelector('[data-af="approver_id"]'); if (asel) asel.addEventListener('change', () => { collect(); drawDrawer(); });
     el.querySelectorAll('[data-item="success_criteria"]').forEach((x) => x.addEventListener('input', () => { const h = el.querySelector(`[data-schint="${x.dataset.id}"]`); if (h) h.textContent = scHint(x.value.trim()); }));
     el.querySelectorAll('[data-kdf="date"]').forEach((x) => x.addEventListener('change', () => { collect(); drawDrawer(); }));
     bindPlanMenu(el, p.id);

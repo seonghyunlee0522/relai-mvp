@@ -8,7 +8,7 @@
  */
 import { ensurePhases, resetPhases } from './guide.js';
 import { randomUUID } from 'node:crypto';
-import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA, ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA,
+import { PHASE_BY_KEY, ANALYSIS_DESIGN_DESCRIPTION, ANALYSIS_DESIGN_DESCRIPTION_V1, TEST_PLAN_TITLE, TEST_PLAN_DESCRIPTION, TEST_PLAN_CRITERIA, ACCEPTANCE_DESCRIPTION, ACCEPTANCE_CRITERIA, ACCEPTANCE_DESCRIPTION_V1, ACCEPTANCE_TITLE, ACCEPTANCE_TITLE_V1, TRANSITION_DESCRIPTION, TRANSITION_DESCRIPTION_V1, CHECK_STEP_COPY,
   OPERATIONS_DESCRIPTION, HANDOVER_CRITERIA, MAINTENANCE_DESCRIPTION, SLA_DESCRIPTION, RELEASE_PLAN_DESCRIPTION, CLOSE_DESCRIPTION, CLOSE_CRITERIA, LESSONS_ITEM_V1, LESSONS_ITEM } from './templates/default-phases.js';
 
 /** Migration 39 (K32): note left on a legacy hand-✓ step that was reset because its record is missing. */
@@ -248,6 +248,19 @@ export const migrations = [
   } },
   { version: 67, name: 'Integrity: ai_runs.request_hash (identical AI request while one is PENDING → 409, no double charge) (schema.sql, additive, nullable; nothing rewritten)', up() {} },
   { version: 68, name: 'Prompt admin: ai_prompts (operator overrides of the AI prompts; no row = code default) + ai_prompt_versions (history) (schema.sql, additive; nothing rewritten)', up() {} },
+  { version: 69, name: 'No approvals (founder 2026-10-21): 01 APPROVAL / 02 BASELINE_APPROVAL become 진행 여부 체크 (권장) — seeded title/description/criteria rewritten unless PM-edited, open BASELINE_APPROVAL → RECOMMENDED; 06 ACCEPTANCE + phase copy without 인수 승인. Data only, no schema change', async up(db) {
+    for (const [key, from, to] of CHECK_STEP_COPY) {
+      await db.run('UPDATE project_steps SET title = ?, updated_at = now() WHERE step_key = ? AND title = ?', [to.title, key, from.title]);
+      await db.run('UPDATE project_steps SET description = ?, updated_at = now() WHERE step_key = ? AND description = ?', [to.description, key, from.description]);
+      await db.run('UPDATE project_steps SET completion_criteria = ?, updated_at = now() WHERE step_key = ? AND completion_criteria = ?', [to.criteria, key, from.criteria]);
+    }
+    await db.run(`UPDATE project_steps SET importance = 'RECOMMENDED', is_required = 0, updated_at = now() WHERE step_key = 'BASELINE_APPROVAL' AND importance = 'REQUIRED'
+      AND project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'REQUIREMENTS')`);
+    const acc = `project_phase_id IN (SELECT id FROM project_phases WHERE phase_key = 'TRANSITION_GO_LIVE')`;
+    await db.run(`UPDATE project_steps SET title = ?, updated_at = now() WHERE step_key = 'ACCEPTANCE' AND title = ? AND ${acc}`, [ACCEPTANCE_TITLE, ACCEPTANCE_TITLE_V1]);
+    await db.run(`UPDATE project_steps SET description = ?, updated_at = now() WHERE step_key = 'ACCEPTANCE' AND description = ? AND ${acc}`, [ACCEPTANCE_DESCRIPTION, ACCEPTANCE_DESCRIPTION_V1]);
+    await db.run(`UPDATE project_phases SET description = ?, updated_at = now() WHERE phase_key = 'TRANSITION_GO_LIVE' AND description = ?`, [TRANSITION_DESCRIPTION, TRANSITION_DESCRIPTION_V1]);
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
