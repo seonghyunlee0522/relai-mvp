@@ -2,6 +2,7 @@ import { api, wsApi } from '../core/api.js';
 import { isPhone } from '../core/device.js';
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
+import { state } from '../core/state.js';
 import { ob } from '../onboarding/state.js';
 import { showErrors, toast, confirmDialog } from '../shared/dialogs.js';
 import { traitFields, wireTraitFields } from '../shared/trait-fields.js';
@@ -16,13 +17,16 @@ export async function projectFormPage(id) {
     p = (await api('GET', wsApi(`/${id}`))).project;
     if (p.status === 'ARCHIVED') { navigate(`/app/projects/${id}`, { replace: true }); return; }
   }
-  document.title = `${editing ? '프로젝트 정보 수정' : '새 프로젝트'} — RELAI`;
+  // MEMBER can't edit (server: project_manage = OWNER/ADMIN → 403). Show the form read-only instead of failing on 저장하기.
+  const ro = editing && state.workspace && state.workspace.role === 'MEMBER';
+  document.title = `${editing ? (ro ? '프로젝트 정보' : '프로젝트 정보 수정') : '새 프로젝트'} — RELAI`;
   // desktop: editing a project keeps that project's rail (계획 door) and top-bar project, not the global 홈·프로젝트 rail (Q22-3)
   if (editing && !isPhone()) { mountProjectRail(p.id, 'plan'); setTopProject(p, null, statusPill(p)); }
   main.innerHTML = html`<div class="page page--form page--guide">
     <a class="crumb" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>← ${editing ? p.name : '프로젝트'}</a>
-    <div class="page__head"><div><h1>${editing ? '프로젝트 정보 수정' : '새 프로젝트 시작하기'}</h1>
+    <div class="page__head"><div><h1>${editing ? (ro ? '프로젝트 정보' : '프로젝트 정보 수정') : '새 프로젝트 시작하기'}</h1>
       ${raw(editing ? '' : '<p>기본 정보와 프로젝트 유형만 정하면 됩니다. 목표·범위·관계자는 생성 후 01 착수 단계에서 차례로 정리합니다.</p>')}</div></div>
+    ${raw(ro ? '<div class="notice" data-ro-notice>프로젝트 정보는 관리자만 수정할 수 있습니다. 내용은 조회만 할 수 있습니다.</div>' : '')}
     <form class="panel form-panel pform" id="f" novalidate data-keep-draft>
       <div class="form-err full" role="alert" hidden></div>
       <div class="pform__sec full"><b>프로젝트 기본 정보</b></div>
@@ -44,13 +48,14 @@ export async function projectFormPage(id) {
       <div class="pform__sec full"><b>프로젝트 특성</b><small>모르는 항목은 '미정'으로 두고, 생성 후 01 착수 › 프로젝트 정의에서 언제든 바꿀 수 있습니다.</small></div>
       ${raw(traitFields(p, { bind: 'name', idPrefix: 'pf' }))}
       <div class="actions actions--end full" style="margin-top:4px">
-        <a class="btn btn--secondary" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>취소</a>
-        <button class="btn btn--primary" type="submit">${editing ? '저장하기' : '프로젝트 시작하기 →'}</button></div>
+        <a class="btn btn--secondary" href="${editing ? `/app/projects/${id}` : '/app/projects'}" data-link>${ro ? '돌아가기' : '취소'}</a>
+        ${raw(ro ? '' : html`<button class="btn btn--primary" type="submit">${editing ? '저장하기' : '프로젝트 시작하기 →'}</button>`)}</div>
     </form></div>`;
   const form = $('#f');
   wireTraitFields(form);
   if (!editing) $('#name').focus();
   if (editing) { /* description is a textarea: set via value to avoid whitespace artefacts */ $('#d').value = p.description; }
+  if (ro) { form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = true; }); form.onsubmit = (e) => e.preventDefault(); return; }
   // Deep link from Project Charter (…/edit?focus=description): land on the field that is missing.
   const focus = editing && form.elements[new URLSearchParams(location.search).get('focus') || ''];
   if (focus && focus.focus) { focus.scrollIntoView({ block: 'center' }); focus.focus({ preventScroll: true }); }
