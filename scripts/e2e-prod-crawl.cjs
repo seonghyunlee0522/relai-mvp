@@ -7,10 +7,14 @@
 //
 //   BASE=https://relai.kr OUT=crawl-out \
 //   OWNER_EMAIL=… OWNER_PASSWORD=… MEMBER_EMAIL=… MEMBER_PASSWORD=… [ADMIN_EMAIL=… ADMIN_PASSWORD=…] \
-//   [ROLES=anon,owner,member,admin] [DEVICES=desktop,iphone,android] [TAPS=1] [PACE_MS=3500] [MAX_PAGES=120] \
+//   [ROLES=anon,owner,member,admin] [DEVICES=desktop,iphone,android] [TAPS=1] [PACE_MS=3500] [MAX_PAGES=120] [WRITES=1] [SEEDS=/path,/path] \
 //   node scripts/e2e-prod-crawl.cjs
 //
 // Output: OUT/results.jsonl (one row per event), OUT/shots/*.png (every failure), OUT/summary.md (route × device × role matrix).
+// WRITES=1 (QA workspace accounts ONLY): also presses write buttons (추가·저장·등록·확정·만들기·적용…) and form submits, and one level into what they open.
+// Never pressed in any mode: AI start / credit spend, payment, invite, delete — and logout, project archive/close, phase move (they would end the crawl
+// or wreck the QA fixture). Every report starts with what was NOT pressed. Look-alikes (text styled like a button, not a control) are tapped too:
+// one that does nothing is a failure (founder 10-21: phone WBS chips 진행 중/완료/마일스톤 were <span>s).
 // Exit code 1 when any failure is found, 2 when stopped on a 5xx burst. Needs `playwright` (+ `npx playwright install chromium webkit`).
 const fs = require('fs');
 const path = require('path');
@@ -47,8 +51,17 @@ const SEEDS_APP = ['/app', '/app/projects', '/app/guide', '/app/projects/new', '
   '/app/billing/plans', '/app/billing/subscribe'];
 const SEEDS_ADMIN = ['/admin'];
 
-// Never pressed (listed as NOT_PRESSED): side effects, money, mail, destructive, session.
-const NO_PRESS = /.{8,}[?？]$|물어|로그아웃|탈퇴|삭제|제거|결제하기|결제 진행|결제 수단|구독하기|정기결제|충전|구매|환불|해지|카드|초대|보내기|전송|발송|제출|저장|등록|추가|생성|만들기|적용|승인|반려|완료 처리|완료로|확정|되돌리|복원|보관|종료|다시 열기|업로드|가져오기|실행|추출|분석하기|초안|다시 생성|AI로|요청하기|변경하기|비밀번호|이메일 변경|연결|연동|해제|승격|강등|권한|재발송|재전송|Go-Live|오픈 처리|이관/;
+const WRITES = process.env.WRITES === '1';
+// Never pressed, any mode (NOT_PRESSED, listed in the report headline): AI start / credit spend, payment, invite, delete; plus logout, project archive /
+// close / reopen and phase moves, which would end the session or wreck the QA fixture. AI dialogs are also fenced by AI_BOX below.
+const NO_PRESS_ALWAYS = /.{8,}[?？]$|물어|결제하기|결제 진행|결제 수단|구독하기|충전|구매|환불|해지|카드 등록|초대|재발송|재전송|삭제|제거|탈퇴|로그아웃|프로젝트 보관|보관하기|프로젝트 종료|종료하기|다시 열기|단계로 진행|단계 시작|승인 없이 진행|Go-Live|오픈 처리|비밀번호 변경|이메일 변경/;
+// Read-only mode (WRITES unset, e.g. a non-QA account): also skip anything that writes.
+const NO_PRESS_WRITE = /보내기|전송|발송|제출|저장|등록|추가|생성|만들기|적용|승인|반려|완료 처리|완료로|확정|되돌리|복원|보관|업로드|가져오기|실행|추출|분석하기|초안|다시 생성|AI로|요청하기|변경하기|연결|연동|해제|승격|강등|권한|이관/;
+if (WRITES) { const bad = Object.values(CREDS).map((c) => c[0]).filter((e) => e && !new RegExp(process.env.WRITES_ALLOW || '^qa-', 'i').test(e));
+  if (bad.length) { console.error(`WRITES=1 refused: ${bad.join(', ')} is not a QA account (WRITES_ALLOW, default ^qa-)`); process.exit(3); } }   // never write as a real customer / founder
+const noPress = (t) => NO_PRESS_ALWAYS.test(t) || (!WRITES && NO_PRESS_WRITE.test(t));
+const AI_BOX = '.aipanel, .scrim--ai, .dialog--ai';   // anything inside runs a paid AI call except close / cancel
+const isClose = (t) => /^(×|✕|닫기|취소|Close)$/.test((t || '').trim());
 const CTRL = 'button, [role=button], [role=tab], [role=menuitem], [role=switch], [role=checkbox], summary, label.toggle, input[type=checkbox], input[type=radio], a[href="#"], a:not([href])[tabindex], a[href^="javascript"]';
 const ROWS = 'tr[data-id], tr[data-i], tr[data-item], tr[data-href], .wtree__r, li[data-id]';
 const OPEN_SEL = '.drawer:not([hidden]), #drawer:not([hidden]), .wdrawer, .scrim, [role=dialog]:not([hidden]), dialog[open], .dmenu, .amenu:not([hidden]), .np__menu:not([hidden]), .helpmenu, .gpop:not([hidden]), details[open] > :not(summary), .aipanel, .side.is-open, .pstepw.is-open';
@@ -61,7 +74,7 @@ const isPage = (u) => { const x = new URL(u, BASE); return x.origin === new URL(
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let burst = [];   // 5xx timestamps → stop on ≥ 3 within 30 s
-const failures = []; const matrix = {}; const resources = new Map(); // url → { from, roles }
+const failures = []; const notPressed = {}; const combos = []; const matrix = {}; const resources = new Map(); // url → { from, roles }
 let lastLoad = 0, lastTap = 0;
 async function paced(min, which) { const last = which === 'load' ? lastLoad : lastTap; const wait = last + min - Date.now(); if (wait > 0) await sleep(wait); if (which === 'load') lastLoad = Date.now(); else lastTap = Date.now(); }
 
@@ -77,7 +90,7 @@ async function runCombo(role, devName) {
   const dev = DEVICE[devName]; const key = `${role}/${devName}`;
   const browser = await dev.engine.launch();
   const ctx = await browser.newContext({ ...dev.opts, locale: 'ko-KR', timezoneId: 'Asia/Seoul', acceptDownloads: true });
-  if (role !== 'anon' && !(await login(ctx, role))) { rec({ kind: 'skip-combo', role, device: devName, why: 'no credentials or login failed' }); await browser.close(); return; }
+  if (role !== 'anon' && !(await login(ctx, role))) { rec({ kind: 'skip-combo', role, device: devName, why: 'no credentials or login failed' }); combos.push(`${role}/${devName}: NOT RUN (no credentials or login failed)`); await browser.close(); return; }
   const page = await ctx.newPage();
   let errs = [];   // events since the last mark
   const net = (r) => { const u = r.url(); if (IGNORE_NET.some((re) => re.test(u))) return; const s = r.status();
@@ -96,6 +109,7 @@ async function runCombo(role, devName) {
     await page.evaluate(() => document.getElementById('__dot')?.remove()).catch(() => {});
     return f;
   };
+  const skipped = (o) => { const k = `${o.label}`; (notPressed[k] = notPressed[k] || new Set()).add(`${o.pat} ${devName}/${role}`); };
   const fail = (o) => { failures.push({ role, device: devName, ...o }); rec({ kind: 'FAIL', role, device: devName, ...o }); };
   const skipTour = async () => { const s = page.getByText('건너뛰기', { exact: true }); if (await s.count().catch(() => 0)) { await s.first().click({ timeout: 2000 }).catch(() => {}); await sleep(300); } };
   const load = async (u) => {
@@ -117,7 +131,7 @@ async function runCombo(role, devName) {
   }, ERROR_TEXT.source);
 
   // ---------- BFS over pages ----------
-  const seeds = [...SEEDS_PUBLIC, ...(role === 'anon' ? [] : SEEDS_APP), ...(role === 'admin' ? SEEDS_ADMIN : [])];
+  const seeds = process.env.SEEDS ? process.env.SEEDS.split(',') : [...SEEDS_PUBLIC, ...(role === 'anon' ? [] : SEEDS_APP), ...(role === 'admin' ? SEEDS_ADMIN : [])];   // SEEDS=/a,/b: a quick targeted run
   const queue = [...seeds]; const seen = new Set(); const perPattern = {}; let pages = 0;
   const tapped = new Set();   // control signature → tapped once per combo
   while (queue.length && pages < MAX_PAGES) {
@@ -144,23 +158,35 @@ async function runCombo(role, devName) {
     if (!TAPS || status >= 400) continue;
 
     // ---------- taps: rows first (one per kind), then every control ----------
-    const controls = await page.evaluate(({ CTRL, ROWS }) => {
+    const controls = await page.evaluate(({ CTRL, ROWS, AI_BOX }) => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && Number(s.opacity) > 0.05 && !el.closest('[hidden]') && !el.closest('details:not([open]) > :not(summary)'); };
       const out = []; const kinds = new Set();
       for (const sel of ROWS.split(', ')) for (const el of document.querySelectorAll(sel)) { if (!vis(el) || kinds.has(sel)) continue; kinds.add(sel); out.push({ row: sel, txt: el.innerText.replace(/\s+/g, ' ').trim().slice(0, 40) }); }
       const modal = [...document.querySelectorAll('.scrim, [role=dialog][aria-modal=true], dialog[open]')].filter(vis).pop();   // a modal open on load (e.g. ?close=1): only its controls are reachable
       for (const el of (modal || document).querySelectorAll(CTRL)) { if (!vis(el)) continue; const txt = (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-        out.push({ tag: el.tagName.toLowerCase(), txt, aria: el.getAttribute('aria-label') || el.title || '', cls: String(el.className || '').split(' ').slice(0, 2).join('.'), disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', type: el.type || '', on: (el.type === 'radio' && el.checked) || el.getAttribute('aria-selected') === 'true' || !!el.getAttribute('aria-current') || /(^|\s)(is-on|is-active|active)(\s|$)/.test(String(el.className)), submit: el.type === 'submit' && !!el.form }); }
+        out.push({ tag: el.tagName.toLowerCase(), txt, aria: el.getAttribute('aria-label') || el.title || '', cls: String(el.className || '').split(' ').slice(0, 2).join('.'), disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', type: el.type || '', on: (el.type === 'radio' && el.checked) || el.getAttribute('aria-selected') === 'true' || !!el.getAttribute('aria-current') || /(^|\s)(is-on|is-active|active)(\s|$)/.test(String(el.className)), submit: el.type === 'submit' && !!el.form, ai: !!el.closest(AI_BOX) }); }
+      // look-alikes: not a control and not inside one, but shares a class with a real control here and is drawn like a button (border + radius)
+      const I = 'a[href], button, summary, input, select, textarea, label, [role=button], [role=tab], [role=link], [role=menuitem], [onclick], [data-link], [tabindex]';
+      const ctrlCls = new Set(); document.querySelectorAll('button, a[href], [role=button]').forEach((e) => e.classList.forEach((c) => ctrlCls.add(c)));
+      const lk = new Set();
+      for (const el of (modal || document.querySelector('main, #main') || document.body).querySelectorAll('*')) {
+        if (el.matches(I) || el.closest(I) || !vis(el)) continue; const r = el.getBoundingClientRect(); if (r.height < 18 || r.width > 420) continue;
+        const cs = getComputedStyle(el); const txt = el.innerText.replace(/\s+/g, ' ').trim(); if (!txt || txt.length > 30) continue;
+        const shared = [...el.classList].filter((c) => ctrlCls.has(c) && !/^(is-|has-)|^(dim|small|link|muted)$/.test(c));
+        if (!shared.length || !(parseFloat(cs.borderTopWidth) > 0 && parseFloat(cs.borderRadius) > 0)) continue;
+        const k = `${el.tagName}|${shared.join('.')}|${txt}`; if (lk.has(k)) continue; lk.add(k);
+        out.push({ look: lk.size - 1, tag: el.tagName.toLowerCase(), txt, aria: '', cls: shared.join('.') });
+      }
       return out;
-    }, { CTRL, ROWS }).catch(() => []);
+    }, { CTRL, ROWS, AI_BOX }).catch(() => []);
     const seenHere = {};
     for (const c of controls) {
-      const label = c.row ? `row:${c.row}` : (c.txt || c.aria || c.cls);
-      const sig = c.row ? `${pat}|${c.row}` : `${c.tag}|${c.txt}|${c.aria}|${c.cls}`;   // shared chrome (top bar, tab bar, help) is tapped once per combo
+      const label = c.row ? `row:${c.row}` : c.look !== undefined ? `look-alike ${c.tag}.${c.cls} "${c.txt}"` : (c.txt || c.aria || c.cls);
+      const sig = c.row ? `${pat}|${c.row}` : c.look !== undefined ? `${pat}|look|${c.tag}|${c.cls}|${c.txt}` : `${c.tag}|${c.txt}|${c.aria}|${c.cls}`;   // shared chrome (top bar, tab bar, help) is tapped once per combo
       if (tapped.has(sig)) continue; tapped.add(sig);
       const occ = (seenHere[sig] = (seenHere[sig] ?? -1) + 1);
       if (c.disabled) { rec({ kind: 'tap', role, device: devName, pat, label, result: 'DISABLED' }); continue; }
-      if (!c.row && (NO_PRESS.test(`${c.txt} ${c.aria}`) || c.submit)) { rec({ kind: 'tap', role, device: devName, pat, label, result: 'NOT_PRESSED' }); continue; }
+      if (!c.row && c.look === undefined && (noPress(`${c.txt} ${c.aria}`) || (c.submit && !WRITES) || (c.ai && !isClose(c.txt || c.aria)))) { { const o = { kind: 'tap', role, device: devName, pat, label, result: 'NOT_PRESSED' }; rec(o); skipped(o); } continue; }
       const r = await tapOne(c, occ, u, pat, label);
       if (r && r.dirty) { await load(u); }
     }
@@ -171,6 +197,7 @@ async function runCombo(role, devName) {
       const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' && !el.closest('[hidden]'); };
       let el;
       if (c.row) el = [...document.querySelectorAll(c.row)].find(vis);
+      else if (c.look !== undefined) el = [...document.querySelectorAll(c.tag)].filter(vis).find((e) => c.cls.split('.').every((k) => e.classList.contains(k)) && e.innerText.replace(/\s+/g, ' ').trim() === c.txt);   // found again by look: a reload drops any marker
       else { const scope = c.inner ? [...document.querySelectorAll(OPEN_SEL)].filter((b) => !b.dataset.crawlPre) : [document];
         const all = scope.flatMap((s) => [...s.querySelectorAll(CTRL)]).filter(vis).filter((e) => (e.innerText || e.value || '').replace(/\s+/g, ' ').trim().slice(0, 40) === c.txt && (e.getAttribute('aria-label') || e.title || '') === c.aria);
         el = all[occ] || all[0]; }
@@ -181,7 +208,7 @@ async function runCombo(role, devName) {
       const covered = !(top && (el === top || el.contains(top) || top.contains(el) || (el.tagName === 'LABEL' && top.closest('label') === el)));
       const d = (n) => (n ? `${n.tagName.toLowerCase()}.${String(n.className).split(' ').slice(0, 2).join('.')} "${(n.innerText || '').trim().slice(0, 24)}"` : 'none');
       document.querySelectorAll(OPEN_SEL).forEach((b) => { b.dataset.crawlPre = '1'; });
-      window.__mut = 0; if (!window.__mo) { window.__mo = new MutationObserver((ms) => { window.__mut += ms.length; }); window.__mo.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true }); }
+      window.__mut = 0; if (!window.__mo) { window.__mo = new MutationObserver((ms) => { for (const m of ms) if (!(m.type === 'attributes' && m.oldValue === m.target.getAttribute(m.attributeName))) window.__mut++; }); window.__mo.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true, attributeOldValue: true }); }   // a write that changes nothing (e.g. re-hiding a hidden popup on every document click) is not a reaction
       return { x, y, w: Math.round(r.width), h: Math.round(r.height), covered, coveredBy: covered ? d(top) : '', byPanel: covered && !!(top && top.closest(OPEN_SEL)) && !el.closest(OPEN_SEL), url: location.href, open: document.querySelectorAll(OPEN_SEL).length, scroll: scrollY, len: document.body.innerText.length };
     }, { c, occ, CTRL, OPEN_SEL }).catch(() => null);
     if (!p) { rec({ kind: 'tap', role, device: devName, pat, label, result: 'GONE' }); return { dirty: true }; }
@@ -195,11 +222,11 @@ async function runCombo(role, devName) {
     const result = a.url !== p.url ? 'NAV' : downloads ? 'DOWNLOAD' : ctx.pages().length > popupsBefore ? 'POPUP' : a.ro ? 'PHONE_READONLY' : a.open > p.open ? 'OPEN' : a.open < p.open ? 'CLOSE' : (a.mut > 0 || a.len !== p.len || Math.abs(a.scroll - p.scroll) > 40) ? 'CHANGE' : 'NONE';
     const errToast = a.toasts.find((t) => /오류|실패|못했|없습니다|error/i.test(t));
     const bad = (result === 'NONE' && !c.on && !p.byPanel) || (p.covered && !p.byPanel) || tapErrs.some((e) => /^(JS|CONSOLE|FAILED|5\d\d|4\d\d)/.test(e)) || result === 'PHONE_READONLY' || errToast;
-    const row = { kind: 'tap', role, device: devName, pat, route: u, label, inner, result, covered: p.covered, coveredBy: p.coveredBy, size: `${p.w}x${p.h}`, toUrl: result === 'NAV' ? a.url.replace(BASE, '') : '', toasts: a.toasts, errs: tapErrs.slice(0, 6) };
+    const row = { kind: 'tap', role, device: devName, pat, route: u, label, inner, result: c.look !== undefined && result === 'NONE' ? 'LOOKALIKE_DEAD' : result, covered: p.covered, coveredBy: p.coveredBy, size: `${p.w}x${p.h}`, toUrl: result === 'NAV' ? a.url.replace(BASE, '') : '', toasts: a.toasts, errs: tapErrs.slice(0, 6) };
     if (bad) { row.shot = await shot(`tap-${pat}-${label}`, p); fail({ ...row, kind: 'tap' }); } else rec(row);
     // one level in: every control inside what just opened (dialog / drawer / menu / sheet)
     if (!inner && result === 'OPEN') {
-      const innerCtrls = await page.evaluate(({ CTRL, OPEN_SEL }) => { const out = []; for (const box of [...document.querySelectorAll(OPEN_SEL)].filter((b) => !b.dataset.crawlPre && !b.closest('[data-crawl-pre]'))) for (const el of box.querySelectorAll(CTRL)) { const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden') out.push({ tag: el.tagName.toLowerCase(), txt: (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 40), aria: el.getAttribute('aria-label') || el.title || '', disabled: !!el.disabled, submit: el.type === 'submit' && !!el.form, inner: true }); } return out; }, { CTRL, OPEN_SEL }).catch(() => []);
+      const innerCtrls = await page.evaluate(({ CTRL, OPEN_SEL, AI_BOX }) => { const out = []; for (const box of [...document.querySelectorAll(OPEN_SEL)].filter((b) => !b.dataset.crawlPre && !b.closest('[data-crawl-pre]'))) for (const el of box.querySelectorAll(CTRL)) { const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden') out.push({ tag: el.tagName.toLowerCase(), txt: (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 40), aria: el.getAttribute('aria-label') || el.title || '', disabled: !!el.disabled, submit: el.type === 'submit' && !!el.form, ai: !!el.closest(AI_BOX), inner: true }); } return out; }, { CTRL, OPEN_SEL, AI_BOX }).catch(() => []);
       // tap-outside closes it?
       const vp = page.viewportSize();
       const spot = await page.evaluate(({ OPEN_SEL, w, h }) => { const boxSel = OPEN_SEL.replace(/:not\(\[hidden\]\)/g, '');
@@ -214,8 +241,8 @@ async function runCombo(role, devName) {
         const isig = `${pat}|in|${label}|${ic.tag}|${ic.txt}|${ic.aria}`; if (tapped.has(isig)) continue; tapped.add(isig);
         const ilabel = `${label} › ${ic.txt || ic.aria || ic.tag}`;
         if (ic.disabled) { rec({ kind: 'tap', role, device: devName, pat, label: ilabel, result: 'DISABLED' }); continue; }
-        const aiBox = /물어보기|✦|AI/.test(label) && !/^(×|닫기|취소)$/.test(ic.txt || ic.aria);   // AI panels: suggestions run a paid AI call
-        if (aiBox || NO_PRESS.test(`${ic.txt} ${ic.aria}`) || ic.submit) { rec({ kind: 'tap', role, device: devName, pat, label: ilabel, result: 'NOT_PRESSED' }); continue; }
+        const aiBox = (ic.ai || /물어보기|✦|AI/.test(label)) && !isClose(ic.txt || ic.aria);   // AI panels / dialogs: their buttons run a paid AI call
+        if (aiBox || noPress(`${ic.txt} ${ic.aria}`) || (ic.submit && !WRITES)) { { const o = { kind: 'tap', role, device: devName, pat, label: ilabel, result: 'NOT_PRESSED' }; rec(o); skipped(o); } continue; }
         await load(u); const re = await tapOne(c, occ, u, pat, label, true); if (!re) continue;   // reopen
         const occIn = (seenIn[isig] = (seenIn[isig] ?? -1) + 1);
         await tapOne(ic, occIn, u, pat, ilabel, true);
@@ -248,7 +275,15 @@ async function checkResources() {
 
 function summary() {
   const cols = []; for (const d of DEVICES) for (const r of ROLES) cols.push(`${d}/${r}`);
-  const lines = [`# RELAI prod crawl — ${BASE} — ${new Date().toISOString()}`, '', `Failures: **${failures.length}**`, '', '## Route × device/role', '', `| route | ${cols.join(' | ')} |`, `|---|${cols.map(() => '---').join('|')}|`];
+  const np = Object.entries(notPressed).sort((a, b) => b[1].size - a[1].size);
+  const lines = [`# RELAI prod crawl — ${BASE} — ${new Date().toISOString()}`, '',
+    `Failures: **${failures.length}** · mode: **${WRITES ? 'WRITES (QA accounts: write buttons and submits pressed)' : 'READ-ONLY (write buttons NOT pressed)'}**`, '',
+    '## Not tested — read this first', '',
+    `- Never pressed by design: AI start / credit spend, payment, invite, delete, logout, project archive/close/reopen, phase moves${WRITES ? '' : ', and every write button / form submit (read-only mode)'}.`,
+    ...combos.map((c) => `- ${c}`),
+    `- Roles not requested: ${['anon', 'owner', 'member', 'admin'].filter((r) => !ROLES.includes(r)).join(', ') || 'none'}. Devices: ${DEVICES.join(', ')}.`,
+    `- ${np.length} distinct controls were seen but NOT pressed:`, '',
+    ...np.slice(0, 80).map(([k, v]) => `  - ${k} — ${v.size}× (${[...v][0]})`), ...(np.length > 80 ? [`  - … ${np.length - 80} more in results.jsonl (result NOT_PRESSED)`] : []), '', '## Route × device/role', '', `| route | ${cols.join(' | ')} |`, `|---|${cols.map(() => '---').join('|')}|`];
   for (const pat of Object.keys(matrix).sort()) lines.push(`| \`${pat}\` | ${cols.map((c) => (matrix[pat][c] === 'FAIL' ? '**FAIL**' : matrix[pat][c] ? 'ok' : '–')).join(' | ')} |`);
   lines.push('', '## Failures', '');
   for (const f of failures) lines.push(`- [${f.device || '-'}/${f.role || '-'}] ${f.kind} ${f.route || f.url || f.pat || ''} ${f.label ? `· ${f.label}` : ''} → ${f.result || f.status || ''} ${f.errText || ''} ${(f.errs || []).join(' ; ')} ${f.coveredBy ? `covered by ${f.coveredBy}` : ''} ${f.shot ? `(shots/${f.shot})` : ''}`);
