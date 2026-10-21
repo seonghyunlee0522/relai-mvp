@@ -137,7 +137,8 @@ async function upsertSnapshot(db, linkId, snap) {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,now()) ON CONFLICT (integration_link_id) DO UPDATE SET external_key = EXCLUDED.external_key, summary = EXCLUDED.summary, issue_type = EXCLUDED.issue_type, status_id = EXCLUDED.status_id, status_name = EXCLUDED.status_name,
       status_category = EXCLUDED.status_category, assignee_account_id = EXCLUDED.assignee_account_id, assignee_name = EXCLUDED.assignee_name, external_updated_at = EXCLUDED.external_updated_at, browser_url = EXCLUDED.browser_url, synced_at = now()`,
     [linkId, snap.external_key, snap.summary, snap.issue_type, snap.status_id, snap.status_name, snap.status_category, snap.assignee_account_id, snap.assignee_name, snap.external_updated_at, snap.browser_url]);
-  await db.run(`UPDATE integration_entity_links SET status = 'ACTIVE', last_synced_at = now(), updated_at = now() WHERE id = ?`, [linkId]);
+  // A link unlinked (REMOVED) while a sync was fetching Jira stays removed: the sync read its link list before the user acted (integrity 2026-10-21).
+  await db.run(`UPDATE integration_entity_links SET status = 'ACTIVE', last_synced_at = now(), updated_at = now() WHERE id = ? AND status <> 'REMOVED'`, [linkId]);
 }
 
 /** Inserts a link + snapshot inside the caller's tx. Throws ValidationError when the issue is already linked elsewhere. */
@@ -475,7 +476,7 @@ export async function syncProject(db, project, { trigger = 'MANUAL', wbsId = nul
       for (const l of batch) {
         const issue = byId.get(String(l.external_entity_id));
         if (issue) { await upsertSnapshot(db, l.id, toSnapshot(issue, { siteUrl: m.site_url })); success++; }
-        else { await db.run(`UPDATE integration_entity_links SET status = 'MISSING', last_synced_at = now(), updated_at = now() WHERE id = ?`, [l.id]); failed++; }
+        else { await db.run(`UPDATE integration_entity_links SET status = 'MISSING', last_synced_at = now(), updated_at = now() WHERE id = ? AND status <> 'REMOVED'`, [l.id]); failed++; }
         if (l.link_role === 'EXECUTION') touched.add(l.wbs_item_id);
         if (l.link_role === 'REQUIREMENT') touchedReq.add(l.requirement_id);
       }
@@ -505,7 +506,7 @@ export async function applyIssueEvent(db, connection, { eventType, issueId, issu
   if (!links.length) return 'ignored';
   const projects = new Map();
   for (const pid of new Set(links.map((l) => l.project_id))) projects.set(pid, await db.get('SELECT id, workspace_id, name, status FROM projects WHERE id = ?', [pid]));
-  const missing = async () => { for (const l of links) await db.run(`UPDATE integration_entity_links SET status = 'MISSING', last_synced_at = now(), updated_at = now() WHERE id = ?`, [l.id]); for (const l of links) if (l.requirement_id) await markRequirements(db, projects.get(l.project_id), mps.get(l.project_id), [l.requirement_id]); };
+  const missing = async () => { for (const l of links) await db.run(`UPDATE integration_entity_links SET status = 'MISSING', last_synced_at = now(), updated_at = now() WHERE id = ? AND status <> 'REMOVED'`, [l.id]); for (const l of links) if (l.requirement_id) await markRequirements(db, projects.get(l.project_id), mps.get(l.project_id), [l.requirement_id]); };
   if (eventType === 'jira:issue_deleted') { await missing(); return 'missing'; }
   const runId = await startRun(db, { connectionId: connection.id, projectId: links[0].project_id, trigger: 'WEBHOOK' });
   try {

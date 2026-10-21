@@ -1763,3 +1763,7 @@ DO $$ DECLARE def text; BEGIN
     ALTER TABLE account_withdrawals ADD CONSTRAINT account_withdrawals_source_check CHECK (source IN ('SELF', 'BACKFILL', 'INACTIVE'));
   END IF;
 END $$;
+
+-- v67 (integrity 2026-10-21): fingerprint of an AI request (sha256 of feature + prompt). A second identical request from the same
+-- user while the first is still PENDING is refused (409 AI_RUN_IN_PROGRESS) instead of running — and charging — twice.
+ALTER TABLE ai_runs ADD COLUMN IF NOT EXISTS request_hash text;

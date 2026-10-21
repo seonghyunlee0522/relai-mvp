@@ -54,9 +54,12 @@ const bind = (client, { isTx = false, pool = null, schema = null } = {}) => ({
  * Open a pool. `schema` (tests) isolates everything under a dedicated PostgreSQL schema so each test gets a fresh,
  * independent database without creating a database per test. Pool size is conservative (env DB_POOL_MAX, default 10).
  */
-export async function openDb({ url = process.env.DATABASE_URL, schema = null, max = Number(process.env.DB_POOL_MAX || 10), idleTimeoutMillis = 30_000, connectionTimeoutMillis = 10_000, onPool = null, createSchema = false, applyMigrations = true } = {}) {
+export async function openDb({ url = process.env.DATABASE_URL, schema = null, max = Number(process.env.DB_POOL_MAX || 10), idleTimeoutMillis = 30_000, connectionTimeoutMillis = 10_000, statementTimeoutMs = 0, onPool = null, createSchema = false, applyMigrations = true } = {}) {
   if (!url) throw new Error('DATABASE_URL is not set');
-  const options = schema ? `-c search_path=${schema},public -c timezone=${APP_TIMEZONE}` : `-c timezone=${APP_TIMEZONE}`;
+  // statementTimeoutMs (serverless): a stuck query or a transaction left open cannot hold one of an instance's 2 connections past
+  // the function's own time limit. Migrations lift it on their own session (migrate()).
+  const limits = statementTimeoutMs > 0 ? ` -c statement_timeout=${statementTimeoutMs} -c idle_in_transaction_session_timeout=${statementTimeoutMs}` : '';
+  const options = (schema ? `-c search_path=${schema},public -c timezone=${APP_TIMEZONE}` : `-c timezone=${APP_TIMEZONE}`) + limits;
   const pool = new Pool({ connectionString: url, max, idleTimeoutMillis, connectionTimeoutMillis, options });
   pool.on('error', (e) => console.error('[db] idle client error', e.message));
   if (onPool) onPool(pool);   // serverless: attachDatabasePool keeps the instance alive until idle clients are closed
@@ -101,9 +104,19 @@ export function dbErrorInfo(err) {
   const code = err && err.code;
   if (code === '23505') return { status: 409, code: 'conflict', message: '이미 존재하는 값입니다.' };
   if (code === '23503') return { status: 400, code: 'invalid_reference', message: '연결 대상을 찾을 수 없습니다.' };
+  // 22021 / 22P05: text PostgreSQL cannot store (a NUL byte \u0000 in a title was a 500, integrity 2026-10-21)
+  if (code === '22021' || code === '22P05') return { status: 400, code: 'invalid_value', message: '입력값에 저장할 수 없는 문자가 있습니다.' };
   if (code === '23514' || code === '23502') return { status: 400, code: 'invalid_value', message: '입력값을 확인해 주세요.' };
   if (code === 'RL001') return { status: 400, code: 'integrity', message: err.message };
   if (code === '40P01' || code === '40001') return { status: 409, code: 'retry', message: '잠시 후 다시 시도해 주세요.' };
   if (code === 'ECONNREFUSED' || code === '57P01' || code === '08006' || code === '08003') return { status: 503, code: 'db_unavailable', message: '데이터베이스에 연결할 수 없습니다.' };
+  // Overload / transient connection trouble (stability test 2026-10-21): every one of these was a bare 500 'internal'. The pool's
+  // "timeout exceeded when trying to connect" (all ≤2 clients busy for 5 s) was 100% of the 500s at 10–50 users; Neon answers
+  // 53300 when its slots are full, 53200 when out of memory, 57P03 while the compute starts. A 503 + Retry-After says "try again".
+  if (code === '57014') return { status: 503, code: 'db_timeout', message: '처리 시간이 너무 오래 걸려 중단했습니다. 잠시 후 다시 시도해 주세요.' };
+  if (['53300', '53200', '53400', '57P03', '08001', '08004', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE'].includes(code)
+    || /timeout exceeded when trying to connect|Connection terminated|couldn't connect to compute node|Client has encountered a connection error/i.test(String(err && err.message))) {
+    return { status: 503, code: 'db_busy', message: '서버 연결이 원활하지 않아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.' };
+  }
   return null;
 }

@@ -87,6 +87,14 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const tokenHash = (token) => sha256(sessionSecret ? `${sessionSecret}:${token}` : token);
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
+  /* Request id on every response (X-Request-Id), in every server error log line and in 5xx bodies, so a user's "오류 ID" leads
+   * straight to the log. On Vercel it is the platform's own id (x-vercel-id, last part) — the one `vercel logs --request-id` takes. */
+  app.use((req, res, next) => {
+    const v = String(req.get('x-vercel-id') || '').split('::').pop();
+    req.id = /^[\w-]{6,80}$/.test(v) ? v : randomUUID();
+    res.set('X-Request-Id', req.id);
+    next();
+  });
   // Billing webhook first: raw body for signature checks, outside JSON parsing / CSRF / auth (docs/production-readiness.md §8).
   mountBillingWebhook(app, db, { provider: billingProvider, fail: (res, status, code, message) => res.status(status).json({ error: { code, message } }) });
   mountServicePayReturn(app, db, { provider: billingProvider });   // 서비스 결제 (/pricing): NicePay window result, cross-site form POST
@@ -1179,7 +1187,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     }
     const r = (await tx(db, async (db) => (await C.transition(db, ctx.c, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id))));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
-    if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${ctx.c.status})에서는 이 작업을 할 수 없습니다.`);
+    if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${r.from || ctx.c.status})에서는 이 작업을 할 수 없습니다.`);
     res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   /* Phase 4 US-2: 승인 기록 추가 — an APPROVED / IMPLEMENTED CR without a customer record gets one; the status never changes. */
@@ -1551,10 +1559,17 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (err instanceof PlanLimitError || err instanceof OverLimitError || err instanceof ProjectReadOnlyError) return fail(res, err.status, err.code, err.message, err.extra);
     if (err instanceof AiError || err instanceof CreditError) return fail(res, err.status, err.code, err.message, err.extra || {});
     const dbe = dbErrorInfo(err);
-    if (dbe) { if (dbe.status >= 500) console.error('[db]', err.message); return fail(res, dbe.status, dbe.code, dbe.message); }
-    console.error(err);
+    const ref = ` (오류 ID: ${String(req.id).slice(-12)})`;
+    if (dbe && dbe.status < 500) return fail(res, dbe.status, dbe.code, dbe.message);
+    if (dbe) {
+      console.error(`[db] ${req.id} ${req.method} ${req.path} → ${dbe.status} ${dbe.code}: ${err.code || ''} ${err.message}`);
+      if (res.headersSent) return next(err);
+      res.set('Retry-After', '5');
+      return fail(res, dbe.status, dbe.code, dbe.message + ref, { request_id: req.id });
+    }
+    console.error(`[error] ${req.id} ${req.method} ${req.path}`, err);
     if (res.headersSent) return next(err);
-    fail(res, 500, 'internal', '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    fail(res, 500, 'internal', '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' + ref, { request_id: req.id });
   });
 
   return app;

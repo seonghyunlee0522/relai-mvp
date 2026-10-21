@@ -4,6 +4,7 @@
  *   → feature post-validation (ids exist, enums, hierarchy) → settle (charge | release) → result for the frontend.
  * Nothing here writes project data; approval endpoints do that separately through the existing services.
  */
+import { createHash } from 'node:crypto';
 import { aiConfig, estimateProviderCost, featureCreditCost, maxOutputTokensFor, publicConfig } from './config.js';
 import { CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS } from '../plans.js';
 import { createProvider, AiProviderError } from './provider.js';
@@ -51,7 +52,8 @@ export async function runAiFeature(db, { wid, projectId = null, userId, feature,
   const provider = createProvider(cfg);
   const maxTokens = maxOutputTokensFor(feature);
   const cost = featureCreditCost(feature);
-  const run = await reserveRun(db, { wid, projectId, userId, feature, provider: provider.name, model: provider.model, inputSummary: String(prompt.inputSummary || '').slice(0, 300), cost })
+  const run = await reserveRun(db, { wid, projectId, userId, feature, provider: provider.name, model: provider.model, inputSummary: String(prompt.inputSummary || '').slice(0, 300), cost,
+    requestHash: createHash('sha256').update(`${feature}\n${prompt.system}\n${prompt.user}`).digest('hex') })
     .catch(async (e) => { if (e instanceof CreditError) e.extra = { ...e.extra, plan: await effectivePlan(db, wid) }; throw e; });   // UI: upgrade link on FREE
   const started = Date.now();
   const usageSum = { input_tokens: 0, output_tokens: 0, seen: false };

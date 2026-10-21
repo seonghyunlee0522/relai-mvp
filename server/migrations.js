@@ -246,6 +246,7 @@ export const migrations = [
       await db.run('UPDATE promotions SET title = ?, body = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ?', [to.title, to.body, id, from.title, from.body]);
     }
   } },
+  { version: 67, name: 'Integrity: ai_runs.request_hash (identical AI request while one is PENDING → 409, no double charge) (schema.sql, additive, nullable; nothing rewritten)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
@@ -294,6 +295,7 @@ export async function migrate(db, schemaSql, bindClient) {
   const upToDate = async () => { try { const r = await client.query('SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations'); return Number(r.rows[0].v) >= LATEST_VERSION; } catch { return false; } };
   try {
     if (await upToDate()) return [];   // nothing to apply → no lock needed (serverless instances boot without touching the lock)
+    await client.query('SET statement_timeout = 0; SET idle_in_transaction_session_timeout = 0');   // a long data migration must not hit the serving timeout (openDb statementTimeoutMs)
     // A frozen serverless instance can keep a session-level advisory lock forever: fail fast, kick idle holders once, retry.
     await client.query(`SET lock_timeout = '15s'`);
     try { await client.query(`SELECT pg_advisory_lock(${lock})`, [db.schema ? db.schema : 7101]); }
@@ -329,6 +331,7 @@ export async function migrate(db, schemaSql, bindClient) {
     return applied;
   } finally {
     await client.query(`SELECT pg_advisory_unlock(${lock})`, [db.schema ? db.schema : 7101]).catch(() => {});
+    await client.query('RESET statement_timeout; RESET idle_in_transaction_session_timeout; RESET lock_timeout').catch(() => {});   // back to the connection's own limits before reuse
     client.release();
   }
 }
