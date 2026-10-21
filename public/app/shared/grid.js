@@ -137,7 +137,7 @@ export function createGrid(cfg) {
     const vc = visibleCols();
     const total = (select ? CHK_W : 0) + vc.reduce((s, c) => s + colW(c), 0);
     return html`<div class="gridwrap"><table class="gtable ${cfg.tableClass || ''}" style="width:${total}px">
-      <colgroup>${raw(select ? `<col style="width:${CHK_W}px">` : '')}${raw(vc.map((c) => html`<col data-col="${c.key}" style="width:${colW(c)}px">`).join(''))}</colgroup>
+      <colgroup>${raw(select ? `<col style="width:${CHK_W}px">` : '')}${raw(vc.map((c) => html`<col data-col="${c.key}"${raw(/\bttl\b/.test(c.cls || '') ? ' class="gcol--grow"' : '')} style="--cw:${colW(c)}px">`).join(''))}</colgroup>
       <thead>${raw(headHtml(vc, rows))}</thead>
       <tbody>${raw(rows.map((r, i) => rowHtml(r, i, vc)).join(''))}</tbody></table></div>${raw(footHtml(all, pages))}`;
   };
