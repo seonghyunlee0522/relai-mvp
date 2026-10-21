@@ -1179,7 +1179,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     }
     const r = (await tx(db, async (db) => (await C.transition(db, ctx.c, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id))));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
-    if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${ctx.c.status})에서는 이 작업을 할 수 없습니다.`);
+    if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${r.from || ctx.c.status})에서는 이 작업을 할 수 없습니다.`);
     res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
   /* Phase 4 US-2: 승인 기록 추가 — an APPROVED / IMPLEMENTED CR without a customer record gets one; the status never changes. */

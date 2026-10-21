@@ -246,6 +246,7 @@ export const migrations = [
       await db.run('UPDATE promotions SET title = ?, body = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ?', [to.title, to.body, id, from.title, from.body]);
     }
   } },
+  { version: 67, name: 'Integrity: ai_runs.request_hash (identical AI request while one is PENDING → 409, no double charge) (schema.sql, additive, nullable; nothing rewritten)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

@@ -220,7 +220,10 @@ export async function transition(db, existing, action, { note, customerApproval,
   const t = TRANSITIONS[action];
   if (!t) return { error: 'bad_action' };
   const [from, to] = t;
-  if (existing.status !== from) return { error: 'invalid_transition', from: existing.status, to };
+  // Re-read the status under a row lock: `existing` was loaded before the transaction, so two approve / reject clicks
+  // (or two approvers) would both pass a check against it and both write (integrity 2026-10-21).
+  const cur = db.isTx ? await db.get('SELECT status, archived_at FROM change_requests WHERE id = ? FOR UPDATE', [existing.id]) : existing;
+  if (!cur || cur.archived_at || cur.status !== from) return { error: 'invalid_transition', from: cur ? cur.status : existing.status, to };
   if (action === 'reject' && !str(note)) throw new ValidationError({ decision_note: '반려 사유를 입력해 주세요.' });
   const ts = now();
   if (action === 'approve') await saveCustomerApproval(db, project || { id: existing.project_id }, existing, customerApproval, userId, ts);
