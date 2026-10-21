@@ -3758,7 +3758,11 @@ html.is-phone .pl-faq{padding:0}html.is-phone .pl-faq summary{padding:12px 0}htm
    * only as wide as its columns (B1), so the title keeps its own width there. */
   html:not(.is-phone) .gtable col{width:calc(var(--cw) * 1.6)}   /* never tighter than the laptop spread (1.6–2.2×) */
   html:not(.is-phone) .gtable col.gcol--grow{width:auto}
-  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer:not([hidden])) .gtable col{width:var(--cw)}
+  /* E. detail panel open: the B1 layout keeps the list only as wide as its columns with the panel beside it, which on a 4K
+   * screen left ~750px empty on the right. Here the list keeps its 1.6× columns (title too) and the panel follows the
+   * screen up to 960px (the same ceiling as a user's drag, drawer.js). 1920px gets the same 653px panel as before. */
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer:not([hidden])) .gtable col.gcol--grow{width:calc(var(--cw) * 1.6)}
+  :root{--panel-w:clamp(480px,34vw,960px)}
   html:not(.is-phone) .rtable td:not(.ttl){width:1%}
   /* D. forms, settings, credits and documents stop growing at the width they have on the laptop (1600px), left-aligned. */
   html:not(.is-phone) .page.page--form,html:not(.is-phone) .page.page--narrow,html:not(.is-phone) .page.page--doc{max-width:1600px}
