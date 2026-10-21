@@ -147,9 +147,10 @@ const phasePanel = (g, p, archived) => {
  *   권장·선택 collapsed with a count) beside 다가오는 일정 + 최근 활동. 되돌리기 / 건너뛰기 / 열기 (for manual rows) sit in the row ⋯.
  * ==================================================================================================================== */
 const nn = (v) => Number(v) || 0;
+// A tile without its own list (필수 업무 남음, this phase's 업무 n/m) scrolls to the 필수 업무 list below instead of being a dead card.
 const tile = (label, value, { href = '', tone = '', sub = '', key = '' } = {}) => {
   const inner = html`<span class="nxt__k">${label}</span><b class="nxt__v ${tone ? `is-${tone}` : ''}">${value}</b>${raw(sub ? html`<small class="nxt__s">${sub}</small>` : '')}`;
-  return href ? html`<a class="nxt" href="${href}" data-link data-tile="${key}">${raw(inner)}</a>` : html`<div class="nxt" data-tile="${key}">${raw(inner)}</div>`;
+  return href ? html`<a class="nxt" href="${href}" data-link data-tile="${key}">${raw(inner)}</a>` : html`<button type="button" class="nxt" data-tile="${key}" data-tile-req>${raw(inner)}</button>`;
 };
 /** The phase's own number: 02 요구사항 확정 n/m · 03/04 WBS 진척률 · 05 테스트 통과 · 06 검수 승인 · else this phase's activities done. */
 const phaseMetric = (g, pid) => {
@@ -332,6 +333,7 @@ export async function nextPage(id, main = $('#main')) {
     main.querySelectorAll('[data-dl]').forEach((b) => { b.onclick = async () => { try { const { download } = await import('../core/ui.js'); await download(b.dataset.dl); toast(/requirements\/export-doc/.test(b.dataset.dl) ? '요구사항 정의서를 내려받았습니다.' : '사업수행계획서를 내려받았습니다.'); } catch (e) { toast(e.message); } }; });
     bindPlanMenu(main, p.id);
     main.querySelectorAll('[data-move-next]').forEach((b) => { b.onclick = g.next_phase ? move : null; });
+    main.querySelectorAll('[data-tile-req]').forEach((b) => b.onclick = () => { const l = main.querySelector('.nxp'); if (l) { l.scrollIntoView({ behavior: 'smooth', block: 'start' }); const h = l.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } } });
     main.querySelectorAll('.np__row[data-href]').forEach((row) => { const go = () => navigate(row.dataset.href); row.onclick = (e) => { if (!e.target.closest('a,button')) go(); }; row.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a,button')) { e.preventDefault(); go(); } }; });
     main.querySelectorAll('[data-step]').forEach((b) => b.onclick = async () => {
       if (b.dataset.status === 'COMPLETED' && Number(b.dataset.open) > 0 && !(await confirmDialog({ title: '이 업무를 완료 처리할까요?', body: `'${b.dataset.title}' 체크리스트에 완료되지 않은 항목 ${b.dataset.open}건이 남아 있습니다. 그래도 완료로 기록합니다.`, confirm: '완료 처리' }))) return;
