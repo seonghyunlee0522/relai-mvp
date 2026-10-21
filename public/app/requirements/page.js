@@ -369,7 +369,7 @@ export async function requirementsPage(id) {
           <div class="field" style="margin-bottom:0"><label for="c-desc">설명</label><textarea class="textarea" id="c-desc" name="description" maxlength="5000" placeholder="요구사항의 배경과 내용을 적어주세요." style="min-height:96px"></textarea></div>
         </div>
         <div class="fsec"><h4>완료 조건</h4><div id="c-crit"></div>
-          <div class="crit-add"><input class="input input--sm" id="c-crit-in" maxlength="1000" placeholder="완료 조건을 입력하고 Enter"><button type="button" class="btn btn--secondary btn--sm" id="c-crit-add">추가</button></div></div>
+          <div class="crit-add"><input class="input input--sm" id="c-crit-in" maxlength="1000" placeholder="완료 조건을 입력하고 Enter"><button type="button" class="btn btn--secondary btn--sm" id="c-crit-add">추가</button></div><div class="err" data-crit-err hidden>완료 조건을 입력해 주세요.</div></div>
       </div>
       <div class="drawer__f"><span class="hint">Ctrl+Enter로 저장</span><span style="display:flex;gap:8px;margin-left:auto"><button class="btn btn--secondary" type="button" id="dcancel">취소</button><button class="btn btn--secondary" type="submit" data-more="1">저장 후 계속 추가</button><button class="btn btn--primary" type="submit">저장</button></span></div></form>`;
     $('#dclose').onclick = closeDrawer; $('#dcancel').onclick = closeDrawer;
@@ -377,10 +377,12 @@ export async function requirementsPage(id) {
     $('#c-title').focus();
   };
 
+  // 추가 with an empty 완료 조건: say so inline (was a silent no-op); typing clears it.
+  const critEmpty = (inp) => { const e = inp.closest('.crit-add').nextElementSibling; if (e && e.hasAttribute('data-crit-err')) { e.hidden = false; inp.setAttribute('aria-invalid', 'true'); inp.oninput = () => { e.hidden = true; inp.removeAttribute('aria-invalid'); }; } inp.focus(); };
   const bindCreate = () => {
     const form = $('#cf'); let crit = []; const list = $('#c-crit'); let more = false;
     const drawCrit = () => { list.innerHTML = crit.map((c, i) => html`<div class="crit-pending"><span class="crit__n">${i + 1}</span><span>${c}</span><button type="button" data-rm="${i}" aria-label="삭제">×</button></div>`).join(''); list.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { crit.splice(Number(b.dataset.rm), 1); drawCrit(); }); };
-    const addCrit = () => { const v = $('#c-crit-in').value.trim(); if (!v) return; crit.push(v); $('#c-crit-in').value = ''; drawCrit(); };
+    const addCrit = () => { const v = $('#c-crit-in').value.trim(); if (!v) return critEmpty($('#c-crit-in')); crit.push(v); $('#c-crit-in').value = ''; drawCrit(); };
     $('#c-crit-add').onclick = addCrit;
     $('#c-crit-in').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addCrit(); } };
     form.querySelectorAll('[type=submit]').forEach((b) => { b.onclick = () => { more = Boolean(b.dataset.more); }; });
@@ -473,7 +475,7 @@ export async function requirementsPage(id) {
               <span class="crit__n">${i + 1}</span>
               <input class="crit__in" value="${c.content}" maxlength="1000" ${readOnly ? 'disabled' : ''} data-crit-in="${c.id}">
               ${raw(readOnly ? '' : html`<span class="crit__act"><button data-crit-move="${c.id}" data-dir="-1" title="위로" ${i === 0 ? 'disabled' : ''}>↑</button><button data-crit-move="${c.id}" data-dir="1" title="아래로" ${i === r.criteria.length - 1 ? 'disabled' : ''}>↓</button><button data-crit-del="${c.id}" title="삭제">×</button></span>`)}</li>`).join(''))}</ol>
-            ${raw(readOnly ? (r.criteria.length ? '' : '<p class="hint">등록된 완료 조건이 없습니다.</p>') : html`<div class="crit-add"><input class="input input--sm" id="crit-in" maxlength="1000" placeholder="완료 조건을 입력하고 Enter"><button class="btn btn--secondary btn--sm" id="crit-add">추가</button></div>`)}`;
+            ${raw(readOnly ? (r.criteria.length ? '' : '<p class="hint">등록된 완료 조건이 없습니다.</p>') : html`<div class="crit-add"><input class="input input--sm" id="crit-in" maxlength="1000" placeholder="완료 조건을 입력하고 Enter"><button class="btn btn--secondary btn--sm" id="crit-add">추가</button></div><div class="err" data-crit-err hidden>완료 조건을 입력해 주세요.</div>`)}`;
   /** Desktop drawer (R2 §5.4): 제목 · 설명 · 완료 조건 · 범위 · 우선순위 · 담당자; 상태 · 유형 · 요청자 · 소속 under 세부 정보 더보기. */
   let moreOpen = false;
   // Jim P1-2: 유형 sits with 범위·우선순위 while the 02 분류 step is open (some 유형 미지정), on the 분류·우선순위 tab, or while it is 미지정
@@ -635,7 +637,7 @@ export async function requirementsPage(id) {
     const critApi = async (method, path, body) => { try { await refreshAll(await api(method, rApi(`/${r.id}${path}`), body)); } catch (e) { toast(e.message); } };
     const addIn = $('#crit-in');
     const critGuard = (before, after, run) => guardEdit(id, { r, field: 'criteria', before, after }, run);
-    const add = () => { const v = addIn.value.trim(); if (!v) return; critGuard('', v, () => critApi('POST', '/criteria', { content: v })).then((ok) => { if (!ok) addIn.value = ''; }); };
+    const add = () => { const v = addIn.value.trim(); if (!v) return critEmpty(addIn); critGuard('', v, () => critApi('POST', '/criteria', { content: v })).then((ok) => { if (!ok) addIn.value = ''; }); };
     if (addIn) { addIn.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }; $('#crit-add').onclick = add; }
     d.querySelectorAll('[data-crit-in]').forEach((inp) => {
       const c = r.criteria.find((x) => x.id === inp.dataset.critIn);
