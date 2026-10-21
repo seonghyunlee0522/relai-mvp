@@ -358,7 +358,7 @@ export function completionSections(d) {
   const q = d.quality;
   out.quality = [`- 테스트 ${q.tests}건 · 최근 통과 ${q.pass}건 · 제외 ${q.excluded}건`, ...q.excluded_list.map((x) => `  - ${x.display_id} ${x.title} — 제외 사유: ${x.reason}`),
     `- 테스트에서 나온 이슈 ${q.defects}건 (해결 ${q.defects_resolved}건)`].join('\n');
-  out.acceptance = d.acceptance.length ? d.acceptance.map((a) => `- ${a.display_id} ${a.title} — ${a.recorded ? [a.approver, a.date, a.method].filter(Boolean).join(' · ') : '고객 승인 기록 없음'}`).join('\n') : '- 승인된 검수가 없습니다.';
+  out.acceptance = d.acceptance.length ? d.acceptance.map((a) => `- ${a.display_id} ${a.title} — ${a.recorded ? a.summary : '고객 확인 미체크'}`).join('\n') : '- 승인된 검수가 없습니다.';
   const c = d.carryover; const cl = [];
   if (c.handover) cl.push(`- 운영 인수: ${c.handover.receiver_name} · ${ymdText(c.handover.date)}`);
   if (c.items.length) { cl.push(`- 운영 이관 ${c.items.length}건`); c.items.forEach((x) => cl.push(`  - [${CARRY_KO[x.type] || x.type}] ${x.display_id} ${x.title}${x.note ? ` — ${x.note}` : ''} · 운영 담당 ${x.owner_name || '미지정'}`)); }
@@ -369,14 +369,14 @@ export function completionSections(d) {
     ? { key, title, body: '', fields: LESSON_FIELDS.map(([k, label]) => ({ key: k, label, body: '' })) }
     : { key, title, body: out[key] }));
 }
-/** Accepted 검수 rows → { display_id, title, recorded, approver, date, method } (Phase 6 고객 승인 기록). */
+/** Accepted 검수 rows → { display_id, title, recorded (= 고객 확인 체크), summary, approver, date, method } (legacy 승인 기록 fields kept). */
 export async function acceptedApprovals(db, projectId) {
   const rows = await db.all(`SELECT id, display_id, title, customer_approval FROM acceptances WHERE project_id = ? AND archived_at IS NULL AND status = 'ACCEPTED' ORDER BY sequence_number`, [projectId]);
   const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]);
   let sh = []; try { sh = JSON.parse((r && r.stakeholders) || '[]'); } catch { sh = []; }
   return rows.map((a) => {
     const v = accApprovalView(a.customer_approval, Array.isArray(sh) ? sh : []);
-    return { display_id: a.display_id, title: a.title, recorded: v.recorded, approver: v.approver ? `${v.approver.name}${v.approver.title ? ` ${v.approver.title}` : ''}` : '', date: v.date || '', method: v.method_label || '' };
+    return { display_id: a.display_id, title: a.title, recorded: v.recorded, summary: v.summary || '', approver: v.approver ? `${v.approver.name}${v.approver.title ? ` ${v.approver.title}` : ''}` : '', date: v.date || '', method: v.method_label || '' };
   });
 }
 

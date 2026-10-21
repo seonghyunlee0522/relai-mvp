@@ -62,7 +62,7 @@ const A = {
     { d: -24, t: '11:10', op: 'section', key: 'MILESTONES' },
     { d: -23, t: '14:00', op: 'def', body: {
       operations: { meetings: '주간 회의 매주 화요일 10시 (고객 PM·수행 PM·개발 리드)', reporting: '주간보고 매주 금요일 오후 메일 공유', communication: '업무 메신저 공용 채널 + 메일', decisions: '범위·일정 변경은 고객 PM 확인 후 스폰서 승인' },
-      change_management: '변경 요청은 RELAI 변경 요청으로 등록하고 영향(일정·공수)을 적어 승인받는다.',
+      change_management: '변경 요청은 RELAI 변경 요청으로 등록하고 영향(일정·공수)을 적고 반영 여부를 결정한다.',
       acceptance: '범위 내 요구사항별 테스트 통과 후 고객 PM 검수 확인서 서명',
     } },
     { d: -23, t: '14:10', op: 'section', key: 'OPERATIONS' },
