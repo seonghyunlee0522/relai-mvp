@@ -1,6 +1,7 @@
 /* RELAI app entry — wires routes to page modules. All pages are ES modules under /assets/. */
 import { registerRoutes, render } from './core/router.js';
 import { onDeviceChange } from './core/device.js';
+import { wireGpops } from './core/outside.js';
 import { shell } from './shell.js';
 import { authPage, forgotPage, resetPage, verifyPage } from './auth.js';
 import { invitePage } from './invite.js';
@@ -91,5 +92,6 @@ registerRoutes([
   [/^\/admin\/purge\/?$/, adminPurgePage],
 ], { shell: (path, view, token) => (path.startsWith('/admin') ? adminShell(path, view) : shell(path, view, token)), auth: authPage, invite: invitePage,
   account: { 'forgot-password': forgotPage, 'reset-password': resetPage, 'verify-email': verifyPage } });
+wireGpops();   // .gpop popovers (Excel ▾ · 컬럼 · 필터) close on an outside click / tap / Esc on every page
 onDeviceChange(render);   // rotate / resize across 768px → same page in the other mode, no reload
 render();

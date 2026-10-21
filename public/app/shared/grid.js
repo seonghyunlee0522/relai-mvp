@@ -12,7 +12,6 @@
 import { esc, html, raw, fmtShort } from '../core/dom.js';
 import { store } from '../core/ui.js';
 import { isPhone } from '../core/device.js';
-import { closeOnOutsideTap } from '../core/outside.js';
 
 const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
 const SIZES = [50, 100, 200, 500];
@@ -251,12 +250,7 @@ export function createGrid(cfg) {
       });
     });
   };
-  if (!document.body.dataset.gpopBound) {
-    document.body.dataset.gpopBound = '1';
-    document.addEventListener('click', () => document.querySelectorAll('.gpop').forEach((p) => { p.hidden = true; }));
-    closeOnOutsideTap((t) => t.closest && t.closest('.gpop, [data-gcols]'), () => document.querySelectorAll('.gpop:not([hidden])').forEach((p) => { p.hidden = true; }), '.gpop:not([hidden])');
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelectorAll('.gpop:not([hidden])').forEach((p) => { p.hidden = true; }); });
-  }
+  // .gpop outside-click / outside-tap / Esc close is global now: core/outside.js wireGpops(), wired in app.js
 
   /* ---------- public API ---------- */
   return {

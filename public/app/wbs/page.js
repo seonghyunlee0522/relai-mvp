@@ -68,6 +68,9 @@ export async function wbsPage(id) {
   const view = () => (!onPhone() && params().get('view') === 'gantt' ? 'gantt' : 'list');   // phone: no Gantt (spec §4 — list + one line)
   const quick = () => params().get('f') || '';
   const QUICK_LABEL = { no_owner: '담당자 미지정 작업', no_dates: '일정 미설정 작업', linked: '요구사항 연결됨', unlinked: '요구사항 미연결 작업', overdue: '지연 작업', over_end: '종료일 초과 작업', open: '미완료 작업·마일스톤' };
+  /** Phone count chips (진행 중 · 완료 · 마일스톤): filter keys whose rule is the same one their counts use (KF_HIT), so a chip's number = the rows it shows. */
+  const KF_LABEL = { in_progress: '진행 중 항목', completed: '완료 항목', milestone: '마일스톤' };
+  const KF_HIT = { in_progress: (it) => it.status === 'IN_PROGRESS', completed: (it) => it.status === 'COMPLETED', milestone: (it) => it.item_type === 'MILESTONE' };
   /* Phase 3 US-1: one owner value for both kinds — 'u:<user>' (RELAI 사용자) · 's:<stakeholder>' (팀원, 계정 없음) · '' (미지정) */
   const ownerKey = OP.ownerKey;
   const hasOwner = (it) => Boolean(it.owner_user_id || (it.owner_stakeholder_id && !it.owner_deleted));
@@ -108,7 +111,7 @@ export async function wbsPage(id) {
     if (f || q || owner || cst || reqWbs || crWbs || phase) {
       keep = new Set();
       for (const it of items) {
-        let hit = !f || (f === 'linked' ? it.linked_req_count > 0
+        let hit = !f || (KF_HIT[f] ? !isSys(it) && KF_HIT[f](it) : f === 'linked' ? it.linked_req_count > 0
           : f === 'overdue' ? isOverdue(it)
           : f === 'over_end' ? Boolean(it.past_end)
           : f === 'open' ? (isLeafTask(it) || it.item_type === 'MILESTONE') && it.status !== 'COMPLETED'
@@ -351,9 +354,9 @@ export async function wbsPage(id) {
   /* ---------- page ---------- */
   const kpiHtml = () => {
     const late = items.filter(isOverdue).length;
-    return html`<button type="button" class="kchip" data-kf=""><b>${summary.total}</b>전체 항목</button>
-      <span class="kchip"><b>${summary.in_progress}</b>진행 중</span><span class="kchip"><b>${summary.completed}</b>완료</span><span class="kchip"><b>${summary.milestones}</b>마일스톤</span>
-      <button type="button" class="kchip ${late ? 'is-crit' : ''}" data-kf="overdue"><b>${late}</b>지연 작업</button>`;
+    const f = quick(); const n = (k) => userItems().filter(KF_HIT[k]).length;
+    const chip = (k, cnt, label, cls = '') => html`<button type="button" class="kchip ${cls} ${f === k ? 'is-on' : ''}" data-kf="${k}" aria-pressed="${f === k}"><b>${cnt}</b>${label}</button>`;
+    return [chip('', summary.total, '전체 항목'), chip('in_progress', n('in_progress'), '진행 중'), chip('completed', n('completed'), '완료'), chip('milestone', n('milestone'), '마일스톤'), chip('overdue', late, '지연 작업', late ? 'is-crit' : '')].join('');
   };
   const paintKpi = () => { const k = $('#kstrip'); if (k) k.innerHTML = kpiHtml(); };
 
@@ -481,7 +484,7 @@ export async function wbsPage(id) {
         ${raw(archived ? '' : '<button class="btn btn--secondary btn--sm ph-hide" id="add-ms" title="마일스톤 추가 (기간 없이 날짜만)">◆ 마일스톤 추가</button><button class="btn btn--primary btn--sm" id="add">+ 항목 추가</button>')}
       </div>
       <div class="kstrip" id="kstrip">${raw(kpiHtml())}</div>` : '')}
-      ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : /^s:/.test(v2) ? (owners.team.find((t) => `s:${t.id}` === v2) || {}).name || v2 : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: QUICK_LABEL }, { key: 'phase', label: '단계', map: LIFECYCLE_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}
+      ${raw(appliedFilters(q, [{ key: 'q', label: '검색' }, { key: 'owner', label: '담당자', format: (v2) => (v2 === 'none' ? '미지정' : /^s:/.test(v2) ? (owners.team.find((t) => `s:${t.id}` === v2) || {}).name || v2 : (members.find((m) => m.id === v2) || {}).name || v2) }, { key: 'cst', label: '상태', map: WBS_CSTATUS }, { key: 'f', label: '보기', map: { ...QUICK_LABEL, ...KF_LABEL } }, { key: 'phase', label: '단계', map: LIFECYCLE_LABEL }, { key: 'requirement', label: '요구사항', format: () => (ctxReq ? `${ctxReq.display_id} ${ctxReq.title}` : '…') }]))}
       <div id="bulkslot"></div>
       <div class="rlayout ${sel ? 'has-drawer' : ''}">
         ${raw(body)}
@@ -630,7 +633,8 @@ export async function wbsPage(id) {
     main.querySelectorAll('[data-cstf]').forEach((b) => { b.onclick = () => { setParam('cst', b.dataset.cstf); syncRows(); draw(); }; });
     const sm = main.querySelector('[data-selmode]'); if (sm) sm.onclick = () => { selMode = !selMode; setParam('select', selMode ? '1' : ''); grid.setSelectMode(selMode); draw(); };
     main.querySelectorAll('.tmenu [data-xl]').forEach((b) => { b.onclick = async () => { try { if (b.dataset.xl === 'import') openImport({ kind: 'wbs', base: wApi(), onDone: async () => { await load(); draw(); } }); else if (b.dataset.xl === 'template') await download(`${wApi()}/template.xlsx`, { filename: 'WBS 등록 템플릿.xlsx' }); else await download(`${wApi()}/export.xlsx`); } catch (err) { toast(err.message); } }; });
-    main.querySelectorAll('[data-kf]').forEach((b) => b.onclick = () => { setParam('f', b.dataset.kf); setParam('requirement', ''); ctxReq = null; syncRows(); draw(); });
+    // delegated on the strip: paintKpi() re-renders the chips without a full draw(); tapping the active chip again clears it
+    const ks = $('#kstrip'); if (ks) ks.onclick = (e) => { const b = e.target.closest('[data-kf]'); if (!b) return; const k = b.dataset.kf; setParam('f', k && k === quick() ? '' : k); setParam('requirement', ''); ctxReq = null; syncRows(); draw(); };
     bindMoreFilters(main);
     bindFilterClears(main, { setParam, keys: ['q', 'owner', 'cst', 'f', 'requirement'], reload: async () => { if (!params().get('requirement')) ctxReq = null; syncRows(); draw(); } });
     const cl2 = $('#clear2'); if (cl2) cl2.onclick = () => { for (const k of ['q', 'owner', 'cst', 'f']) setParam(k, ''); syncRows(); draw(); };

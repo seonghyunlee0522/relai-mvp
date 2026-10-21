@@ -84,6 +84,19 @@ export function closeOnOutsideTap(inside, close, openSel) {
   if (openSel) trackMenu(openSel, close);
 }
 
+/* .gpop popovers (Excel ▾ · 컬럼 · 필터): one global closer, wired once at app start (app.js). It used to live in shared/grid.js and
+ * was bound only after a grid with column tools rendered, so on a page visited first without one (테스트 › Excel ▾) the popover
+ * never closed on an outside click (Jim 10-21). Toggles open their popover on click after closing the others, so they count as inside. */
+const GPOP_TOGGLES = '.gpop, [data-gcols], [data-fmore], #xl-btn';
+const closeGpops = () => document.querySelectorAll('.gpop:not([hidden])').forEach((p) => { p.hidden = true; });
+let wiredGpops = false;
+export function wireGpops() {
+  if (wiredGpops || typeof document === 'undefined') return; wiredGpops = true;
+  document.addEventListener('click', () => document.querySelectorAll('.gpop').forEach((p) => { p.hidden = true; }));
+  closeOnOutsideTap((t) => t.closest && t.closest(GPOP_TOGGLES), closeGpops, '.gpop:not([hidden])');
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGpops(); });
+}
+
 /* <details class="pmenu"> / <details class="rmenu"> dropdowns (사업수행계획서 · 요구사항 정의서 · 보고서): one open at a time,
  * closed by an outside tap / click or Esc (Jim mobile 10-21 #2 — .pmenu had no outside close). */
 const OPEN_DETAILS = 'details.pmenu[open], details.rmenu[open]';

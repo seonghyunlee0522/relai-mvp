@@ -38,7 +38,7 @@ test('fallback pointerdown closers ignore taps on the backdrop (the backdrop clo
 });
 
 test('every menu registers its open state with the shared backdrop', () => {
-  const reg = [['frame.js', ".dmenu'"], ['shared/toolmenu.js', ".tmenu:not([hidden])'"], ['shared/grid.js', ".gpop:not([hidden])'"], ['project/actions.js', ".amenu'"], ['project/next.js', ".np__menu:not([hidden])'"]];
+  const reg = [['frame.js', ".dmenu'"], ['shared/toolmenu.js', ".tmenu:not([hidden])'"], ['core/outside.js', ".gpop:not([hidden])'"], ['project/actions.js', ".amenu'"], ['project/next.js', ".np__menu:not([hidden])'"]];
   for (const [f, sel] of reg) assert.match(src(f), new RegExp(`closeOnOutsideTap\\([^\\n]*, '${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`), f);
   assert.match(src('onboarding/ui.js'), /trackMenu\('#helpmenu'/);
   assert.match(src('onboarding/ui.js'), /!isBackdrop\(e\.target\) && !e\.target\.closest\('#helpmenu, \.helpbtn'\)/);

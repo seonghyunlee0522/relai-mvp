@@ -44,7 +44,7 @@ test('#2 wireDetailsMenus: an open .pmenu / .rmenu closes on an outside pointerd
 });
 
 test('#6 every outside-click menu also listens to pointerdown', () => {
-  for (const f of ['frame.js', 'project/actions.js', 'project/next.js', 'shared/grid.js', 'shared/toolmenu.js']) assert.match(src(f), /closeOnOutsideTap\(/, f);
+  for (const f of ['frame.js', 'project/actions.js', 'project/next.js', 'core/outside.js', 'shared/toolmenu.js'])   // .gpop: core/outside.js wireGpops (was shared/grid.js) assert.match(src(f), /closeOnOutsideTap\(/, f);
   assert.match(src('onboarding/ui.js'), /addEventListener\('pointerdown', down, true\)/);
   assert.match(src('onboarding/ui.js'), /removeEventListener\('pointerdown', down, true\)/, 'help menu removes its listener on close');
   assert.match(src('project/report.js'), /wireDetailsMenus\(\)/);

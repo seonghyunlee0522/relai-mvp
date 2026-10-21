@@ -961,6 +961,8 @@ h1,h2,h3{letter-spacing:-0.025em}
 .kchip b{font-size:var(--fs-md);color:var(--navy);font-variant-numeric:tabular-nums}
 .kchip.is-warn b{color:var(--warn-fg)}.kchip.is-crit b{color:var(--danger-fg)}
 button.kchip{cursor:pointer}button.kchip:hover{border-color:var(--border-blue);background:var(--bg-tint)}
+.kchip.is-on{border-color:var(--blue);background:var(--blue-soft);box-shadow:inset 0 0 0 1px var(--blue)}.kchip.is-on b{color:var(--blue-deep)}
+html.is-phone button.kchip{min-height:44px;align-items:center}
 .rtool{gap:6px;margin-bottom:8px}
 .rtool #q{width:200px}
 .applied{margin:-2px 0 8px}
@@ -3396,7 +3398,6 @@ html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]::after{content:no
 html.is-phone .kstrip{scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);padding-right:24px}
 html.is-phone .kstrip::-webkit-scrollbar{display:none}
 html.is-phone .kpi__s{white-space:normal;overflow:visible;text-overflow:clip}
-=======
 /* ---------- 샘플 프로젝트 (server/samples/): badge on cards / list / project header, Home banner, 설정 panel ---------- */
 .chip--sample{background:#F3EEFF;color:#6D28D9;margin-left:6px;flex:none}
 .sbanner{display:flex;align-items:center;gap:12px;background:#FAF7FF;border:1px solid #E4D9FB;border-radius:var(--r-lg);padding:10px 16px;margin:0 0 14px}
