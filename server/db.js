@@ -116,7 +116,7 @@ export function dbErrorInfo(err) {
   if (code === '57014') return { status: 503, code: 'db_timeout', message: '처리 시간이 너무 오래 걸려 중단했습니다. 잠시 후 다시 시도해 주세요.' };
   if (['53300', '53200', '53400', '57P03', '08001', '08004', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE'].includes(code)
     || /timeout exceeded when trying to connect|Connection terminated|couldn't connect to compute node|Client has encountered a connection error/i.test(String(err && err.message))) {
-    return { status: 503, code: 'db_busy', message: '접속이 많아 잠시 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.' };
+    return { status: 503, code: 'db_busy', message: '서버 연결이 원활하지 않아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.' };
   }
   return null;
 }

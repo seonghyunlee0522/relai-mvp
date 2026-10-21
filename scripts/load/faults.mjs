@@ -53,6 +53,7 @@ psql(`select count(pg_terminate_backend(pid)) from pg_stat_activity where usenam
 await probe('home right after kill', 'GET', HOME); await probe('home again', 'GET', HOME);
 
 scenario = 'S5 connection slots exhausted (53300)';
+await ctl('/kill'); await sleep(300); psql(`select count(pg_terminate_backend(pid)) from pg_stat_activity where usename='app'`); await sleep(300);   // free the app's own slots first, then take every slot
 const hogs = []; for (let i = 0; i < 120; i++) { const c = new pg.Client({ connectionString: 'postgres://hog:sim@127.0.0.1:55490/relai_fault' }); try { await c.connect(); hogs.push(c); } catch { break; } }
 rows.push({ scenario, label: 'hog connections held', value: hogs.length, dbMem: execFileSync('docker', ['stats', '--no-stream', '--format', '{{.MemUsage}}', 'relai-neonsim']).toString().trim() }); console.log('hogs', hogs.length);
 await ctl('/kill'); await sleep(300);
