@@ -48,6 +48,18 @@ async function readJson(res) {
   return json;
 }
 
+/* Request bodies, shared by the adapters and the admin preview (관리자 › AI 프롬프트) so the preview shows exactly what is posted. */
+export const anthropicBody = ({ model, maxTokens, system, user, schema, schemaName = 'result', schemaDescription = 'Structured result' }) => ({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }],
+  tools: [{ name: schemaName, description: schemaDescription, input_schema: schema }], tool_choice: { type: 'tool', name: schemaName } });
+export const openaiBody = ({ model, maxTokens, system, user, schema, schemaName = 'result' }) => ({ model, max_completion_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+  response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema: openaiSchema(schema) } } });
+/** What the configured provider would receive: endpoint + body (the API key header is never included). */
+export function providerRequest(provider, req) {
+  if (provider === 'anthropic') return { endpoint: 'POST https://api.anthropic.com/v1/messages', body: anthropicBody(req) };
+  if (provider === 'openai') return { endpoint: 'POST https://api.openai.com/v1/chat/completions', body: openaiBody(req) };
+  return { endpoint: provider === 'fake' ? '(테스트용 가짜 제공사 — 외부 전송 없음)' : '(제공사 미설정)', body: openaiBody(req) };
+}
+
 /* ---------- Anthropic (Messages API, forced tool use = guaranteed JSON matching input_schema) ---------- */
 function anthropicProvider({ apiKey, model, timeoutMs, maxOutputTokens }) {
   return {
@@ -55,8 +67,7 @@ function anthropicProvider({ apiKey, model, timeoutMs, maxOutputTokens }) {
     async generateStructured({ system, user, schema, schemaName = 'result', schemaDescription = 'Structured result', maxTokens = maxOutputTokens }) {
       const res = await call('https://api.anthropic.com/v1/messages', {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }],
-          tools: [{ name: schemaName, description: schemaDescription, input_schema: schema }], tool_choice: { type: 'tool', name: schemaName } }),
+        body: JSON.stringify(anthropicBody({ model, maxTokens, system, user, schema, schemaName, schemaDescription })),
       }, timeoutMs);
       const json = await readJson(res);
       const tool = (json.content || []).find((c) => c.type === 'tool_use');
@@ -93,8 +104,7 @@ function openaiProvider({ apiKey, model, timeoutMs, maxOutputTokens }) {
     async generateStructured({ system, user, schema, schemaName = 'result', maxTokens = maxOutputTokens }) {
       const res = await call(`${openaiBase()}/chat/completions`, {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, max_completion_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-          response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema: openaiSchema(schema) } } }),
+        body: JSON.stringify(openaiBody({ model, maxTokens, system, user, schema, schemaName })),
       }, timeoutMs);
       const json = await readJson(res);
       const choice = json.choices?.[0]; const msg = choice?.message;

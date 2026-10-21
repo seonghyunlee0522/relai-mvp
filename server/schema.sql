@@ -1767,3 +1767,26 @@ END $$;
 -- v67 (integrity 2026-10-21): fingerprint of an AI request (sha256 of feature + prompt). A second identical request from the same
 -- user while the first is still PENDING is refused (409 AI_RUN_IN_PROGRESS) instead of running — and charging — twice.
 ALTER TABLE ai_runs ADD COLUMN IF NOT EXISTS request_hash text;
+
+-- v68 (prompt admin 2026-10-21): operator overrides of the AI prompts (관리자 › AI 프롬프트). A key with no row uses the code default
+-- in server/ai/prompts.js, so an empty table is exactly the shipped behaviour. Every save / reset / restore appends a version row.
+CREATE TABLE IF NOT EXISTS ai_prompts (
+  key         text PRIMARY KEY,                 -- COMMON_RULES | REQUIREMENT_EXTRACTION | … (prompts.js PROMPT_KEYS)
+  body        text NOT NULL,
+  version     integer NOT NULL,
+  updated_by  text REFERENCES users(id) ON DELETE SET NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS ai_prompt_versions (
+  id          text PRIMARY KEY,
+  seq         bigserial,
+  key         text NOT NULL,
+  version     integer NOT NULL,
+  action      text NOT NULL,                    -- SAVE | RESET (back to the code default) | RESTORE (an older version saved again)
+  body        text NOT NULL,                    -- the text in effect after this change (for RESET: the code default at that time)
+  restored_from integer,
+  created_by  text REFERENCES users(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (key, version)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_key ON ai_prompt_versions(key, version DESC);

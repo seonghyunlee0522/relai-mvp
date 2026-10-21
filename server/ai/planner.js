@@ -19,7 +19,8 @@ import { ValidationError } from '../validate.js';
 import { buildProjectCharter } from '../charter.js';
 import * as W from '../wbs.js';
 import { runAiFeature, AiError } from './service.js';
-import { SYSTEM, dataBlock, inputBlock, neutralize, AREA_LABEL } from './prompts.js';
+import { dataBlock, inputBlock, neutralize, AREA_LABEL } from './prompts.js';
+import { systemPrompt } from './prompt-store.js';
 import { PLANNER_SCHEMAS, PLAN_AREAS, AREA_STATUS, AREA_SOURCE, QUESTION_TYPES } from './schemas.js';
 import { projectBlock, requirementRows, wbsRows } from './context.js';
 import { commitWbs, titleSimilarity, DUPLICATE_THRESHOLD } from './features.js';
@@ -97,6 +98,20 @@ const save = (db, id, patch) => {
   return db.run(`UPDATE ai_wbs_plans SET ${sets.join(', ')}, updated_at = now() WHERE id = ?`, [...vals, id]);
 };
 
+/* ---------- prompt builders (also used by 관리자 › AI 프롬프트 › 미리보기, which must not create or claim a plan) ---------- */
+export async function planQuestionsRequest(db, project, ids, planId) {
+  const ctx = await plannerContext(db, project, ids);
+  return { ctx, prompt: { system: await systemPrompt(db, 'WBS_PLAN_QUESTIONS'), schemaName: 'wbs_planning_questions', schemaDescription: '수행 영역 판단과 사용자 질문',
+    user: `${dataBlock(`${ctx.base}\n\n${ctx.knownText}`)}\n\n위 프로젝트에 필요한 수행 영역을 판단하고, 정보가 부족한 영역에 대한 질문을 JSON으로 반환하세요.`,
+    inputSummary: `plan ${planId}: requirements ${ctx.reqs.length}, existing wbs ${ctx.wbs.length}, known areas ${ctx.known.length}`, inputChars: ctx.base.length } };
+}
+export async function planDraftRequest(db, project, plan, areas) {
+  const ctx = await plannerContext(db, project, plan.requirement_ids);
+  return { ctx, prompt: { system: await systemPrompt(db, 'PROJECT_WBS_DRAFT'), schemaName: 'project_wbs_draft', schemaDescription: '전체 프로젝트 WBS 초안',
+    user: `${dataBlock(`${ctx.base}\n\n${areasText(areas)}`)}\n\n${inputBlock(answersText(plan))}\n\n기능 요구사항만 구현하지 말고 실제 프로젝트 완료에 필요한 전체 수행 WBS 초안을 JSON으로 반환하세요.`,
+    inputSummary: `plan ${plan.id}: requirements ${ctx.reqs.length}, existing wbs ${ctx.wbs.length}, answers ${Object.keys(plan.answers).length}`, inputChars: ctx.base.length } };
+}
+
 /* ---------- 1. create plan + questions ---------- */
 export async function createPlan(db, { project, wid, userId, requirementIds = null, all = false }) {
   const live = await requirementRows(db, project.id, { limit: 300 });
@@ -115,12 +130,7 @@ export async function createPlan(db, { project, wid, userId, requirementIds = nu
   try {
     out = await runAiFeature(db, {
       wid, projectId: project.id, userId, feature: 'WBS_PLAN_QUESTIONS',
-      build: async () => {
-        ctx = await plannerContext(db, project, ids);
-        return { system: SYSTEM.WBS_PLAN_QUESTIONS, schemaName: 'wbs_planning_questions', schemaDescription: '수행 영역 판단과 사용자 질문',
-          user: `${dataBlock(`${ctx.base}\n\n${ctx.knownText}`)}\n\n위 프로젝트에 필요한 수행 영역을 판단하고, 정보가 부족한 영역에 대한 질문을 JSON으로 반환하세요.`,
-          inputSummary: `plan ${id}: requirements ${ctx.reqs.length}, existing wbs ${ctx.wbs.length}, known areas ${ctx.known.length}`, inputChars: ctx.base.length };
-      },
+      build: async () => { const r = await planQuestionsRequest(db, project, ids, id); ctx = r.ctx; return r.prompt; },
       postValidate: async (data) => ({ data: normalizeQuestions(data, ctx.known), warnings: [] }),
     });
   } catch (e) { await db.run('DELETE FROM ai_wbs_plans WHERE id = ?', [id]); throw e; }
@@ -215,12 +225,7 @@ export async function generatePlanDraft(db, { plan, project, wid, userId }) {
   try {
     out = await runAiFeature(db, {
       wid, projectId: project.id, userId, feature: 'WBS_GENERATION', schema: PLANNER_SCHEMAS.project_wbs_draft,
-      build: async () => {
-        ctx = await plannerContext(db, project, plan.requirement_ids);
-        return { system: SYSTEM.PROJECT_WBS_DRAFT, schemaName: 'project_wbs_draft', schemaDescription: '전체 프로젝트 WBS 초안',
-          user: `${dataBlock(`${ctx.base}\n\n${areasText(areas)}`)}\n\n${inputBlock(answersText(plan))}\n\n기능 요구사항만 구현하지 말고 실제 프로젝트 완료에 필요한 전체 수행 WBS 초안을 JSON으로 반환하세요.`,
-          inputSummary: `plan ${plan.id}: requirements ${ctx.reqs.length}, existing wbs ${ctx.wbs.length}, answers ${Object.keys(plan.answers).length}`, inputChars: ctx.base.length };
-      },
+      build: async () => { const r = await planDraftRequest(db, project, plan, areas); ctx = r.ctx; return r.prompt; },
       postValidate: async (data) => { const r = normalizeCandidates(data.items, { reqs: ctx.reqs, existing: ctx.wbs, max: MAX_ITEMS }); return { data: { items: r.items, notes: (data.notes || []).map((n) => str(n, 300)).filter(Boolean) }, warnings: r.warnings }; },
     });
   } catch (e) { await save(db, plan.id, { status: 'QUESTIONS_READY' }); throw e; }
@@ -372,7 +377,7 @@ export async function fixPlan(db, { plan, project, wid, userId, areas: wanted = 
       ctx = await plannerContext(db, project, plan.requirement_ids);
       const draftText = `## 현재 초안 (temp_id · 영역 · 제목)\n${plan.draft.items.map((i) => `- ${i.temp_id}${i.parent_temp_id ? ` (상위 ${i.parent_temp_id})` : ''} [${i.project_area}] ${clip(i.title, 100)}`).join('\n')}`;
       const target = `## 보완 대상\nmissing_areas: ${missingAreas.map((a) => `${a} (${AREA_LABEL[a]})`).join(', ') || '(없음)'}\nuncovered_requirements: ${missingReqs.join(', ') || '(없음)'}`;
-      return { system: SYSTEM.WBS_PLAN_FIX, schemaName: 'wbs_plan_fix', schemaDescription: '누락 영역 보완 후보',
+      return { system: await systemPrompt(db, 'WBS_PLAN_FIX'), schemaName: 'wbs_plan_fix', schemaDescription: '누락 영역 보완 후보',
         user: `${dataBlock(`${ctx.base}\n\n${areasText(areas)}\n\n${draftText}\n\n${target}`)}\n\n${inputBlock(answersText(plan))}\n\n보완 대상에 해당하는 추가 WBS 후보만 JSON으로 반환하세요.`,
         inputSummary: `plan ${plan.id} fix: areas ${missingAreas.length}, requirements ${missingReqs.length}`, inputChars: ctx.base.length };
     },

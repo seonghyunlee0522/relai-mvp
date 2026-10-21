@@ -11,7 +11,8 @@ import { ValidationError } from '../validate.js';
 import * as Q from '../testing.js';
 import { REQ_TYPES } from '../requirements.js';
 import { runAiFeature } from './service.js';
-import { COMMON_RULES, dataBlock, neutralize } from './prompts.js';
+import { SYSTEM, dataBlock, neutralize } from './prompts.js';
+import { systemPrompt } from './prompt-store.js';
 import { charterBlock } from './context.js';
 import { TEST_SCENARIO_TYPES } from './schemas.js';
 
@@ -21,17 +22,8 @@ export const AI_TEST_SOURCE = 'AI 시나리오에서 생성';
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const clip = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n)}…` : t; };
 
-export const SYSTEM_TEST_GENERATION = `${COMMON_RULES}
-
-작업: 선택한 요구사항마다 테스트 시나리오 초안을 1~3개 만듭니다.
-- requirement_id에는 제공된 요구사항 ID(REQ-nnn)만 그대로 씁니다. 목록에 없는 요구사항은 만들지 않습니다.
-- type: ${TEST_SCENARIO_TYPES.join(' | ')} — 정상 흐름 1개를 먼저 두고, 완료 조건에 근거가 있을 때만 예외·경계를 더합니다.
-- precondition: 실행 전에 갖춰야 할 상태 (권한, 사전 데이터 등).
-- test_data: 필요한 테스트 계정의 역할·종류와 입력 데이터 예시. 실제 비밀번호·개인정보·키 같은 비밀값은 절대 쓰지 말고 "<테스트 계정 비밀번호>"처럼 자리표시로 둡니다.
-- environment: "적용 환경" 목록이 있으면 그중 이 시나리오에 해당하는 것만 적고, 없으면 빈 문자열로 둡니다.
-- steps: 사용자가 따라 할 단계(instruction)와 단계별 예상 결과(expected). 3~8단계.
-- expected_result: 시나리오 전체의 최종 예상 결과 — 완료 조건을 확인할 수 있게 씁니다.
-- "기존 테스트" 제목과 같은 내용은 다시 만들지 않습니다. 근거 없는 수치·화면 이름을 지어내지 않습니다.`;
+/** Code default (prompts.js DEFAULT_PROMPTS.TEST_GENERATION, assembled); runs read the live one through systemPrompt(). */
+export const SYSTEM_TEST_GENERATION = SYSTEM.TEST_GENERATION;
 
 /** 적용 환경 (#2, T2 contract `project_definitions.environments`): any shape → short lines; absent column/value → []. */
 export function environmentLines(v) {
@@ -78,7 +70,7 @@ export async function generateTests(db, { project, wid, userId, requirementIds }
     build: async () => {
       ctx = await testGenContext(db, project, ids);
       if (!ctx.reqs.length) throw new ValidationError({ requirement_ids: '선택한 요구사항을 찾을 수 없습니다.' });
-      return { system: SYSTEM_TEST_GENERATION, schemaName: 'test_scenarios', schemaDescription: '요구사항별 테스트 시나리오 초안',
+      return { system: await systemPrompt(db, 'TEST_GENERATION'), schemaName: 'test_scenarios', schemaDescription: '요구사항별 테스트 시나리오 초안',
         user: `${dataBlock(ctx.text)}\n\n위 선택 요구사항마다 테스트 시나리오 초안을 JSON으로 반환하세요.`,
         inputSummary: `requirements ${ctx.reqs.length}, environments ${ctx.environments.length}`, inputChars: ctx.text.length };
     },
