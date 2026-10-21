@@ -3744,3 +3744,22 @@ html.is-phone .coach__x{display:inline-flex;align-items:center;justify-content:c
 html.is-phone .gfoot .btn--xs{min-width:44px;min-height:44px}
 html.is-phone .pl-faq{padding:0}html.is-phone .pl-faq summary{padding:12px 0}html.is-phone .pl-faq p{margin:0 0 12px}
 @media (pointer:coarse){html.is-phone body{cursor:pointer}}   /* #6: iOS Safari delivers taps on non-clickable areas to document listeners only when the target looks clickable */
+
+/* =====================================================================================================================
+ * WIDE SCREENS (founder 2026-10-21: laptop 1707 CSS px must look as before; 4K at 150 % = 2560 CSS px must use the space;
+ * docs/wide-layout-2026-10-21.md). The content column already fills the width; what goes wrong on a wide screen is that
+ * every component stretches. Rules below only match ≥ 1760px (the "wide tier"), so laptop (≤ 1707, also at 125/150 % zoom),
+ * tablet and phone render exactly as before.
+ * ===================================================================================================================== */
+.gtable col{width:var(--cw)}   /* grid.js writes each column's width as --cw so the wide tier can let one column take the surplus */
+@media (min-width:1760px){
+  /* B. lists: the title column absorbs the extra width; ID / 상태 / 담당자 / dates keep their designed widths instead of
+   * drifting 200–300 px apart (each keeps 1.6× its designed width, about what the laptop gives it). A column the user resized keeps its inline width. With the detail panel open the list is
+   * only as wide as its columns (B1), so the title keeps its own width there. */
+  html:not(.is-phone) .gtable col{width:calc(var(--cw) * 1.6)}   /* never tighter than the laptop spread (1.6–2.2×) */
+  html:not(.is-phone) .gtable col.gcol--grow{width:auto}
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer:not([hidden])) .gtable col{width:var(--cw)}
+  html:not(.is-phone) .rtable td:not(.ttl){width:1%}
+  /* D. forms, settings, credits and documents stop growing at the width they have on the laptop (1600px), left-aligned. */
+  html:not(.is-phone) .page.page--form,html:not(.is-phone) .page.page--narrow,html:not(.is-phone) .page.page--doc{max-width:1600px}
+}
