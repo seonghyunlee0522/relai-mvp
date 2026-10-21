@@ -27,3 +27,8 @@ All new rules live in ONE block at the end of app.css behind `@media (min-width:
 - C. dashboards: side column grows with the screen `clamp(288px, 16vw, 400px)`.
 - D. forms / settings: readable cap (the laptop's own width, 1600 px) — they stop growing past what the laptop shows.
 - E. drawers: grow modestly with the screen `clamp(420px, 22vw, 560px)`.
+
+## Result (Step 2–3)
+Implemented as planned except: page gutters left at 24px (inside the spec's "일정 범위"); dashboards already used
+clamp()/auto-fit. Laptop 1707 and every narrower viewport are pixel-identical apart from data (timestamps). Full report:
+hive research/relai-wide-layout-2026-10-21.md.
