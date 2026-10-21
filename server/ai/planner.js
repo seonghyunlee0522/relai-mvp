@@ -202,9 +202,14 @@ const areasText = (areas) => `## 수행 영역 판단\n${areas.map((a) => `- ${a
 
 /* ---------- 3. draft generation ---------- */
 export async function generatePlanDraft(db, { plan, project, wid, userId }) {
-  if (!['QUESTIONS_READY', 'REVIEW'].includes(plan.status)) throw new PlanError(409, 'plan_state', '현재 상태에서는 초안을 생성할 수 없습니다.');
+  if (!['QUESTIONS_READY', 'REVIEW', 'GENERATING'].includes(plan.status)) throw new PlanError(409, 'plan_state', '현재 상태에서는 초안을 생성할 수 없습니다.');
   const areas = assessWithAnswers(plan);
-  await save(db, plan.id, { status: 'GENERATING', areas });
+  // Claim the plan atomically: `plan` was read before this request, so a double click (or two tabs) both passed the status
+  // check above and each ran — and paid for — WBS_GENERATION (integrity 2026-10-21). A GENERATING plan older than 10 minutes
+  // (its function was killed mid-run) may be claimed again.
+  const claim = await db.run(`UPDATE ai_wbs_plans SET status = 'GENERATING', areas = ?::jsonb, updated_at = now()
+    WHERE id = ? AND (status IN ('QUESTIONS_READY', 'REVIEW') OR (status = 'GENERATING' AND updated_at < now() - interval '10 minutes'))`, [JSON.stringify(areas), plan.id]);
+  if (claim.changes !== 1) throw new PlanError(409, 'plan_busy', '이미 초안을 생성하고 있습니다. 잠시 후 결과를 확인해 주세요.');
   let ctx;
   let out;
   try {

@@ -209,16 +209,21 @@ export async function expirePlanCredits(db, wid, { reason = '기본 크레딧 �
 }
 
 /** Insert the PENDING ai_run and reserve its credits atomically. Throws CreditError AI_CREDIT_INSUFFICIENT. */
-export async function reserveRun(db, { wid, projectId, userId, feature, provider, model, inputSummary, cost }) {
+export async function reserveRun(db, { wid, projectId, userId, feature, provider, model, inputSummary, cost, requestHash = null }) {
   return tx(db, async (t) => {
     await ensureAccount(t, wid);
     const acc = await lockAccount(t, wid);
+    // Same user, same feature, same prompt, still running (double click, a retry after the browser gave up): refuse instead of
+    // running and charging twice. Serialised by the account lock above, so two identical clicks cannot both pass. A run older than
+    // the reservation window (its function was killed) no longer blocks, the same way it no longer holds credits.
+    if (requestHash && await t.get(`SELECT 1 FROM ai_runs WHERE workspace_id = ? AND user_id IS NOT DISTINCT FROM ? AND request_hash = ? AND status = 'PENDING' AND created_at > now() - ${RESERVATION_TTL} LIMIT 1`, [wid, userId, requestHash]))
+      throw new CreditError('AI_RUN_IN_PROGRESS', '같은 AI 요청을 이미 처리하고 있습니다. 잠시 후 결과를 확인해 주세요.', { status: 409, feature });
     const reserved = await openReservations(t, wid);
     const available = acc.balance - reserved;
     if (cost > 0 && available < cost) throw new CreditError('AI_CREDIT_INSUFFICIENT', 'AI 크레딧이 부족합니다.', { balance: Math.max(0, available), required: cost, feature, upgrade: { url: PLANS_URL } });
     const id = randomUUID();
-    await t.run(`INSERT INTO ai_runs (id, workspace_id, project_id, user_id, feature, provider, model, status, input_summary, credit_cost, credit_status)
-      VALUES (?,?,?,?,?,?,?,'PENDING',?,?,?)`, [id, wid, projectId, userId, feature, provider, model, inputSummary, cost, cost > 0 ? 'RESERVED' : 'NONE']);
+    await t.run(`INSERT INTO ai_runs (id, workspace_id, project_id, user_id, feature, provider, model, status, input_summary, credit_cost, credit_status, request_hash)
+      VALUES (?,?,?,?,?,?,?,'PENDING',?,?,?,?)`, [id, wid, projectId, userId, feature, provider, model, inputSummary, cost, cost > 0 ? 'RESERVED' : 'NONE', requestHash]);
     return { id, balance_before: acc.balance, available };
   });
 }

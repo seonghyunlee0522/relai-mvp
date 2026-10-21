@@ -168,10 +168,23 @@ const descendants = async (db, projectId, rootId) => {
   const items = (await liveItems(db, projectId));
   const kids = new Map();
   for (const it of items) { const k = it.parent_id || ''; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(it.id); }
-  const out = []; const stack = [rootId];
-  while (stack.length) { const id = stack.pop(); for (const c of kids.get(id) || []) { out.push(c); stack.push(c); } }
+  const out = []; const stack = [rootId]; const seen = new Set([rootId]);   // `seen`: a parent cycle in old data must not loop forever
+  while (stack.length) { const id = stack.pop(); for (const c of kids.get(id) || []) { if (seen.has(c)) continue; seen.add(c); out.push(c); stack.push(c); } }
   return out;
 };
+
+/** Serialise every structural WBS write of one project (create / move / indent / outdent / duplicate / archive / restore / dependency).
+ * Without it two moves at the same moment ("X under Y" and "Y under X") both passed the descendant check and stored a parent
+ * cycle (both items vanished from the tree), and concurrent creates under one parent got the same sequence → duplicate WBS codes
+ * (integrity 2026-10-21). Transaction-scoped: released at COMMIT / ROLLBACK, re-entrant inside one transaction. */
+export async function lockWbs(db, projectId) {
+  if (db.isTx) await db.get('SELECT pg_advisory_xact_lock(hashtext(?)) AS l', [`wbs:${projectId}`]);
+}
+/** Lock, then re-read `existing` (it was loaded before the transaction). */
+async function lockedItem(db, project, existing) {
+  await lockWbs(db, project.id);
+  return (db.isTx && (await getItem(db, project.id, existing.id))) || existing;
+}
 
 const getItem = async (db, projectId, id) => (await db.get('SELECT * FROM wbs_items WHERE project_id = ? AND id = ?', [projectId, id]));
 
@@ -393,6 +406,7 @@ export async function guardLeafToGroup(db, project, parent, convert, userId, { c
 }
 
 export async function createWbs(db, project, input, userId, { skipRenumber = false, skipGuard = false } = {}) {
+  await lockWbs(db, project.id);
   await assertWithinLimit(db, project.workspace_id, 'wbs');   // plan limit (402); duplicate / import / AI commits come through here too
   if (input.parent_id) {
     const parent = (await getItem(db, project.id, input.parent_id));
@@ -470,6 +484,8 @@ export async function updateWbs(db, project, existing, input, userId = null, { d
 
 /** Move within/between parents. sequence is the 1-based target position among live siblings of the new parent. */
 export async function moveWbs(db, project, existing, { parent_id, sequence, convert_parent }, userId = null) {
+  existing = await lockedItem(db, project, existing);
+  if (existing.archived_at) throw new ValidationError({ parent_id: '보관된 항목은 이동할 수 없습니다.' });
   if (isSystem(existing)) throw new SystemNodeError('이동');
   const newParent = parent_id === undefined ? existing.parent_id : (parent_id || null);
   if (newParent) {
@@ -506,6 +522,7 @@ const siblingsOf = (db, projectId, parentId) => db.all('SELECT * FROM wbs_items 
 
 /** 들여쓰기: become the last child of the previous sibling. */
 export async function indentWbs(db, project, existing, userId = null, { convert_parent } = {}) {
+  existing = await lockedItem(db, project, existing);
   if (isSystem(existing)) throw new SystemNodeError('들여쓰기');
   const sibs = await siblingsOf(db, project.id, existing.parent_id);
   const i = sibs.findIndex((x) => x.id === existing.id);
@@ -517,6 +534,7 @@ export async function indentWbs(db, project, existing, userId = null, { convert_
 }
 /** 내어쓰기: become the sibling right after the current parent. */
 export async function outdentWbs(db, project, existing, userId = null) {
+  existing = await lockedItem(db, project, existing);
   if (isSystem(existing)) throw new SystemNodeError('내어쓰기');
   if (!existing.parent_id) throw new ValidationError({ parent_id: '최상위 항목은 내어쓸 수 없습니다.' });
   const parent = await getItem(db, project.id, existing.parent_id);
@@ -526,6 +544,7 @@ export async function outdentWbs(db, project, existing, userId = null) {
 
 /** 복제: copy the item (and, with `withChildren`, its subtree) right after itself. Links/dependencies are not copied. */
 export async function duplicateWbs(db, project, existing, userId, { withChildren = true } = {}) {
+  existing = await lockedItem(db, project, existing);
   if (isSystem(existing)) throw new SystemNodeError('복제');
   const items = (await liveItems(db, project.id)); const kids = new Map();
   for (const it of items) { const k = it.parent_id || ''; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(it); }
@@ -548,6 +567,7 @@ export async function duplicateWbs(db, project, existing, userId, { withChildren
 
 /** Restore an archived item together with the descendants archived in the same operation (same archived_at). */
 export async function restoreWbs(db, project, existing, userId = null) {
+  existing = await lockedItem(db, project, existing);
   if (!existing.archived_at) return [];
   if (isSystem(existing)) throw new SystemNodeError('복구');   // 데이터 이관 comes back through the WBS switch
   if (existing.parent_id) { const parent = await getItem(db, project.id, existing.parent_id); if (!parent || parent.archived_at) throw new ValidationError({ parent_id: '상위 항목이 보관 상태라 복구할 수 없습니다. 상위 항목을 먼저 복구하세요.' }); }
@@ -566,6 +586,7 @@ export async function restoreWbs(db, project, existing, userId = null) {
 /** Archive an item with all live descendants. Dependency rows are kept (history); reads filter them out.
  *  children: 'cascade' (default) archives the subtree; 'promote' first moves the direct children to the item's own level. */
 export async function archiveWbs(db, project, existing, userId = null, { skipRenumber = false, children = 'cascade' } = {}) {
+  existing = await lockedItem(db, project, existing);
   if (existing.archived_at) return [];
   if (isSystem(existing)) throw new SystemNodeError('삭제');
   if (children === 'promote') {
@@ -595,6 +616,7 @@ async function reaches(db, projectId, fromId, toId) {
 }
 
 export async function addDependency(db, project, successor, predecessorId, userId) {
+  await lockWbs(db, project.id);
   if (predecessorId === successor.id) throw new ValidationError({ predecessor_id: '자기 자신을 선행 작업으로 지정할 수 없습니다.' });
   const pred = (await getItem(db, project.id, predecessorId));
   if (!pred || pred.archived_at) throw new ValidationError({ predecessor_id: '선행 작업을 찾을 수 없습니다.' });
