@@ -26,3 +26,36 @@ Emails/links to customers: none exist for approvals (grep of server/email/templa
 Records stay in the same JSON columns (project_definitions.approval / req_approval, change_requests.customer_approval, acceptances.customer_approval). New keys `checked`, `note`, `checked_by`, `checked_by_name`, `checked_at`; legacy keys kept untouched.
 - legacy record with all 4 fields (or step COMPLETED) → checked.
 - pending / partial → unchecked, never blocking.
+
+## Before → after per screen (done, branch `no-approval`)
+
+| Screen | Before | After |
+|---|---|---|
+| 01 착수 › 착수 확인 drawer | 승인자·승인일·승인 방법·근거 필수, 없으면 완료 409; 목표·범위·일정 수정 시 "다시 승인받기" | 체크박스 "착수 결과를 고객·스폰서와 공유·확인했나요?" + 메모(선택). 체크 = 완료, 누가·언제 자동 기록. 재승인 루프 없음 |
+| 01→02, 02→03 단계 이동 | "승인 없이 진행" 다이얼로그 + 사유 필수 | 다이얼로그 없음 — 미체크는 열린 권장 활동일 뿐 |
+| 02 요구사항 › 요구사항 확정 내용 고객 확인 | 필수 활동, 4필드 필수, 범위 내 요구사항 0건이면 거절 | 권장 활동, 체크 + 메모, "범위 내 미확정도 함께 확정" 토글 유지, 거절 없음 |
+| 04 변경 요청 › 승인 | 검토 중에서만, 4필드 필수(422), OWNER/ADMIN/지정 승인자만, 작성자 본인 불가(403) | 작성 중·검토 중에서 편집 권한자 누구나 승인·반려. "고객과 협의·확인했나요?" 체크 + 메모(선택) |
+| 06 검수 › 승인 | 검수 요청에서만, 4필드 필수(422); 검수 활동 수동 완료 409 | 작성 중·검수 요청에서 승인. "고객과 검수 결과를 확인했나요?" 체크 + 메모(선택); 수동 완료 허용 |
+| 지금 할 일 / 활동 행 | "고객에게 승인받으세요", "승인 전 진행 · 사유 있음" | "…확인했는지 체크하세요" (INIT_CHECK / REQ_CHECK), 체크 안 해도 다음 단계 |
+| 사업수행계획서·요구사항 정의서·완료보고서 | 승인자·승인일·방법 또는 "미승인 — 사유", "재승인 필요" 버전 | "✓ 체크됨 (이름 · 날짜) · 메모" 또는 "아직 체크하지 않음"; 완료보고서 검수 줄 "✓ 고객 확인 …" / "고객 확인 미체크" |
+| 템플릿 + 기존 프로젝트 | 승인 제목·기준 문구, BASELINE_APPROVAL 필수 | 새 문구, BASELINE_APPROVAL 권장 (migration 69) |
+
+Customer-facing approval request e-mails/links: none existed; nothing to remove.
+
+Local screenshots (no preview opened): hive `research/design/no-approval/` — 01-착수결과-확인, 02-요구사항확정-확인, 04-변경요청-승인, 06-검수-승인 (.png).
+
+## Migration 69 (data only)
+- Only `UPDATE`s on `project_steps` / `project_phases` text where the row still holds the exact seeded text, plus `BASELINE_APPROVAL` `REQUIRED → RECOMMENDED`. No DROP / RENAME / type change, no schema change.
+- Local run on a copy (3 sample projects rolled back to the pre-69 text, one with a PM-edited title): seeded titles/criteria rewritten, 06 "검수 / 인수 승인" → "검수 / 인수", BASELINE_APPROVAL → 권장, **PM-edited title kept**; rerun gives byte-identical rows (idempotent).
+- Previews share the prod DB, so the first boot of a preview runs 69 on prod. Live main code still works on the rewritten rows (text + importance only). One preview request was made at ~21:41 KST before the hold (see god).
+- Local boot: `node server/index.js` on a fresh DB → migrates to 69, `GET /api/me` → 401.
+
+## Tests
+`TEST_DATABASE_URL=… node --test --test-concurrency=3 "server/test/*.test.js"`: **566 / 568 pass**.
+- Failing: `changes.test.js` 'list, search, filters…' (known pre-existing collation order of 김보안); `lifecycle-v3.test.js` 'add-on now' flaked once in the full run, passes 12/12 alone twice.
+- Updated tests (approval gates → check): phase1, phase2, phase4, phase6, phase7, polish, activities, guide, onboarding-tour, checklist, v1-func, changes, testing, v1-features.
+- Full concurrency (default) on this machine hits "too many clients" on local Postgres — environment, not code.
+
+## Known gaps (not blocking)
+- Generic `PATCH …/steps/:id {COMPLETED}` on APPROVAL / BASELINE_APPROVAL marks the step done without stamping who/when in the record; screens read the step status, so display is right.
+- An old client sending only the 4 legacy fields (no `checked`) to CR/검수 is saved as unchecked.
