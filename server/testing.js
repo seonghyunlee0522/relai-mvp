@@ -8,13 +8,14 @@ import { nextDisplayId, formatDisplayId, reserveProjectSequence, resolveLinkTarg
 import { createIssue, updateEntity } from './raid.js';
 import { todayKst } from '../public/app/shared/kst-date.js';
 import * as D from './definition.js';
-import { customerApprovalView, approvalRequired } from './changes.js';
+import { customerApprovalView } from './changes.js';
 
 export const TC_STATUSES = ['DRAFT', 'READY', 'BLOCKED', 'COMPLETED'];
 export const TC_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
 export const RESULTS = ['PASS', 'FAIL', 'BLOCKED', 'NOT_RUN'];
 export const ACC_STATUSES = ['DRAFT', 'REQUESTED', 'ACCEPTED', 'REJECTED', 'REWORK_REQUIRED'];
-export const ACC_TRANSITIONS = { submit: ['DRAFT', 'REQUESTED'], accept: ['REQUESTED', 'ACCEPTED'], rework: ['REQUESTED', 'REWORK_REQUIRED'], reject: ['REQUESTED', 'REJECTED'], resubmit: ['REWORK_REQUIRED', 'REQUESTED'] };
+/** action → [from (one or a list), to]. 승인·보완·반려 straight from 작성 중 too (2026-10-21: no 검수 요청 step required). */
+export const ACC_TRANSITIONS = { submit: ['DRAFT', 'REQUESTED'], accept: [['DRAFT', 'REQUESTED'], 'ACCEPTED'], rework: [['DRAFT', 'REQUESTED'], 'REWORK_REQUIRED'], reject: [['DRAFT', 'REQUESTED'], 'REJECTED'], resubmit: ['REWORK_REQUIRED', 'REQUESTED'] };
 
 const now = () => new Date().toISOString();
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -378,30 +379,26 @@ export async function scopeAllTargets(db, projectId) {
   return { requirements, tests };
 }
 
-/* ---------- 고객 승인 기록 (Phase 6 US-1) — the 01·02·04 approval record reused for 검수 ---------- */
+/* ---------- 고객 확인 체크 (was Phase 6 US-1 고객 승인 기록; 진행 여부 체크 since 2026-10-21) ---------- */
 export const ACC_APPROVAL_METHODS = D.REQ_APPROVAL_METHODS;
 const parseObj = (v) => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
-/** The CR display model + who recorded it: list/Drawer "✓ 승인 · 10/20 · 오지현 고객 PM · 서명본 수령 (기록: 정하늘)". */
+/** The CR display model ("✓ 고객 확인 · 정하늘 · 2026-10-20 · 메모") + who recorded a legacy record. */
 export function accApprovalView(raw, stakeholders) {
   const o = typeof raw === 'string' ? parseObj(raw) : raw || {};
   return { ...customerApprovalView(o, stakeholders), recorded_by_name: o.recorded_by_name || '' };
 }
-/** Validate + store (all 4 fields required → 422 customer_approval_required). A directly entered approver joins 01 이해관계자 (고객사). */
+/** Store the optional 고객 확인 체크 { checked, note } (who/when stamped). An absent body leaves the record as it was. */
 export async function saveAcceptanceApproval(db, project, acc, body, userId, ts = now()) {
-  if (!body || typeof body !== 'object') throw approvalRequired({}, null);
-  const { add_to_stakeholders: addSh, ...a } = D.cleanApproval(body, ACC_APPROVAL_METHODS);   // 400 on a bad / future date or unknown method
   const stakeholders = await stakeholdersOf(db, project.id);
-  const err = approvalRequired(a, D.approverOf({ stakeholders }, a)); if (err) throw err;
-  if (!a.approver_id && a.approver_name && addSh) {
-    const sh = D.approverStakeholder(project, a, `검수 승인 (${acc.display_id})`);
-    await D.appendStakeholder(db, project, sh, userId); a.approver_id = sh.id;
-  }
-  if (a.approver_id) { a.approver_name = ''; a.approver_title = ''; }
-  a.recorded_by = userId; a.recorded_by_name = (await db.get('SELECT name FROM users WHERE id = ?', [userId]))?.name || '';
-  const prev = accApprovalView(acc.customer_approval, stakeholders);   // 승인 기록 수정: the old record line stays in 이력 (old → new)
+  if (!body || typeof body !== 'object') return accApprovalView(acc.customer_approval, stakeholders);
+  const { add_to_stakeholders: _addSh, ...sent } = D.cleanApproval(body, ACC_APPROVAL_METHODS);   // 400 on a bad / future date or unknown method
+  const raw = parseObj((await db.get('SELECT customer_approval FROM acceptances WHERE id = ?', [acc.id]))?.customer_approval);
+  const prev = accApprovalView(raw, stakeholders);
+  const a = await D.stampCheck(db, D.approvalOf(raw), { ...raw, ...sent }, userId);
+  if (a.checked === prev.checked && (a.note || '') === (prev.note || '')) return prev;   // nothing changed → no history row
   await db.run('UPDATE acceptances SET customer_approval = ?, updated_at = ? WHERE id = ?', [JSON.stringify(a), ts, acc.id]);
-  const view = accApprovalView(a, await stakeholdersOf(db, project.id));
-  await addHistory(db, 'ACCEPTANCE', acc.id, 'CUSTOMER_APPROVAL', { field: 'customer_approval', oldValue: prev.recorded ? prev.summary : null, newValue: view.summary }, userId, ts);
+  const view = accApprovalView(a, stakeholders);
+  await addHistory(db, 'ACCEPTANCE', acc.id, 'CUSTOMER_APPROVAL', { field: 'customer_approval', oldValue: prev.checked ? prev.summary : null, newValue: view.checked ? view.summary : '고객 확인 체크 해제' }, userId, ts);
   return view;
 }
 export async function getAcceptance(db, project, id) {
@@ -436,10 +433,10 @@ export async function updateAcceptance(db, existing, input, userId) {
   (await db.run(`UPDATE acceptances SET ${sets.join(', ')} WHERE id = ?`, [...vals]));
   return changed;
 }
-/** accept = 고객 승인 기록 + REQUESTED → ACCEPTED in one transaction (Phase 6 US-1); without the 4 approval fields → 422 customer_approval_required. */
+/** accept = (작성 중 | 검수 요청) → ACCEPTED, with an optional 고객 확인 체크 { checked, note } saved in the same transaction. */
 export async function transitionAcceptance(db, existing, action, { note, customerApproval, project = null }, userId) {
   const t = ACC_TRANSITIONS[action]; if (!t) return { error: 'bad_action' };
-  const [from, to] = t; if (existing.status !== from) return { error: 'invalid_transition', from: existing.status, to };
+  const [from, to] = t; if (![].concat(from).includes(existing.status)) return { error: 'invalid_transition', from: existing.status, to };
   if ((action === 'reject' || action === 'rework') && !str(note)) throw new ValidationError({ decision_note: action === 'reject' ? '반려 사유를 입력해 주세요.' : '보완이 필요한 내용을 입력해 주세요.' });
   const ts = now(); const sets = ['status = ?', 'updated_at = ?']; const vals = [to, ts];
   if (action === 'accept') await saveAcceptanceApproval(db, project || { id: existing.project_id }, existing, customerApproval, userId, ts);
@@ -449,7 +446,7 @@ export async function transitionAcceptance(db, existing, action, { note, custome
   if (str(note)) { sets.push('decision_note = ?'); vals.push(str(note)); }
   vals.push(existing.id);
   (await db.run(`UPDATE acceptances SET ${sets.join(', ')} WHERE id = ?`, [...vals]));
-  (await addHistory(db, 'ACCEPTANCE', existing.id, 'STATUS_CHANGED', { field: 'status', oldValue: from, newValue: to }, userId, ts));
+  (await addHistory(db, 'ACCEPTANCE', existing.id, 'STATUS_CHANGED', { field: 'status', oldValue: existing.status, newValue: to }, userId, ts));
   return { ok: true };
 }
 export async function archiveAcceptance(db, existing, userId) {

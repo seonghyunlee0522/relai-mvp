@@ -32,7 +32,6 @@ const act = (label, href) => ({ label, href });
 /** 06/07 checklist screen for one activity (public/app/project/checklist.js). */
 const cl = (ctx, key, label = '체크리스트 작성 →') => act(label, `/app/projects/${ctx.pid}/checklist?activity=${key}`);
 
-export const REAPPROVAL_TEXT = '승인 후 목표·범위·일정이 바뀌었습니다. 바뀐 내용을 고객에게 다시 확인받으세요.';
 
 /* ---------- per-phase rules ---------- */
 function initiation(key, ctx) {
@@ -41,7 +40,6 @@ function initiation(key, ctx) {
   const go = (label) => act(label, u);
   if (!sec) return none('프로젝트 정의에서 작성합니다.', go('입력하기 →'));
   if (sec.status === 'SKIPPED') return { derived: 'SKIPPED', text: '이번 프로젝트에서는 수행하지 않음', cta: null };
-  if (sec.status === 'COMPLETED' && sec.reapproval) return prog(REAPPROVAL_TEXT, go('다시 승인받기 →'), { reopen: true });   // 진행 중, not red: 착수 승인 is 권장 (batch7 #5)
   if (sec.status === 'COMPLETED' && sec.changed_after_completion) return prog(`${sec.summary || '작성됨'} · 완료 후 수정되어 다시 확인이 필요합니다.`, go('다시 확인 →'));
   if (sec.status === 'COMPLETED') return ok(sec.summary || '작성 완료', null);
   if (sec.has_data || sec.ready) return prog(sec.summary || '작성 중', go('계속 작성 →'));
@@ -67,17 +65,15 @@ function requirements(key, ctx) {
     case 'CONFIRM': {
       if (n(r.total) === 0) return dep;
       if (n(r.in_scope) === 0) return none('범위 내 요구사항이 아직 없습니다.', act('범위 결정 →', u('?scope=UNDECIDED')));
-      // Phase 2 US-4(7): no separate bulk-confirm — 승인 기록 confirms the rest in the same save (BASELINE_APPROVAL Drawer)
-      if (n(r.in_scope_confirmed) < n(r.in_scope)) return prog(`범위 내 ${r.in_scope}건 중 ${r.in_scope_confirmed}건이 확정되었습니다.`, act('승인 기록하기', u('?approval=1')));
+      // Phase 2 US-4(7): no separate bulk-confirm — the 요구사항 확정 확인 Drawer confirms the rest in the same save (BASELINE_APPROVAL)
+      if (n(r.in_scope_confirmed) < n(r.in_scope)) return prog(`범위 내 ${r.in_scope}건 중 ${r.in_scope_confirmed}건이 확정되었습니다.`, act('요구사항 확정하기', u('?approval=1')));
       return ok('범위 내 요구사항이 모두 확정되었습니다.', act('확정 요구사항 보기 →', u('?scope=IN_SCOPE&status=CONFIRMED')));
     }
-    case 'BASELINE_APPROVAL': {   // 요구사항 기준선 승인 (Phase 2 US-1): completes only from the Drawer (승인 기록), never by hand on What's Next
-      const b = ctx.definition && ctx.definition.req_baseline; const go = act('승인 기록하기', u('?approval=1'));
+    case 'BASELINE_APPROVAL': {   // 요구사항 확정 확인 (진행 여부 체크, 2026-10-21): checked in the Drawer; never blocks the next phase
+      const b = ctx.definition && ctx.definition.req_baseline; const go = act('진행 여부 체크', u('?approval=1'));
       if (n(r.total) === 0) return dep;
-      if (b && b.status === 'COMPLETED') return ok(b.summary || '고객 승인이 기록되었습니다.', null);
-      if (b && b.bypass) return prog('승인 전 진행 · 사유 있음', go);
-      if (b && b.summary) return prog(`작성 중 · ${b.summary}`, go);
-      return none('확정한 요구사항을 고객에게 보내 승인받고 기록합니다.', go);
+      if (b && b.status === 'COMPLETED') return ok(b.summary || '✓ 확인', null);
+      return none('확정한 요구사항을 고객과 확인했다면 체크합니다. 승인 기록은 필요 없습니다.', go);
     }
     case 'INTERFACE': return n(r.total) === 0 ? dep
       : n(r.non_functional) ? ok(`인터페이스·데이터·보안 유형 요구사항 ${r.non_functional}건이 정리되어 있습니다.`, act('비기능 요구사항 보기 →', u('?type=INTERFACE,DATA,SECURITY')))
@@ -151,8 +147,8 @@ function development(key, ctx) {
     case 'CHANGES': {
       const cu = (qs = '') => `/app/projects/${ctx.pid}/changes${qs}`;
       if (n(c.total) === 0) return none('아직 변경 요청이 없습니다. 추가·변경 요청이 들어오면 변경 요청으로 기록하세요.', act('변경 요청 등록 →', cu('?new=1')));
-      const parts = []; if (n(c.under_review)) parts.push(`검토 중 ${c.under_review}건 · 고객 결정을 받아 기록하세요`); if (n(c.approved_unimplemented)) parts.push(`승인 후 미반영 ${c.approved_unimplemented}건`);
-      return parts.length ? prog(parts.join(' · '), n(c.under_review) ? act('승인 기록하기', cu('?status=UNDER_REVIEW&approve=1')) : act('변경 요청 결정 →', cu('?status=APPROVED')), { row_text: Boolean(n(c.under_review)) })   // US-2: the approval Drawer
+      const parts = []; if (n(c.under_review)) parts.push(`검토 중 ${c.under_review}건 · 반영 여부를 결정하세요`); if (n(c.approved_unimplemented)) parts.push(`승인 후 미반영 ${c.approved_unimplemented}건`);
+      return parts.length ? prog(parts.join(' · '), n(c.under_review) ? act('변경 요청 결정 →', cu('?status=UNDER_REVIEW&approve=1')) : act('변경 요청 결정 →', cu('?status=APPROVED')), { row_text: Boolean(n(c.under_review)) })   // US-2: the approval Drawer
         : ok(`변경 요청 ${c.total}건이 모두 처리되었습니다.`, act('변경 요청 보기 →', cu()));
     }
     case 'WEEKLY_REPORT': return weeklyReport(ctx);
@@ -212,10 +208,10 @@ function transition(key, ctx) {
       // Phase 6 US-2: 완료 = 범위 내 확정 요구사항이 모두 승인된 검수에 들어 있음 (1차·2차 검수는 합계). No such requirement → every 검수 approved (as before).
       const tgt = n(a.scope_target); const scope = tgt ? ` ${accScopeText(a)}.` : '';
       if (tgt && n(a.scope_accepted) >= tgt) return ok(`범위 내 요구사항 ${tgt}건이 모두 승인된 검수에 들어 있습니다.`, act('검수 결과 보기 →', u('?status=ACCEPTED')));
-      if (n(a.total) === 0) return none('아직 검수 항목이 없습니다. 검수 대상 요구사항과 테스트를 묶어 검수를 요청하세요.', act('검수 항목 작성 →', u('?new=1')));
+      if (n(a.total) === 0) return none('아직 검수 항목이 없습니다. 검수 대상 요구사항과 테스트를 묶어 검수 결과를 기록하세요.', act('검수 항목 작성 →', u('?new=1')));
       if (n(a.rework)) return prog(`보완 필요 ${a.rework}건이 있습니다.${scope}`, act('보완 처리 →', u('?status=REWORK_REQUIRED')), { crit: true });
-      if (n(a.requested)) return prog(`검수 요청 ${a.requested}건이 고객 확인을 기다립니다.${scope}`, act('검수 결과 기록 →', u('?status=REQUESTED')));
-      if (n(a.draft)) return prog(`작성 중 검수 ${a.draft}건이 있습니다.${scope}`, act('검수 요청 →', u('?status=DRAFT')));
+      if (n(a.requested)) return prog(`검수 요청 ${a.requested}건의 결과를 기록하세요.${scope}`, act('검수 결과 기록 →', u('?status=REQUESTED')));
+      if (n(a.draft)) return prog(`작성 중 검수 ${a.draft}건이 있습니다.${scope}`, act('검수 결과 기록 →', u('?status=DRAFT')));
       if (tgt) return prog(`${accScopeText(a)}.`, act('검수 범위 보기', u('?new=1')), { row_text: true });
       if (n(a.rejected) && !n(a.accepted)) return prog(`반려된 검수 ${a.rejected}건이 있습니다.`, act('검수 보기 →', u('?status=REJECTED')));
       return ok(`검수 ${a.accepted}건이 모두 승인되었습니다.`, act('검수 결과 보기 →', u('?status=ACCEPTED')));

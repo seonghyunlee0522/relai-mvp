@@ -456,16 +456,11 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
         const st = (await db.get(`SELECT s.importance, s.step_key, p.phase_key FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
         if (st && effectiveImportance(st.phase_key, st.step_key, st.importance, project) === 'REQUIRED') return fail(res, 409, 'not_skippable', '필수 업무는 건너뛸 수 없습니다.');
       }
-      if (status === 'COMPLETED') {   // 01 착수 결과 승인 · 02 요구사항 기준선 승인 complete only with an approval record (their own 완료 처리 routes)
+      if (status === 'COMPLETED') {   // 01 착수 결과 확인 · 02 요구사항 확정 확인 are plain 진행 여부 체크 since 2026-10-21 (no approval record required)
         const st = (await db.get(`SELECT s.step_key, p.phase_key FROM project_steps s JOIN project_phases p ON p.id = s.project_phase_id WHERE s.id = ? AND p.project_id = ?`, [req.params.sid, project.id]));
-        if (st && st.phase_key === 'INITIATION' && st.step_key === 'APPROVAL') {
-          const sec = (await D.loadDefinition(db, project)).sections.find((x) => x.key === 'APPROVAL');
-          if (sec && !sec.ready) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 착수 결과 승인에서 승인 기록을 입력하세요.');
-        }
         // Phase 6 US-3: 오픈 completes only through the 오픈 dialog (오픈일 + 남은 항목 운영 이관 — POST …/go-live)
         if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'GO_LIVE') return fail(res, 409, 'go_live_required', '오픈은 오픈 완료 처리에서 오픈일과 남은 항목을 정해 완료합니다.');
-        // Phase 6 US-2: 검수 completes only when the whole scope is accepted (no hand-marking 1건 검수 as 완료)
-        if (st && st.phase_key === 'TRANSITION_GO_LIVE' && st.step_key === 'ACCEPTANCE' && !Q.acceptanceGateMet(await Q.acceptanceStats(db, project.id))) return fail(res, 409, 'acceptance_required', '범위 내 요구사항이 모두 승인된 검수에 들어가야 완료됩니다. 검수에서 고객 승인을 기록하세요.');
+        // 검수 (ACCEPTANCE) may be marked 완료 by hand since 2026-10-21 — no "every requirement in an approved 검수" gate
         // Phase 7 US-3: 운영 인수 = 인수자 · 인수일 (+ 운영 이관 담당) — the same record as POST …/handover
         if (st && st.phase_key === 'OPERATIONS' && st.step_key === 'HANDOVER') {
           if (!req.body.handover || typeof req.body.handover !== 'object') return fail(res, 422, 'handover_required', '인수자와 인수일을 입력해야 운영 인수를 완료할 수 있습니다.', { fields: { receiver: '인수자를 고르세요.', date: '인수일을 입력하세요.' } });
@@ -480,10 +475,6 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
           if (reason.length > 500) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { reason: '사유는 500자 이내로 입력해 주세요.' } });
           const prev = (await db.get('SELECT note FROM project_steps WHERE id = ?', [req.params.sid]))?.note || '';
           fields.note = `${prev ? `${prev}\n` : ''}[외부 완료보고서] ${reason} · ${todayKst()} · ${req.user.name || ''}`;
-        }
-        if (st && st.phase_key === 'REQUIREMENTS' && st.step_key === RB.STEP_KEY) {
-          const m = await RB.loadBaseline(db, project);
-          if (m.missing.length || !m.counts.in_scope) return fail(res, 409, 'approval_required', '승인 기록 없이 완료할 수 없습니다. 요구사항 확정 승인에서 승인 기록을 입력하세요.');
         }
       }
       fields.status = status;
@@ -1179,23 +1170,15 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   }));
   app.post(`${cbase}/:cid/transition`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
-    const action = String(req.body?.action || '');
-    if (action === 'approve' || action === 'reject') {
-      const perm = C.reviewPermission(ctx.c, { userId: req.user.id, role: req.role, memberCount: await memberCount(req.params.wid) });
-      if (perm.reason === 'author') return fail(res, 403, 'self_approval', '본인이 작성한 변경 요청은 승인하거나 반려할 수 없습니다. 다른 승인자에게 요청하세요.');
-      if (!perm.allowed) return fail(res, 403, 'forbidden', '변경 요청은 소유자·관리자 또는 지정된 승인자만 승인하거나 반려할 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
-    }
+    // 승인·반려: any member who may edit the project (2026-10-21 — no designated approver / self-approval rule)
     const r = (await tx(db, async (db) => (await C.transition(db, ctx.c, String(req.body?.action || ''), { note: req.body?.decision_note, customerApproval: req.body?.customer_approval, project: ctx.project }, req.user.id))));
     if (r.error === 'bad_action') return fail(res, 400, 'bad_action', '지원하지 않는 작업입니다.');
     if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${r.from || ctx.c.status})에서는 이 작업을 할 수 없습니다.`);
     res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
-  /* Phase 4 US-2: 승인 기록 추가 — an APPROVED / IMPLEMENTED CR without a customer record gets one; the status never changes. */
+  /* 고객 확인 체크 (진행 여부 체크, 2026-10-21) — { checked, note } on any CR; the status never changes. */
   app.patch(`${cbase}/:cid/customer-approval`, guard, wrap(async (req, res) => {
     const ctx = (await crMutable(req, res)); if (!ctx) return;
-    if (!['APPROVED', 'IMPLEMENTED'].includes(ctx.c.status)) return fail(res, 409, 'invalid_transition', '검토 중인 변경 요청은 승인 버튼으로 고객 승인을 기록하세요.');
-    const perm = C.reviewPermission(ctx.c, { userId: req.user.id, role: req.role, memberCount: await memberCount(req.params.wid) });
-    if (!perm.allowed && perm.reason === 'role') return fail(res, 403, 'forbidden', '승인 기록은 소유자·관리자 또는 지정된 승인자만 남길 수 있습니다.', { required: ['OWNER', 'ADMIN', 'APPROVER'] });
     (await tx(db, async (db) => (await C.saveCustomerApproval(db, ctx.project, ctx.c, req.body?.customer_approval, req.user.id))));
     res.json((await crResponse(ctx.project, ctx.c.id, req)));
   }));
@@ -1425,10 +1408,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (r.error) return fail(res, 409, 'invalid_transition', `현재 상태(${r.from})에서는 이 작업을 할 수 없습니다.`);
     res.json((await aResp(ctx.project, ctx.a.id)));
   }));
-  /* Phase 6 US-1: 승인 기록 추가 — an ACCEPTED 검수 without a customer record gets one; the status never changes (same as the Phase 4 CR). */
+  /* 고객 확인 체크 (진행 여부 체크, 2026-10-21) — { checked, note } on any 검수; the status never changes (same as the CR). */
   app.patch(`${abase}/:aid/customer-approval`, guard, wrap(async (req, res) => {
     const ctx = (await aMutable(req, res)); if (!ctx) return;
-    if (ctx.a.status !== 'ACCEPTED') return fail(res, 409, 'invalid_transition', '요청된 검수는 승인 버튼으로 고객 승인을 기록하세요.');
     (await tx(db, async (db) => (await Q.saveAcceptanceApproval(db, ctx.project, ctx.a, req.body?.customer_approval, req.user.id))));
     res.json((await aResp(ctx.project, ctx.a.id)));
   }));
