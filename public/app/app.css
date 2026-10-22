@@ -3751,10 +3751,19 @@ pre.acode--tall{max-height:640px}
   html:not(.is-phone) .gtable col{width:calc(var(--cw) * 1.6)}   /* never tighter than the laptop spread (1.6–2.2×) */
   html:not(.is-phone) .gtable col.gcol--grow{width:auto}
   /* E. detail panel open: the B1 layout keeps the list only as wide as its columns with the panel beside it, which on a 4K
-   * screen left ~750px empty on the right. Here the list keeps its 1.6× columns (title too) and the panel follows the
-   * screen up to 960px (the same ceiling as a user's drag, drawer.js). 1920px gets the same 653px panel as before. */
-  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer:not([hidden])) .gtable col.gcol--grow{width:calc(var(--cw) * 1.6)}
+   * screen left ~750px empty on the right. The panel follows the screen up to 960px (the same ceiling as a user's drag,
+   * drawer.js; 1920px gets the same 653px panel as before) and the list takes the rest (F). */
   :root{--panel-w:clamp(480px,34vw,960px)}
+  /* F. (wide-b1, founder 2026-10-23) the B1 grid above kept the list column only as wide as its table (`max-content`,
+   * `justify-content:start`, WBS title pinned at 220px), so on a 2560px screen ~250px stayed empty right of the panel. Here the
+   * list takes every pixel the panel leaves and its title column absorbs it; the panel's fields use the panel's width instead
+   * of shrinking to their content (WBS: `.dlayout` kept `align-items:start` from the old two-column layout) or 280px. */
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])),html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--side:not([hidden])){grid-template-columns:minmax(0,1fr) var(--panel-w-eff)}
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable col.gcol--grow{width:auto}
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs{width:100%!important}
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs col[data-col="title"]{width:auto!important}
+  html:not(.is-phone) .drawer--lg .dlayout{align-items:stretch}
+  html:not(.is-phone) .drawer--lg .dgrid .dfield :is(.select,.input){max-width:none}
   html:not(.is-phone) .rtable td:not(.ttl){width:1%}
   /* D. forms, settings, credits and documents stop growing at the width they have on the laptop (1600px), left-aligned. */
   html:not(.is-phone) .page.page--form,html:not(.is-phone) .page.page--narrow,html:not(.is-phone) .page.page--doc{max-width:1600px}
