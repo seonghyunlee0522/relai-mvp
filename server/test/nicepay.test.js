@@ -239,6 +239,22 @@ test('one-time checkout: order priced on the server, pay page, signed return →
   void M; server.close();
 });
 
+test('concurrent return for one order (double submit / replay race): one claim, one approval, one payment', async () => {
+  const { db, server, client, np, returnPost, windowResult } = await boot();
+  const A = await setup(client, 'race@x.com', '김가나');
+  await db.run('UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL');
+  const co = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'ANNUAL', seats: 3 });
+  const order = await db.get('SELECT * FROM billing_orders WHERE id = ?', [co.json.session_id]);
+  const form = windowResult(order);
+  const [r1, r2] = await Promise.all([returnPost(form), returnPost(form)]);
+  for (const r of [r1, r2]) { assert.equal(r.status, 303); assert.match(r.location, /checkout=(success|processing)/); }
+  assert.ok([r1.location, r2.location].includes('/app/settings?checkout=success#billing'));
+  assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 1);
+  assert.equal((await db.get('SELECT COUNT(*)::int AS n FROM payments WHERE workspace_id = ?', [A.w])).n, 1);
+  assert.equal((await db.get('SELECT status FROM billing_orders WHERE id = ?', [order.id])).status, 'PAID');
+  server.close();
+});
+
 test('approval network failure → net cancel, order failed; refund by operator shortens the period; renewal reminder 7 days before, once', async () => {
   const { db, server, client, np, returnPost, windowResult } = await boot();
   const mail = fakeEmailProvider(); setEmailProvider(mail);

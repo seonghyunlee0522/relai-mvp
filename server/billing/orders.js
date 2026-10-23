@@ -196,6 +196,13 @@ export async function failOrder(db, id, code, message) {
     [String(code || 'failed').slice(0, 60), String(message || '').slice(0, 300), id]);
 }
 
+/**
+ * The charge claim: exactly one request moves an unclaimed PENDING order to claimed and may charge or approve it. Returns the claimed
+ * row, or null when another request already holds it (or the order is closed). Status stays PENDING, so webhooks, failOrder and
+ * applyOrRefund are unchanged. A request that dies after the claim leaves a PENDING order that expires like any other.
+ */
+export const claimCharge = (db, id) => db.get(`UPDATE billing_orders SET charge_claimed_at = now(), updated_at = now() WHERE id = ? AND status = 'PENDING' AND charge_claimed_at IS NULL RETURNING *`, [id]);
+
 /** Customer-facing order fields. */
 export const publicOrder = (o) => o && ({ id: o.id, kind: o.kind, plan: o.plan, cycle: o.cycle, seats: o.seats, users: o.seats, months: o.months, unit_price: o.unit_price, list_amount: o.list_amount,
   discount_amount: o.discount_amount, supply_amount: o.supply_amount, vat_amount: o.vat_amount, amount: o.amount, founding: o.founding, goods_name: o.goods_name,

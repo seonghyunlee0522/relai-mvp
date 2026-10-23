@@ -1255,6 +1255,9 @@ ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS client_key TEXT;
 ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS refund_tid_seq INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS price_version TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_orders_client_key ON billing_orders(workspace_id, client_key) WHERE client_key IS NOT NULL;
+-- charge_claimed_at (migration v70): set by the one request that may charge / approve this PENDING order (claimCharge). A concurrent
+-- request with the same client_key, or a replayed payment-window return, loses the claim and charges nothing. Status stays PENDING.
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS charge_claimed_at TIMESTAMPTZ;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'billing_orders_kind_check' AND conrelid = 'billing_orders'::regclass AND pg_get_constraintdef(oid) LIKE '%CREDIT_TOPUP%') THEN
     ALTER TABLE billing_orders DROP CONSTRAINT IF EXISTS billing_orders_kind_check;
