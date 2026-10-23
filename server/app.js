@@ -79,6 +79,20 @@ const PROJECT_COLS = `id, workspace_id, name, description, client_name, project_
   planned_start_date, planned_end_date, current_phase, created_by, created_at, updated_at,
   project_type, data_migration, deployment_environment, delivery_model, has_existing_system, has_external_integration, closed_on, warranty_end_on, sample_key`;
 
+/** Public 404 (signed-out visitors on an unknown path): branded, Pretendard, home / login / sign-up ways out. */
+const NOT_FOUND_HTML = `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>페이지를 찾을 수 없습니다 — RELAI</title><meta name="robots" content="noindex"><link rel="icon" type="image/svg+xml" href="/brand/icon.svg">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:#F6F8FB;color:#101828;font-family:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif}
+header{padding:20px 24px}header img{display:block;height:28px;width:auto}main{flex:1;display:flex;align-items:center;justify-content:center;padding:24px 20px 80px}
+.c{max-width:440px;text-align:center}.code{font-size:15px;font-weight:700;letter-spacing:.12em;color:#2E51C4}h1{margin:12px 0 10px;font-size:28px;letter-spacing:-.03em}
+p{margin:0 0 28px;color:#475467;line-height:1.6}.a{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.a a{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 20px;border-radius:10px;font-weight:700;text-decoration:none;font-size:15px}
+.p{background:#2E51C4;color:#fff}.s{background:#fff;color:#101828;border:1px solid #E4E8EF}</style></head>
+<body><header><a href="/" aria-label="RELAI 홈"><img src="/brand/logo.svg" alt="RELAI" width="88" height="28"></a></header>
+<main><div class="c"><div class="code">404</div><h1>페이지를 찾을 수 없습니다</h1><p>주소가 바뀌었거나 삭제된 페이지입니다.<br>아래에서 이동할 곳을 선택해 주세요.</p>
+<div class="a"><a class="p" href="/">홈으로</a><a class="s" href="/login">로그인</a></div></div></main></body></html>`;
+
 export function createApp(db, { secureCookies = process.env.NODE_ENV === 'production', sessionSecret = process.env.SESSION_SECRET || '', billingProvider = providerFromEnv() } = {}) {
   const app = express();
   // __Host- prefix (production only): the browser refuses the cookie unless Secure + Path=/ + no Domain — hardening for free.
@@ -1528,7 +1542,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   app.use((req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(404).type('text').send('Not found');
     if (req.user) return res.redirect('/app');
-    res.status(404).type('html').send('<!DOCTYPE html><meta charset="utf-8"><title>404</title><body style="font-family:sans-serif;padding:40px"><h1>404</h1><p>페이지를 찾을 수 없습니다.</p><a href="/login">로그인</a></body>');
+    res.status(404).type('html').send(NOT_FOUND_HTML);
   });
 
   /* ---------- errors ---------- */

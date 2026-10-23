@@ -41,7 +41,7 @@ function wireOnce() {
 }
 
 /** Global navigation (outside a project). Inside a project the sidebar holds the project LNB (project/lnb.js). */
-const globalNav = () => html`<a class="logo" href="/app" data-link><span class="logo__full">RELAI</span><span class="logo__mark">R</span></a>
+const globalNav = () => html`<a class="logo" href="/app" data-link aria-label="RELAI 홈"><span class="logo__full"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></span><span class="logo__mark"><img class="brandmark" src="/brand/mark.svg" alt="RELAI" width="25" height="30"></span></a>
   <nav aria-label="주요 메뉴">
     <a class="navlink" data-nav="home" href="/app" data-link title="홈" data-tour-id="nav-home">${raw(icon.home)}<span class="nl">홈</span></a>
     <a class="navlink" data-nav="projects" href="/app/projects" data-link title="프로젝트" data-tour-id="nav-projects">${raw(icon.projects)}<span class="nl">프로젝트</span></a>
@@ -108,9 +108,9 @@ export async function shell(path, view, token = null) {
   wireOnce();
   if (!$('.shell')) {
     root.innerHTML = html`<div class="shell">
-      <header class="dtop" id="dtop"><a class="dtop__logo" href="/app" data-link>RELAI</a><div class="dtop__p" id="dtop-p"></div><span class="dtop__sp"></span><div class="dnext" id="dtop-next" hidden></div><span class="dtop__sp"></span><div class="dtop__r" id="dtop-r"></div></header>
+      <header class="dtop" id="dtop"><a class="dtop__logo" href="/app" data-link aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a><div class="dtop__p" id="dtop-p"></div><span class="dtop__sp"></span><div class="dnext" id="dtop-next" hidden></div><span class="dtop__sp"></span><div class="dtop__r" id="dtop-r"></div></header>
       <aside class="rail" id="rail"></aside>
-      <header class="topbar"><a class="logo" href="/app" data-link>RELAI</a><a class="ptop" id="ptop" href="/app/projects" data-link hidden></a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
+      <header class="topbar"><a class="logo" href="/app" data-link aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a><a class="ptop" id="ptop" href="/app/projects" data-link hidden></a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
       <div class="pstrip" id="pstrip" hidden></div>
       <aside class="side" id="side"></aside>
       <div class="sidescrim" id="sidescrim" hidden></div>

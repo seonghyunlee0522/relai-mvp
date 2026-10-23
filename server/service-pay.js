@@ -143,7 +143,7 @@ const head = (title, meta = '') => `<!doctype html><html lang="ko"><head><meta c
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="/service/pricing.css"></head>`;
 // Shared as a standalone payment link: the brand is not a link to the home page and there is no 문의하기 / navigation away.
-const topbar = () => `<header class="sp-top"><div class="sp-wrap sp-top__in"><span class="sp-brand"><b>relai</b><span class="sp-brand__sep">/</span><span>서비스 결제</span></span></div></header>`;
+const topbar = () => `<header class="sp-top"><div class="sp-wrap sp-top__in"><span class="sp-brand"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"><span class="sp-brand__sep">/</span><span>서비스 결제</span></span></div></header>`;
 /** Business footer (전자상거래법 표시 의무) with 이용약관 / 개인정보처리방침 only — no 요금 안내 link to the home page. */
 const payFooter = () => legalFooterHtml(LEGAL).replace('class="legal-foot"', 'class="legal-foot sp-wrap"').replace('<a href="/#pricing">요금 안내</a>', '');
 

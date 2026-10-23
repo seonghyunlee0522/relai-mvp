@@ -13,7 +13,7 @@ const DEAD = { ACCEPTED: ['이미 수락된 초대입니다', '이 초대는 이
 
 export async function invitePage(token) {
   document.title = '초대 — RELAI';
-  const frame = (body) => { root.innerHTML = html`<div class="auth auth--single"><main class="auth__form invite"><a class="logo" href="/">RELAI</a>${raw(body)}</main></div>`; };
+  const frame = (body) => { root.innerHTML = html`<div class="auth auth--single"><main class="auth__form invite"><a class="logo" href="/" aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a>${raw(body)}</main></div>`; };
   // Session (optional): the landing works without one; with one we can offer explicit acceptance.
   if (!state.user) { try { const me = await api('GET', '/api/me?optional=1'); if (me.user) { Object.assign(state, me); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0]; } } catch { /* logged out */ } }
   let data;

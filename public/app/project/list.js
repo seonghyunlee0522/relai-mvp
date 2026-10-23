@@ -24,7 +24,7 @@ export async function projectsPage(main = $("#main")) {
   let showArchived = false; let q = ''; let status = '';
   let all = [];
   const grid = createGrid({
-    key: 'projects', rowId: (r) => r.id, select: false, pageSize: 100, defaultSort: { key: 'name', dir: 'asc' },
+    key: 'projects', tableClass: 'gtable--projects', rowId: (r) => r.id, select: false, pageSize: 100, defaultSort: { key: 'name', dir: 'asc' },
     rowClass: (r) => (r.status === 'ARCHIVED' ? 'is-arch' : ''),
     onOpen: (pid) => navigate(`/app/projects/${pid}`),
     empty: () => (all.length ? '<div class="empty empty--sm"><h2>조건에 맞는 프로젝트가 없습니다.</h2></div>' : emptyState()),

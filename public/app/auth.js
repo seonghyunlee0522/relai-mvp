@@ -21,9 +21,9 @@ export const googleButton = (href, { label = 'Google로 계속하기', divider =
 /** B9: required consents on signup (이용약관 + 개인정보 수집·이용). The server refuses signup without both (422). */
 const consentBlock = () => html`<fieldset class="consent" id="consent"><legend class="sr-only">약관 동의</legend>
   <label class="consent__all"><input type="checkbox" id="agree-all"> <b>전체 동의</b></label>
-  <div class="consent__row"><label><input type="checkbox" name="agree_terms" value="true" data-agree> <span class="req">[필수]</span> 이용약관 동의</label><a class="link" href="/terms" target="_blank" rel="noopener">보기</a></div>
+  <div class="consent__row"><label><input type="checkbox" name="agree_terms" value="true" data-agree> <span class="req">[필수]</span> 이용약관 동의</label><a class="link" href="/terms" target="_blank" rel="noopener" aria-label="이용약관 보기">보기</a></div>
   <div class="err" data-for="agree_terms"></div>
-  <div class="consent__row"><label><input type="checkbox" name="agree_privacy" value="true" data-agree> <span class="req">[필수]</span> 개인정보 수집·이용 동의</label><a class="link" href="/privacy" target="_blank" rel="noopener">처리방침</a></div>
+  <div class="consent__row"><label><input type="checkbox" name="agree_privacy" value="true" data-agree> <span class="req">[필수]</span> 개인정보 수집·이용 동의</label><a class="link" href="/privacy" target="_blank" rel="noopener" aria-label="개인정보처리방침 보기">보기</a></div>
   <details class="consent__d"><summary>수집·이용 내용 보기</summary><dl>${raw(CONSENT_PRIVACY_ROWS.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl></details>
   <div class="err" data-for="agree_privacy"></div></fieldset>`;
 const consentErrors = (form) => ({ ...(form.agree_terms.checked ? {} : { agree_terms: '이용약관에 동의해 주세요.' }), ...(form.agree_privacy.checked ? {} : { agree_privacy: '개인정보 수집·이용에 동의해 주세요.' }) });
@@ -74,7 +74,7 @@ const signupMobile = () => html`<div class="su-mobile su-a-m" aria-label="프로
 
 /** Phone (< 768px, mobile-v2): a brand band on top — the value in one line and a glimpse of 지금 할 일 — instead of a bare form. */
 const phoneBand = (isSignup) => html`<div class="aband" aria-hidden="true">
-  <a class="aband__logo" href="/" tabindex="-1"><img src="/brand/icon.svg" alt="" width="28" height="28">RELAI</a>
+  <a class="aband__logo" href="/" tabindex="-1"><img class="brandlogo" src="/brand/logo-white.svg" alt="RELAI" width="94" height="30"></a>
   <p class="aband__t">${isSignup ? '첫 프로젝트, 다음 할 일부터 안내합니다' : '오늘 할 일이 기다리고 있어요'}</p>
   <div class="aband__card"><span class="aband__k">✦ 다음 할 일</span><b>화면 설계를 확정하세요</b>
     <span class="aband__dots">${raw(PHASES.map((p, i) => `<i class="${i < 2 ? 'is-done' : i === 2 ? 'is-cur' : ''}"></i>`).join(''))}</span><small>03 / 07 · 분석·설계</small></div>
@@ -101,7 +101,7 @@ export async function authPage(mode) {
   root.innerHTML = html`<div class="auth${isSignup ? ' auth--su-a' : ''}">
     <main class="auth__form">
       ${raw(phoneBand(isSignup))}
-      <a class="logo" href="/">RELAI</a>
+      <a class="logo" href="/" aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a>
       <h1>${isSignup ? (invite && !invite.invalid ? '초대받은 계정 만들기' : raw('처음 맡은 프로젝트,<br>다음 할 일부터 알려드릴게요.')) : '다시 만나서 반갑습니다'}</h1>
       <p class="sub">${isSignup ? (invite && !invite.invalid ? '초대받은 이메일로 가입하면 바로 시작할 수 있습니다.' : '프로젝트 관리 방법을 몰라도 괜찮습니다. 착수부터 운영까지 7단계를 따라, 지금 해야 할 일을 RELAI가 하나씩 짚어 드립니다.') : (google.enabled ? '이메일과 비밀번호 또는 Google 계정으로 로그인해 주세요.' : '이메일과 비밀번호로 로그인해 주세요.')}</p>
       ${raw(isSignup ? signupMobile() : '')}
@@ -192,8 +192,8 @@ const ACCT_ICONS = {
 const acctIcon = (tone, icon) => `<div class="acct__ic acct__ic--${tone}${icon === 'wait' ? ' acct__ic--wait' : ''}" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ACCT_ICONS[icon]}</svg></div>`;
 /** tone: ok | warn | info · icon: ACCT_ICONS key · note: a quieter second line · actions: buttons/links (primary last) · alt: 로그인으로 돌아가기. */
 const authCard = ({ tone = 'info', icon = 'key', title, sub, note = '', body = '', actions = '', alt = true }) => html`<div class="auth auth--acct"><main class="auth__form acct">
-    <div class="aband aband--acct" aria-hidden="true"><a class="aband__logo" href="/" tabindex="-1"><img src="/brand/icon.svg" alt="" width="28" height="28">RELAI</a></div>
-    <a class="logo" href="/">RELAI</a>${raw(acctIcon(tone, icon))}<h1>${title}</h1><p class="sub">${sub}</p>
+    <div class="aband aband--acct" aria-hidden="true"><a class="aband__logo" href="/" tabindex="-1"><img class="brandlogo" src="/brand/logo-white.svg" alt="RELAI" width="94" height="30"></a></div>
+    <a class="logo" href="/" aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a>${raw(acctIcon(tone, icon))}<h1>${title}</h1><p class="sub">${sub}</p>
     ${raw(note ? html`<p class="acct__note">${note}</p>` : '')}${raw(body)}
     ${raw(actions ? `<div class="acct__actions">${actions}</div>` : '')}
     ${raw(alt ? '<p class="auth__alt"><a class="link" href="/login">로그인으로 돌아가기</a></p>' : '')}${raw(legalFooterHtml(undefined, { compact: true }))}</main>

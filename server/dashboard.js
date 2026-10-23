@@ -84,6 +84,13 @@ async function recentChanges(db, pid, lim = RECENT_LIMIT, before = null) {
     ...integ.map((r) => ({ ...r, entity_type: 'JIRA', title: r.title || '지라', href: r.entity_id ? `wbs?sel=${r.entity_id}` : 'wbs', summary: r.summary })),
   ];
   events.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.seq - a.seq));
+  // One user action can write several history rows for the same item (a WBS move logs parent + source): when they read the same,
+  // show one line. Same item, actor and summary within 5 seconds of the line already kept.
+  const ms = (t) => new Date(t).getTime();
+  for (let i = events.length - 1; i > 0; i--) {
+    const a = events[i - 1]; const b = events[i];
+    if (a.entity_type === b.entity_type && a.entity_id === b.entity_id && a.actor_name === b.actor_name && a.summary === b.summary && Math.abs(ms(a.at) - ms(b.at)) < 5000) events.splice(i, 1);
+  }
   const sample = Boolean((await db.get('SELECT sample_key FROM projects WHERE id = ?', [pid]))?.sample_key);   // v1 P2-1: replayed sample history has no actor
   return events.slice(0, lim).map((e) => ({ at: e.at, actor_name: e.actor_name || (sample ? SAMPLE_ACTOR : null), entity_type: e.entity_type, entity_id: e.entity_id, display_id: e.display_id, title: e.title, summary: e.summary, href: e.href }));
 }
