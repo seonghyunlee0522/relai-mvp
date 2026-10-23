@@ -26,11 +26,15 @@ test('#11 requirement owner: a 01 관계자 (고객사 included) via owner=s:<id
   const r2 = (await A.c('POST', A.req, { title: '두 번째' })).json.requirement;
   assert.deepEqual((await A.c('GET', `${A.req}?owner=s:sh-han`)).json.requirements.map((x) => x.id), [r1.id]);
   assert.deepEqual((await A.c('GET', `${A.req}?owner=none`)).json.requirements.map((x) => x.id), [r2.id]);
-  // user ↔ 관계자 is exclusive; history is one '담당자' row with display text
+  // founder 2026-10-23: 요구사항 담당자 = 01 관계자 only — a RELAI user (u:<id> / owner_user_id) is refused; history is one '담당자' row
   let u = await A.c('PATCH', `${A.req}/${r1.id}`, { owner: `u:${A.uid}` });
-  assert.equal(u.status, 200); assert.equal(u.json.requirement.owner_user_id, A.uid); assert.equal(u.json.requirement.owner_stakeholder_id, null);
+  assert.equal(u.status, 400); assert.match(u.json.error.fields.owner, /관계자/);
+  assert.equal((await A.c('PATCH', `${A.req}/${r1.id}`, { owner_user_id: A.uid })).status, 400);
+  assert.equal((await A.c('POST', A.req, { title: '멤버 담당', owner: `u:${A.uid}` })).status, 400);
+  u = await A.c('PATCH', `${A.req}/${r1.id}`, { owner: 's:sh-pm' });
+  assert.equal(u.status, 200); assert.equal(u.json.requirement.owner_stakeholder_id, 'sh-pm'); assert.equal(u.json.requirement.owner_user_id, null);
   const h = u.json.requirement.history.find((x) => x.field_name === 'owner');
-  assert.equal(h.old_value, '한도윤 · 다온생명'); assert.equal(h.new_value, '홍길동');
+  assert.equal(h.old_value, '한도윤 · 다온생명'); assert.match(h.new_value, /김피엠/);
   u = await A.c('PATCH', `${A.req}/${r1.id}`, { owner_user_id: null });   // old clients: owner_user_id '' / null = 미지정
   assert.equal(u.json.requirement.owner_label, ''); assert.equal(u.json.requirement.owner_stakeholder_id, null);
   assert.equal((await A.c('PATCH', `${A.req}/${r1.id}`, { owner: 's:nope' })).status, 400);

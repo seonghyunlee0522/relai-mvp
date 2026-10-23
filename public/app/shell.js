@@ -108,7 +108,7 @@ export async function shell(path, view, token = null) {
   wireOnce();
   if (!$('.shell')) {
     root.innerHTML = html`<div class="shell">
-      <header class="dtop" id="dtop"><a class="dtop__logo" href="/app" data-link aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a><div class="dtop__p" id="dtop-p"></div><span class="dtop__sp"></span><div class="dnext" id="dtop-next" hidden></div><span class="dtop__sp"></span><div class="dtop__r" id="dtop-r"></div></header>
+      <header class="dtop" id="dtop"><a class="dtop__logo" href="/app" data-link aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a><div class="dtop__p" id="dtop-p"></div><span class="dtop__sp"></span><div class="dtop__r" id="dtop-r"></div></header>
       <aside class="rail" id="rail"></aside>
       <header class="topbar"><a class="logo" href="/app" data-link aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a><a class="ptop" id="ptop" href="/app/projects" data-link hidden></a><span class="topbar__r">${raw(helpButton())}<button id="menu" aria-label="메뉴">☰</button></span></header>
       <div class="pstrip" id="pstrip" hidden></div>

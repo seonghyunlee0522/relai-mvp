@@ -262,6 +262,28 @@ export const migrations = [
     await db.run(`UPDATE project_phases SET description = ?, updated_at = now() WHERE phase_key = 'TRANSITION_GO_LIVE' AND description = ?`, [TRANSITION_DESCRIPTION, TRANSITION_DESCRIPTION_V1]);
   } },
   { version: 70, name: 'Integrity: billing_orders.charge_claimed_at — one charge per order (concurrent add-on / upgrade / first subscription with the same client_key, or a replayed payment-window return, charged the card twice) (schema.sql, additive, nullable; nothing rewritten)', up() {} },
+  { version: 71, name: "요구사항 담당자 = 01 관계자 only (founder 2026-10-23): requirements owned by a RELAI user move to a 관계자 — samples to their 당사 관계자; other projects to the 관계자 with the same name, or the user is added to 01 관계자 as 당사 (nothing is unassigned). Data only", async up(db) {
+    const rows = await db.all(`SELECT r.id, r.project_id, u.name AS uname, p.sample_key FROM requirements r JOIN users u ON u.id = r.owner_user_id JOIN projects p ON p.id = r.project_id WHERE r.owner_user_id IS NOT NULL`);
+    const norm = (x) => String(x || '').replace(/\s+/g, '').toLowerCase();
+    const defs = new Map();
+    const load = async (pid) => {
+      if (defs.has(pid)) return defs.get(pid);
+      const d = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [pid]);
+      let list = []; try { list = JSON.parse(d ? d.stakeholders : '[]') || []; } catch { list = []; }
+      const v = { exists: Boolean(d), list, dirty: false }; defs.set(pid, v); return v;
+    };
+    for (const r of rows) {
+      const d = await load(r.project_id);
+      let sh = r.sample_key ? (d.list.find((x) => x && x.name && x.org_type === 'OWN') || d.list.find((x) => x && x.name)) : d.list.find((x) => x && x.name && norm(x.name) === norm(r.uname));
+      if (!sh && r.uname) { sh = { id: randomUUID(), org_type: 'OWN', org: '', department: '', name: String(r.uname).slice(0, 100), role: '', area: '', note: '' }; d.list.push(sh); d.dirty = true; }
+      await db.run('UPDATE requirements SET owner_stakeholder_id = ?, owner_user_id = NULL WHERE id = ?', [sh ? sh.id : null, r.id]);
+    }
+    for (const [pid, d] of defs) {
+      if (!d.dirty) continue;
+      if (d.exists) await db.run('UPDATE project_definitions SET stakeholders = ?, updated_at = now() WHERE project_id = ?', [JSON.stringify(d.list), pid]);
+      else await db.run('INSERT INTO project_definitions (project_id, stakeholders) VALUES (?, ?)', [pid, JSON.stringify(d.list)]);
+    }
+  } },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

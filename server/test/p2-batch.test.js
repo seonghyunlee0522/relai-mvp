@@ -86,7 +86,7 @@ test('#6 WBS: 07 운영 is a fixed node; 운영 work goes under it; plans withou
 test('#6 WBS/간트 tabs carry no fixed phase → the chip is the current phase (요구사항 연결 stays 03)', () => {
   const tabs = DOORS('p').find((d) => d.key === 'schedule').tabs;
   assert.equal(tabs.find((t) => t.key === 'wbs').phase, null); assert.equal(tabs.find((t) => t.key === 'gantt').phase, null);
-  assert.equal(tabs.find((t) => t.key === 'wbs-trace').phase, 'ANALYSIS_DESIGN');
+  assert.ok(!tabs.some((t) => t.key === 'wbs-trace'), '일정 › 요구사항 연결 = 요구사항 › 연결 현황 (one screen, founder 2026-10-23)');
   assert.match(src('public/app/frame.js'), /phase: t \? t\.phase \|\| curKey : null/);
 });
 

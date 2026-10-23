@@ -21,7 +21,7 @@ import { toolMenu, tmItem, aiPrice } from '../shared/toolmenu.js';
 import { createGrid } from '../shared/grid.js';
 import { bulkRun, mountBulk } from '../shared/bulk.js';
 import { activityPane, bindActivity, bindDtabs, dtabs, mergeActivity } from '../shared/detail.js';
-import { openImport } from '../shared/importer.js';
+import { openImport, excelFirst, bindExcelFirst } from '../shared/importer.js';
 import { choiceDialog, confirmDialog, pickerDialog, toast, toastAction, withDelayReason } from '../shared/dialogs.js';
 import { planShiftText, workdaysBetween } from '../shared/kst-date.js';
 import { holidays } from '../shared/holidays.js';
@@ -207,7 +207,8 @@ export async function wbsPage(id) {
     const s0 = r.planned_start; const e0 = r.planned_end; if (!s0 && !e0) return isLeafTask(r) && !roRow(r) ? '<span class="wper wper--empty" data-period-empty title="눌러서 계획 시작·종료일을 입력합니다">날짜 지정</span>' : dim();   // Jim P2-3: an empty 기간 says it can be clicked
     return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''} ${r.rollup ? 'dim' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${raw(r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : '')}${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(periodShift(r))}`; } }] : []);
   const grid = createGrid({
-    key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', select: !archived, selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched, tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
+    key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', select: !archived, selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched,
+    totalLabel: () => (hasUser() ? null : html`<span>단계 <b>${items.filter((x) => isSys(x) && !x.archived_at).length}</b>개 · 작업 <b>0</b>건</span>`),   // P4-1: no '총 0건' under the stage rows tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
     rowClass: (r) => `${isSys(r) ? 'is-sys' : ''} ${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
     canEdit: editable, activeId: () => (sel ? sel.id : null), onOpen: (iid) => { if (iid !== GHOST) openDetail(iid); },
     onSelect: (s) => bulk.update(s.size),
@@ -366,11 +367,13 @@ export async function wbsPage(id) {
     const lead = v === 'gantt' ? '작업에 시작일·종료일을 넣으면 여기에 일정표가 그려집니다.' : '아직 작업이 없습니다';
     const bodyText = conf ? `확정한 요구사항 ${conf}건으로 기본 작업 목록을 만들어 드립니다.` : '기본 작업 목록을 먼저 만들고 구현 작업은 요구사항이 확정되면 연결할 수 있습니다.';
     // R3b: one sentence + one button (the list's sentence is the helpful one; '아직 작업이 없습니다' is implied)
-    return html`<div class="wempty" data-tour-id="wbs-empty"><span class="wempty__ic" aria-hidden="true">▤</span><h2>${v === 'gantt' ? lead : bodyText}</h2>
-      ${raw(archived ? '' : html`<div class="wempty__a"><button class="btn btn--primary" id="skel">WBS 뼈대 만들기</button></div>
-        ${raw(ghost && !hasNodes() ? html`<div class="wempty__add"><input class="input" data-ghost maxlength="200" placeholder="${ghost.item_type === 'MILESTONE' ? '마일스톤 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off" aria-label="첫 작업 이름"></div>` : '')}
-        <p class="wempty__alt"><button type="button" class="link linkbtn" id="add2">직접 추가</button> · <button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button> · ${raw(ai.enabled ? '<button type="button" class="link linkbtn" id="ai-wbs2">AI 초안</button>' : '<span class="dim" title="AI 기능이 설정되지 않았습니다.">AI 초안(사용 불가)</span>')}</p>
-        ${raw(hasNodes() ? html`<p class="wempty__alt"><label class="toggle" title="분석·설계 다음에 '데이터 이관' 단계를 둡니다. 프로젝트 특성 '데이터 이관'도 함께 바뀝니다."><input type="checkbox" id="dm-sw" ${dmNode() ? 'checked' : ''}> 데이터 이관 단계</label></p>` : '')}`)}</div>`;
+    const ghostIn = ghost && !hasNodes() ? html`<div class="wempty__add"><input class="input" data-ghost maxlength="200" placeholder="${ghost.item_type === 'MILESTONE' ? '마일스톤 이름 입력 후 Enter' : '작업명 입력 후 Enter · Esc 취소'}" autocomplete="off" aria-label="첫 작업 이름"></div>` : '';
+    // gantt / archived / phone: one sentence (nothing to enter there)
+    if (v === 'gantt' || archived) return html`<div class="wempty" data-tour-id="wbs-empty"><span class="wempty__ic" aria-hidden="true">▤</span><h2>${v === 'gantt' ? lead : bodyText}</h2></div>`;
+    // founder 2026-10-23: the first entry is Excel (템플릿 → 작성 → 올리기); 뼈대 · 직접 추가 · AI 초안 are the other ways in
+    const alt = html`<button type="button" class="link linkbtn" id="skel" title="${bodyText}">기본 작업 뼈대 만들기${conf ? ` (확정 요구사항 ${conf}건 연결)` : ''}</button> · <button type="button" class="link linkbtn" id="add2">화면에서 직접 추가</button>${raw(ai.enabled ? ' · <button type="button" class="link linkbtn" id="ai-wbs2">AI 초안</button>' : '')}`;
+    const dm = hasNodes() ? html`<label class="toggle xfirst__opt" title="분석·설계 다음에 '데이터 이관' 단계를 둡니다. 프로젝트 특성 '데이터 이관'도 함께 바뀝니다."><input type="checkbox" id="dm-sw" ${dmNode() ? 'checked' : ''}> 데이터 이관 단계 포함</label>` : '';
+    return html`${raw(excelFirst('wbs', { tourId: 'wbs-empty', alt: alt + dm }))}${raw(ghostIn)}`;
   };
   /** 뼈대 확인 dialog: a short list (그룹명 + 건수) instead of a sentence; [취소] [만들기]. */
   const openSkeleton = async () => {
@@ -683,6 +686,7 @@ export async function wbsPage(id) {
       } catch (err) { toast(err.message); }
     };
     const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = doImport;
+    bindExcelFirst(main, { kind: 'wbs', base: wApi(), onDone: async () => { await load(); draw(); } });
     bindCoach(main);
     if (params().get('import') === '1' && !archived) { setParam('import', ''); doImport(); }
     if (params().get('ai') === '1' && !archived && ai.enabled) { setParam('ai', ''); openWbsPlanner({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }

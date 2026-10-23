@@ -13,10 +13,10 @@ const KIND_LABEL = { requirements: '요구사항', wbs: 'WBS', tests: '테스트
 const TEMPLATE_NAME = { requirements: '요구사항 등록 템플릿.xlsx', wbs: 'WBS 등록 템플릿.xlsx', tests: '테스트 케이스 등록 템플릿.xlsx' };
 
 /**
- * @param {{kind:'requirements'|'wbs'|'tests', base:string, parentId?:string, onDone?:()=>void}} o
+ * @param {{kind:'requirements'|'wbs'|'tests', base:string, parentId?:string, onDone?:()=>void, file?:File}} o
  *   base = `/api/workspaces/:wid/projects/:pid/<kind>`
  */
-export function openImport({ kind, base, parentId, onDone = () => {} }) {
+export function openImport({ kind, base, parentId, onDone = () => {}, file = null }) {   // file: a .xlsx already chosen (Excel-first entry's drop zone) → straight to reading it
   const label = KIND_LABEL[kind];
   const el = document.createElement('div');
   el.className = 'impscrim';
@@ -198,5 +198,49 @@ export function openImport({ kind, base, parentId, onDone = () => {} }) {
   document.onkeydown = (e) => { if (e.key === 'Escape' && !document.querySelector('.scrim')) tryClose(); };
 
   drawFile();
+  if (file) upload(file);
 }
 
+
+/* ---------- Excel-first entry (founder 2026-10-23): an empty 요구사항 / WBS opens on 템플릿 → 작성 → 올리기 ----------
+ * Lots of rows are faster in Excel than one by one on screen; after the upload the details are refined on screen.
+ * `alt` = the other ways in (직접 추가 · AI …) as rendered HTML. The drop zone hands the file to openImport({ file }). */
+const XF_COPY = {
+  requirements: { what: '요구사항이', title: '요구사항을 Excel로 한 번에 등록하세요',
+    write: '한 행이 요구사항 1건입니다. 제목만 있어도 됩니다. 유형·우선순위·담당자처럼 모르는 칸은 비워 두고 올린 뒤 화면에서 채우세요.' },
+  wbs: { what: '작업이', title: '작업 목록을 Excel로 한 번에 등록하세요',
+    write: 'WBS Code(1, 1.1, 1.1.1)로 상위·하위 작업을 나타냅니다. 기간·담당자·진행률은 비워 두고 올린 뒤 화면에서 채워도 됩니다.' },
+  tests: { what: '테스트가', title: '테스트 케이스를 Excel로 한 번에 등록하세요',
+    write: '한 행이 테스트 1건입니다. 연결할 요구사항 ID를 적으면 자동으로 연결됩니다.' },
+};
+export function excelFirst(kind, { alt = '', tourId = '' } = {}) {
+  const c = XF_COPY[kind];
+  return html`<section class="xfirst" data-xfirst="${kind}" ${raw(tourId ? `data-tour-id="${tourId}"` : '')}>
+    <h2 class="xfirst__t">${c.title}</h2>
+    <p class="xfirst__s">입력할 ${c.what} 많다면 Excel에 모아 작성한 뒤 올리는 것이 가장 빠릅니다. 올린 뒤에는 화면에서 상세 내용을 다듬으세요.</p>
+    <ol class="xfirst__steps">
+      <li><span class="xfirst__n">1</span><div><b>템플릿 내려받기</b><p>정해진 열 이름과 '작성 안내' 시트(입력 규칙·허용 값)가 들어 있습니다.</p>
+        <button type="button" class="btn btn--secondary btn--sm" data-xf-tpl>${TEMPLATE_NAME[kind].replace('.xlsx', '')} 내려받기</button></div></li>
+      <li><span class="xfirst__n">2</span><div><b>Excel에서 작성</b><p>${c.write}</p></div></li>
+      <li><span class="xfirst__n">3</span><div><b>파일 올리기</b><p>올리면 바로 검증합니다. 오류가 있는 행만 고쳐서 가져올 수 있습니다.</p>
+        <div class="xfirst__drop" data-xf-drop tabindex="0" role="button" aria-label="Excel 파일 올리기"><b>.xlsx 파일을 끌어다 놓거나 클릭해 선택</b><span>최대 5MB · 2,000행</span>
+          <input type="file" data-xf-file accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></div></div></li>
+    </ol>
+    ${raw(alt ? html`<p class="xfirst__alt"><span>건수가 적다면</span> ${raw(alt)}</p>` : '')}
+  </section>`;
+}
+/** Wires one rendered excelFirst block: template download + drop / pick → openImport({ file }). */
+export function bindExcelFirst(root, { kind, base, onDone }) {
+  const box = root.querySelector(`[data-xfirst="${kind}"]`); if (!box) return;
+  const tpl = box.querySelector('[data-xf-tpl]');
+  if (tpl) tpl.onclick = async () => { try { await download(`${base}/template.xlsx`, { filename: TEMPLATE_NAME[kind] }); } catch (e) { toast(e.message); } };
+  const drop = box.querySelector('[data-xf-drop]'); const input = box.querySelector('[data-xf-file]');
+  if (!drop || !input) return;
+  const go = (file) => openImport({ kind, base, onDone, file });
+  drop.onclick = () => input.click();
+  drop.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } };
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('is-over'); };
+  drop.ondragleave = () => drop.classList.remove('is-over');
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('is-over'); if (e.dataTransfer.files[0]) go(e.dataTransfer.files[0]); };
+  input.onchange = () => { if (input.files[0]) { go(input.files[0]); input.value = ''; } };
+}
