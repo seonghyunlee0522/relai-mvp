@@ -141,7 +141,7 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
 const head = (title, meta = '') => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>${meta}<link rel="icon" href="/favicon.ico">
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="/service/pay/agent.css"></head>`;
+<link rel="stylesheet" href="/service/pricing.css"></head>`;
 const topbar = () => `<header class="sp-top"><div class="sp-wrap sp-top__in"><a class="sp-brand" href="/"><b>relai</b><span class="sp-brand__sep">/</span><span>서비스 결제</span></a>
 <a class="sp-top__link" href="mailto:${esc(LEGAL.contactEmail)}">문의하기</a></div></header>`;
 
@@ -206,7 +206,7 @@ ${open ? '' : `<p class="sp-note" id="sp-closed">지금은 온라인 결제를 �
 <section class="sp-contact"><h2>문의</h2><p>서비스 범위, 견적, 세금계산서 발행은 <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 문의해 주세요.</p></section>
 </main>
 ${legalFooterHtml(LEGAL).replace('class="legal-foot"', 'class="legal-foot sp-wrap"')}
-<script type="module" src="/service/pay/agent.js"></script></body></html>`;
+<script type="module" src="/service/pricing.js"></script></body></html>`;
 }
 
 const REASON = { canceled: '결제가 취소되었습니다.', expired: '결제 시간이 초과되었습니다. 다시 시도해 주세요.', amount_mismatch: '결제 금액이 주문 금액과 달라 결제하지 않았습니다.',
