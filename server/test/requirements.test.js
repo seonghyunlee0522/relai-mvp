@@ -49,11 +49,12 @@ test('create: REQ-001.. sequential per project, defaults, other project restarts
   server.close();
 });
 
-test('update: tracked fields logged only when changed; requester; owner must be workspace member', async () => {
+test('update: tracked fields logged only when changed; requester; owner = 01 관계자 only (no RELAI user)', async () => {
   const { server, client } = await boot();
   const A = await setup(client, 'a@x.com'); const B = await setup(client, 'b@x.com');
+  await A.c('PUT', `${A.purl}/definition`, { stakeholders: [{ id: 'sh-hong', name: '홍길동', org_type: 'OWN' }] });
   const r = (await A.c('POST', A.url, { title: 'SSO 로그인' })).json.requirement;
-  let u = await A.c('PATCH', `${A.url}/${r.id}`, { type: 'FUNCTIONAL', priority: 'HIGH', scope: 'IN_SCOPE', status: 'REVIEWING', description: 'Entra ID', requester_name: '김OO 책임', requester_organization: 'A사 IT팀', owner_user_id: A.uid });
+  let u = await A.c('PATCH', `${A.url}/${r.id}`, { type: 'FUNCTIONAL', priority: 'HIGH', scope: 'IN_SCOPE', status: 'REVIEWING', description: 'Entra ID', requester_name: '김OO 책임', requester_organization: 'A사 IT팀', owner: 's:sh-hong' });
   assert.equal(u.status, 200);
   assert.deepEqual(u.json.changed.sort(), ['description', 'owner', 'priority', 'requester', 'scope', 'status', 'type']);   // batch7 #11: 담당자 = 'owner'
   assert.equal(u.json.requirement.owner_name, '홍길동');
@@ -66,7 +67,8 @@ test('update: tracked fields logged only when changed; requester; owner must be 
   // scope and status independent
   u = await A.c('PATCH', `${A.url}/${r.id}`, { scope: 'OUT_OF_SCOPE', status: 'CONFIRMED' });
   assert.equal(u.json.requirement.scope, 'OUT_OF_SCOPE'); assert.equal(u.json.requirement.status, 'CONFIRMED');
-  // owner from another workspace rejected (API + trigger)
+  // a RELAI user as owner is refused — own workspace member or another workspace's (founder 2026-10-23)
+  assert.equal((await A.c('PATCH', `${A.url}/${r.id}`, { owner_user_id: A.uid })).status, 400);
   assert.equal((await A.c('PATCH', `${A.url}/${r.id}`, { owner_user_id: B.uid })).status, 400);
   assert.equal((await A.c('POST', A.url, { title: 'x', owner_user_id: B.uid })).status, 400);
   server.close();
@@ -74,7 +76,8 @@ test('update: tracked fields logged only when changed; requester; owner must be 
 
 test('acceptance criteria: add/update/delete/reorder with history; list search & filters; summary', async () => {
   const { server, client } = await boot();
-  const { c, url, uid } = await setup(client);
+  const { c, url, uid, purl } = await setup(client);
+  await c('PUT', `${purl}/definition`, { stakeholders: [{ id: 'sh-own', name: '담당', org_type: 'OWN' }] });   // 요구사항 담당자 = 01 관계자 only
   const r = (await c('POST', url, { title: 'SSO 로그인', criteria: ['Entra ID 계정으로 로그인할 수 있다.', '비인가 사용자는 접근할 수 없다.'] })).json.requirement;
   assert.equal(r.criteria.length, 2);
   let x = (await c('POST', `${url}/${r.id}/criteria`, { content: '로그인 실패 시 오류 메시지가 표시된다.' })).json.requirement;
@@ -89,7 +92,7 @@ test('acceptance criteria: add/update/delete/reorder with history; list search &
   assert.equal((await c('POST', `${url}/${r.id}/criteria`, { content: '' })).status, 400);
 
   // more data for search/filter
-  await c('POST', url, { title: '권한 관리', type: 'SECURITY', priority: 'HIGH', scope: 'IN_SCOPE', status: 'CONFIRMED', owner_user_id: uid });
+  await c('POST', url, { title: '권한 관리', type: 'SECURITY', priority: 'HIGH', scope: 'IN_SCOPE', status: 'CONFIRMED', owner: 's:sh-own' });
   await c('POST', url, { title: '배치 연동', description: 'SAP 인터페이스', type: 'INTERFACE', priority: 'LOW', scope: 'OUT_OF_SCOPE', status: 'REJECTED' });
   const arch = (await c('POST', url, { title: '삭제 예정' })).json.requirement;
   await c('POST', `${url}/${arch.id}/archive`, {});
@@ -101,7 +104,7 @@ test('acceptance criteria: add/update/delete/reorder with history; list search &
   assert.equal((await c('GET', `${url}?type=SECURITY,INTERFACE`)).json.requirements.length, 2);
   assert.equal((await c('GET', `${url}?type=SECURITY&priority=HIGH&status=CONFIRMED`)).json.requirements.length, 1);
   assert.equal((await c('GET', `${url}?scope=IN_SCOPE&status=REJECTED`)).json.requirements.length, 0);
-  assert.equal((await c('GET', `${url}?owner=${uid}`)).json.requirements.length, 1);
+  assert.equal((await c('GET', `${url}?owner=s:sh-own`)).json.requirements.length, 1); void uid;
   assert.equal((await c('GET', `${url}?owner=none`)).json.requirements.length, 2);
   assert.deepEqual({ ...all.summary }, { total: 3, in_scope: 1, out_of_scope: 1, scope_undecided: 1, confirmed: 1, reviewing: 0, draft: 1, on_hold: 0, rejected: 1, type_unspecified: 1, priority_unspecified: 1, in_scope_confirmed: 1, non_functional: 2, in_scope_linked: 0, in_scope_unlinked: 1, coverage: 0, confirmed_unlinked: 1 });
   server.close();
