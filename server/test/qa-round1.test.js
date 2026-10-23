@@ -150,3 +150,9 @@ test('UX-006: import accepts on-screen status labels; UX-001: unknown pages are 
   assert.ok([302, 200].includes(r2.status), String(r2.status));   // signed in → redirected into the app
   server.close();
 });
+
+test('WBS grid keeps its phone-card table class (a trailing comment once swallowed tableClass)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../public/app/wbs/page.js', import.meta.url), 'utf8');
+  assert.match(src, /^\s*tableClass: 'gtable--wbs',/m);
+});

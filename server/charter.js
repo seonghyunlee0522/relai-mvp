@@ -27,9 +27,13 @@ export async function buildProjectCharter(db, project, { definition = null } = {
   const own = [...new Set((d.stakeholders || []).filter((s) => s.org_type === 'OWN' && s.org).map((s) => s.org))];
   const ops = d.operations || {};
   const communication = Object.entries(OPS_LABEL).filter(([k]) => ops[k]).map(([k, label]) => `${label}: ${ops[k]}`).join('\n');
+  // A key date that was also turned into a WBS milestone (같은 이름 · 같은 날짜) is ONE milestone: keep the WBS row (code + status), drop the key-date copy.
+  const msKey = (t, dt) => `${String(t || '').replace(/\s+/g, '').toLowerCase()}|${dt || ''}`;
+  const wbsMs = (model.wbs_milestones || []).map((w) => ({ id: w.id, title: w.title, date: dateStr(w.milestone_date), source: 'WBS', wbs_code: w.wbs_code, status: w.status }));
+  const inWbs = new Set(wbsMs.map((m) => msKey(m.title, m.date)));
   const milestones = [
-    ...(d.key_dates || []).filter((k) => k.title).map((k) => ({ id: k.id, title: k.title, date: k.date || null, source: 'KEY_DATE' })),
-    ...(model.wbs_milestones || []).map((w) => ({ id: w.id, title: w.title, date: dateStr(w.milestone_date), source: 'WBS', wbs_code: w.wbs_code, status: w.status })),
+    ...(d.key_dates || []).filter((k) => k.title && !inWbs.has(msKey(k.title, k.date || null))).map((k) => ({ id: k.id, title: k.title, date: k.date || null, source: 'KEY_DATE' })),
+    ...wbsMs,
   ].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   return {
     profile: {

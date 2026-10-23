@@ -208,7 +208,8 @@ export async function wbsPage(id) {
     return html`<span class="wper ${r.past_end ? 'wpast' : r.computed_status === 'DELAYED' ? 'cell--late' : ''} ${r.rollup ? 'dim' : ''}" title="${r.rollup ? '하위 작업 기준 자동 계산' : r.past_end ? PAST_END() : ''}">${raw(r.past_end ? '<i class="wpast__i" aria-hidden="true">!</i>' : '')}${s0 ? fmtShort(s0) : '?'}–${e0 ? fmtShort(e0) : '?'}</span>${raw(periodShift(r))}`; } }] : []);
   const grid = createGrid({
     key: desk ? `wbs.tree.r2.${meId}` : 'wbs.tree', select: !archived, selectMode: !desk || selMode, rowId: (r) => r.id, paginate: false, sortable: false, total: () => matched,
-    totalLabel: () => (hasUser() ? null : html`<span>단계 <b>${items.filter((x) => isSys(x) && !x.archived_at).length}</b>개 · 작업 <b>0</b>건</span>`),   // P4-1: no '총 0건' under the stage rows tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
+    totalLabel: () => (hasUser() ? null : html`<span>단계 <b>${items.filter((x) => isSys(x) && !x.archived_at).length}</b>개 · 작업 <b>0</b>건</span>`),   // P4-1: no '총 0건' under the stage rows
+    tableClass: 'gtable--wbs',   // K19: phone card = 1.1 제목 / 담당자 · 시작–종료 · 상태
     rowClass: (r) => `${isSys(r) ? 'is-sys' : ''} ${r._ghost ? 'is-ghost' : ''} wd${Math.min(r.depth, 4)} ${r.is_group || r.item_type === 'SUMMARY' ? 'is-group' : ''} ${r.item_type === 'MILESTONE' ? 'is-ms' : ''} ${isOverdue(r) ? 'is-late' : ''} ${r.archived_at ? 'is-arch' : ''}`,
     canEdit: editable, activeId: () => (sel ? sel.id : null), onOpen: (iid) => { if (iid !== GHOST) openDetail(iid); },
     onSelect: (s) => bulk.update(s.size),
