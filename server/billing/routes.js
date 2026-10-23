@@ -19,7 +19,7 @@ import { emailConfig } from '../email/config.js';
 import { requireVerifiedEmail } from '../auth/account-security.js';
 import { BillingError, paymentsEnabled, PAYMENTS_OFF_MESSAGE, CHECKOUT_NOT_OPEN_MESSAGE } from './provider.js';
 import { parseCard, safeEqual } from './nicepay.js';
-import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, minUsers, MAX_USERS, publicOrder, renewalAmount, quoteAddon, quoteUpgrade, loadQuoteContext } from './orders.js';
+import { OrderError, quoteFor, createOrder, getOrder, isExpired, failOrder, claimCharge, minUsers, MAX_USERS, publicOrder, renewalAmount, quoteAddon, quoteUpgrade, loadQuoteContext } from './orders.js';
 import { countUsage, workspaceLimits, overLimit, projectAccess } from './limits.js';
 import { FREE_POLICY, FREE_KEEP } from '../email/templates.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
@@ -80,6 +80,12 @@ export function mountBillingWebhook(app, db, { provider, fail }) {
       if (order.status === 'PAID') return res.redirect(303, settingsUrl('success', '', order));
       if (order.status !== 'PENDING') return res.redirect(303, settingsUrl('failed', order.failure_code || 'order_closed', order));
       if (isExpired(order)) { await failOrder(db, order.id, 'expired', '결제 시간이 초과되었습니다.'); return res.redirect(303, settingsUrl('failed', 'expired', order)); }
+      // Replayed or concurrent return: only the claim holder approves; the other shows the current state and approves nothing.
+      if (!(await claimCharge(db, order.id))) {
+        const now = await getOrder(db, order.id);
+        if (now?.status === 'PAID') return res.redirect(303, settingsUrl('success', '', order));
+        return res.redirect(303, now?.status === 'PENDING' ? settingsUrl('processing', '', order) : settingsUrl('failed', now?.failure_code || 'order_closed', order));
+      }
       let ev;
       try { ev = await provider.completeReturn({ form, order }); }
       catch (e) {
@@ -285,6 +291,13 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
    * 정기결제 구독 (new subscription): consent to the disclosure of this exact quote → billing key registration → first charge.
    * POST …/billing/recurring { plan, cycle, extra_users?, extra_projects?, card, agree, disclosure_hash }.
    */
+  /** The other request of a double click (same client_key) lost the charge claim: it charges nothing and reports the order's current state. */
+  const lostClaim = async (res, wid, role, orderId, paidStatus = 200) => {
+    const o = await getOrder(db, orderId);
+    if (o?.status === 'PAID') return res.status(paidStatus).json(await summary(wid, role));
+    if (o?.status === 'PENDING') return fail(res, 409, 'order_in_progress', '결제를 처리하고 있습니다. 잠시 후 화면을 새로 고쳐 주세요.');
+    return fail(res, 409, 'order_closed', '이미 처리된 주문입니다. 화면을 새로 고쳐 주세요.');
+  };
   const subscribe = async (req, res) => {
     if (closed(res)) return;
     let card;
@@ -294,6 +307,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const bad = checkConsent(req.body, d); if (bad) return consentFail(res, bad, d);
     const order = await createOrder(db, { workspaceId: req.params.wid, userId: req.user.id, provider: provider.name, kind: 'RECURRING_FIRST', q, clientKey: req.body?.client_key });
     if (order.status !== 'PENDING') return order.status === 'PAID' ? res.status(201).json(await summary(req.params.wid, req.role)) : fail(res, 409, 'order_closed', '이미 처리된 주문입니다. 화면을 새로 고쳐 주세요.');
+    if (!(await claimCharge(db, order.id))) return lostClaim(res, req.params.wid, req.role, order.id, 201);
     await recordConsent(db, { workspaceId: req.params.wid, userId: req.user.id, orderId: order.id, kind: 'CHECKOUT', d, amount: q.total, renewalAmount: q.next_renewal_amount, cycle: q.cycle, nextChargeAt: q.next_renewal_at, req });
     const customer = { email: req.user.email, name: req.user.name };
     let bid;
@@ -350,6 +364,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const order = await createOrder(db, { workspaceId: wid, userId: req.user.id, provider: provider.name, kind, q: quote, clientKey: req.body?.client_key });
     if (order.status === 'PAID') return res.json(await summary(wid, req.role));
     if (order.status !== 'PENDING') return fail(res, 409, 'order_closed', '이미 처리된 주문입니다. 화면을 새로 고쳐 주세요.');
+    if (!(await claimCharge(db, order.id))) return lostClaim(res, wid, req.role, order.id);
     await recordConsent(db, { workspaceId: wid, userId: req.user.id, orderId: order.id, kind, d, amount: quote.total, renewalAmount: quote.next_renewal_amount, cycle: quote.cycle, nextChargeAt: quote.next_renewal_at, req });
     if (!(await chargeInPeriod(res, wid, order))) return;
     res.status(201).json({ ...(await summary(wid, req.role)), order: publicOrder(await getOrder(db, order.id)) });

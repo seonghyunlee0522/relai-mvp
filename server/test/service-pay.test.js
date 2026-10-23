@@ -86,6 +86,10 @@ test('GET /pay/agent: public (no login), both cards, consents, notes, business f
     for (const s of ['relai', '서비스 결제', 'AI Agent 개발 및 운영', 'AI Agent 개발 및 운영 월 구독', '400,000원', '결제 전 확인해주세요', '이용약관', '개인정보처리방침',
       '개인정보 수집·이용', '결제 진행', '회사명', '연락처', LEGAL.bizNo, LEGAL.mailOrderNo, LEGAL.contactEmail, '카드번호', '유효기간', '정기결제에 동의']) assert.ok(r.text.includes(s), s);
     assert.match(r.text, /data-selected="agent-once"/);
+    // every /service/* stylesheet and script the page links is actually served (a wrong path left the live page unstyled, form dead)
+    const assets = [...r.text.matchAll(/(?:href|src)="(\/service\/[^"]+)"/g)].map((m) => m[1]);
+    assert.ok(assets.some((a) => a.endsWith('.css')) && assets.some((a) => a.endsWith('.js')), JSON.stringify(assets));
+    for (const a of assets) { const x = await c('GET', a); assert.equal(x.status, 200, a); }
     assert.doesNotMatch(visible(r.text), /sample|test|샘플|테스트/i);
     assert.match((await c('GET', '/pay/agent?plan=monthly&product=agent')).text, /data-selected="agent-monthly"/);
     assert.match((await c('GET', '/pay/agent?plan=monthly&product=agent')).text, /data-recurring="0"/);

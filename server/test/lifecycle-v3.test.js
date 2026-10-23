@@ -101,6 +101,26 @@ test('subscribe PRO monthly +2 users: consent required (400, then stale hash), o
   t.server.close();
 });
 
+test('first subscription double click (same client_key, concurrent): one order, one billing key, one charge, one consent', async () => {
+  const t = await boot();
+  const A = await owner(t);
+  const q = await A.c('GET', `${B(A)}/quote?plan=PRO&cycle=MONTHLY&extra_users=0&extra_projects=0`);
+  const body = { plan: 'PRO', cycle: 'MONTHLY', extra_users: 0, extra_projects: 0, card: CARD, agree: true, disclosure_hash: q.json.disclosure.hash, client_key: 'sub-k1' };
+  const [r1, r2] = await Promise.all([A.c('POST', `${B(A)}/recurring`, body), A.c('POST', `${B(A)}/recurring`, body)]);
+  assert.ok([r1.status, r2.status].includes(201), JSON.stringify([r1.json, r2.json]));
+  for (const r of [r1, r2]) assert.ok([201, 409].includes(r.status), JSON.stringify(r.json));
+  const orders = await t.db.all(`SELECT * FROM billing_orders WHERE workspace_id = ? AND kind = 'RECURRING_FIRST'`, [A.w]);
+  assert.equal(orders.length, 1); assert.equal(orders[0].status, 'PAID'); assert.ok(orders[0].charge_claimed_at);
+  assert.equal(t.provider.calls.regist.length, 1);
+  assert.equal(t.provider.calls.charge.filter((c) => c.order_id === orders[0].id).length, 1);
+  assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM billing_consents WHERE workspace_id = ?`, [A.w])).n, 1);
+  // the same key again after success: no new order, no new charge
+  const again = await A.c('POST', `${B(A)}/recurring`, body);
+  assert.ok([201, 409].includes(again.status), JSON.stringify(again.json));
+  assert.equal(t.provider.calls.charge.length, 1);
+  t.server.close();
+});
+
 test('add-on now: prorated to the period end (rounded down), limit +2 only when PAID, consent ADDON; flag off → 409; double click (client_key) → one order', async () => {
   const t = await boot();
   const A = await owner(t);

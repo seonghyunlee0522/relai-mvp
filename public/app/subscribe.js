@@ -144,6 +144,10 @@ export async function subscribePage(main = $('#main')) {
   if (f.number) f.number.oninput = () => { f.number.value = f.number.value.replace(/[^\d]/g, '').replace(/(\d{4})(?=\d)/g, '$1-').slice(0, 19); };
   const clearCard = () => { if (!f.number) return; f.number.value = ''; f.mm.value = ''; f.yy.value = ''; f.id_no.value = ''; f.password2.value = ''; };
   refresh();
+  // Idempotency key for this checkout attempt: a second request (another tab, a resend) gets the same order and is never charged twice.
+  // A new key after an error, so a retry after a decline opens a new order instead of hitting the closed one.
+  const newKey = () => (globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+  let clientKey = newKey();
   f.onsubmit = async (e) => {
     e.preventDefault();
     const withCard = Boolean(f.number);
@@ -156,13 +160,13 @@ export async function subscribePage(main = $('#main')) {
     if (!current) return toast('금액을 다시 불러온 뒤 시도해 주세요.');
     const btn = $('#sub-pay', root); btn.disabled = true;
     try {
-      const consent = { agree: true, disclosure_hash: current.disclosure.hash };
+      const consent = { agree: true, disclosure_hash: current.disclosure.hash, client_key: clientKey };
       if (mode === 'ADDON') { await api('POST', `/api/workspaces/${wid}/billing/addons`, { extra_users: sel.extra_users, extra_projects: sel.extra_projects, ...consent }); toast('추가했습니다. 한도가 바로 늘었어요.'); }
       else if (mode === 'UPGRADE') { await api('POST', `/api/workspaces/${wid}/billing/upgrade`, { plan: 'TEAM', ...consent }); toast(`${label('TEAM')} 플랜으로 바꿨습니다.`); }
       else { await api('POST', `/api/workspaces/${wid}/billing/recurring`, { ...sel, card: c.card, ...consent }); toast(`${label(sel.plan)} 플랜 구독을 시작했습니다.`); }
       clearCard(); navigate('/app/settings/billing');
     } catch (err) {
-      clearCard(); btn.disabled = false;
+      clearCard(); btn.disabled = false; clientKey = newKey();
       if (err.code === 'consent_stale') { await refresh(); f.agree.checked = false; }
       showErr(err.fields || {}); toast(Object.values(err.fields || {})[0] || err.message);
     }

@@ -261,6 +261,7 @@ export const migrations = [
     await db.run(`UPDATE project_steps SET description = ?, updated_at = now() WHERE step_key = 'ACCEPTANCE' AND description = ? AND ${acc}`, [ACCEPTANCE_DESCRIPTION, ACCEPTANCE_DESCRIPTION_V1]);
     await db.run(`UPDATE project_phases SET description = ?, updated_at = now() WHERE phase_key = 'TRANSITION_GO_LIVE' AND description = ?`, [TRANSITION_DESCRIPTION, TRANSITION_DESCRIPTION_V1]);
   } },
+  { version: 70, name: 'Integrity: billing_orders.charge_claimed_at — one charge per order (concurrent add-on / upgrade / first subscription with the same client_key, or a replayed payment-window return, charged the card twice) (schema.sql, additive, nullable; nothing rewritten)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */
