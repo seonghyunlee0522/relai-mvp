@@ -13,8 +13,9 @@ test('requirements bulk: update applies per id, skips unknown/archived/other-pro
   await A.c('POST', `${A.req}/${r3.id}/archive`, {});
   const foreign = await mkReq(B, { title: 'foreign' });
   const cr = (await A.c('POST', `${A.purl}/changes`, { title: '변경', description: 'x' })).json.change;
+  await A.c('PUT', `${A.purl}/definition`, { stakeholders: [{ id: 'sh-m', name: '멤버', org_type: 'OWN' }] });   // 요구사항 담당자 = 01 관계자 only
 
-  const r = await A.c('POST', `${A.req}/bulk`, { ids: [r1.id, r2.id, r3.id, foreign.id, 'nope'], action: 'update', patch: { status: 'CONFIRMED', priority: 'HIGH', owner_user_id: m.uid }, source_change_request_id: cr.id });
+  const r = await A.c('POST', `${A.req}/bulk`, { ids: [r1.id, r2.id, r3.id, foreign.id, 'nope'], action: 'update', patch: { status: 'CONFIRMED', priority: 'HIGH', owner: 's:sh-m' }, source_change_request_id: cr.id });
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal(r.json.updated, 2);
   const reason = Object.fromEntries(r.json.skipped.map((s) => [s.id, s.reason]));
@@ -22,7 +23,7 @@ test('requirements bulk: update applies per id, skips unknown/archived/other-pro
   assert.equal(reason[foreign.id], '요구사항을 찾을 수 없습니다.'); assert.equal(reason.nope, '요구사항을 찾을 수 없습니다.');
   assert.equal(r.json.summary.total, 2); assert.equal(r.json.summary.confirmed, 2);
   const one = (await A.c('GET', `${A.req}/${r1.id}`)).json.requirement;
-  assert.equal(one.status, 'CONFIRMED'); assert.equal(one.priority, 'HIGH'); assert.equal(one.owner_user_id, m.uid);
+  assert.equal(one.status, 'CONFIRMED'); assert.equal(one.priority, 'HIGH'); assert.equal(one.owner_stakeholder_id, 'sh-m'); assert.equal(one.owner_user_id, null);
   assert.deepEqual(one.history.filter((h) => h.action_type === 'UPDATED').map((h) => h.field_name).sort(), ['owner', 'priority', 'status']);   // batch7 #11: one 'owner' row (display text) for 담당자
   assert.ok(one.history.filter((h) => h.action_type === 'UPDATED').every((h) => h.source_change_display_id === cr.display_id));
   const two = (await A.c('GET', `${A.req}/${r2.id}`)).json.requirement;                       // status already CONFIRMED: only priority + owner changed
@@ -34,11 +35,12 @@ test('requirements bulk: update applies per id, skips unknown/archived/other-pro
   assert.equal(same.json.updated, 0); assert.equal(same.json.skipped[0].reason, '변경할 내용이 없습니다.');
   // unassign owner with null
   assert.equal((await A.c('POST', `${A.req}/bulk`, { ids: [r1.id], action: 'update', patch: { owner_user_id: null } })).json.updated, 1);
-  assert.equal((await A.c('GET', `${A.req}/${r1.id}`)).json.requirement.owner_user_id, null);
-  // a user from another workspace as owner: every id skipped, nothing applied
-  const o = await A.c('POST', `${A.req}/bulk`, { ids: [r1.id, r2.id], action: 'update', patch: { owner_user_id: B.uid } });
-  assert.equal(o.status, 200); assert.equal(o.json.updated, 0); assert.equal(o.json.skipped.length, 2);
-  assert.match(o.json.skipped[0].reason, /워크스페이스 멤버/);
+  assert.equal((await A.c('GET', `${A.req}/${r1.id}`)).json.requirement.owner_stakeholder_id, null);
+  // a RELAI user as requirement owner (any workspace, even a member): refused — 요구사항 담당자 = 01 관계자 only
+  for (const uid of [B.uid, m.uid]) {
+    const o = await A.c('POST', `${A.req}/bulk`, { ids: [r1.id, r2.id], action: 'update', patch: { owner_user_id: uid } });
+    assert.equal(o.status, 400); assert.match(JSON.stringify(o.json.error), /관계자/);
+  }
   server.close();
 });
 

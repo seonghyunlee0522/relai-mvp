@@ -14,17 +14,21 @@ const teamLabel = (t) => (t.role ? `${t.name} · ${t.role}` : t.name);
 const ORG = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 export const OUR_TEAM = '우리 팀';
 const groupLabel = (t) => [t.org || ORG[t.org_type] || '기타', t.department].filter(Boolean).join(' · ');
-export function ownerGroups(members, owners, cur = '', short = false, { all = false, orgLabel = false } = {}) {   // orgLabel: "이름 · 조직" for 관계자 outside 우리 팀 (list cells)
+/* stakeholdersOnly (요구사항, founder 2026-10-23): only the people entered in 01 착수 › 관계자 — no workspace members at all, a 관계자 who
+ * is also a member is offered as the 관계자. Groups: 당사, then "조직 · 부서" in 01 order. */
+export function ownerGroups(members, owners, cur = '', short = false, { all = false, orgLabel = false, stakeholdersOnly = false } = {}) {   // orgLabel: "이름 · 조직" for 관계자 outside 우리 팀 (list cells)
   const o = owners || {};
-  const dir = ((all && o.directory) || o.team || []).filter((t) => !t.member || `s:${t.id}` === cur);   // K13
+  if (stakeholdersOnly) members = [];
+  const dir = ((all || stakeholdersOnly) && o.directory || o.team || []).filter((t) => stakeholdersOnly || !t.member || `s:${t.id}` === cur);   // K13 (not for 관계자-only)
   const lab = (t) => (orgLabel && t.org_type !== 'OWN' ? [t.name, t.org || ORG[t.org_type]].filter(Boolean).join(' · ') : short ? t.name : teamLabel(t));
-  const groups = [{ label: OUR_TEAM, options: [...(members || []).map((m) => [`u:${m.id}`, m.name]), ...dir.filter((t) => t.org_type === 'OWN').map((t) => [`s:${t.id}`, lab(t)])] }];
+  const groups = [{ label: stakeholdersOnly ? ORG.OWN : OUR_TEAM, options: [...(members || []).map((m) => [`u:${m.id}`, m.name]), ...dir.filter((t) => t.org_type === 'OWN').map((t) => [`s:${t.id}`, lab(t)])] }];
   for (const t of dir.filter((x) => x.org_type !== 'OWN')) {
     const label = groupLabel(t); let g = groups.find((x) => x.label === label);
     if (!g) groups.push(g = { label, options: [] });
     g.options.push([`s:${t.id}`, lab(t)]);
   }
   if (/^s:/.test(cur) && !groups.some((g) => g.options.some(([v]) => v === cur))) groups[0].options.push([cur, '(삭제된 담당자)']);
+  if (stakeholdersOnly && /^u:/.test(cur)) groups[0].options.push([cur, '(관계자가 아닌 이전 담당자)']);
   return groups.filter((g, i) => i === 0 || g.options.length);
 }
 /** 미지정 · <optgroup 우리 팀> · <optgroup "조직 · 부서">… (grid cells and plain selects). A deleted stakeholder still shows as the current value. short: name only. */
@@ -51,8 +55,8 @@ const personOpts = (groups, gi, cur, q = '', bulk = false) => {
  * so every existing change / form handler keeps working — choosing a group only refills the person list (no save until a person is picked).
  * Behaviour is wired once for the whole document (delegated listeners below), so a page only renders this string.
  */
-export function ownerPicker(members, owners, cur = '', { attrs = '', disabled = false, label = '담당자', search = true, all = false, bulk = false } = {}) {   // bulk: 사람 선택 placeholder + 미지정 (담당자 해제) = BULK_NONE
-  const groups = ownerGroups(members, owners, cur, false, { all });
+export function ownerPicker(members, owners, cur = '', { attrs = '', disabled = false, label = '담당자', search = true, all = false, bulk = false, stakeholdersOnly = false } = {}) {   // bulk: 사람 선택 placeholder + 미지정 (담당자 해제) = BULK_NONE
+  const groups = ownerGroups(members, owners, cur, false, { all, stakeholdersOnly });
   const gi = Math.max(0, groups.findIndex((g) => g.options.some(([v]) => v === cur)));
   const dis = disabled ? 'disabled' : '';
   return html`<span class="opick" data-opick="${JSON.stringify({ groups, cur, bulk })}">
@@ -73,7 +77,7 @@ if (typeof document !== 'undefined' && !globalThis.__relaiOpick) {
   document.addEventListener('input', (e) => { const q = e.target.closest && e.target.closest('[data-opick-q]'); if (!q) return; e.stopPropagation(); refill(q.closest('[data-opick]'), q.value); }, true);
 }
 /** 관계자가 0명 → one line pointing at 01 관계자 (the picker then only offers 우리 팀). */
-export const stakeholderHint = (owners, pid, archived) => (!(owners && owners.stakeholders_total) && !archived ? html`<p class="whint" data-sh-hint>고객사·협력사 담당자는 01 관계자에 먼저 등록하세요. <a class="link" href="${definitionHref(pid, 'STAKEHOLDERS')}" data-link>관계자 등록 →</a></p>` : '');
+export const stakeholderHint = (owners, pid, archived, msg = '고객사·협력사 담당자는 01 관계자에 먼저 등록하세요.') => (!(owners && owners.stakeholders_total) && !archived ? html`<p class="whint" data-sh-hint>${msg} <a class="link" href="${definitionHref(pid, 'STAKEHOLDERS')}" data-link>관계자 등록 →</a></p>` : '');
 /** `계정 없음` — grey text tag, not a badge. */
 export const noAcct = (it) => (it.owner_no_account ? html`<small class="wnoacct">계정 없음</small>` : '');
 /** Only the PM (or nobody) registered in 01 → one line under the picker pointing at 이해관계자 추가. */

@@ -139,7 +139,8 @@ export const DOORS = (pid) => [
     // P2 (Jim prod 10-21 #6): the schedule runs through every phase, so its chip is the project's current phase (no phase here), not 03
     T('wbs', '작업 목록', P(pid, '/wbs'), '요구사항을 작업으로 나누고 담당자와 기간을 정합니다.', null),
     T('gantt', '간트', P(pid, '/wbs?view=gantt'), '작업 기간과 마일스톤을 일정표로 봅니다.', null),
-    T('wbs-trace', '요구사항 연결', P(pid, '/requirements?view=trace&scope=IN_SCOPE'), '범위 내 요구사항을 어떤 작업으로 구현하는지 연결합니다.', 'ANALYSIS_DESIGN'),
+    // founder 2026-10-23: '요구사항 연결' here was the same screen as 요구사항 › 연결 현황 (only ?scope=IN_SCOPE differed) → one place, under 요구사항.
+    // From the WBS side the gap is the list's quick filter '요구사항 미연결 작업' (?f=unlinked).
     T('dev-status', '구현 현황', P(pid, '/wbs?phase=DEVELOPMENT'), '구현 단계 작업의 진행률과 지연을 확인합니다.', 'DEVELOPMENT'),
   ] },
   { key: 'tests', label: '시험', href: P(pid, '/tests'), tabs: [
@@ -172,7 +173,7 @@ export function doorOf(pid, path, qs, hint = null) {
     return pick('plan', slug === 'goals' ? 'goals-scope' : DEFINITION_TABS.some(([s]) => s && s === slug) ? slug : 'definition');
   }
   if (sub === '/requirements') {
-    if (q(qs, 'view', 'trace')) return q(qs, 'scope', 'IN_SCOPE') ? pick('schedule', 'wbs-trace') : pick('requirements', 'req-trace');
+    if (q(qs, 'view', 'trace')) return pick('requirements', 'req-trace');
     return pick('requirements', 'requirements');   // ?view=classify / 미지정 links open the 목록 with the filter chip on (#13)
   }
   if (sub === '/wbs') return q(qs, 'phase', 'DEVELOPMENT') ? pick('schedule', 'dev-status') : q(qs, 'view', 'gantt') ? pick('schedule', 'gantt') : pick('schedule', 'wbs');

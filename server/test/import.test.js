@@ -75,11 +75,14 @@ test('requirements preview: label/code enums, owner match, blank rows skipped, d
   const { server, client } = await boot();
   const A = await setup(client);
   const B = await addMember(client, A, 'kim@x.com', '김철수'); const C = await addMember(client, A, 'kim2@x.com', '김철수');
+  // 요구사항 담당자 = 01 관계자 only (founder 2026-10-23): members are not matched, 관계자 by name or "이름 · 조직"
+  await A.c('PUT', `${A.purl}/definition`, { stakeholders: [{ id: 'sh-hong', name: '홍길동', org_type: 'OWN' }, { id: 'sh-lee', name: '이서연', org_type: 'CLIENT', org: 'A사' },
+    { id: 'sh-k1', name: '김철수', org_type: 'CLIENT' }, { id: 'sh-k2', name: '김철수', org_type: 'PARTNER' }] });
   await A.c('POST', A.req, { title: '기존' });                       // REQ-001 exists
   const data = await xlsxBase64([...REQ_HEADERS, '메모'], [
-    ['', 'SSO 로그인', '설명', '기능', 'High', '범위 내', '확정', 'u@x.com', '김OO', 'A사', '조건1\n조건2'],            // 2 ok (owner by e-mail)
+    ['', 'SSO 로그인', '설명', '기능', 'High', '범위 내', '확정', '이서연 · A사', '김OO', 'A사', '조건1\n조건2'],      // 2 ok (owner as the export prints it)
     [],                                                                                                                  // 3 empty -> skipped
-    ['', '대문자 코드', '', 'non_functional', 'low', 'in_scope', 'REVIEWING', '홍길동', '', '', ''],                      // 4 ok (codes, owner by name)
+    ['', '대문자 코드', '', 'non_functional', 'low', 'in_scope', 'REVIEWING', '홍길동', '', '', ''],                      // 4 ok (codes, owner = 관계자 name)
     ['REQ-001', '이미 있는 ID', '', '', '', '', '', '', '', '', ''],                                                     // 5 existing id
     ['REQ-007', '신규 ID', '', '', '', '', '', '', '', '', ''],                                                          // 6 ok
     ['req-7', '파일 내 중복', '', '', '', '', '', '', '', '', ''],                                                       // 7 duplicate inside file
@@ -111,8 +114,8 @@ test('requirements preview: label/code enums, owner match, blank rows skipped, d
   assert.match(row(j.rows, 7).errors.display_id, /파일 내/);
   const e9 = row(j.rows, 9).errors;
   assert.deepEqual(Object.keys(e9).sort(), ['owner', 'priority', 'scope', 'status', 'type']);
-  assert.equal(e9.owner, '담당자를 찾을 수 없습니다.');
-  assert.match(row(j.rows, 10).errors.owner, /이메일/);
+  assert.match(e9.owner, /01 관계자에 없는/);
+  assert.match(row(j.rows, 10).errors.owner, /여러 명/);
   assert.match(row(j.rows, 11).errors.display_id, /형식/);
   assert.ok(row(j.rows, 12).errors.title);
   assert.ok(row(j.rows, 13).errors.criteria);
@@ -181,8 +184,9 @@ test('requirements import: partial success, explicit + auto ids never collide, h
   const { server, client, db } = await boot();
   const A = await setup(client);
   await addMember(client, A, 'kim@x.com', '김철수');
+  await A.c('PUT', `${A.purl}/definition`, { stakeholders: [{ id: 'sh-kim', name: '김철수', org_type: 'CLIENT', org: '고객사' }] });   // 요구사항 담당자 = 01 관계자 only
   const rows = [
-    { row: 2, values: { title: '첫째 (자동)', description: 'd', type: '기능', priority: 'High', scope: '범위 내', status: '확정', owner: 'kim@x.com', requester_name: '요청자', requester_organization: '소속', criteria: '조건 A\n\n조건 B\n' } },
+    { row: 2, values: { title: '첫째 (자동)', description: 'd', type: '기능', priority: 'High', scope: '범위 내', status: '확정', owner: '김철수 · 고객사', requester_name: '요청자', requester_organization: '소속', criteria: '조건 A\n\n조건 B\n' } },
     { row: 3, values: { display_id: 'REQ-001', title: '명시 ID' } },            // claims REQ-001 → the auto row above must not take it
     { row: 4, values: { description: '제목 없음' } },                             // invalid
     { row: 5, values: { title: '셋째', type: '이상한값' } },                     // invalid
@@ -234,7 +238,8 @@ test('import atomicity: a failure while creating rolls back every row', async ()
 test('requirements export: same columns as the template, non-archived data, Korean filename; errors.xlsx round trip', async () => {
   const { server, client } = await boot();
   const A = await setup(client);
-  const a = (await A.c('POST', A.req, { title: '로그인', description: '설명', type: 'FUNCTIONAL', priority: 'HIGH', scope: 'IN_SCOPE', status: 'CONFIRMED', owner_user_id: A.uid, requester_name: '김', requester_organization: 'A사', criteria: ['조건1', '조건2'] })).json.requirement;
+  await A.c('PUT', `${A.purl}/definition`, { stakeholders: [{ id: 'sh-hong', name: '홍길동', org_type: 'OWN' }] });
+  const a = (await A.c('POST', A.req, { title: '로그인', description: '설명', type: 'FUNCTIONAL', priority: 'HIGH', scope: 'IN_SCOPE', status: 'CONFIRMED', owner: 's:sh-hong', requester_name: '김', requester_organization: 'A사', criteria: ['조건1', '조건2'] })).json.requirement;
   const b = (await A.c('POST', A.req, { title: '보관됨' })).json.requirement;
   await A.c('POST', `${A.req}/${b.id}/archive`, {});
   const r = await A.c('GET', `${A.req}/export.xlsx`);

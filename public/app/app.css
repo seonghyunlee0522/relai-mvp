@@ -2570,6 +2570,22 @@ body:has(.scrim) #main .btn--primary,
 .wempty__add{max-width:420px;margin:14px auto 0}
 .wempty__alt{margin:14px auto 0!important;font-size:var(--fs-sm)}
 .wempty__alt .linkbtn{width:auto;display:inline;padding:0}
+/* Excel-first entry (요구사항 · WBS 비어 있을 때, founder 2026-10-23): 템플릿 → 작성 → 올리기, other ways in below */
+.xfirst{margin:18px 0;padding:28px 28px 22px;border:1px solid var(--border);border-radius:var(--r-lg);background:#fff}
+.xfirst__t{margin:0 0 6px;font-size:var(--fs-lg);color:var(--navy);letter-spacing:-.02em}
+.xfirst__s{margin:0 0 20px;color:var(--text-2);font-size:var(--fs-sm);line-height:1.6}
+.xfirst__steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.xfirst__steps>li{display:flex;gap:12px;padding:16px;border:1px solid var(--border-soft);border-radius:var(--r-md);background:var(--bg-alt)}
+.xfirst__steps b{display:block;font-size:var(--fs-sm);color:var(--text);margin:2px 0 4px}
+.xfirst__steps p{margin:0 0 12px;font-size:var(--fs-xs);color:var(--text-2);line-height:1.6}
+.xfirst__n{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue-deep);font-weight:800;font-size:13px}
+.xfirst__drop{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 10px;border:1.5px dashed var(--border-blue);border-radius:10px;background:#fff;cursor:pointer;text-align:center}
+.xfirst__drop b{margin:0;font-size:var(--fs-xs);color:var(--blue-deep)}.xfirst__drop span{font-size:11px;color:var(--text-3)}
+.xfirst__drop:hover,.xfirst__drop.is-over,.xfirst__drop:focus-visible{background:var(--blue-soft);border-color:var(--blue)}
+.xfirst__alt{margin:18px 0 0;padding-top:14px;border-top:1px solid var(--border-soft);font-size:var(--fs-sm);color:var(--text-2)}
+.xfirst__alt{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}.xfirst__alt>span{color:var(--text-3)}.xfirst__opt{margin-left:auto;font-size:var(--fs-xs);color:var(--text-2)}.xfirst__alt .linkbtn{width:auto;display:inline;padding:0}
+@media (max-width:1100px){.xfirst__steps{grid-template-columns:minmax(0,1fr)}}
+.gridwrap .xfirst,.grid .xfirst,.rtable-wrap .xfirst{margin:0;border:0;border-radius:0}
 .skel{list-style:none;margin:4px 0 10px;padding:0;border:1px solid var(--border-soft);border-radius:var(--r-lg)}
 .skel li{display:flex;justify-content:space-between;gap:12px;padding:7px 12px;border-top:1px solid var(--border-soft);font-size:var(--fs-sm)}
 .skel li:first-child{border-top:0}
@@ -3535,14 +3551,17 @@ html:not(.is-phone) .chl:not(:has(.chx__head)) .chr{margin-top:0}
 
 /* #17 / B5 top-bar strip: 다음 할 일 · <short title> [지금 하기 →] */
 .dnext{display:none}
-html:not(.is-phone) .dnext:not([hidden]){display:flex;align-items:center;gap:8px;min-width:0;flex:0 1 auto;max-width:min(620px,44vw);height:36px;padding:0 4px 0 12px;border:1px solid var(--border-blue);border-radius:999px;background:var(--bg-tint);font-size:var(--fs-sm);color:var(--navy)}
+/* tab bar row: the screen's own menu on the left, 다음 할 일 at the right end (founder 2026-10-23: out of the global top bar) */
+.stabs-row{display:flex;align-items:center;min-width:0;background:#fff;border-bottom:1px solid var(--border)}
+.stabs-row>.stabs{flex:1 1 auto;min-width:0;border-bottom:0}
+html:not(.is-phone) .dnext:not([hidden]){display:flex;align-items:center;gap:8px;min-width:0;flex:0 1 auto;max-width:min(560px,46%);height:32px;margin:0 20px 0 12px;padding:0 3px 0 12px;border:1px solid var(--border-blue);border-radius:999px;background:var(--bg-tint);font-size:var(--fs-sm);color:var(--navy)}
 .dnext__k{flex:none;font-weight:700;color:var(--blue-deep)}
 .dnext__k::after{content:" ·";color:var(--text-3);font-weight:400}
 .dnext--slim .dnext__k::after{content:""}
 .dnext__t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dnext__n{font-variant-numeric:tabular-nums;padding-right:8px}
 .dnext__dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 3px var(--warn-bg)}
-.dnext__go{flex:none;display:inline-flex;align-items:center;height:28px;padding:0 12px;border-radius:999px;background:var(--blue);color:#fff;font-weight:700;font-size:var(--fs-sm);white-space:nowrap}
+.dnext__go{flex:none;display:inline-flex;align-items:center;height:26px;padding:0 12px;border-radius:999px;background:var(--blue);color:#fff;font-weight:700;font-size:var(--fs-sm);white-space:nowrap}
 .dnext__go:hover{background:var(--blue-deep)}
 @media (max-width:1023px){.dnext__k,.dnext__t{display:none}.dnext__dot{margin-left:-4px}html:not(.is-phone) .dnext:not([hidden]){padding-left:8px}}
 

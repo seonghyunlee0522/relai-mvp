@@ -101,6 +101,14 @@ export async function addSampleProjects(db, { workspaceId, userId, userName, key
         await d.run(`INSERT INTO "${t.name}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES ${chunk.map(() => `(${cols.map(() => '?').join(',')})`).join(', ')}`, chunk.flat());
       }
     }
+    // 요구사항 담당자 = 01 관계자 only (founder 2026-10-23): the snapshot's requirement owner (the build user → this user) becomes the
+    // sample's 당사 관계자 — the person the sample's own 01 lists for our side — so samples follow the same rule as real projects.
+    for (const c of created) {
+      const def = await d.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [c.id]);
+      let list = []; try { list = JSON.parse(def ? def.stakeholders : '[]') || []; } catch { list = []; }
+      const own = list.find((x) => x && x.name && x.org_type === 'OWN') || list.find((x) => x && x.name);
+      await d.run('UPDATE requirements SET owner_stakeholder_id = ?, owner_user_id = NULL WHERE project_id = ? AND owner_user_id IS NOT NULL', [own ? own.id : null, c.id]);
+    }
   });
   return created;
 }

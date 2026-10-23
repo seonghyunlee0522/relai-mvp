@@ -14,7 +14,7 @@ import { traceStrip } from '../shared/trace-strip.js';
 import { createGrid } from '../shared/grid.js';
 import { bulkRun, mountBulk } from '../shared/bulk.js';
 import { activityPane, bindActivity, bindDtabs, dtabs, mergeActivity } from '../shared/detail.js';
-import { openImport } from '../shared/importer.js';
+import { openImport, excelFirst, bindExcelFirst } from '../shared/importer.js';
 import { ACC_STATUS, LINK_TYPE, REQ_FIELD_LABEL, REQ_PRIORITY, REQ_SCOPE, REQ_STATUS, REQ_STATUS_CHIP, REQ_TYPE, TC_STATUS, TC_STATUS_CHIP, WBS_STATUS, WBS_STATUS_CHIP, WBS_TYPE, testSummaryText } from '../shared/constants.js';
 import { confirmDialog, pickerDialog, showErrors, toast } from '../shared/dialogs.js';
 import { aiStatus } from '../shared/ai.js';
@@ -67,11 +67,12 @@ export async function requirementsPage(id) {
   const jiraSort = (r) => { const j = reqJira && reqJira.by[r.id]; return j ? j.rate ?? -1 : -2; };
 
   const opt = (map, cur) => Object.entries(map).map(([v, l]) => html`<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
-  const ALL = { all: true };   // 요구사항 담당자: every named 01 관계자 (고객사 현업 included), not only 당사·협력사
-  const ownerPick = (cur, attrs, disabled = false) => OP.ownerPicker(members, owners, cur, { attrs, disabled, all: true });
+  const REQ_OWNER_HINT = '요구사항 담당자는 01 관계자에 등록한 사람 중에서 고릅니다. 관계자를 먼저 등록하세요.';
+  const ALL = { all: true, stakeholdersOnly: true };   // 요구사항 담당자 = 01 관계자 only (founder 2026-10-23): workspace members are not offered
+  const ownerPick = (cur, attrs, disabled = false) => OP.ownerPicker(members, owners, cur, { attrs, disabled, ...ALL });
   const ownerKey = OP.ownerKey;
   /** Filter map: member ids (old ?owner=<user id> links keep working) + 's:<관계자 id>' with the picker's labels. */
-  const ownerMap = () => ({ ...Object.fromEntries(members.map((m) => [m.id, m.name])), ...Object.fromEntries((owners.directory || []).filter((t) => !t.member).map((t) => [`s:${t.id}`, OP.ownerText(members, owners, `s:${t.id}`, ALL)])) });
+  const ownerMap = () => ({ ...Object.fromEntries((owners.directory || []).map((t) => [`s:${t.id}`, OP.ownerText(members, owners, `s:${t.id}`, ALL)])) });
   const ownerCell = (r) => (r.owner_label ? html`<span class="cellwrap"><i class="av">${[...r.owner_name || r.owner_label][0]}</i>${r.owner_label}</span>${raw(OP.noAcct(r))}` : dim());
   const LINK_F = { linked: 'WBS 연결됨', unlinked: 'WBS 미연결' };
   const FILTER_DEFS = [{ key: 'q', label: '검색' }, { key: 'status', label: '상태', map: REQ_STATUS }, { key: 'scope', label: '범위', map: REQ_SCOPE }, { key: 'owner', label: '담당자', get map() { return { ...ownerMap(), none: '미지정' }; } },
@@ -103,7 +104,7 @@ export async function requirementsPage(id) {
       { key: 'scope', label: '범위', width: 88, hidden: desk && baselineApproved, sort: (r) => REQ_SCOPE[r.scope], edit: { type: 'select', field: 'scope', options: REQ_SCOPE }, render: (r) => subtle(REQ_SCOPE[r.scope]) },
       { key: 'priority', label: '우선순위', width: 84, sort: (r) => ['HIGH', 'MEDIUM', 'LOW', 'UNSPECIFIED'].indexOf(r.priority), edit: { type: 'select', field: 'priority', options: REQ_PRIORITY }, render: (r) => prText(r.priority === 'UNSPECIFIED' ? '' : r.priority, REQ_PRIORITY) },
       { key: 'type', label: '유형', width: 96, card: false, hidden: desk, sort: (r) => REQ_TYPE[r.type], edit: { type: 'select', field: 'type', options: REQ_TYPE }, render: (r) => REQ_TYPE[r.type] },
-      { key: 'owner', label: '담당자', width: 140, card: false, sort: (r) => r.owner_label || '', edit: { type: 'select', field: 'owner', options: (r) => OP.ownerChoices(members, owners, ownerKey(r), true, { all: true, orgLabel: true }), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: OP.noAcct },
+      { key: 'owner', label: '담당자', width: 140, card: false, sort: (r) => r.owner_label || '', edit: { type: 'select', field: 'owner', options: (r) => OP.ownerChoices(members, owners, ownerKey(r), true, { ...ALL, orgLabel: true }), value: ownerKey, prefix: (r) => (r.owner_name ? html`<i class="av">${[...r.owner_name][0]}</i>` : ''), suffix: OP.noAcct },
         render: ownerCell },
       { key: 'wbs', label: 'WBS', width: 64, align: 'right', card: false, hidden: desk, sort: (r) => r.linked_wbs_count, render: (r) => (r.linked_wbs_count ? String(r.linked_wbs_count) : (r.scope === 'IN_SCOPE' && r.status !== 'REJECTED' && !r.archived_at && wbsPhase() ? '<span class="dim is-unlinked" title="WBS 미연결">—</span>' : dim())) },
       { key: 'ac', label: '완료 조건', width: 72, card: false, hidden: desk, align: 'right', sort: (r) => r.criteria_count, render: (r) => (r.criteria_count ? String(r.criteria_count) : dim()) },
@@ -154,12 +155,15 @@ export async function requirementsPage(id) {
   };
   const curGrid = () => (rview() === 'trace' ? traceGrid : listGrid);
 
+  /** First entry (no requirement yet, no filter, list view): the Excel-first block alone — the toolbar's 추가 / AI buttons would compete with it. */
+  const firstEntry = () => !summary.total && rview() !== 'trace' && !['q', ...filterKeys, 'archived'].some((k) => params().get(k)) && !archived;
   const emptyBlock = () => {
     const q = params();
     const hasFilter = ['q', ...filterKeys, 'archived'].some((k) => q.get(k));
     return hasFilter ? emptyFiltered('요구사항')
-      : html`<div class="empty empty--ob" data-tour-id="req-empty"><h2>고객이 원하는 기능과 조건을 요구사항으로 등록하세요.</h2>
-        ${raw(archived ? '' : html`<div class="empty__a"><button class="btn btn--primary btn--lg" id="add2">요구사항 추가</button></div><p class="tempty__alt"><button type="button" class="link linkbtn" id="xl-import2">Excel로 가져오기</button>${raw(ai.enabled ? ' · <button type="button" class="link linkbtn" id="ai-extract2">AI로 요구사항 추출</button>' : '')}</p>`)}</div>`;
+      // founder 2026-10-23: the first entry is Excel (템플릿 → 작성 → 올리기); 직접 추가 · AI 추출 stay as the small-count way in
+      : archived || isPhone() ? html`<div class="empty empty--ob" data-tour-id="req-empty"><h2>고객이 원하는 기능과 조건을 요구사항으로 등록하세요.</h2>${raw(isPhone() && !archived ? '<p>PC에서 추가할 수 있습니다.</p>' : '')}</div>`
+      : excelFirst('requirements', { tourId: 'req-empty', alt: html`<button type="button" class="link linkbtn" id="add2">화면에서 직접 추가</button>${raw(ai.enabled ? ' · <button type="button" class="link linkbtn" id="ai-extract2">AI로 회의록·문서에서 추출</button>' : '')}` });
   };
 
   /* ---------- bulk ---------- */
@@ -252,12 +256,12 @@ export async function requirementsPage(id) {
     // K18: on phones 상태 · 범위 move into the 필터 sheet (search + 필터 + one primary stay in the toolbar)
     const phone = isPhone(); const quick = html`${raw(filterSelect('status', '상태', REQ_STATUS, q.get('status')))}${raw(filterSelect('scope', '범위', REQ_SCOPE, q.get('scope')))}`;
     main.innerHTML = html`<div class="page page--wide">
-      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? (q.get('scope') === 'IN_SCOPE' ? 'wbs-trace' : 'req-trace') : 'requirements'; })(), title: '요구사항' }))}
+      ${raw(projectHead(p, g, { tab: (() => { const q = new URLSearchParams(location.search); return q.get('view') === 'trace' ? 'req-trace' : 'requirements'; })(), title: '요구사항' }))}
       ${raw(isArch ? '<div class="notice">보관된 프로젝트입니다. 요구사항은 조회만 할 수 있습니다.</div>' : pcLine())}
       ${raw(summary.total && !(g.wbs && g.wbs.tasks) && !archived && wbsPhase() ? html`<div class="nextstrip nextstrip--slim" data-tour-id="req-next"><div><b>요구사항 ${summary.total}건이 등록되었습니다.</b><span>요구사항을 기준으로 실행 계획을 구성하세요.</span></div><div class="nextstrip__a"><a class="btn btn--primary btn--sm" href="/app/projects/${p.id}/wbs?new=1" data-link><span class="go__tab">WBS</span>로 이동 →</a>${raw(ai.enabled ? html`<a class="btn btn--secondary btn--sm btn--ai" href="/app/projects/${p.id}/wbs?ai=1" data-link>AI로 WBS 만들기</a>` : '')}</div></div>` : '')}
       ${raw(summary.total && wbsPhase() ? coachMark('REQ_TRACE_INTRO') : '')}
       ${raw(ctxCr ? html`<div class="ctx"><span><b>${ctxCr.display_id}</b> ${ctxCr.title}에서 이동했습니다. 이 화면에서 수정하는 내용은 해당 변경 요청을 출처로 변경 이력에 기록됩니다.</span><a class="link" href="/app/projects/${p.id}/changes?sel=${ctxCr.id}" data-link>변경 요청 보기</a><button class="linkbtn" id="ctx-off" type="button">변경 요청 기준 해제</button></div>` : '')}
-      ${raw(desk ? deskTool(q) : '')}
+      ${raw(desk && !firstEntry() ? deskTool(q) : '')}
       ${raw(desk ? '' : html`<div class="rtool">
         <div class="seg" role="tablist"><button class="${rview() === 'list' ? 'is-on' : ''}" data-rview="list" role="tab">요구사항 목록</button><button class="${rview() === 'trace' ? 'is-on' : ''}" data-rview="trace" role="tab">연결 현황</button></div>
         <input class="input input--sm" id="q" type="search" placeholder="ID, 제목, 설명 검색" value="${q.get('q') || ''}">
@@ -307,6 +311,7 @@ export async function requirementsPage(id) {
     const cx = $('#ctx-off'); if (cx) cx.onclick = () => { ctxCr = null; setParam('cr', ''); draw(); };
     for (const ida of ['add', 'add2']) { const b = $('#' + ida); if (b) b.onclick = () => { creating = true; sel = null; apvOpen = false; setParam('approval', ''); setParam('sel', ''); setParam('new', '1'); showDrawer(); drawCreate(); }; }
     for (const ida of ['ai-extract', 'ai-extract2', 'ai-extract-pc']) { const ax = $('#' + ida); if (ax) ax.onclick = () => openExtractDialog({ pid: id, onDone: async () => { await load(); paintKpi(); draw(); } }); }
+    bindExcelFirst(main, { kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } });
     const xi2 = $('#xl-import2'); if (xi2) xi2.onclick = () => openImport({ kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } });
     bindCoach(main);
     if (params().get('import') === '1' && !archived) { setParam('import', ''); openImport({ kind: 'requirements', base: rApi(), onDone: async () => { await load(); paintKpi(); draw(); } }); }
@@ -362,7 +367,7 @@ export async function requirementsPage(id) {
             <div class="field"><label>우선순위</label><select class="select" name="priority">${raw(opt(REQ_PRIORITY, 'UNSPECIFIED'))}</select><small class="hint req-phint">${PRIORITY_HINT}</small></div>
             <div class="field"><label>범위</label><select class="select" name="scope">${raw(opt(REQ_SCOPE, 'UNDECIDED'))}</select></div>
             <div class="field"><label>상태</label><select class="select" name="status">${raw(opt(REQ_STATUS, 'DRAFT'))}</select></div>
-            <div class="field field--span"><label>담당자</label>${raw(ownerPick('', 'name="owner"'))}${raw(OP.stakeholderHint(owners, p.id, archived))}<div class="err" data-for="owner"></div><div class="err" data-for="owner_user_id"></div></div>
+            <div class="field field--span"><label>담당자</label>${raw(ownerPick('', 'name="owner"'))}${raw(OP.stakeholderHint(owners, p.id, archived, REQ_OWNER_HINT))}<div class="err" data-for="owner"></div><div class="err" data-for="owner_user_id"></div></div>
             <div class="field"><label>요청자</label><input class="input" name="requester_name" maxlength="100" placeholder="예: 김OO 책임"></div>
             <div class="field"><label>요청자 소속</label><input class="input" name="requester_organization" maxlength="100" placeholder="예: A사 IT팀"></div>
           </div>
@@ -477,7 +482,7 @@ export async function requirementsPage(id) {
       ${raw(typeTop(r) ? typeField(r, readOnly) : '')}
       ${raw(fieldRow(html`범위`, html`<select class="select select--sm" data-field="scope" ${readOnly ? 'disabled' : ''} aria-label="범위">${raw(opt(REQ_SCOPE, r.scope))}</select>`))}
       ${raw(fieldRow('우선순위', html`<select class="select select--sm" data-field="priority" ${readOnly ? 'disabled' : ''} aria-label="우선순위">${raw(opt(REQ_PRIORITY, r.priority))}</select><small class="hint req-phint">${PRIORITY_HINT}</small>`))}
-      ${raw(fieldRow('담당자', html`${raw(ownerPick(ownerKey(r), 'data-field="owner"', readOnly))}${raw(OP.noAcct(r))}${raw(OP.stakeholderHint(owners, p.id, readOnly))}`))}
+      ${raw(fieldRow('담당자', html`${raw(ownerPick(ownerKey(r), 'data-field="owner"', readOnly))}${raw(OP.noAcct(r))}${raw(OP.stakeholderHint(owners, p.id, readOnly, REQ_OWNER_HINT))}`))}
     </div>
     <details class="dmore" data-dmore ${moreOpen ? 'open' : ''}><summary>세부 정보 더보기</summary><div class="dgrid">
       ${raw(fieldRow('상태', html`<select class="select select--sm" data-field="status" ${readOnly ? 'disabled' : ''} aria-label="상태">${raw(opt(REQ_STATUS, r.status))}</select>`))}

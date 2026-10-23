@@ -49,6 +49,8 @@ export function parseRequirement(b = {}, { partial = false } = {}) {
   if (out.owner_user_id !== undefined && out.owner_stakeholder_id === undefined) out.owner_stakeholder_id = null;   // a user (or 미지정) clears the 관계자
   if (out.owner_stakeholder_id && out.owner_user_id === undefined) out.owner_user_id = null;
   if (out.owner_user_id && out.owner_stakeholder_id) f.owner_user_id = '담당자는 RELAI 사용자와 관계자 중 한 명만 지정할 수 있습니다.';
+  // founder 2026-10-23: 요구사항 담당자 = 01 관계자 only — a RELAI 사용자 (워크스페이스 멤버) is never stored as a requirement owner
+  if (out.owner_user_id) f[b.owner !== undefined ? 'owner' : 'owner_user_id'] = OWNER_STAKEHOLDER_ONLY;
   if (Object.keys(f).length) throw new ValidationError(f);
   return out;
 }
@@ -63,6 +65,7 @@ export function parseCriterion(b = {}) {
 const ORG_LABEL = { OWN: '당사', CLIENT: '고객사', PARTNER: '협력사', OTHER: '기타' };
 export const DELETED_OWNER = '(삭제된 담당자)';
 /** 01 관계자 of a project (project_definitions.stakeholders JSON). */
+export const OWNER_STAKEHOLDER_ONLY = '요구사항 담당자는 01 착수 › 관계자에 등록한 사람 중에서 지정합니다.';
 export async function stakeholdersOf(db, projectId) {
   const r = await db.get('SELECT stakeholders FROM project_definitions WHERE project_id = ?', [projectId]);
   try { const v = r ? JSON.parse(r.stakeholders) : []; return Array.isArray(v) ? v : []; } catch { return []; }

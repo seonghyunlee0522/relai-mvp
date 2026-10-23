@@ -121,7 +121,8 @@ export function createGrid(cfg) {
     const pageIds = view().rows.map((r) => String(cfg.rowId(r)));
     const pageAll = pageIds.length && pageIds.every((i) => st.selected.has(i));
     const real = cfg.total ? cfg.total() : all.filter((r) => !r._ghost).length;   // an inline "new item" row is not an item (J3); a tree grid counts folded rows too (K11)
-    return html`<div class="gfoot"><span>총 <b>${real.toLocaleString('ko-KR')}</b>건</span>
+    const lab = cfg.totalLabel ? cfg.totalLabel(real) : null;   // e.g. WBS with only the fixed 단계 rows: '단계 7개 · 작업 0건'
+    return html`<div class="gfoot">${raw(lab || html`<span>총 <b>${real.toLocaleString('ko-KR')}</b>건</span>`)}
       ${raw(n ? html`<span class="gfoot__sel"><b>${n.toLocaleString('ko-KR')}</b>건 선택됨${raw(pageAll && n < all.length ? html` · <button type="button" class="link linkbtn" data-pickall>필터 결과 ${all.length.toLocaleString('ko-KR')}건 모두 선택</button>` : '')}</span>` : '')}
       <span class="gfoot__sp"></span>
       ${raw(paged ? html`<span>${from.toLocaleString('ko-KR')}–${to.toLocaleString('ko-KR')}</span>

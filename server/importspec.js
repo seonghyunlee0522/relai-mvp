@@ -41,7 +41,7 @@ export const KINDS = {
       { key: 'priority', label: '우선순위', required: false, type: 'enum', width: 12, options: opts(REQ_PRIORITIES, LABELS.priority), hint: '목록에서 선택. 비우면 미지정', examples: ['High', 'Medium', 'Low'] },
       { key: 'scope', label: '범위', required: false, type: 'enum', width: 12, options: opts(REQ_SCOPES, LABELS.scope), hint: '목록에서 선택. 비우면 미결정', examples: ['범위 내', '범위 외'] },
       { key: 'status', label: '상태', required: false, type: 'enum', width: 12, options: opts(REQ_STATUSES, LABELS.status), hint: '목록에서 선택. 비우면 작성 중', examples: ['작성 중', '검토 중', '확정'] },
-      { key: 'owner', label: '담당자', required: false, type: 'owner', width: 20, hint: '워크스페이스 멤버의 이메일 또는 이름(정확히 일치), 또는 01 관계자 이름. 이름이 중복되면 이메일로 입력', examples: ['hong@company.com', '홍길동'] },
+      { key: 'owner', label: '담당자', required: false, type: 'owner', width: 20, hint: '01 착수 › 관계자에 등록한 사람의 이름(정확히 일치). 비워 두면 미지정', examples: ['김태호', '이서연'] },
       { key: 'requester_name', label: '요청자', required: false, type: 'text', width: 14, hint: '100자 이내', examples: ['김OO 책임'] },
       { key: 'requester_organization', label: '요청자 소속', required: false, type: 'text', width: 18, hint: '100자 이내', examples: ['A사 IT팀'] },
       { key: 'criteria', label: '완료 조건', required: false, type: 'multiline', width: 50, hint: '한 줄에 하나씩(Alt+Enter로 줄바꿈), 줄마다 1,000자 이내', examples: ['SSO 로그인 성공 시 메인 화면으로 이동한다.\n미등록 계정은 오류 안내를 표시한다.'] },

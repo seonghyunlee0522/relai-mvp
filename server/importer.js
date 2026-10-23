@@ -48,6 +48,18 @@ function resolveOwner(members, raw, team = null) {
   return { error: '담당자를 찾을 수 없습니다.' };
 }
 
+/** 요구사항 담당자 (founder 2026-10-23): a named 01 관계자 only. Accepts the name, or "이름 · 조직" as the export prints it. */
+function resolveStakeholderOwner(team, raw) {
+  const t = String(raw || '').trim();
+  if (!t) return { value: null };
+  for (const key of [t, t.split('·')[0].trim()]) {
+    const sh = (team || []).filter((x) => x.name === key);
+    if (sh.length === 1) return { value: null, stakeholder: sh[0].id };
+    if (sh.length > 1) return { error: '같은 이름의 관계자가 여러 명입니다. 01 관계자 이름을 구분해 주세요.' };
+  }
+  return { error: '01 관계자에 없는 사람입니다. 01 착수 › 관계자에 먼저 등록하세요.' };
+}
+
 /** YYYY-MM-DD / YYYY.MM.DD / YYYY/MM/DD (1–2 digit month/day tolerated) → { value:'YYYY-MM-DD' }. */
 function parseDate(raw) {
   const t = raw.trim();
@@ -90,7 +102,7 @@ function validateRequirements(rows, ctx) {
     if (!v.title) errors.title = REQUIRED;
     const enums = {};
     for (const k of ['type', 'priority', 'scope', 'status']) { const x = resolveEnum(col(k), v[k]); if (x.error) errors[k] = x.error; else enums[k] = x.value; }
-    const ow = resolveOwner(ctx.members, v.owner, ctx.team); if (ow.error) errors.owner = ow.error;
+    const ow = resolveStakeholderOwner(ctx.team, v.owner); if (ow.error) errors.owner = ow.error;   // 요구사항 담당자 = 01 관계자 only
     let displayId;
     if (v.display_id) {
       const m = /^REQ-(\d{1,6})$/i.exec(v.display_id.replace(/\s+/g, ''));

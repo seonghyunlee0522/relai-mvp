@@ -103,27 +103,29 @@ export function setTopProject(p, g, pill) {
  * On 지금 할 일 the big card already says it → the strip only shows '단계 진행 n/m'. */
 let nextState = { pid: null, g: null, timer: null };
 const isMoveHref = (h) => /\?move=next$/.test(h || '');
-function drawNext() {
-  const el = $('#dtop-next'); if (!el) return;
+/** The strip's content for the current state, or null when it is not shown (no project, closed / archived, or on 지금 할 일 whose big card says it). */
+function nextParts() {
   const { pid, g } = nextState; const q = g && g.guidance; const p = g && g.project;
-  if (!pid || !q || !p || p.status === 'COMPLETED' || p.status === 'ARCHIVED') { el.hidden = true; el.innerHTML = ''; el.dataset.pid = ''; return; }
-  el.hidden = false; el.dataset.pid = pid;
-  const onNext = location.pathname.replace(/\/$/, '') === `/app/projects/${pid}`;
-  if (onNext) {
-    const cur = g.current_phase; const req = cur && Array.isArray(cur.steps) ? cur.steps.filter((s) => s.importance === 'REQUIRED') : [];
-    const done = req.filter((s) => s.state === 'COMPLETED' || s.state === 'SKIPPED').length;
-    el.className = 'dnext dnext--slim';
-    el.innerHTML = req.length ? html`<span class="dnext__k">단계 진행</span><b class="dnext__n" data-next-progress>${done}/${req.length}</b>` : '';
-    el.hidden = !req.length; return;
-  }
+  if (!pid || !q || !p || p.status === 'COMPLETED' || p.status === 'ARCHIVED') return null;
+  if (location.pathname.replace(/\/$/, '') === `/app/projects/${pid}`) return null;
   const warns = q.warnings || []; const a = q.primary_action;
   const href = q.href || (a && a.href) || ''; const label = q.cta_label || (a && a.label) || '';
   const nx = g.next_phase; const cta = isMoveHref(href) && nx ? `${no2(nx.sequence)} ${nx.name} 단계 시작 →` : label;
   const go = !href ? '' : href.startsWith('/api/') ? html`<a class="dnext__go" href="${href}" download title="${cta}" data-next-go>지금 하기 →</a>`
     : html`<a class="dnext__go" href="${href}" data-link title="${cta}" aria-label="지금 하기: ${cta}" data-next-go>지금 하기 →</a>`;
-  el.className = `dnext ${warns.length ? 'has-warn' : ''}`;
-  el.innerHTML = html`${raw(warns.length ? html`<i class="dnext__dot" role="img" aria-label="주의 ${warns.length}건" title="${warns.join('\n')}"></i>` : '')}<span class="dnext__k">다음 할 일</span><span class="dnext__t" title="${q.title}">${q.short_title || q.title}</span>${raw(go)}`;
+  return { cls: `dnext ${warns.length ? 'has-warn' : ''}`, inner: html`${raw(warns.length ? html`<i class="dnext__dot" role="img" aria-label="주의 ${warns.length}건" title="${warns.join('\n')}"></i>` : '')}<span class="dnext__k">다음 할 일</span><span class="dnext__t" title="${q.title}">${q.short_title || q.title}</span>${raw(go)}` };
 }
+/* founder 2026-10-23: the strip lives at the right end of the work screen's tab bar (pageHeader), not in the middle of the global
+ * top bar — it reads as "this screen's next step" next to the screen's own menu, and the top bar keeps project context only. */
+function drawNext() {
+  const el = $('#dtop-next'); if (!el) return;
+  const pp = nextParts();
+  if (!pp) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false; el.dataset.pid = nextState.pid; el.className = pp.cls; el.innerHTML = pp.inner;
+}
+/** The slot pageHeader renders; filled right away from the last guidance so a re-render does not blink. */
+const nextSlot = (pid) => { const pp = nextState.pid === pid ? nextParts() : null;
+  return pp ? html`<div class="${pp.cls}" id="dtop-next" data-pid="${pid}">${raw(pp.inner)}</div>` : html`<div class="dnext" id="dtop-next" data-pid="${pid}" hidden></div>`; };
 export function setTopNext(p, g) {
   clearTimeout(nextState.timer);
   nextState = { pid: p ? p.id : null, g: p && g ? { ...g, project: g.project || p } : null, timer: null };
@@ -204,7 +206,8 @@ const phaseChip = (p, g, key) => {
 };
 /** The desktop page header. `actions` = the ⋯ menu group (project actions) + optional secondaries, already rendered. */
 export function pageHeader(p, g, info, actions) {
-  return html`<div class="phead-wrap" data-door="${info.door.key}">${raw(sectionTabs(info))}
+  const tabs = sectionTabs(info);
+  return html`<div class="phead-wrap" data-door="${info.door.key}">${raw(tabs ? html`<div class="stabs-row">${raw(tabs)}${raw(nextSlot(p.id))}</div>` : '')}
     <header class="phead">
       <div class="phead__l"><div class="phead__t"><h1 class="phead__title">${info.title}</h1>${raw(info.door.key === 'next' && !info.crumb ? '' : phaseChip(p, g, info.phase))}</div>
         <p class="phead__purpose">${info.purpose}</p></div>
