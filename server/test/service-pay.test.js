@@ -90,6 +90,12 @@ test('GET /pay/agent: public (no login), both cards, consents, notes, business f
     const assets = [...r.text.matchAll(/(?:href|src)="(\/service\/[^"]+)"/g)].map((m) => m[1]);
     assert.ok(assets.some((a) => a.endsWith('.css')) && assets.some((a) => a.endsWith('.js')), JSON.stringify(assets));
     for (const a of assets) { const x = await c('GET', a); assert.equal(x.status, 200, a); }
+    // standalone payment link: no way off the page except 이용약관 / 개인정보처리방침
+    for (const page of [r.text, (await c('GET', '/pay/agent/failed?reason=canceled')).text]) {
+      const links = [...page.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+      for (const h of links) assert.ok(/^(\/terms|\/privacy|\/pay\/agent)\b/.test(h) || /^mailto:/.test(h), `unexpected link ${h}`);
+      assert.doesNotMatch(page, />문의하기</);
+    }
     assert.doesNotMatch(visible(r.text), /sample|test|샘플|테스트/i);
     assert.match((await c('GET', '/pay/agent?plan=monthly&product=agent')).text, /data-selected="agent-monthly"/);
     assert.match((await c('GET', '/pay/agent?plan=monthly&product=agent')).text, /data-recurring="0"/);

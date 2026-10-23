@@ -1,6 +1,6 @@
 /**
  * RELAI 서비스 결제 — a public page, no RELAI login (founder 2026-10-20; layout after docreel.kr/pay/agent).
- *   GET  /pay/agent[?plan=once|monthly&product=agent]   product cards, buyer form, consents, 결제 전 확인해주세요, contact, business footer
+ *   GET  /pay/agent[?plan=once|monthly&product=agent]   product cards, buyer form, consents, 결제 전 확인해주세요, business footer
  *   POST /api/service-pay/orders                       { product, buyer, agree_* } → service_orders row (catalogue amount) + NicePay window params
  *   POST /api/service-pay/nicepay/return               NicePay window result (form POST, cross-site): verify → approve (amount from the order) → apply → 303
  *   POST /api/service-pay/subscriptions                월 구독 (billing key). Refused while NICEPAY_RECURRING_ENABLED is off; the page never calls it then
@@ -142,8 +142,10 @@ const head = (title, meta = '') => `<!doctype html><html lang="ko"><head><meta c
 <title>${esc(title)}</title>${meta}<link rel="icon" href="/favicon.ico">
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="/service/pricing.css"></head>`;
-const topbar = () => `<header class="sp-top"><div class="sp-wrap sp-top__in"><a class="sp-brand" href="/"><b>relai</b><span class="sp-brand__sep">/</span><span>서비스 결제</span></a>
-<a class="sp-top__link" href="mailto:${esc(LEGAL.contactEmail)}">문의하기</a></div></header>`;
+// Shared as a standalone payment link: the brand is not a link to the home page and there is no 문의하기 / navigation away.
+const topbar = () => `<header class="sp-top"><div class="sp-wrap sp-top__in"><span class="sp-brand"><b>relai</b><span class="sp-brand__sep">/</span><span>서비스 결제</span></span></div></header>`;
+/** Business footer (전자상거래법 표시 의무) with 이용약관 / 개인정보처리방침 only — no 요금 안내 link to the home page. */
+const payFooter = () => legalFooterHtml(LEGAL).replace('class="legal-foot"', 'class="legal-foot sp-wrap"').replace('<a href="/#pricing">요금 안내</a>', '');
 
 const CARDS = {
   'agent-once': { unit: '1회', badge: '1회 결제', bullets: ['AI Agent 개발 및 운영 지원 (협의한 범위)', '1개월 이용 · 자동 갱신 없음', '신용카드 결제 · 부가세 포함'], cta: '1회 결제 선택' },
@@ -203,9 +205,8 @@ ${open ? '' : `<p class="sp-note" id="sp-closed">지금은 온라인 결제를 �
 <li>월 구독은 카드 등록 시 첫 결제가 이루어지고 이후 매월 같은 날 결제됩니다. 다음 결제일 전에 해지할 수 있습니다.</li>
 <li>이미 결제한 이용료의 취소·환불은 서비스 제공 여부와 계약 내용, 관련 법령에 따라 처리합니다.</li>
 <li>결제 금액은 모두 부가세 포함 금액입니다.</li></ul></section>
-<section class="sp-contact"><h2>문의</h2><p>서비스 범위, 견적, 세금계산서 발행은 <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 문의해 주세요.</p></section>
 </main>
-${legalFooterHtml(LEGAL).replace('class="legal-foot"', 'class="legal-foot sp-wrap"')}
+${payFooter()}
 <script type="module" src="/service/pricing.js"></script></body></html>`;
 }
 
@@ -228,6 +229,5 @@ export function resultPage({ ok, order, reason = '' }) {
       : '<p class="sp-note">결제가 완료되지 않았으므로 청구되지 않습니다.</p>'}`;
   return `${head(`${title} — RELAI`)}<body class="sp">${topbar()}<main class="sp-wrap"><section class="sp-result ${ok ? 'is-ok' : 'is-bad'}" id="sp-result" data-status="${esc(order?.status || 'NONE')}">
 <div class="sp-result__icon" aria-hidden="true">${ok ? '✓' : '!'}</div><h1>${title}</h1>${body}${rows}
-<div class="sp-result__a">${ok || MAYBE_CHARGED.has(reason) ? '<a class="sp-btn sp-btn--line" href="/pay/agent">서비스 결제로 돌아가기</a>' : '<a class="sp-btn sp-btn--pri" href="/pay/agent">다시 결제하기</a>'}
-<a class="sp-btn sp-btn--line" href="mailto:${esc(LEGAL.contactEmail)}">문의하기</a></div></section></main>${legalFooterHtml(LEGAL).replace('class="legal-foot"', 'class="legal-foot sp-wrap"')}</body></html>`;
+<div class="sp-result__a">${ok || MAYBE_CHARGED.has(reason) ? '<a class="sp-btn sp-btn--line" href="/pay/agent">서비스 결제로 돌아가기</a>' : '<a class="sp-btn sp-btn--pri" href="/pay/agent">다시 결제하기</a>'}</div></section></main>${payFooter()}</body></html>`;
 }
