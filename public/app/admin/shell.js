@@ -16,7 +16,7 @@ export async function adminShell(path, view) {
   if (!$('.ashell')) {
     root.innerHTML = html`<div class="ashell">
       <aside class="aside" id="aside">
-        <div class="aside__brand"><a href="/admin" data-link>RELAI <em>관리자</em></a><button class="aside__menu" id="amenu" aria-label="메뉴">☰</button></div>
+        <div class="aside__brand"><a href="/admin" data-link aria-label="RELAI 관리자"><img class="brandlogo" src="/brand/logo-white.svg" alt="RELAI" width="94" height="30"><em>관리자</em></a><button class="aside__menu" id="amenu" aria-label="메뉴">☰</button></div>
         <nav class="aside__nav" aria-label="운영자 메뉴">${raw(NAV.map(([href, label]) => html`<a href="${href}" data-link data-anav="${href}">${label}${raw(href === '/admin/feedback' ? '<span class="anav__badge" data-fb-badge hidden></span>' : '')}</a>`).join(''))}</nav>
         <div class="aside__foot"><a href="/app" data-link>← RELAI 앱으로</a><div class="aside__me"><b>${state.user.name}</b><small>${state.user.email}</small></div><button class="linkbtn" id="alogout">로그아웃</button></div>
       </aside>

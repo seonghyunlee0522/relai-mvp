@@ -8,7 +8,7 @@ a{color:var(--sp-pri)}
 .sp-top{background:#fff;border-bottom:1px solid var(--sp-line);position:sticky;top:0;z-index:5}
 .sp-top__in{display:flex;align-items:center;justify-content:space-between;height:56px}
 .sp-brand{display:flex;align-items:baseline;gap:8px;color:var(--sp-text);text-decoration:none;font-size:15px}
-.sp-brand b{font-size:20px;font-weight:800;letter-spacing:-.03em;color:var(--sp-pri)}
+.sp-brand{align-items:center}.sp-brand .brandlogo{display:block;height:24px;width:auto}
 .sp-brand__sep{color:var(--sp-line)}
 .sp-top__link{font-size:14px;font-weight:600;text-decoration:none}
 .sp-hero{padding:44px 0 24px}
@@ -78,5 +78,8 @@ dd.sp-sum__tot{font-weight:800;color:var(--sp-text)}
 .sp-result__a{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:18px}.sp-result__a .sp-btn{width:auto;flex:1 1 180px}
 .legal-foot{padding:24px 16px 40px;color:var(--sp-text3);font-size:12.5px;border-top:1px solid var(--sp-line);margin-top:16px}
 .legal-foot__links{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:10px}.legal-foot__links a{color:var(--sp-text2);text-decoration:none}
+/* P1-4: footer links are 32px tall touch targets on phones (were ~18px) */
+@media (max-width:767px){.legal-foot__links a,.legal-foot__biz summary,.footer__links a{display:inline-flex;align-items:center;min-height:32px}.legal-foot__links{row-gap:0}}
+
 .legal-biz{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0 0 8px;line-height:1.6}.legal-biz__k{color:var(--sp-text2);font-weight:600}
 .legal-foot__c{margin:0}

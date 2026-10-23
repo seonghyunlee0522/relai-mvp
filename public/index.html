@@ -71,6 +71,7 @@ p{margin:0}
 .header__inner{display:flex;align-items:center;gap:36px;height:68px}
 .logo{font-size:22px;font-weight:800;letter-spacing:-0.05em;color:var(--navy)}
 .logo span{color:var(--blue)}
+.logo .brandlogo{display:block;height:28px;width:auto}.ui__brand .brandlogo{display:block;height:20px;width:auto}
 .nav{display:flex;gap:28px;font-size:15px;font-weight:500;color:var(--text-2)}
 .nav a:hover{color:var(--navy)}
 .header__cta{margin-left:auto;display:flex;align-items:center;gap:18px}
@@ -491,13 +492,15 @@ p{margin:0}
   .mcta .btn{height:50px;border-radius:12px}
   .footer{padding-bottom:84px}
 }
+/* P1-4: footer links are 32px tall touch targets on phones (were ~18px) */
+@media (max-width:767px){.legal-foot__links a,.legal-foot__biz summary,.footer__links a{display:inline-flex;align-items:center;min-height:32px}.legal-foot__links{row-gap:0}}
 </style>
 </head>
 <body>
 
 <header class="header">
   <div class="wrap header__inner">
-    <a href="#top" class="logo">RELAI</a>
+    <a href="#top" class="logo" aria-label="RELAI"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a>
     <nav class="nav">
       <a href="#preview">사용 방법</a>
       <a href="#lifecycle">7단계</a>
@@ -576,7 +579,7 @@ p{margin:0}
       </div>
       <div class="ui">
         <aside class="ui__side">
-          <div class="ui__brand">RELAI</div>
+          <div class="ui__brand"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="63" height="20"></div>
           <div class="ui__pj">
             <b>A사 상담 시스템 구축</b>
             <span>진행 중 · 현재 단계 02 요구사항 정의</span>
@@ -906,7 +909,7 @@ p{margin:0}
   <div class="wrap">
     <div class="footer__in">
       <div>
-        <div class="logo">RELAI</div>
+        <div class="logo"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></div>
         <p class="footer__tag">착수부터 운영까지 7단계를 따라 다음 해야 할 일을 안내하는 프로젝트 길잡이</p>
       </div>
       <nav class="footer__links">

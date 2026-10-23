@@ -434,7 +434,7 @@ a{color:var(--blue)}
 .top{border-bottom:1px solid var(--border);background:#fff}
 .top__in,.doc,.legal-foot{max-width:820px;margin:0 auto;padding:0 16px}
 .top__in{display:flex;align-items:center;gap:20px;height:60px}
-.logo{font-weight:800;font-size:20px;letter-spacing:-.03em;color:var(--navy);text-decoration:none}
+.logo{font-weight:800;font-size:20px;letter-spacing:-.03em;color:var(--navy);text-decoration:none;display:inline-flex;align-items:center}.logo .brandlogo{display:block;height:26px;width:auto}
 .top__nav{margin-left:auto;display:flex;gap:16px;font-size:14px}.top__nav a{color:var(--text-2);text-decoration:none}.top__nav a[aria-current]{color:var(--navy);font-weight:700}
 .doc{padding-top:40px;padding-bottom:56px}
 .doc h1{font-size:30px;line-height:1.3;letter-spacing:-.03em;margin:0 0 8px;color:var(--navy)}
@@ -471,8 +471,10 @@ export function legalPage(kind, { plans } = {}, L = LEGAL) {
 <title>${p.title} — RELAI</title><meta name="description" content="RELAI ${p.title}">
 <!--SHARE_META-->
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<style>${PAGE_CSS}</style></head>
-<body><header class="top"><div class="top__in"><a class="logo" href="/">RELAI</a><nav class="top__nav"><a href="/terms"${kind === 'terms' ? ' aria-current="page"' : ''}>이용약관</a><a href="/privacy"${kind === 'privacy' ? ' aria-current="page"' : ''}>개인정보처리방침</a></nav></div></header>
+<style>${PAGE_CSS}/* P1-4: footer links are 32px tall touch targets on phones (were ~18px) */
+@media (max-width:767px){.legal-foot__links a,.legal-foot__biz summary,.footer__links a{display:inline-flex;align-items:center;min-height:32px}.legal-foot__links{row-gap:0}}
+</style></head>
+<body><header class="top"><div class="top__in"><a class="logo" href="/" aria-label="RELAI 홈"><img class="brandlogo" src="/brand/logo.svg" alt="RELAI" width="94" height="30"></a><nav class="top__nav"><a href="/terms"${kind === 'terms' ? ' aria-current="page"' : ''}>이용약관</a><a href="/privacy"${kind === 'privacy' ? ' aria-current="page"' : ''}>개인정보처리방침</a></nav></div></header>
 <main class="doc"><h1>RELAI ${p.title}</h1><p class="doc__meta">시행일 ${koDate(kind === 'terms' ? (L.termsEffectiveDate || L.effectiveDate) : L.effectiveDate)} · 버전 ${esc(kind === 'terms' ? L.termsVersion : L.privacyVersion)}</p>
 ${body}</main>
 ${legalFooterHtml(L)}

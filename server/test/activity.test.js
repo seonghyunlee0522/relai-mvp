@@ -262,3 +262,19 @@ test('project activity feed: history + comments merged newest-first with kinds; 
   assert.equal((await X.c('GET', `${A.purl}/activity`)).status, 404);
   server.close();
 });
+
+test('activity feed: one action logged as several identical rows (WBS move: parent + source) reads as one line; distinct actions stay', async () => {
+  const { db, server, client } = await boot();
+  const A = await setup(client, 'dup@x.com', '소유자');
+  const t = await mkWbs(A, { item_type: 'TASK', title: '이동 작업' });
+  const row = (field, at) => db.run(`INSERT INTO wbs_history (id, wbs_item_id, action_type, field_name, old_value, new_value, changed_by, changed_at) VALUES (gen_random_uuid()::text, ?, 'MOVED', ?, NULL, NULL, ?, ?::timestamptz)`,
+    [t.id, field, A.uid, at]);
+  const base = Date.now() + 60_000;
+  await row('parent', new Date(base).toISOString()); await row('source', new Date(base + 4).toISOString());   // one move
+  await row('parent', new Date(base + 30_000).toISOString());                                                // a second move, 30s later
+  const items = (await A.c('GET', `${A.purl}/activity`)).json.items.filter((i) => i.title === '이동 작업' && i.summary === (i.summary || '') && /옮겼|이동/.test(i.summary));
+  assert.equal(items.length, 2, JSON.stringify(items.map((i) => [i.at, i.summary])));
+  const recent = (await A.c('GET', `${A.purl}/dashboard`)).json.recent_changes.filter((e) => e.title === '이동 작업' && /옮겼|이동/.test(e.summary));
+  assert.equal(recent.length, 2);
+  server.close();
+});

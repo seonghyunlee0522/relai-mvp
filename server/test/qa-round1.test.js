@@ -144,6 +144,7 @@ test('UX-006: import accepts on-screen status labels; UX-001: unknown pages are 
   const anon = client();
   const r = await anon('GET', '/projects', undefined, { raw: true });
   assert.equal(r.status, 404); assert.doesNotMatch(r.buf.toString(), /Cannot GET/);
+  { const t = r.buf.toString(); assert.match(t, /<img src="\/brand\/logo.svg" alt="RELAI"/); assert.match(t, /페이지를 찾을 수 없습니다/); assert.match(t, /href="\/">홈으로/); assert.match(t, /href="\/login">로그인/); assert.match(t, /viewport/); }
   const A = await setup(client);
   const r2 = await A.c('GET', '/projects');
   assert.ok([302, 200].includes(r2.status), String(r2.status));   // signed in → redirected into the app
