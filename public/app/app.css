@@ -3759,6 +3759,9 @@ pre.acode--tall{max-height:640px}
    * list takes every pixel the panel leaves and its title column absorbs it; the panel's fields use the panel's width instead
    * of shrinking to their content (WBS: `.dlayout` kept `align-items:start` from the old two-column layout) or 280px. */
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])),html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--side:not([hidden])){grid-template-columns:minmax(0,1fr) var(--panel-w-eff)}
+  /* founder 2026-10-23: titles truncated ('요...') while 진행률/담당자 sat 1.6× wide — with the panel open the other columns go
+   * back to about their designed widths (1.15 × --cw, so 진행률 still fits "100%") and the title takes everything else */
+  html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable col{width:calc(var(--cw) * 1.15)}
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable col.gcol--grow{width:auto}
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs{width:100%!important}
   html:not(.is-phone) .rlayout.has-drawer:has(>.drawer--lg:not([hidden])) .gtable--wbs col[data-col="title"]{width:auto!important}

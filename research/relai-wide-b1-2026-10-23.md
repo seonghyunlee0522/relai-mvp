@@ -15,6 +15,7 @@ description and owner fields shrink to their content (369 / 505 px). In the requ
 ```css
 /* F. list takes what the panel leaves; panel fields use the panel width */
 .rlayout.has-drawer:has(>.drawer--lg|--side:not([hidden])){grid-template-columns:minmax(0,1fr) var(--panel-w-eff)}
+… .gtable col{width:calc(var(--cw) * 1.15)}               /* other columns ≈ designed width (round 2) */
 … .gtable col.gcol--grow{width:auto}                       /* title column absorbs the surplus */
 … .gtable--wbs{width:100%!important}  … col[data-col="title"]{width:auto!important}
 .drawer--lg .dlayout{align-items:stretch}
@@ -43,6 +44,22 @@ Panel fields at 2560 (WBS title, description, owner): 369 / 369 / 250 px before,
 **Laptop widths (<1760 px) are unchanged.** I pixel-compared all 5 pages at 1440 and 1707 against a control run that serves the
 unchanged CSS through the same route. 8 of the 10 shots are identical. The other 2 differ by 9 antialiased pixels on the bottom
 2 rows, and two runs of the unchanged CSS show the same noise.
+
+## 3b. Round 2 (god / founder 2026-10-23: titles still truncated with the panel open)
+In round 1, the non-title columns kept the wide-screen 1.6× width while the panel was open (889 px together at 1920), so the WBS
+작업 column got 198 px ('요...', '착수 보고회 ...'). Now, with the panel open, these columns are 1.15 × their designed width. At
+1.0×, the 진행률 column clipped "100%". The title column takes the rest:
+
+| WBS, panel open | 작업 (title) | 번호 · 기간 · 진행률 · 담당자 · 상태 |
+|---|---|---|
+| 1920 before → after | 198 → **448 px** | 112·208·179·224·166 → 81·150·129·161·120 |
+| 2560 before → after | 620 → **870 px** | same as above |
+
+All WBS titles in the QA project now show in full at 1920 (the longest is '데이터 이관 프로그램 개발·리허설 1차'). 요구사항 uses the
+same rule; its 제목 column is about 510 px at 1920. I re-shot every `after-*` screenshot. The laptop check (1440 / 1707 against
+a control run) found nothing new: 8 of 10 shots are identical, and 변경 differs by 13 to 53 pixels, which also varies between
+unchanged runs (three runs of the unchanged CSS at 1707 matched "after" exactly). The test suite gives the same result:
+566 / 568, with the same 2 server-side failures.
 
 ## 4. Screenshots — `research/design/wide-b1/`
 Files are named `before|after-<wbs|requirements|changes|issues|tests>-<1440|1707|1920|2560>.png`, 39 files in all. Reproduce with
