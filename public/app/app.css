@@ -2034,6 +2034,8 @@ html.is-phone body:has(.rlayout.has-drawer, #drawer:not([hidden]), .wdrawer, .ai
 .ovatt__list .mono{font-size:var(--fs-xs);color:var(--text-3);white-space:nowrap}
 .ovatt__t{font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ovatt__list small{color:var(--text-3);font-size:var(--fs-xs);white-space:nowrap}
+/* phone: the meta line (담당·기한) drops under the title so the title keeps the full width instead of shrinking to "5.5 P…" */
+@media (max-width:767px){.ovatt__list a{grid-template-columns:8px auto auto minmax(0,1fr)}.ovatt__list small{grid-column:4/-1;white-space:normal;overflow:hidden;text-overflow:ellipsis}}
 /* Schedule · Scope · Quality band */
 .ovband{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;padding:0}
 .ovcol{padding:10px 16px 8px;min-width:0}.ovcol+.ovcol{border-left:1px solid var(--border-soft)}
@@ -3416,9 +3418,12 @@ html.is-phone .gtable--wbs tbody tr td[data-label="상태"]{order:2;margin-left:
 html.is-phone .gtable--wbs tbody tr td.ttl{order:3;flex:0 0 100%}
 html.is-phone .gtable--wbs tbody tr td[data-label="계획 시작"]{order:4}
 html.is-phone .gtable--wbs tbody tr td[data-label="계획 종료"]{order:5}
-html.is-phone .gtable--wbs tbody tr td[data-label="계획 종료"]::before{content:"–";margin:0 4px;color:var(--text-3)}
+/* separators only between parts that are shown: "7/30–8/07 · 담당", "7/11 · 담당" (마일스톤), "담당" alone — never "– –" or a leading "–"/"·" */
+html.is-phone .gtable--wbs tbody tr td[data-label="계획 시작"]::after,html.is-phone .gtable--wbs tbody tr td[data-label="계획 종료"]::before,
+html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]::before,html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]::after,html.is-phone .gtable--wbs tbody tr td[data-label="상태"]::before{content:none}
+html.is-phone .gtable--wbs tbody tr:not(.is-ms) td[data-label="계획 시작"]:not(:has(>.dim:only-child)) + td[data-label="계획 종료"]:not(:has(>.dim:only-child))::before{content:"–";margin:0 4px;color:var(--text-3)}
 html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]{order:6}
-html.is-phone .gtable--wbs tbody tr td[data-label="담당자"]::before{content:"·";margin:0 6px;color:var(--text-3)}
+html.is-phone .gtable--wbs tbody tr td:is([data-label="계획 시작"],[data-label="계획 종료"]):not(:has(>.dim:only-child)) ~ td[data-label="담당자"]::before{content:"·";margin:0 6px;color:var(--text-3)}
 html.is-phone .gtable--wbs tbody tr td:is([data-label="계획 시작"],[data-label="계획 종료"],[data-label="담당자"]):has(>.dim:only-child){display:none!important}
 html.is-phone .gtable--wbs tbody tr td.ttl .wtitle{padding-left:0!important}
 html.is-phone .gtable--wbs tbody tr:has(.wtog:not(.wtog--none)){background:var(--bg-alt);border-color:var(--border)}

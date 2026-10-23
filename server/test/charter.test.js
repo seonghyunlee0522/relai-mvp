@@ -101,3 +101,16 @@ test('lifecycle: phases before the current one are flagged is_passed (shown as e
   assert.equal(g.phases.find((p) => p.phase_key === 'ANALYSIS_DESIGN').is_passed, false);
   server.close();
 });
+
+test('charter: a key date already imported as a WBS milestone (same name · same date) shows once; other key dates stay', async () => {
+  const { server, client } = await boot();
+  const A = await setup(client, 'ch-dedupe@x.com');
+  await A.c('PUT', `${A.purl}/definition`, { key_dates: [{ title: '착수 보고', date: '2026-11-10' }, { title: '프로젝트 종료', date: '2027-02-28' }] });
+  const wbs = `${A.purl}/wbs`;
+  assert.equal((await A.c('POST', wbs, { title: '착수보고', item_type: 'MILESTONE', milestone_date: '2026-11-10' })).status, 201);
+  assert.equal((await A.c('POST', wbs, { title: '착수보고', item_type: 'MILESTONE', milestone_date: '2026-11-12' })).status, 201);   // other date → its own row
+  const ms = (await A.c('GET', `${A.purl}/charter`)).json.charter.timeline.milestones;
+  assert.deepEqual(ms.map((m) => [m.date, m.title, m.source]), [
+    ['2026-11-10', '착수보고', 'WBS'], ['2026-11-12', '착수보고', 'WBS'], ['2027-02-28', '프로젝트 종료', 'KEY_DATE']]);
+  server.close();
+});
