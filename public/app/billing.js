@@ -176,8 +176,8 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
   if (refund) refund.onclick = async () => {
     let q;
     try { q = (await api('GET', b.refund_quote_url)).refund; } catch (e) { toast(e.message); return; }
-    const lines = (q.lines || []).map((l) => html`<li>${l.label || '결제'} ${krw(l.paid)} · 남은 ${n(l.days)}/${n(l.period_days)}일 → <b>${krw(l.amount)}</b></li>`).join('');
-    const bodyHtml = html`<p>${b.plan_label} 이용이 지금 끝나고 Free로 바뀌어요. 남은 기간을 일할 계산해 <b id="bl-refund-total">${krw(q.total)}</b>을 환불해요${q.withdrawal ? ' (청약철회)' : ''}. 위약금은 없어요.</p>
+    const lines = (q.lines || []).map((l) => html`<li>${l.label || '결제'} ${krw(l.paid)}${l.amount === l.paid ? '' : ` · 남은 ${n(l.days)}/${n(l.period_days)}일`} → <b>${krw(l.amount)}</b></li>`).join('');
+    const bodyHtml = html`<p>${b.plan_label} 이용이 지금 끝나고 Free로 바뀌어요. ${b.flags?.one_time ? '결제한 금액' : '남은 기간을 일할 계산해'} <b id="bl-refund-total">${krw(q.total)}</b>을 환불해요${q.withdrawal ? ' (청약철회)' : ''}. 위약금은 없어요.</p>
       ${raw(lines ? html`<ul class="bl-list">${raw(lines)}</ul>` : '')}<p class="hint">이번 기간의 기본 AI 크레딧은 소멸해요.</p><ul class="bl-list" id="bl-refund-policy"><li>${policy(b).free}</li><li>${policy(b).keep}</li></ul>`;
     if (!(await confirmDialog({ title: '지금 해지하고 환불받을까요?', bodyHtml, confirm: '해지하고 환불', danger: true }))) return;
     try {

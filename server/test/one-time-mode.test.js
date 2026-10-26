@@ -18,7 +18,8 @@ delete process.env.ONE_TIME_PLANS_ENABLED;
 async function boot(on) {
   if (on) process.env.ONE_TIME_PAYMENT_MODE = 'true'; else delete process.env.ONE_TIME_PAYMENT_MODE;
   const db = await testDb(); resetBillingCache();
-  const server = createApp(db, { billingProvider: createFakeProvider() }).listen(0);
+  const provider = createFakeProvider();
+  const server = createApp(db, { billingProvider: provider }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   let cookie = '';
   const c = async (method, path, body) => {
@@ -31,7 +32,8 @@ async function boot(on) {
   const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '김심사', email: `review${Date.now()}@relai.kr`, password: 'passw0rd!' });
   assert.equal(s.status, 201, JSON.stringify(s.json));
   await db.run('UPDATE users SET email_verified_at = now()');
-  return { db, c, w: s.json.workspaces[0].id, done: () => { server.close(); delete process.env.ONE_TIME_PAYMENT_MODE; } };
+  const deliver = async (d) => { const r = await fetch(`${base}/api/billing/webhook/fake`, { method: 'POST', headers: { ...d.headers, Origin: 'https://pg.example.com' }, body: d.body }); return r.status; };
+  return { db, c, deliver, provider, w: s.json.workspaces[0].id, done: () => { server.close(); delete process.env.ONE_TIME_PAYMENT_MODE; } };
 }
 const pricingSection = (html) => html.slice(html.indexOf('id="pricing"'), html.indexOf('<!-- CLOSING -->'));
 
@@ -79,5 +81,37 @@ test('one-time mode off: unchanged', async () => {
     assert.equal(cr.status, 402); assert.equal(cr.json.error.code, 'AI_TOPUP_PLAN_REQUIRED');
     const sec = pricingSection((await env.c('GET', '/')).text);
     assert.ok(!sec.includes('data-credit-pack')); assert.match(sec, /연간 결제/);
+  } finally { env.done(); }
+});
+
+test('one-time mode: 해지 환불 = the whole payment, listed in 관리자 › 환불 관리 until marked done by hand', async () => {
+  const env = await boot(true);
+  try {
+    const co = await env.c('POST', `/api/workspaces/${env.w}/billing/checkout`, { plan: 'PRO', cycle: 'MONTHLY' });
+    assert.equal(co.status, 201, JSON.stringify(co.json));
+    const order = await env.db.get("SELECT id, amount FROM billing_orders WHERE workspace_id = ? AND kind = 'ONE_TIME'", [env.w]);
+    assert.equal(await env.deliver(env.provider.signedEvent('subscription.activated', { order_id: order.id, workspace_id: env.w,
+      payment: { amount: 30000, currency: 'KRW', status: 'PAID', provider_tid: 'tid_review_1', moid: order.id } })), 200);
+    assert.equal((await env.c('GET', `/api/workspaces/${env.w}/billing`)).json.billing.plan, 'PRO');
+    const q = (await env.c('GET', `/api/workspaces/${env.w}/billing/refund-quote`)).json.refund;
+    assert.equal(q.total, 30000, 'refund = what was paid, not prorated days');
+    const cancel = await env.c('POST', `/api/workspaces/${env.w}/billing/cancel`, { refund: true });
+    assert.equal(cancel.status, 200, JSON.stringify(cancel.json)); assert.equal(cancel.json.cancel.refund_total, 30000);
+    assert.equal(env.provider.calls.refund.length, 0, 'no automatic card cancel');
+
+    await env.db.run("UPDATE users SET system_role = 'SYSTEM_ADMIN'");
+    const list = (await env.c('GET', '/api/billing/admin/subscription-refunds')).json;
+    assert.equal(list.refunds.length, 1); assert.equal(list.open.n, 1); assert.equal(list.open.amount, 30000);
+    const r = list.refunds[0];
+    assert.equal(r.amount, 30000); assert.equal(r.paid_amount, 30000); assert.equal(r.status, 'REQUESTED'); assert.equal(r.provider_tid, 'tid_review_1');
+    assert.match(r.goods_name, /1개월 이용권/); assert.ok(r.owner_email);
+    assert.equal((await env.c('POST', `/api/billing/admin/subscription-refunds/${r.id}/done`, { note: '나이스페이 관리자 전체취소' })).status, 200);
+    assert.equal((await env.c('GET', '/api/billing/admin/subscription-refunds')).json.refunds.length, 0);
+    const done = (await env.c('GET', '/api/billing/admin/subscription-refunds?status=DONE')).json.refunds[0];
+    assert.equal(done.status, 'DONE'); assert.match(done.failure_message, /나이스페이 관리자 전체취소/);
+    assert.equal(Number((await env.db.get('SELECT refunded_amount FROM billing_orders WHERE id = ?', [order.id])).refunded_amount), 30000);
+    assert.equal((await env.c('POST', `/api/billing/admin/subscription-refunds/${r.id}/reopen`, {})).status, 200);
+    assert.equal((await env.c('GET', '/api/billing/admin/subscription-refunds')).json.refunds[0].status, 'REQUESTED');
+    assert.equal(Number((await env.db.get('SELECT refunded_amount FROM billing_orders WHERE id = ?', [order.id])).refunded_amount), 0);
   } finally { env.done(); }
 });
