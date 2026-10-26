@@ -67,7 +67,7 @@ function moreMenu(btn, c) {
   const m = openMenu(btn, html`<button type="button" role="menuitem" class="amenu__act" data-more="activity">활동 기록</button>
     ${raw(c.ro ? '' : '<button type="button" role="menuitem" class="amenu__act amenu__act--sm" data-more="report-new">주간보고 생성</button>')}${raw(done)}
     ${raw(c.ro ? '' : html`<a role="menuitem" href="/app/projects/${c.pid}/edit" data-link>프로젝트 정보 수정</a>`)}
-    <button type="button" role="menuitem" data-more="jira">지라 연동 설정</button>
+    ${raw(state.features && state.features.jira === false ? '<button type="button" role="menuitem" data-more="jira" disabled aria-disabled="true" title="지라 연동은 출시 예정입니다">지라 연동 <small class="dim">출시 예정</small></button>' : '<button type="button" role="menuitem" data-more="jira">지라 연동 설정</button>')}
     ${raw(c.closed && !c.ro ? '<hr><button type="button" role="menuitem" data-more="reopen">종료 취소</button>' : '')}
     ${raw(c.sample ? (state.workspace && state.workspace.role !== 'MEMBER' ? '<hr><button type="button" role="menuitem" class="is-danger" data-more="sample-delete">샘플 프로젝트 삭제</button>' : '')
       : c.ro ? '<hr><button type="button" role="menuitem" data-more="unarchive">보관 해제</button>' : '<hr><button type="button" role="menuitem" class="is-danger" data-more="archive">프로젝트 보관</button>')}`);
@@ -83,7 +83,7 @@ function moreMenu(btn, c) {
   };
   $('[data-more="activity"]', m).onclick = () => openActivity(c.pid);
   const cb = $('[data-rep="completion"]', m); if (cb && !cb.disabled) cb.onclick = async () => { closeMenus(); const { openCompletion } = await import('./closing.js'); openCompletion(c.pid); };
-  $('[data-more="jira"]', m).onclick = () => { closeMenus(); openJiraProjectSettings(c.pid); };
+  const jb = $('[data-more="jira"]', m); if (jb && !jb.disabled) jb.onclick = () => { closeMenus(); openJiraProjectSettings(c.pid); };
   const rn = $('[data-more="report-new"]', m); if (rn) rn.onclick = () => { closeMenus(); periodDialog(undefined, async (period) => { try { const r = await api('POST', wsApi(`/${c.pid}/weekly-reports/generate`), period); navigate(`/app/projects/${c.pid}/reports/${r.report.id}`); return true; } catch (e) { return e.fields || { period_end: e.message }; } }); };
   const ab = $('[data-more="archive"]', m);
   if (ab) ab.onclick = async () => {

@@ -1,5 +1,7 @@
 /** Integration layer configuration (env). Nothing here is ever sent to the browser except `enabled`/`configured`. */
 const str = (v) => String(v ?? '').trim();
+/** Release gate: Jira is built and tested but shown as '출시 예정' until JIRA_INTEGRATION=on (Vercel env + redeploy, no code change). */
+export const jiraLive = (env = process.env) => str(env.JIRA_INTEGRATION).toLowerCase() === 'on';
 export function integrationConfig(env = process.env) {
   const clientId = str(env.ATLASSIAN_CLIENT_ID); const clientSecret = str(env.ATLASSIAN_CLIENT_SECRET); const redirectUri = str(env.ATLASSIAN_REDIRECT_URI);
   const appBaseUrl = str(env.APP_BASE_URL) || (redirectUri ? redirectUri.replace(/\/api\/integrations\/jira\/callback\/?$/, '') : '');

@@ -27,7 +27,7 @@ import * as J from './jira/sync.js';
 import { handleJiraWebhook } from './jira/webhook.js';
 import { listActivity } from './events.js';
 import { JiraApiError } from './jira/client.js';
-import { integrationConfig } from './config.js';
+import { integrationConfig, jiraLive } from './config.js';
 import { getProvider } from './registry.js';
 
 export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base }) {
@@ -55,14 +55,16 @@ export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth
     return back({ jira: 'ok', ws: r.workspace_id });
   }));
 
+  /* Release gate (config.jiraLive): until JIRA_INTEGRATION=on every project / WBS / requirement Jira route answers 409 '출시 예정'. */
+  const comingSoon = (req, res, next) => (jiraLive() ? next() : fail(res, 409, 'integration_coming_soon', '지라 연동은 출시 예정입니다.'));
   const P = `${base}/:pid/integrations/jira`;
-  app.get(P, guard, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json({ ...(await J.projectIntegration(db, project)), activity: await listActivity(db, project.id, 20) }); })));
-  app.get(`${P}/projects`, pmanage, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json({ projects: await J.listJiraProjects(db, project, String(req.query.q || '')) }); })));
-  app.get(`${P}/issue-types`, pmanage, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json({ issue_types: await J.listIssueTypes(db, project, String(req.query.project_key || '').toUpperCase()) }); })));
-  app.put(`${P}/mapping`, pmanage, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; res.json(await J.saveMapping(db, project, req.body, req.user.id)); })));
-  app.delete(`${P}/mapping`, pmanage, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; res.json(await J.removeMapping(db, project, req.user.id)); })));
-  app.post(`${P}/sync`, guard, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; const run = await J.syncProject(db, project, { trigger: 'MANUAL', userId: req.user.id }); res.json({ run, ...(await J.projectIntegration(db, project)) }); })));
-  app.get(`${P}/issues/search`, guard, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json(await J.searchIssues(db, project, String(req.query.q || ''))); })));
+  app.get(P, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json({ ...(await J.projectIntegration(db, project)), activity: await listActivity(db, project.id, 20) }); })));
+  app.get(`${P}/projects`, pmanage, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json({ projects: await J.listJiraProjects(db, project, String(req.query.q || '')) }); })));
+  app.get(`${P}/issue-types`, pmanage, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json({ issue_types: await J.listIssueTypes(db, project, String(req.query.project_key || '').toUpperCase()) }); })));
+  app.put(`${P}/mapping`, pmanage, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; res.json(await J.saveMapping(db, project, req.body, req.user.id)); })));
+  app.delete(`${P}/mapping`, pmanage, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; res.json(await J.removeMapping(db, project, req.user.id)); })));
+  app.post(`${P}/sync`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; const run = await J.syncProject(db, project, { trigger: 'MANUAL', userId: req.user.id }); res.json({ run, ...(await J.projectIntegration(db, project)) }); })));
+  app.get(`${P}/issues/search`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project) return; res.json(await J.searchIssues(db, project, String(req.query.q || ''))); })));
 
   const W = `${base}/:pid/wbs/:iid/jira`;
   const wbsCtx = async (req, res, { write = false } = {}) => {
@@ -72,11 +74,11 @@ export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth
     if (!w) { fail(res, 404, 'not_found', 'WBS 항목을 찾을 수 없습니다.'); return null; }
     return { project, w };
   };
-  app.get(W, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res); if (!c) return; const m = await J.getMapping(db, c.project.id); res.json({ mapped: Boolean(m), mapping: m ? { external_project_key: m.external_project_key, external_project_name: m.external_project_name, leaf_issue_type_name: m.leaf_issue_type_name, group_issue_type_name: m.group_issue_type_name, site_url: m.site_url, connection_status: m.connection_status, auto_complete_leaf_wbs: m.auto_complete_leaf_wbs } : null, links: await J.linksForWbs(db, c.w.id), summary: await J.executionForWbs(db, c.project.id, c.w.id), paused: Boolean(c.w.archived_at) }); })));
-  app.post(`${W}/issues`, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.createIssueForWbs(db, c.project, c.w.id, req.body, req.user.id)); })));
-  app.post(`${W}/links`, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.linkIssues(db, c.project, c.w.id, req.body, req.user.id)); })));
-  app.delete(`${W}/links/:lid`, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.json(await J.unlinkIssue(db, c.project, c.w.id, req.params.lid, req.user.id)); })));
-  app.post(`${W}/refresh`, guard, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; const run = await J.syncProject(db, c.project, { trigger: 'MANUAL', wbsId: c.w.id, userId: req.user.id }); res.json({ run, links: await J.linksForWbs(db, c.w.id), summary: await J.executionForWbs(db, c.project.id, c.w.id) }); })));
+  app.get(W, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res); if (!c) return; const m = await J.getMapping(db, c.project.id); res.json({ mapped: Boolean(m), mapping: m ? { external_project_key: m.external_project_key, external_project_name: m.external_project_name, leaf_issue_type_name: m.leaf_issue_type_name, group_issue_type_name: m.group_issue_type_name, site_url: m.site_url, connection_status: m.connection_status, auto_complete_leaf_wbs: m.auto_complete_leaf_wbs } : null, links: await J.linksForWbs(db, c.w.id), summary: await J.executionForWbs(db, c.project.id, c.w.id), paused: Boolean(c.w.archived_at) }); })));
+  app.post(`${W}/issues`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.createIssueForWbs(db, c.project, c.w.id, req.body, req.user.id)); })));
+  app.post(`${W}/links`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.linkIssues(db, c.project, c.w.id, req.body, req.user.id)); })));
+  app.delete(`${W}/links/:lid`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; res.json(await J.unlinkIssue(db, c.project, c.w.id, req.params.lid, req.user.id)); })));
+  app.post(`${W}/refresh`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await wbsCtx(req, res, { write: true }); if (!c) return; const run = await J.syncProject(db, c.project, { trigger: 'MANUAL', wbsId: c.w.id, userId: req.user.id }); res.json({ run, links: await J.linksForWbs(db, c.w.id), summary: await J.executionForWbs(db, c.project.id, c.w.id) }); })));
 
   const RQ = `${base}/:pid/requirements/:rid/jira`;
   const reqCtx = async (req, res, { write = false } = {}) => {
@@ -86,12 +88,12 @@ export function mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth
     if (!r) { fail(res, 404, 'not_found', '요구사항을 찾을 수 없습니다.'); return null; }
     return { project, r };
   };
-  app.post(`${base}/:pid/requirements/jira/bulk-create`, guard, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; res.json({ ...(await J.bulkCreateForRequirements(db, project, req.body?.ids, req.user.id)), jira: await J.requirementJiraMap(db, project.id) }); })));
-  app.get(RQ, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res); if (!c) return; res.json(await J.requirementJira(db, c.project, c.r.id)); })));
-  app.post(`${RQ}/issues`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.createIssueForRequirement(db, c.project, c.r.id, req.body, req.user.id)); })));
-  app.post(`${RQ}/links`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.linkIssuesToRequirement(db, c.project, c.r.id, req.body, req.user.id)); })));
-  app.delete(`${RQ}/links/:lid`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.json(await J.unlinkRequirementIssue(db, c.project, c.r.id, req.params.lid, req.user.id)); })));
-  app.post(`${RQ}/refresh`, guard, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; const run = await J.syncProject(db, c.project, { trigger: 'MANUAL', requirementId: c.r.id, userId: req.user.id }); res.json({ run, jira: await J.requirementJira(db, c.project, c.r.id) }); })));
+  app.post(`${base}/:pid/requirements/jira/bulk-create`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const project = await loadProject(req, res); if (!project || !mutable(res, project)) return; res.json({ ...(await J.bulkCreateForRequirements(db, project, req.body?.ids, req.user.id)), jira: await J.requirementJiraMap(db, project.id) }); })));
+  app.get(RQ, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res); if (!c) return; res.json(await J.requirementJira(db, c.project, c.r.id)); })));
+  app.post(`${RQ}/issues`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.createIssueForRequirement(db, c.project, c.r.id, req.body, req.user.id)); })));
+  app.post(`${RQ}/links`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.status(201).json(await J.linkIssuesToRequirement(db, c.project, c.r.id, req.body, req.user.id)); })));
+  app.delete(`${RQ}/links/:lid`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; res.json(await J.unlinkRequirementIssue(db, c.project, c.r.id, req.params.lid, req.user.id)); })));
+  app.post(`${RQ}/refresh`, guard, comingSoon, wrap(async (req, res) => send(res, async () => { const c = await reqCtx(req, res, { write: true }); if (!c) return; const run = await J.syncProject(db, c.project, { trigger: 'MANUAL', requirementId: c.r.id, userId: req.user.id }); res.json({ run, jira: await J.requirementJira(db, c.project, c.r.id) }); })));
 
   // INTEGRATION_PROVIDER=fake only (local e2e): change an issue's status in the in-memory Jira, as a person would in Jira. Never mounted otherwise.
   if (integrationConfig().provider === 'fake') {

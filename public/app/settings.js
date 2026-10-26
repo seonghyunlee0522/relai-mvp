@@ -50,6 +50,12 @@ export async function settingsPage(main = $('#main')) {
   if (qp.get('jira')) { toast(qp.get('jira') === 'ok' ? '지라를 연결했습니다.' : `지라 연결에 실패했습니다. (${qp.get('reason') || 'oauth_error'})`); history.replaceState(null, '', '/app/settings'); }
   const jiraCard = () => {
     const pv = integ && integ.providers.find((x) => x.provider === 'JIRA'); if (!pv) return '';
+    if (pv.coming_soon) return html`<div class="panel" style="margin-top:20px"><div class="panel__h">연동</div><div class="panel__b">
+      <div class="icard" data-jira-soon><div class="icard__logo">J</div><div class="icard__m">
+        <div class="icard__t"><b>지라</b><span class="chip chip--muted">출시 예정</span></div>
+        <p class="hint">요구사항·WBS 작업을 지라 이슈와 연결하고, 지라 진행 상태를 RELAI에서 바로 확인하는 기능을 준비하고 있습니다.</p>
+        <div class="actions" style="margin-top:10px"><button class="btn btn--secondary btn--sm" disabled aria-disabled="true">출시 예정</button></div>
+      </div></div></div></div>`;
     const c = pv.connection; const can = perm.integration_manage;
     const status = !c ? '' : c.status === 'ACTIVE' ? '<span class="chip chip--done">정상</span>' : c.status === 'ERROR' ? html`<span class="chip chip--fail">${c.reconnect_required ? '재연결 필요' : '오류'}</span>` : c.status === 'DISABLED' ? '<span class="chip chip--muted">연결 해제됨</span>' : '<span class="chip chip--hold">대기</span>';
     return html`<div class="panel" style="margin-top:20px"><div class="panel__h">연동</div><div class="panel__b">

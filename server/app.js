@@ -48,6 +48,7 @@ import { mountFeedbackRoutes } from './feedback.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
+import { jiraLive } from './integrations/config.js';
 import { mountAuthRoutes } from './auth/routes.js';
 import { mountAccountSecurityRoutes, sendVerificationEmail } from './auth/account-security.js';
 import { mountMaintenanceRoutes } from './maintenance.js';
@@ -309,7 +310,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.json({ holidays: [...map].map(([day, name]) => ({ day, name })) });
   }));
   app.get('/api/me', (req, res, next) => (!req.user && req.query.optional ? res.json({ user: null, workspaces: [] }) : next()), requireAuth, wrap(async (req, res) => {
-    res.json({ user: toPublicUser(req.user), workspaces: await q.memberships.all(req.user.id), features: { one_time_payment: oneTimeMode() } });
+    res.json({ user: toPublicUser(req.user), workspaces: await q.memberships.all(req.user.id), features: { one_time_payment: oneTimeMode(), jira: jiraLive() } });   // features.jira=false → 지라 '출시 예정' in the UI
   }));
 
   /* ---------- admin console API (operator role only; see admin-routes.js) ---------- */

@@ -16,7 +16,7 @@ import { tx } from '../../db.js';
 import { ValidationError } from '../../validate.js';
 import { updateWbs } from '../../wbs.js';
 import { addWbsHistory } from '../../wbs-history.js';
-import { integrationConfig } from '../config.js';
+import { integrationConfig, jiraLive } from '../config.js';
 import { IntegrationError, withClient, requireActiveConnection, getConnectionById, markError } from '../service.js';
 import { logActivity, startRun, finishRun } from '../events.js';
 import { toSnapshot, isDone } from './mapper.js';
@@ -247,6 +247,7 @@ export async function requirementJira(db, project, reqId, env = process.env) {
 }
 /** List response: { enabled, auto_mark, by: { reqId: { total, done, …, rate, keys: [{ key, status_category, status_name, browser_url }] } } } or null when unmapped. */
 export async function requirementJiraMap(db, projectId) {
+  if (!jiraLive()) return null;   // 출시 예정: nothing Jira reaches the screens / AI context
   const m = await db.get(`SELECT auto_mark_requirements FROM integration_project_mappings WHERE project_id = ? AND status = 'ACTIVE'`, [projectId]);
   if (!m) return null;
   const rows = await db.all(`SELECT l.requirement_id, l.external_key, l.status, s.status_category, s.status_name, s.browser_url FROM integration_entity_links l LEFT JOIN jira_issue_snapshots s ON s.integration_link_id = l.id
@@ -406,7 +407,7 @@ export async function executionByWbs(db, projectId) {
   for (const o of direct.values()) total += o.total;
   return { map, total };
 }
-export async function executionForWbs(db, projectId, wbsId) { const { map } = await executionByWbs(db, projectId); return map.get(wbsId) || rate({ total: 0, done: 0, in_progress: 0, todo: 0, missing: 0 }); }
+export async function executionForWbs(db, projectId, wbsId) { if (!jiraLive()) return rate({ total: 0, done: 0, in_progress: 0, todo: 0, missing: 0 }); const { map } = await executionByWbs(db, projectId); return map.get(wbsId) || rate({ total: 0, done: 0, in_progress: 0, todo: 0, missing: 0 }); }
 /** Project-level: every live EXECUTION link once. */
 export async function projectExecutionSummary(db, projectId) {
   const r = await db.get(`SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE s.status_category = 'done') AS done, COUNT(*) FILTER (WHERE s.status_category = 'indeterminate') AS in_progress,
@@ -417,12 +418,14 @@ export async function projectExecutionSummary(db, projectId) {
 }
 /** Project home: null when unmapped, else the execution summary + project key (one small card line). */
 export async function homeSummary(db, projectId) {
+  if (!jiraLive()) return null;   // 출시 예정: nothing Jira reaches the screens / AI context
   const m = await db.get(`SELECT m.external_project_key, c.site_url, c.status FROM integration_project_mappings m JOIN integration_connections c ON c.id = m.connection_id WHERE m.project_id = ? AND m.status = 'ACTIVE'`, [projectId]);
   if (!m) return null;
   return { project_key: m.external_project_key, site_url: m.site_url, connection_status: m.status, ...(await projectExecutionSummary(db, projectId)) };
 }
 /** For the WBS list response: { enabled, by: { wbsId: summary } } or null when the project is not mapped. Cheap (2 queries). */
 export async function wbsExecutionMap(db, projectId) {
+  if (!jiraLive()) return null;   // 출시 예정: nothing Jira reaches the screens / AI context
   const m = await db.get(`SELECT 1 FROM integration_project_mappings WHERE project_id = ? AND status = 'ACTIVE'`, [projectId]);
   if (!m) return null;
   const { map } = await executionByWbs(db, projectId);
@@ -430,6 +433,7 @@ export async function wbsExecutionMap(db, projectId) {
 }
 /** Requirement trace: Jira execution of each WBS linked to the requirement (direct or descendant leaves) + a total. Read-only; no requirement↔Jira table. */
 export async function executionForRequirement(db, projectId, requirementId) {
+  if (!jiraLive()) return { wbs: [], total: 0, done: 0, in_progress: 0, todo: 0, rate: null };
   const links = await db.all(`SELECT w.id, w.wbs_code, w.title FROM requirement_wbs_links l JOIN wbs_items w ON w.id = l.wbs_item_id WHERE l.requirement_id = ? AND w.archived_at IS NULL ORDER BY w.sequence`, [requirementId]);
   const { map } = await executionByWbs(db, projectId);
   const per = links.map((w) => ({ ...w, jira: map.get(w.id) || null }));
@@ -569,6 +573,7 @@ export async function renewWebhooks(db, env = process.env) {
 
 /* ---------- AI context helper (DB only) ---------- */
 export async function jiraContextLines(db, projectId, limit = 40) {
+  if (!jiraLive()) return null;   // 출시 예정: nothing Jira reaches the screens / AI context
   const m = await db.get(`SELECT external_project_key FROM integration_project_mappings WHERE project_id = ? AND status = 'ACTIVE'`, [projectId]);
   if (!m) return null;
   const sum = await projectExecutionSummary(db, projectId);

@@ -1,7 +1,12 @@
 # Jira Cloud Integration (Phase 12 — Integration Foundation + Jira)
 
-RELAI = Project Delivery Control Layer, Jira = Development Execution Layer. 연결 구조는 **Requirement → WBS → Jira Issue**;
-Requirement와 Jira는 직접 연결하지 않고 RequirementWBSLink → WBS → Jira Link로만 간접 조회한다.
+RELAI = Project Delivery Control Layer, Jira = Development Execution Layer. 연결 구조는 **Requirement → WBS → Jira Issue**
+(WBS 경유 간접 조회) + v43부터 **Requirement ↔ Jira Issue 직접 링크**(link_role REQUIREMENT).
+
+## 출시 게이트 (2026-10-26)
+기능은 완성·테스트 완료 상태지만 **`JIRA_INTEGRATION=on`일 때만 열린다**(기본 꺼짐 = '출시 예정').
+* 꺼짐: `/api/me` → `features.jira=false`, 설정 › 연동 카드 '출시 예정'(버튼 비활성), 프로젝트 ⋯ 메뉴 '지라 연동 · 출시 예정'(비활성), 요구사항 상세 지라 탭 = 안내 문구, 컬럼 옵션 라벨 '(출시 예정)'. connect와 프로젝트·WBS·요구사항 Jira 라우트 18개는 409 `integration_coming_soon`, 목록/상세/홈 응답의 `jira`는 null(AI 컨텍스트 포함). 웹훅·크론·관리자 화면은 그대로.
+* 출시: Vercel 환경변수 `JIRA_INTEGRATION=on` 추가(+ 아래 운영 설정) 후 Redeploy — 코드 변경 없음(Vercel은 환경변수를 새 배포부터 적용). 테스트는 `server/test/helpers.js`에서 on, `jira-soon.test.js`가 off 동작을 검증.
 
 ## 구조
 ```
