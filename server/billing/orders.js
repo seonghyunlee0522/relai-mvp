@@ -15,7 +15,7 @@
  * and a total below MIN_CARD_KRW is waived (charged 0, activated until renewal).
  */
 import { randomBytes } from 'node:crypto';
-import { PLANS, CYCLES, PAID_PLANS, MIN_CARD_KRW, PRICE_VERSION, planPrice, addonPrice, limitsFor, splitVat } from '../plans.js';
+import { PLANS, CYCLES, PAID_PLANS, MIN_CARD_KRW, PRICE_VERSION, planPrice, addonPrice, limitsFor, splitVat, oneTimeMode } from '../plans.js';
 import { prorate } from './prorate.js';
 
 export const MAX_USERS = 1000;
@@ -147,7 +147,7 @@ export function quote({ plan = 'PRO', cycle = 'MONTHLY', users, seats, extra_use
   return { ...q, cycle_label: CYCLES[cycle].label, users: p.included.users + q.extra_users, seats: p.included.users + q.extra_users, included_users: p.included.users,
     unit_price: Math.floor(q.total / q.months), list_amount: monthlyList, discount_amount: monthlyList - q.total, cycle_discount_amount: monthlyList - q.total, founding_discount_amount: 0,
     supply_amount: q.supply, vat_amount: q.vat, amount: q.total, founding: false,
-    goods_name: `RELAI ${p.label} ${q.months === 12 ? '연간' : '월간'}${q.extra_users ? ` +사용자 ${q.extra_users}` : ''}${q.extra_projects ? ` +프로젝트 ${q.extra_projects}` : ''}` };
+    goods_name: `RELAI ${p.label} ${q.months === 12 ? '연간' : oneTimeMode() ? '1개월 이용권' : '월간'}${q.extra_users ? ` +사용자 ${q.extra_users}` : ''}${q.extra_projects ? ` +프로젝트 ${q.extra_projects}` : ''}` };
 }
 
 /** @deprecated founding offer retired in v3. */

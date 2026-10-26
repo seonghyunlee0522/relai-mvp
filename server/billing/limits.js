@@ -22,7 +22,7 @@
  * the edit lock off (creation checks stay). `PLAN_LIMITS=off` disables everything (legacy test fixtures). Operator-owned
  * workspaces (OPERATOR_OWNED_SQL) are exempt from all of it.
  */
-import { PLANS, USAGE_DIMS, PLANS_URL, limitsFor } from '../plans.js';
+import { PLANS, USAGE_DIMS, PLANS_URL, limitsFor, oneTimeMode } from '../plans.js';
 import { effectivePlan } from './subscriptions.js';
 
 export const limitsEnforced = () => process.env.PLAN_LIMITS !== 'off';
@@ -80,7 +80,7 @@ export class PlanLimitError extends Error {
     const label = USAGE_DIMS.find((d) => d.key === dimension)?.label || dimension;
     const allowed = Math.max(0, limit - used);
     const name = PLANS[plan]?.label || plan;
-    const addon = PLANS[plan]?.addons?.[dimension === 'members' ? 'user' : 'project'];
+    const addon = oneTimeMode() ? null : PLANS[plan]?.addons?.[dimension === 'members' ? 'user' : 'project'];   // 단건결제 모드: no add-on is sold
     const how = addon ? `${dimension === 'members' ? '추가 사용자 1명' : '추가 프로젝트 1개'} 월 ${won(addon.MONTHLY)}로 한도를 늘리거나 ` : '';
     const msg = dimension === 'members'
       ? `${name} 플랜의 사용자 한도(${limit}명)를 모두 사용 중입니다${pending ? ` (대기 중인 초대 ${pending}건 포함)` : ''}. ${how || '상위 플랜으로 업그레이드하거나 '}멤버·대기 중인 초대를 정리해 주세요.`

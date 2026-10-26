@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { LEGAL, koDate, legalFooterHtml } from '../public/app/shared/legal-info.js';
-import { PLANS, annualView, catalogue, ANNUAL_DISCOUNT_PCT, CREDIT_PRICE_KRW, TOPUP_STEP_KRW, TOPUP_MAX_KRW, MIN_CARD_KRW, PURCHASED_VALID_YEARS } from './plans.js';
+import { PLANS, annualView, catalogue, ANNUAL_DISCOUNT_PCT, CREDIT_PRICE_KRW, CREDIT_PACKS, TOPUP_STEP_KRW, TOPUP_MAX_KRW, MIN_CARD_KRW, PURCHASED_VALID_YEARS, FREE_ONCE_CREDITS, oneTimeMode, CREDITS_URL, PLANS_URL } from './plans.js';
 import { pricingHtml, PRICING_CSS, soonCta } from '../public/app/shared/pricing.js';
 import { paymentsEnabled } from './billing/provider.js';
 import { shareMeta } from './share-meta.js';
@@ -481,14 +481,46 @@ ${legalFooterHtml(L)}
 </body></html>`;
 }
 
-/** Landing #pricing (pricing v3): the shared plan cards from the server catalogue + their CSS. No price is typed in index.html. */
-export function landingPricingHtml(cat = catalogue(), { open = paymentsEnabled() && process.env.NICEPAY_RECURRING_ENABLED === 'true' } = {}) {
+/** Landing #pricing (pricing v3): the shared plan cards from the server catalogue + their CSS. No price is typed in index.html.
+ * 단건결제 모드: Pro / Team as 1개월 이용권 (one-time) with a buy CTA (sign up / log in → 요금제 page), then the AI credit packs. */
+export function landingPricingHtml(cat = catalogue(), { open = paymentsEnabled() && process.env.NICEPAY_RECURRING_ENABLED === 'true', oneTime = oneTimeMode() } = {}) {
+  const buyNext = `/signup?next=${encodeURIComponent(PLANS_URL)}`;
   const cta = (p) => (p.contact_sales
     ? '<a href="mailto:__CONTACT_EMAIL__?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" class="btn btn--secondary btn--block" data-loc="pricing_enterprise">도입 문의</a>'
     : p.key === 'FREE' ? '<a href="/signup" class="btn btn--secondary btn--block" data-auth="start" data-loc="pricing_free">무료로 시작하기</a>'
+      : oneTime ? `<a href="${buyNext}" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-loc="pricing_${p.key.toLowerCase()}">${esc(p.label)} 1개월 이용권 구매</a>`
       : !open ? soonCta(p, '')
       : `<a href="/signup" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-auth="start" data-loc="pricing_${p.key.toLowerCase()}">무료로 시작하고 ${esc(p.label)} 선택</a>`);
-  return `<style>${PRICING_CSS}</style>${pricingHtml(cat, { cta })}`;
+  const plans = `<style>${PRICING_CSS}</style>${pricingHtml(cat, { cta, oneTime })}`;
+  return oneTime ? `${plans}${creditPacksHtml()}` : plans;
+}
+
+/**
+ * 단건결제 모드: the AI credit packs on the landing (카드 1회 결제, plans.js CREDIT_PACKS, VAT included), and the
+ * <!--CO:x--> … <!--/CO:x--> spans of index.html that say only Pro · Team can top up get the any-workspace copy.
+ */
+const num = (v) => Number(v || 0).toLocaleString('ko-KR');
+export const ONE_TIME_COPY = {
+  aiprice: `크레딧은 워크스페이스 공용입니다. Free는 처음 한 번 <b>AI 크레딧 ${num(FREE_ONCE_CREDITS)}</b>, Pro는 매월 1,000, Team은 매월 3,000 크레딧을 드리고, 모든 워크스페이스가 필요한 만큼 추가로 충전할 수 있습니다.`,
+};
+export function creditPacksHtml(packs = CREDIT_PACKS) {
+  const next = `/login?next=${encodeURIComponent(CREDITS_URL)}`;
+  const card = (p, i) => `<div class="plan${i === 1 ? ' plan--team' : ''}" data-credit-pack="${esc(p.key)}">
+      <div class="plan__n">AI 크레딧 ${num(p.credits)}</div>
+      <div class="plan__p">${num(p.amount)}원 <small>VAT 포함</small></div>
+      <p class="plan__d">AI 크레딧 ${num(p.credits)}을 충전합니다. 1크레딧 = ${num(CREDIT_PRICE_KRW)}원</p>
+      <ul><li>신용카드 1회 결제 (자동 결제 없음)</li><li>구매일부터 ${PURCHASED_VALID_YEARS}년간 사용</li><li>쓰지 않은 구매 크레딧은 환불 요청 가능</li></ul>
+      <a href="${next}" class="btn ${i === 1 ? 'btn--primary' : 'btn--secondary'} btn--block" data-loc="pricing_credit_${esc(p.key.toLowerCase())}">로그인하고 충전하기</a>
+    </div>`;
+  return `<div class="head-block center" id="credit-packs-head" style="margin-top:56px"><p class="eyebrow">AI 크레딧 충전</p>
+      <p class="lead" style="margin-top:10px">요금제와 관계없이 필요한 만큼 AI 크레딧을 충전할 수 있습니다.</p></div>
+    <div class="pgrid" id="credit-packs" style="margin-top:24px">${packs.map(card).join('')}</div>
+    <p class="pricing__note">결제는 신용카드 1회 결제로만 진행됩니다. 충전 금액은 설정 › AI 크레딧에서 ${num(TOPUP_STEP_KRW)}원 단위로 고를 수도 있습니다.</p>`;
+}
+/** Applies the 단건결제 copy to the landing page HTML when the mode is on. */
+export function applyOneTimeCopy(html, on = oneTimeMode()) {
+  if (!on) return html;
+  return html.replace(/<!--CO:(\w+)-->[\s\S]*?<!--\/CO:\1-->/g, (m, k) => (k in ONE_TIME_COPY ? ONE_TIME_COPY[k] : m));
 }
 
 /** Mounts /terms, /privacy, /pricing and the landing page (with the footer filled in). Call before express.static. */
@@ -502,7 +534,7 @@ export function mountLegal(app, { pub, plans, onLanding = null, landingPromo = n
   let landing = null;
   app.get(['/', '/index.html'], async (req, res) => {
     if (onLanding) await onLanding(req);
-    landing ||= readFileSync(resolve(pub, 'index.html'), 'utf8').replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replace('<!--PRICING:landing-->', landingPricingHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
+    landing ||= applyOneTimeCopy(readFileSync(resolve(pub, 'index.html'), 'utf8')).replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replace('<!--PRICING:landing-->', landingPricingHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
     const promo = landingPromo ? await landingPromo() : '';   // 관리자 › 프로모션 (placement landing), rendered per request
     res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req) + ga4For(req)).replace('<!--PROMO:landing-->', promo));
   });

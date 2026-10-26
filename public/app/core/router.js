@@ -61,6 +61,10 @@ export async function render() {
       Object.assign(state, me); state.workspace = state.workspaces.find((w) => w.status !== 'SUSPENDED') || state.workspaces[0];
     } catch { return; }
   }
+  // features (/api/me) are missing after an in-page login (the auth response carries no features): fetch them once.
+  if (!state.features) { try { state.features = (await api('GET', '/api/me?optional=1')).features || {}; } catch { state.features = {}; } }
+  // 단건결제 모드: there is no 정기결제 구독 screen; its links land on the plans page (1개월 이용권).
+  if (state.features.one_time_payment && /^\/app\/billing\/subscribe\/?$/.test(path)) { navigate('/app/billing/plans', { replace: true }); return; }
   // phone = view mode: creating/editing a project and the Admin Console are PC-only pages (spec §4)
   const pcOnly = isPhone() && (/^\/app\/projects\/new\/?$/.test(path) || /^\/app\/projects\/[\w-]+\/edit\/?$/.test(path) ? '프로젝트 만들기와 수정은 PC에서 할 수 있습니다.'
     : /^\/admin(\/|$)/.test(path) ? '운영자 콘솔은 PC에서 사용할 수 있습니다.' : '');

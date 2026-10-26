@@ -25,6 +25,7 @@
 | `NICEPAY_SECRET_KEY` | nicepay | NicePay 시크릿 키. 서명 검증·Basic 인증·카드정보 암호화에 사용. 로그·응답에 절대 노출하지 않는다 |
 | `NICEPAY_MODE` | nicepay | `live`면 `api.nicepay.co.kr`, 그 외(기본)는 `sandbox-api.nicepay.co.kr`. 키 접두사(S/R)와 모드가 다르면 결제가 비활성화된다(부팅은 정상) |
 | `NICEPAY_RECURRING_ENABLED` | | `true`면 정기결제(빌키) 경로를 연다. 기본 `false` (NicePay 정기결제 심사 완료 전까지) |
+| `ONE_TIME_PAYMENT_MODE` | | `true`면 단건결제 모드(나이스페이 카드사 심사, 정기결제 승인 전): Pro/Team은 1개월 이용권(카드 1회 결제, 자동 갱신 없음, 월간만·추가 구매 없음)으로 판매하고, AI 크레딧은 Free 포함 모든 요금제에서 충전. 랜딩·요금제 화면에서 연간·정기결제 문구 제거, 랜딩에 크레딧 상품 3종 표시. 정기결제 승인 후 끈다 |
 | `SERVICE_PAY_ENABLED` | | `/pricing` 서비스 결제(로그인 없는 구매) 스위치. 값이 정확히 `true`이고 NicePay Provider가 설정됐을 때만 결제가 열린다. 그 외(미설정 포함)에는 페이지만 보이고 버튼은 '결제 준비 중'. **Preview는 `false`**(운영 DB를 공유하고 키가 같으면 실제 카드가 결제된다), Production은 대표 승인 뒤에만 `true` |
 | `NICEPAY_SDK_URL` | | 결제창 JS SDK URL 재정의(기본 `https://pay.nicepay.co.kr/v1/js/`) |
 | `CRON_SECRET` | 결제 운영 | `GET /api/billing/cron/daily` 인증(`Authorization: Bearer …`, Vercel Cron이 자동 첨부). 미설정 시 503 |
