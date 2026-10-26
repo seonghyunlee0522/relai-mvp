@@ -59,8 +59,12 @@ test('one-time mode: Pro 1개월 이용권 + credits for Free, landing without �
     const sec = pricingSection((await env.c('GET', '/')).text);
     assert.match(sec, /data-plan="PRO"/); assert.match(sec, /data-plan="TEAM"/);
     assert.match(sec, /Pro 1개월 이용권 구매/);
-    assert.match(sec, /href="\/signup\?next=%2Fapp%2Fbilling%2Fplans"/);
-    assert.equal((sec.match(/data-credit-pack=/g) || []).length, 3);
+    assert.match(sec, /href="\/signup\?next=%2Fapp%2Fbilling%2Fplans%3Fbuy%3DPRO"/);
+    // signed in: /signup?next=… goes straight there
+    const r = await env.c('GET', '/signup?next=%2Fapp%2Fbilling%2Fplans%3Fbuy%3DPRO');
+    assert.equal(r.status, 302);
+    assert.equal((sec.match(/data-credit-pack=/g) || []).length, 1);
+    assert.match(sec, /10,000원/); assert.match(sec, /href="\/login\?next=%2Fapp%2Fsettings%2Fcredits"/);
     for (const w of ['연간', '정기결제', '자동 결제됩니다', '추가 사용자 1명', '정기결제 준비 중', 'Pro·Team은 필요한 만큼']) assert.ok(!sec.includes(w), `pricing section must not say ${w}`);
   } finally { env.done(); }
 });

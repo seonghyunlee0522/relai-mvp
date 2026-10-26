@@ -1517,7 +1517,9 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   const onLanding = (req) => (req.method === 'GET' && !req.user && !isBot(req.get('user-agent')) ? track(db, 'landing_visit') : null);
   mountLegal(app, { pub, plans: PLANS, onLanding, landingPromo: () => promoBlockHtml(db, 'landing') });   // /, /terms, /privacy, /pricing (B9)
   app.get(['/login', '/signup'], (req, res) => {
-    if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect('/app');
+    // Signed in already: go where the link meant to go (?next=, same rule as the login page: /app|/invite|/admin only), else /app.
+    const next = String(req.query.next || '');
+    if (req.user && !(req.path === '/signup' && req.query.invite)) return res.redirect(/^\/(app|invite|admin)(\/|\?|$)/.test(next) && !next.startsWith('//') ? next : '/app');
     sendApp(req, res);
   });
   // Account-security pages work with or without a session. The token sits in the query string, so never cache and never send a Referer.

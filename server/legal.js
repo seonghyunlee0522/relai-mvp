@@ -484,11 +484,11 @@ ${legalFooterHtml(L)}
 /** Landing #pricing (pricing v3): the shared plan cards from the server catalogue + their CSS. No price is typed in index.html.
  * 단건결제 모드: Pro / Team as 1개월 이용권 (one-time) with a buy CTA (sign up / log in → 요금제 page), then the AI credit packs. */
 export function landingPricingHtml(cat = catalogue(), { open = paymentsEnabled() && process.env.NICEPAY_RECURRING_ENABLED === 'true', oneTime = oneTimeMode() } = {}) {
-  const buyNext = `/signup?next=${encodeURIComponent(PLANS_URL)}`;
+  const buyNext = (key) => `/signup?next=${encodeURIComponent(`${PLANS_URL}?buy=${key}`)}`;   // signed in → straight to the plans page with the purchase dialog open
   const cta = (p) => (p.contact_sales
     ? '<a href="mailto:__CONTACT_EMAIL__?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" class="btn btn--secondary btn--block" data-loc="pricing_enterprise">도입 문의</a>'
     : p.key === 'FREE' ? '<a href="/signup" class="btn btn--secondary btn--block" data-auth="start" data-loc="pricing_free">무료로 시작하기</a>'
-      : oneTime ? `<a href="${buyNext}" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-loc="pricing_${p.key.toLowerCase()}">${esc(p.label)} 1개월 이용권 구매</a>`
+      : oneTime ? `<a href="${buyNext(p.key)}" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-loc="pricing_${p.key.toLowerCase()}">${esc(p.label)} 1개월 이용권 구매</a>`
       : !open ? soonCta(p, '')
       : `<a href="/signup" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-auth="start" data-loc="pricing_${p.key.toLowerCase()}">무료로 시작하고 ${esc(p.label)} 선택</a>`);
   const plans = `<style>${PRICING_CSS}</style>${pricingHtml(cat, { cta, oneTime })}`;
@@ -503,19 +503,18 @@ const num = (v) => Number(v || 0).toLocaleString('ko-KR');
 export const ONE_TIME_COPY = {
   aiprice: `크레딧은 워크스페이스 공용입니다. Free는 처음 한 번 <b>AI 크레딧 ${num(FREE_ONCE_CREDITS)}</b>, Pro는 매월 1,000, Team은 매월 3,000 크레딧을 드리고, 모든 워크스페이스가 필요한 만큼 추가로 충전할 수 있습니다.`,
 };
-export function creditPacksHtml(packs = CREDIT_PACKS) {
+export function creditPacksHtml(pack = CREDIT_PACKS[0]) {
+  // One product on the landing (founder 2026-10-26): AI 크레딧 1,000 = 10,000원, one button to the in-app 충전 page (sign in first).
   const next = `/login?next=${encodeURIComponent(CREDITS_URL)}`;
-  const card = (p, i) => `<div class="plan${i === 1 ? ' plan--team' : ''}" data-credit-pack="${esc(p.key)}">
-      <div class="plan__n">AI 크레딧 ${num(p.credits)}</div>
-      <div class="plan__p">${num(p.amount)}원 <small>VAT 포함</small></div>
-      <p class="plan__d">AI 크레딧 ${num(p.credits)}을 충전합니다. 1크레딧 = ${num(CREDIT_PRICE_KRW)}원</p>
-      <ul><li>신용카드 1회 결제 (자동 결제 없음)</li><li>구매일부터 ${PURCHASED_VALID_YEARS}년간 사용</li><li>쓰지 않은 구매 크레딧은 환불 요청 가능</li></ul>
-      <a href="${next}" class="btn ${i === 1 ? 'btn--primary' : 'btn--secondary'} btn--block" data-loc="pricing_credit_${esc(p.key.toLowerCase())}">로그인하고 충전하기</a>
-    </div>`;
   return `<div class="head-block center" id="credit-packs-head" style="margin-top:56px"><p class="eyebrow">AI 크레딧 충전</p>
       <p class="lead" style="margin-top:10px">요금제와 관계없이 필요한 만큼 AI 크레딧을 충전할 수 있습니다.</p></div>
-    <div class="pgrid" id="credit-packs" style="margin-top:24px">${packs.map(card).join('')}</div>
-    <p class="pricing__note">결제는 신용카드 1회 결제로만 진행됩니다. 충전 금액은 설정 › AI 크레딧에서 ${num(TOPUP_STEP_KRW)}원 단위로 고를 수도 있습니다.</p>`;
+    <div class="pgrid" id="credit-packs" style="margin-top:24px;grid-template-columns:minmax(0,420px)"><div class="plan plan--team" data-credit-pack="${esc(pack.key)}">
+      <div class="plan__n">AI 크레딧 ${num(pack.credits)}</div>
+      <div class="plan__p">${num(pack.amount)}원 <small>VAT 포함</small></div>
+      <p class="plan__d">${num(pack.amount)}원에 AI 크레딧 ${num(pack.credits)}을 충전합니다. 필요한 만큼 ${num(TOPUP_STEP_KRW)}원 단위로 충전할 수 있습니다.</p>
+      <ul><li>신용카드 1회 결제 (자동 결제 없음)</li><li>구매일부터 ${PURCHASED_VALID_YEARS}년간 사용</li><li>쓰지 않은 구매 크레딧은 환불 요청 가능</li></ul>
+      <a href="${next}" class="btn btn--primary btn--block" data-loc="pricing_credit">AI 크레딧 충전하기</a>
+    </div></div>`;
 }
 /** Applies the 단건결제 copy to the landing page HTML when the mode is on. */
 export function applyOneTimeCopy(html, on = oneTimeMode()) {
