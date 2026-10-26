@@ -288,6 +288,8 @@ async function settleOrder(db, provider, order, ev, subscriptionId, prevPlan = n
     await db.run(`UPDATE billing_orders SET status = 'PAID', provider_tid = ?, paid_at = now(), updated_at = now() WHERE id = ?`, [tid, order.id]);
     if (order.founding) await db.run(`UPDATE subscriptions SET founding_until = COALESCE(founding_until, now() + make_interval(months => ${FOUNDING_OFFER.months})) WHERE id = ?`, [subscriptionId]);
     await applyOrderToSubscription(db, order, subscriptionId, prevPlan);
+    // 프로모션 코드: a discount counts once its order is paid (same transaction); a free-months order recorded it already (no-op)
+    if (order.promo_code_id) await (await import('./promo-codes.js')).recordRedemption(db, { codeId: order.promo_code_id, wid: order.workspace_id, userId: order.user_id, email: order.buyer_email, orderId: order.id, discount: Number(order.promo_discount || 0) });
   } else if (ev.type === 'payment.failed') {
     await db.run(`UPDATE billing_orders SET status = 'FAILED', provider_tid = COALESCE(?, provider_tid), failure_code = ?, failure_message = ?, updated_at = now() WHERE id = ?`,
       [tid, ev.payment?.failure_code || null, ev.payment?.failure_message || null, order.id]);

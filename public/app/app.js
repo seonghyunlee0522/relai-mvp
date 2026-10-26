@@ -45,6 +45,7 @@ import { adminAuditPage } from './admin/audit.js';
 import { adminIntegrationsPage } from './admin/integrations.js';
 import { adminInvitationsPage, adminEmailDeliveriesPage } from './admin/invitations.js';
 import { adminRefundsPage } from './admin/refunds.js';
+import { adminPromoCodesPage } from './admin/promo-codes.js';
 
 registerRoutes([
   [/^\/app\/?$/, homePage],
@@ -81,7 +82,8 @@ registerRoutes([
   [/^\/admin\/subscriptions\/([\w-]+)\/?$/, adminSubscriptionPage],
   [/^\/admin\/payments\/?$/, adminPaymentsPage],
   [/^\/admin\/payments\/([\w-]+)\/?$/, adminPaymentPage],
-  [/^\/admin\/refunds\/?$/, adminRefundsPage],   // 환불 관리: 구독 해지 · 청약철회 환불 대상 (수동 처리)
+  [/^\/admin\/refunds\/?$/, adminRefundsPage],
+  [/^\/admin\/promo-codes\/?$/, adminPromoCodesPage],   // 프로모션 코드 (할인 · 무료 기간 · 크레딧)   // 환불 관리: 구독 해지 · 청약철회 환불 대상 (수동 처리)
   [/^\/admin\/usage\/?$/, adminUsagePage],
   [/^\/admin\/deliverables\/?$/, adminDeliverablesPage],
   [/^\/admin\/ai-prompts\/?$/, adminPromptsPage],

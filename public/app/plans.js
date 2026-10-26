@@ -73,19 +73,45 @@ export async function plansPage(main = $('#main')) {
 async function buyPass(plan, btn) {
   const wid = state.workspace.id;
   const n = (v) => Number(v || 0).toLocaleString('ko-KR');
+  const quote = (code) => api('GET', `/api/workspaces/${wid}/billing/quote?plan=${encodeURIComponent(plan)}&cycle=MONTHLY${code ? `&promo_code=${encodeURIComponent(code)}` : ''}`).then((r) => r.quote);
   let q;
-  try { q = (await api('GET', `/api/workspaces/${wid}/billing/quote?plan=${encodeURIComponent(plan)}&cycle=MONTHLY`)).quote; } catch (e) { toast(e.message); return; }
+  try { q = await quote(''); } catch (e) { toast(e.message); return; }
   const label = plan === 'TEAM' ? 'Team' : 'Pro';
+  let applied = '';   // 프로모션 코드 (할인) the server accepted; sent again with the checkout, which re-checks it
   const bodyHtml = html`<dl class="info" id="pl-buy-sum"><dt>상품</dt><dd><b>RELAI ${label} 1개월 이용권</b></dd>
     <dt>이용 기간</dt><dd>결제일부터 1개월</dd>
-    <dt>결제 금액</dt><dd><b>${n(q.total)}원</b> <small class="dim">(공급가액 ${n(q.supply)}원 + 부가세 ${n(q.vat)}원)</small></dd>
     <dt>결제 수단</dt><dd>신용카드 <small class="dim">· 나이스페이먼츠 결제창</small></dd>
     <dt>자동 갱신</dt><dd>없음 <small class="dim">· 기간이 끝나면 Free로 바뀌고 데이터는 삭제되지 않아요</small></dd></dl>
+    <div class="field" style="margin-top:12px"><label for="pl-promo">프로모션 코드</label>
+      <div style="display:flex;gap:8px"><input class="input" id="pl-promo" autocomplete="off" placeholder="있으면 입력하세요" style="flex:1;text-transform:uppercase"><button type="button" class="btn btn--secondary" id="pl-promo-apply">적용</button></div>
+      <p class="hint" id="pl-promo-msg" role="status" style="margin:6px 0 0"></p></div>
+    <dl class="info" id="pl-buy-amount" style="margin-top:8px"><dt>정가</dt><dd id="pl-list">${n(q.total)}원</dd>
+      <dt>할인</dt><dd id="pl-disc">-</dd>
+      <dt>결제 금액</dt><dd><b id="pl-total">${n(q.total)}원</b> <small class="dim" id="pl-vat">(공급가액 ${n(q.supply)}원 + 부가세 ${n(q.vat)}원)</small></dd></dl>
     <p class="hint" style="margin-top:10px">결제하기를 누르면 카드 결제창이 열려요. 환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>을 확인해 주세요.</p>`;
-  if (!(await confirmDialog({ title: `${label} 1개월 이용권 구매`, bodyHtml, confirm: `${n(q.total)}원 결제하기` }))) return;
+  const done = confirmDialog({ title: `${label} 1개월 이용권 구매`, bodyHtml, confirm: `${n(q.total)}원 결제하기` });
+  // confirmDialog renders synchronously: wire the code field now
+  const box = document.getElementById('pl-promo'); const msg = document.getElementById('pl-promo-msg');
+  const okBtn = box?.closest('.dialog')?.querySelector('[data-v="1"]');
+  const show = (r, code) => {
+    document.getElementById('pl-disc').textContent = r.promo ? `−${n(r.promo.discount)}원 (${r.promo.code})` : '-';
+    document.getElementById('pl-total').textContent = `${n(r.total)}원`;
+    document.getElementById('pl-vat').textContent = `(공급가액 ${n(r.supply)}원 + 부가세 ${n(r.vat)}원)`;
+    if (okBtn) okBtn.textContent = `${n(r.total)}원 결제하기`;
+    applied = r.promo ? code : '';
+  };
+  const apply = async () => {
+    const code = (box.value || '').trim().toUpperCase();
+    if (!code) { show(q, ''); msg.textContent = ''; return; }
+    try { const r = await quote(code); show(r, code); msg.textContent = `${r.promo.benefit}이 적용됐어요.`; msg.style.color = '#067647'; }
+    catch (e) { show(q, ''); msg.textContent = e.fields?.promo_code || e.message; msg.style.color = '#B42318'; }
+  };
+  document.getElementById('pl-promo-apply')?.addEventListener('click', apply);
+  box?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); apply(); } });
+  if (!(await done)) return;
   btn.disabled = true;
   try {
-    const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, { plan, cycle: 'MONTHLY' });
+    const r = await api('POST', `/api/workspaces/${wid}/billing/checkout`, { plan, cycle: 'MONTHLY', ...(applied ? { promo_code: applied } : {}) });
     location.href = r.checkout_url;
-  } catch (e) { btn.disabled = false; toast(e.message); }
+  } catch (e) { btn.disabled = false; toast(e.fields?.promo_code || e.message); }
 }
