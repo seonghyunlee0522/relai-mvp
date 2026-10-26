@@ -1,7 +1,7 @@
 import { api, resetMembers } from './core/api.js';
 import { $, fmtShort, html, raw } from './core/dom.js';
 import { isPhone, pcLine } from './core/device.js';
-import { state, creditsOnly } from './core/state.js';
+import { state } from './core/state.js';
 import { confirmDialog, toast } from './shared/dialogs.js';
 import { relTime } from './shared/jira.js';
 import { formDialog, inviteStatusChip, emailStatusChip } from './shared/forms.js';
@@ -63,12 +63,7 @@ export async function settingsPage(main = $('#main')) {
   };
   // Redesign R3 §5.7 (desktop): four tabs — 내 정보 · 팀원 · 요금제 · 연동; each with a title, purpose line and one primary.
   // The phone keeps the single long page below (view mode).
-  const co = creditsOnly();   // NicePay 심사 모드: the 요금제 tab becomes AI 크레딧 (no plan / 구독 screens)
-  const TABS = [['me', '내 정보', '내 계정과 워크스페이스 정보를 관리합니다.'], ['team', '팀원', '함께 일할 팀원과 초대 현황을 한곳에서 관리합니다.'], co ? ['plan', 'AI 크레딧', 'AI 크레딧 잔액과 사용 내역을 확인하고 충전합니다.'] : ['plan', '요금제', '플랜, 사용량, AI 크레딧을 확인하고 결제합니다.'], ['integrations', '연동', '외부 도구를 연결해 프로젝트와 동기화합니다.']];
-  const creditsCard = () => html`<div class="panel" id="credits-link" style="margin-top:20px"><div class="panel__h">AI 크레딧</div><div class="panel__b">
-    <p style="margin:0">AI 기능은 워크스페이스 공용 크레딧으로 이용합니다. 잔액과 사용 내역을 확인하고, 워크스페이스 소유자는 신용카드 1회 결제로 충전할 수 있습니다.</p>
-    <div class="actions" style="margin-top:14px"><a class="btn btn--primary btn--sm" href="/app/settings/credits" data-link>AI 크레딧 확인 · 충전</a></div></div></div>`;
-  const billingSlot = () => (co ? creditsCard() : '<div id="billing" class="bl-wrap"></div>');
+  const TABS = [['me', '내 정보', '내 계정과 워크스페이스 정보를 관리합니다.'], ['team', '팀원', '함께 일할 팀원과 초대 현황을 한곳에서 관리합니다.'], ['plan', '요금제', '플랜, 사용량, AI 크레딧을 확인하고 결제합니다.'], ['integrations', '연동', '외부 도구를 연결해 프로젝트와 동기화합니다.']];
   const tabOf = () => { const t = qp0().get('tab'); if (TABS.some(([k]) => k === t)) return t; if (location.hash === '#billing' || qp0().get('checkout')) return 'plan'; if (qp0().get('jira')) return 'integrations'; return 'me'; };
   let tab = tabOf();
   const daysLeft = (d) => Math.max(0, Math.ceil((new Date(d) - Date.now()) / 86400000));
@@ -92,7 +87,7 @@ export async function settingsPage(main = $('#main')) {
       <div class="panel"><div class="panel__h"><span>팀원 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em>${raw(perm.member_manage ? html` <small class="dim" style="font-weight:400;margin-left:6px">초대 대기 ${invites.filter((i) => i.status === 'PENDING').length}건</small>` : '')}</span></div>
       ${raw(teamTable(members))}
       ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="이미 가입한 사용자 이메일" required style="flex:1;max-width:480px"><select class="select select--sm" name="role" aria-label="역할"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">바로 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '<p class="hint" style="padding:0 20px 14px">팀원 초대·역할 변경은 워크스페이스 소유자·관리자만 할 수 있습니다.</p>')}</div>`;
-    if (tab === 'plan') return html`${raw(tabHead(label, purpose))}${raw(billingSlot())}`;
+    if (tab === 'plan') return html`${raw(tabHead(label, purpose))}<div id="billing" class="bl-wrap"></div>`;
     if (tab === 'integrations') return html`${raw(tabHead(label, purpose))}${raw(jiraCard() || '<p class="dim">연결할 수 있는 도구가 없습니다.</p>')}`;
     const ownerWs = workspace.role === 'OWNER';
     return html`${raw(tabHead(label, purpose))}
@@ -133,7 +128,7 @@ export async function settingsPage(main = $('#main')) {
         <dt>이름</dt><dd>${raw(perm.workspace_settings ? html`<form id="wsf" class="inline-form"><input class="input input--sm" name="name" value="${workspace.name}" maxlength="100" style="max-width:280px"> <button class="btn btn--secondary btn--sm">저장</button></form>` : html`${workspace.name}`)}</dd>
         <dt>내 역할</dt><dd>${ROLE[workspace.role]} <small class="dim">— ${ROLE_DESC[workspace.role]}</small></dd></dl>
         ${raw(workspace.role === 'OWNER' ? '<div class="actions" style="margin-top:14px"><button class="btn btn--ghost btn--sm is-danger" id="ws-delete">워크스페이스 삭제</button></div>' : '')}</div></div>
-      ${raw(billingSlot())}
+      <div id="billing" class="bl-wrap"></div>
       <div class="panel" style="margin-top:20px"><div class="panel__h">멤버 <em class="att__n" style="background:var(--bg-tint);color:var(--blue-deep)">${members.length}</em></div>
         <div class="rtable-wrap--in"><table class="rtable rtable--raid rtable--mem" style="margin:0"><thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>참여</th>${raw(perm.member_manage ? '<th></th>' : '')}</tr></thead>
         <tbody>${raw(members.map((m) => html`<tr>

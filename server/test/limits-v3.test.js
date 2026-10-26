@@ -173,7 +173,7 @@ test('PRO with add-ons: limits = included + extra; plan limits from the subscrip
   assert.deepEqual([b.usage.projects_active, b.usage.members, b.usage.pending_invites], [4, 1, 0]);
   assert.deepEqual(b.scheduled, []); assert.equal(typeof b.credits.total, 'number');
   assert.deepEqual(b.catalogue.plans.map((p) => p.key), ['FREE', 'PRO', 'TEAM', 'ENTERPRISE']);
-  assert.deepEqual(Object.keys(b.flags).sort(), ['addons', 'checkout_open', 'payments', 'plan_change', 'recurring', 'refund_partial']);
+  assert.deepEqual(Object.keys(b.flags).sort(), ['addons', 'checkout_open', 'one_time', 'payments', 'plan_change', 'recurring', 'refund_partial']);
   assert.equal(b.over_limit, null);
   // FREE workspace: no cycle, no payment
   const F = await setup(client, 'free@x.com');

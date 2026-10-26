@@ -547,7 +547,7 @@ p{margin:0}
         <a href="#preview" class="btn btn--secondary" data-loc="hero_how">어떻게 작동하나요?</a>
       </div>
       <p class="hero__note">회원가입 후 바로 시작할 수 있습니다.</p>
-      <p class="hero__mnote"><span><!--CO:hero-->무료 플랜으로 시작<!--/CO:hero--></span><span>AI 크레딧 200 제공</span><span>설치 없이 웹에서</span></p>
+      <p class="hero__mnote"><span>무료 플랜으로 시작</span><span>AI 크레딧 200 제공</span><span>설치 없이 웹에서</span></p>
       <div class="mshot" id="mpreview" aria-label="RELAI 지금 할 일 화면 예시">
         <div class="mshot__s">
           <div class="mshot__top"><b>A사 상담 시스템 구축</b><span class="mshot__q">?</span></div>
@@ -876,12 +876,12 @@ p{margin:0}
   <div class="wrap">
     <div class="head-block center reveal">
       <p class="eyebrow">요금</p>
-      <!--CO:head--><h2 class="h2">작게 시작하고,<br>팀이 커지면 Pro · Team으로.</h2>
-      <p class="lead" style="margin-top:18px">Free로 프로젝트 하나를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 필요한 플랜을 고르세요. 요금은 워크스페이스 단위로, 활성 프로젝트와 사용자 수 기준입니다.</p><!--/CO:head-->
+      <h2 class="h2">작게 시작하고,<br>팀이 커지면 Pro · Team으로.</h2>
+      <p class="lead" style="margin-top:18px">Free로 프로젝트 하나를 끝까지 운영해 보고, 프로젝트와 팀원이 늘어나면 필요한 플랜을 고르세요. 요금은 워크스페이스 단위로, 활성 프로젝트와 사용자 수 기준입니다.</p>
     </div>
     <!-- 프로모션은 관리자 › 프로모션(placement landing)에서 바꾼다 — server/promotions.js가 요청마다 채운다 -->
     <div class="pricing__promo reveal" id="free-plan"><!--PROMO:landing--></div>
-    <!-- CO:* 구간은 CREDITS_ONLY_MODE(나이스페이 심사 모드)일 때 server/legal.js가 크레딧 전용 문구로 바꾼다. 요금 카드는 server/legal.js가 server/plans.js catalogue()로 채운다 (public/app/shared/pricing.js, pricing v3). 가격을 여기에 적지 않는다. -->
+    <!-- CO:* 구간은 ONE_TIME_PAYMENT_MODE(단건결제 모드)일 때 server/legal.js가 바꾼다. 요금 카드는 server/legal.js가 server/plans.js catalogue()로 채운다 (public/app/shared/pricing.js, pricing v3). 가격을 여기에 적지 않는다. -->
     <div class="reveal" id="plan-cards"><!--PRICING:landing--></div>
     <!-- AI 크레딧 수는 server/ai/config.js featureCreditCost와 같은 값이어야 한다. 기능 비용은 크레딧으로만 보여 준다(₩ 없음, batch7 #7) -->
     <div class="aiprice reveal" id="ai-credits">

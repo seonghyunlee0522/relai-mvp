@@ -39,7 +39,8 @@ const meter = (id, label, used, limit, extra = '') => {
 function planPanel(b) {
   const paid = b.plan === 'PRO' || b.plan === 'TEAM';
   const label = b.plan_label || PLAN_LABEL[b.plan] || b.plan;
-  const rows = [['요금제', html`<b>${label}</b>${raw(b.cycle ? html` <span class="chip chip--muted">${CYCLE[b.cycle] || b.cycle}</span>` : '')}`]];
+  const cycleLabel = b.flags?.one_time && paid && !b.auto_renew ? '1개월 이용권' : CYCLE[b.cycle] || b.cycle;   // 단건결제 모드
+  const rows = [['요금제', html`<b>${label}</b>${raw(b.cycle ? html` <span class="chip chip--muted">${cycleLabel}</span>` : '')}`]];
   if (paid && b.status) rows.push(['상태', html`${STATUS[b.status] || b.status}`]);
   const end = b.subscription?.current_period_end;
   if (paid && b.next_payment_at) {
@@ -106,6 +107,10 @@ function policyPanel(b) {
   const paid = b.plan === 'PRO' || b.plan === 'TEAM';
   if (!paid) return '';
   const p = policy(b);
+  if (b.flags?.one_time && !b.auto_renew) {   // 단건결제 모드: a 1개월 이용권 has nothing to cancel
+    return html`<div class="panel bl-panel" id="bl-policy"><div class="panel__h">이용 기간이 끝나면 어떻게 되나요?</div><div class="panel__b">
+    <ul class="bl-list"><li>1개월 이용권은 자동으로 다시 결제되지 않아요. 계속 쓰려면 요금제 화면에서 이용권을 다시 구매하면 1개월이 더해져요.</li><li>${p.free.replace('구독이 끝나', '이용 기간이 끝나')}</li></ul></div></div>`;
+  }
   return html`<div class="panel bl-panel" id="bl-policy"><div class="panel__h">해지하면 어떻게 되나요?</div><div class="panel__b">
     <ul class="bl-list"><li>해지하면 다음 자동결제가 멈추고, 이미 결제한 기간이 끝날 때까지 지금 요금제를 그대로 써요.</li><li>${p.free}</li><li>${p.keep}</li></ul></div></div>`;
 }
@@ -120,17 +125,18 @@ function actionsPanel(b) {
   const btns = [
     html`<a class="btn btn--primary btn--sm" id="bl-change" href="/app/billing/plans" data-link>${b.plan === 'FREE' ? '요금제 살펴보기' : '요금제 변경'}</a>`,
     paid && f.addons ? html`<a class="btn btn--secondary btn--sm" id="bl-addon" href="/app/billing/subscribe?addon=1" data-link>사용자 · 프로젝트 추가</a>` : '',
-    paid || b.plan === 'ENTERPRISE' ? html`<a class="btn btn--secondary btn--sm" id="bl-topup" href="/app/settings/credits#cr-buy" data-link>AI 크레딧 충전</a>` : '',
+    paid || b.plan === 'ENTERPRISE' || f.one_time ? html`<a class="btn btn--secondary btn--sm" id="bl-topup" href="/app/settings/credits#cr-buy" data-link>AI 크레딧 충전</a>` : '',
     canCancel ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel" data-phone-ok>해지</button>` : '',
     // 이용약관 제11조 2항: end now + unused days refunded (also after a period-end cancel); shown only when the server sends refund_quote_url
     canRefund ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel-refund" data-phone-ok>지금 해지하고 환불</button>` : '',
   ].filter(Boolean).join('');
-  const free = b.plan === 'FREE' ? html`<p class="bl-upsell" id="bl-free-topup">AI 크레딧 충전은 Pro부터 할 수 있어요. <a class="link" href="/app/billing/plans" data-link>Pro로 업그레이드</a>하면 매월 1,000 크레딧과 충전을 이용할 수 있어요.</p>` : '';
+  const free = b.plan === 'FREE' && f.one_time ? html`<p class="bl-upsell" id="bl-free-topup">Pro·Team 1개월 이용권을 구매하거나, 지금 요금제 그대로 AI 크레딧을 충전할 수 있어요.</p>`
+    : b.plan === 'FREE' ? html`<p class="bl-upsell" id="bl-free-topup">AI 크레딧 충전은 Pro부터 할 수 있어요. <a class="link" href="/app/billing/plans" data-link>Pro로 업그레이드</a>하면 매월 1,000 크레딧과 충전을 이용할 수 있어요.</p>` : '';
   // D3 (founder 2026-10-20): no one-time passes — a paid plan without auto renewal has been cancelled
-  const pass = paid && s && !s.auto_renew && !s.cancel_at_period_end ? html`<p class="hint" id="bl-pass">자동 갱신이 꺼져 있어요. ${day(s.current_period_end)}까지 이용하고 이후 Free로 바뀌어요. 이후에는 최근 프로젝트 1개만 편집하고 나머지는 조회 전용이 돼요(데이터는 삭제되지 않아요).</p>` : '';
+  const pass = paid && s && !s.auto_renew && !s.cancel_at_period_end ? html`<p class="hint" id="bl-pass">${f.one_time ? '1개월 이용권이에요.' : '자동 갱신이 꺼져 있어요.'} ${day(s.current_period_end)}까지 이용하고 이후 Free로 바뀌어요. 이후에는 최근 프로젝트 1개만 편집하고 나머지는 조회 전용이 돼요(데이터는 삭제되지 않아요).</p>` : '';
   const pending = paid && s?.cancel_at_period_end ? html`<p class="hint" id="bl-cancel-pending">해지가 예약됐어요. ${day(s.current_period_end)}까지 ${b.plan_label || b.plan}를 그대로 쓰고 이후 Free로 바뀌어요.</p>` : '';
   return html`<div class="panel bl-panel" id="bl-actions"><div class="panel__h">관리</div><div class="panel__b">${raw(free)}${raw(pass)}${raw(pending)}<div class="actions">${raw(btns)}</div>
-    <p class="hint" style="margin-top:10px">해지·환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>, 자동 결제는 <a class="link" href="/terms#recurring" target="_blank" rel="noopener">정기결제 안내</a>를 확인하세요.</p></div></div>`;
+    <p class="hint" style="margin-top:10px">${raw(f.one_time ? '환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>을 확인하세요.' : '해지·환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>, 자동 결제는 <a class="link" href="/terms#recurring" target="_blank" rel="noopener">정기결제 안내</a>를 확인하세요.')}</p></div></div>`;
 }
 
 /** Ledger labels (credit-routes.js) carry the won amount of a top-up ('충전 ₩10,000'); this page shows credits only. */
