@@ -284,6 +284,7 @@ export const migrations = [
       else await db.run('INSERT INTO project_definitions (project_id, stakeholders) VALUES (?, ?)', [pid, JSON.stringify(d.list)]);
     }
   } },
+  { version: 72, name: 'Refund policy (founder 2026-10-26): workspaces.content_changed_at — last successful write to project data, so a cancel within 7 days refunds in full only when the service was not used (schema.sql, additive, nullable)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

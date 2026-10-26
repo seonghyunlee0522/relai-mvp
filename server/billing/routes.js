@@ -198,6 +198,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
         effective_at: c.effective_at, cancel_url: `/api/workspaces/${wid}/billing/changes/${c.id}/cancel` })), credits: await creditBuckets(wid),
       // 해지: POST cancel_url (auto-renew stops, plan to period end) · POST cancel_url { refund: true } (ends now + unused days refunded; preview: refund_quote_url).
       cancel_url: paid && renews ? `/api/workspaces/${wid}/billing/cancel` : null, refund_quote_url: paid ? `/api/workspaces/${wid}/billing/refund-quote` : null,
+      refund: paid ? await refundQuote(db, wid).then((q) => ({ eligible: Boolean(q.eligible), total: q.total, reason: q.reason, refund_until: q.refund_until })) : null,   // 7일 이내 미사용 전액 환불 (founder 2026-10-26)
       catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null,
       read_only_projects: roRows.length ? { limit: access.limit, editable: edRows, read_only: roRows } : null,
       cancel_policy: { free: FREE_POLICY, keep: FREE_KEEP }, price_version: row?.price_version || null,
@@ -274,6 +275,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (!provider) return unavailable(res);
     if (req.body?.refund === true || req.body?.refund === 'true') {
       const out = await cancelWithRefund(db, provider, { workspaceId: req.params.wid, userId: req.user.id, reason: String(req.body?.reason || '고객 해지 환불').slice(0, 100) });
+      if (out.error === 'not_refundable') return fail(res, 409, out.error, out.reason === 'used' ? '결제 후 서비스를 이용해 환불 대상이 아닙니다. 해지하면 이용 기간이 끝날 때까지 쓰고 다음 결제는 되지 않습니다.' : '결제 후 7일이 지나 환불 대상이 아닙니다. 해지하면 이용 기간이 끝날 때까지 쓰고 다음 결제는 되지 않습니다.', { reason: out.reason });
       if (out.error) return fail(res, 409, out.error, '해지할 구독이 없습니다.');
       await sendCancelNotice(db, req.params.wid, { immediate: true, refunds: out.refunds, total: out.total, executed: out.executed }).catch((e) => console.error('[billing] cancel mail failed', e.message));
       return res.json({ ...(await summary(req.params.wid, req.role)), cancel: { immediate: true, refund_total: out.total, withdrawal: out.withdrawal, refunds: out.refunds.map((r) => ({ id: r.id, kind: r.kind, amount: r.amount, days: r.days, period_days: r.period_days, status: r.status || 'REQUESTED' })) } });
@@ -289,7 +291,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   /** GET …/billing/refund-quote — what 해지 + 환불 would refund right now (per order: unused days / period days, amount). */
   app.get(`${b}/refund-quote`, owner, wrap(async (req, res) => {
     const q = await refundQuote(db, req.params.wid);
-    res.json({ refund: { total: q.total, withdrawal: Boolean(q.withdrawal), lines: q.lines.map(({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount }) => ({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount })) } });
+    res.json({ refund: { total: q.total, withdrawal: Boolean(q.withdrawal), eligible: Boolean(q.eligible), reason: q.reason, refund_until: q.refund_until, lines: q.lines.map(({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount }) => ({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount })) } });
   }));
 
   /**

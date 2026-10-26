@@ -16,9 +16,10 @@ export const LEGAL = {
   contactPhone: '010-2021-2338',        // 전자상거래법 · NicePay 심사 필수 (founder's public business line, docreel.kr footer)
   privacyOfficer: { name: '이성현', title: '대표' },
   effectiveDate: '2026-10-22',          // 시행일 of /privacy (and of /terms unless termsEffectiveDate is set) (YYYY-MM-DD). v2026-10-22: 제3조 보유기간 — 이용 분석·AI 실행·이메일 발송 기록 1년, 만료 초대 30일, 1년 미이용 계정 삭제(30일 전 안내), 운영자 접속기록 2년, 결제 기록 법정 신고기한 기준 (retention gaps G-1..G-6, G-8). v2026-10-21: 결제·정기결제 동의 기록, 가입 크레딧 중복 지급 방지(이메일 해시), NicePay 환불 위탁 (pricing v3)
-  termsEffectiveDate: '2026-10-21',     // 이용약관 v2026-10-21: pricing v3 (Free/Pro/Team/Enterprise, VAT 포함, 추가 이용, AI 크레딧 정책, 정기결제 안내, 환불 — legal-review.md §8/§10)
+  termsEffectiveDate: '2026-10-26',     // v2026-10-26: 환불 기준 — 결제 후 7일 이내 미사용 전액 환불, 그 외 환불 없음(일할 환불 폐지), 1개월 이용권 (founder 2026-10-26)
+  // previous:     // 이용약관 v2026-10-21: pricing v3 (Free/Pro/Team/Enterprise, VAT 포함, 추가 이용, AI 크레딧 정책, 정기결제 안내, 환불 — legal-review.md §8/§10)
   /** Version recorded with each signup consent. Bump when the text of /terms or /privacy changes. */
-  termsVersion: '2026-10-21',
+  termsVersion: '2026-10-26',
   privacyVersion: '2026-10-22',
   dbLocation: '해외 클라우드 데이터센터(리전 확인 후 고지)',         // 국외 이전 표: Neon 프로젝트 리전의 국가 (Neon console → Project settings → Region). Vercel functions run in sin1 (vercel.json)
   courtSeat:'수원지방법원 성남지원',     // 관할: 회사 소재지(성남시 수정구) 관할 법원

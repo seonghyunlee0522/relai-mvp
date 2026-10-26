@@ -323,6 +323,14 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   /* ---------- projects (always workspace-scoped) ---------- */
   const base = '/api/workspaces/:wid/projects';
   const guard = [requireAuth, requireMember, requireWorkspaceActive];
+  // Usage marker for the refund policy (billing/lifecycle.js usageSince): a successful write to project data stamps the workspace.
+  app.use(base, (req, res, next) => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      const wid = req.params.wid;
+      res.on('finish', () => { if (res.statusCode < 400 && req.user) db.run(`UPDATE workspaces SET content_changed_at = now() WHERE id = ? AND (content_changed_at IS NULL OR content_changed_at < now() - interval '10 seconds')`, [wid]).catch(() => {}); });
+    }
+    next();
+  });
   /*
    * Pricing v3 project write guard (design.md §5; founder policy 2026-10-21). Every write under a project (any method but GET/HEAD/OPTIONS):
    *   ARCHIVED   (보관)  read-only except 보관 해제                                         → 409 archived

@@ -5,8 +5,8 @@
  *                      current period. The renewal charge prices the target (renewalTarget) and applies the rows (subscriptions.js).
  *   cancel             any time, monthly and annual: auto-renewal stops at once (requestCancel in subscriptions.js), the plan runs to the
  *                      end of what was paid.
- *   cancel + refund    the plan ends now and every paid order of the current period is refunded for its unused KST days
- *                      (prorate.js, refunds rounded up, never more than paid), NO penalty, annual NOT re-priced at the monthly list price.
+ *   cancel + refund    only within WITHDRAWAL_DAYS (7) of the payment AND with no use of the service since (usageSince): the plan ends
+ *                      now and the whole payment is refunded (founder 2026-10-26). Otherwise no refund — cancel just stops renewal.
  *                      Within WITHDRAWAL_DAYS of the payment the same row is recorded as 청약철회 (WITHDRAWAL). The refund is executed as
  *                      a NicePay partial cancel with a new orderId when REFUND_PARTIAL_ENABLED=true; otherwise it stays REQUESTED for the
  *                      operator (관리자) and the owner is told it will be paid within 3 business days.
@@ -14,8 +14,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
-import { PLANS, PAID_PLANS, CYCLES, limitsFor, oneTimeMode } from '../plans.js';
-import { prorate, kstDaysBetween } from './prorate.js';
+import { PLANS, PAID_PLANS, CYCLES, limitsFor } from '../plans.js';
+import { kstDaysBetween } from './prorate.js';
 import { renewalAmount, newOrderId, OrderError } from './orders.js';
 import { countUsage } from './limits.js';
 import { transition } from './subscriptions.js';
@@ -118,30 +118,45 @@ function orderPeriod(order, sub) {
 }
 
 /**
- * Refund preview for an immediate cancel at `at`: one line per paid order of the current period with unused days.
- * Used days = from the period start through today (KST); refund = ceil(amount × unused / period days), capped at what is left.
- * kind WITHDRAWAL when the order was paid within WITHDRAWAL_DAYS (청약철회), else CANCEL — the amount rule is the same.
+ * Usage since `since` (refund policy, founder 2026-10-26): any AI credit spent, any project created (samples excluded), or any
+ * change to project data (workspaces.content_changed_at: a successful POST/PUT/PATCH/DELETE under /api/workspaces/:wid/projects —
+ * 입력·수정·삭제; 단순 조회는 제외). Returns { used, ai, projects, edits }.
+ */
+export async function usageSince(db, workspaceId, since) {
+  const s = new Date(since);
+  const [ai, pr, ws] = await Promise.all([
+    db.get(`SELECT COUNT(*)::int AS n FROM credit_ledger WHERE workspace_id = ? AND type = 'AI_USAGE' AND created_at > ?`, [workspaceId, s]),
+    db.get(`SELECT COUNT(*)::int AS n FROM projects WHERE workspace_id = ? AND sample_key IS NULL AND created_at > ?`, [workspaceId, s]),
+    db.get('SELECT content_changed_at FROM workspaces WHERE id = ?', [workspaceId]),
+  ]);
+  const edits = Boolean(ws?.content_changed_at && new Date(ws.content_changed_at) > s);
+  return { used: ai.n > 0 || pr.n > 0 || edits, ai: ai.n, projects: pr.n, edits };
+}
+
+/**
+ * Refund preview for an immediate cancel at `at` (founder policy 2026-10-26, 정기결제 · 단건결제 alike): a paid period order is refunded
+ * IN FULL (what is left of it) only when it was paid within WITHDRAWAL_DAYS (7 KST days) AND the workspace has not used the service
+ * since that payment (usageSince). Otherwise there is no refund: the customer keeps the plan to the end of the period and auto renewal
+ * stops. No 일할 계산. → { sub, lines, total, withdrawal, eligible, reason: null | 'period_over' | 'used' | 'nothing_paid', refund_until }.
  */
 export async function refundQuote(db, workspaceId, { at = new Date() } = {}) {
   const sub = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [workspaceId]);
-  if (!sub || !['ACTIVE', 'PAST_DUE'].includes(sub.status) || !PAID_PLANS.includes(sub.plan)) return { sub, lines: [], total: 0 };
+  const none = (reason, extra = {}) => ({ sub, lines: [], total: 0, withdrawal: false, eligible: false, reason, refund_until: null, ...extra });
+  if (!sub || !['ACTIVE', 'PAST_DUE'].includes(sub.status) || !PAID_PLANS.includes(sub.plan)) return none('nothing_paid');
   const orders = await db.all(`SELECT * FROM billing_orders WHERE workspace_id = ? AND status = 'PAID' AND kind IN (${PERIOD_KINDS.map(() => '?').join(',')}) ORDER BY paid_at`, [workspaceId, ...PERIOD_KINDS]);
-  const tomorrow = new Date(at.getTime() + DAY);
-  const lines = [];
-  for (const o of orders) {
-    const left = Number(o.amount) - Number(o.refunded_amount || 0);
-    if (!(left > 0)) continue;
-    const per = orderPeriod(o, sub);
-    if (!per || new Date(per.end) <= at) continue;
-    const r = prorate({ unit: Number(o.amount), qty: 1, periodStart: per.start, periodEnd: per.end, at: tomorrow, dir: 'up' });
-    // 단건결제 모드 (founder 2026-10-26): a cancel refunds what the customer paid for the order (the payment unit), not unused days.
-    const amount = oneTimeMode() ? left : Math.min(left, r.amount);
-    if (!(amount > 0)) continue;
-    const withdrawal = o.paid_at && kstDaysBetween(o.paid_at, at) < WITHDRAWAL_DAYS;
-    lines.push({ order_id: o.id, kind: withdrawal ? 'WITHDRAWAL' : 'CANCEL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
-      days: r.days, period_days: r.period_days, amount });
-  }
-  return { sub, lines, total: lines.reduce((s, l) => s + l.amount, 0), withdrawal: lines.some((l) => l.kind === 'WITHDRAWAL') };
+  const open = orders.filter((o) => Number(o.amount) - Number(o.refunded_amount || 0) > 0 && o.paid_at && (() => { const per = orderPeriod(o, sub); return per && new Date(per.end) > at; })());
+  if (!open.length) return none('nothing_paid');
+  const recent = open.filter((o) => kstDaysBetween(o.paid_at, at) < WITHDRAWAL_DAYS);
+  const last = open[open.length - 1];
+  const refundUntil = new Date(new Date(last.paid_at).getTime() + WITHDRAWAL_DAYS * DAY).toISOString();
+  if (!recent.length) return none('period_over', { refund_until: refundUntil });
+  // usage since the earliest refundable payment: anything used after it means that payment was used
+  const u = await usageSince(db, workspaceId, recent[0].paid_at);
+  if (u.used) return none('used', { refund_until: refundUntil, usage: u });
+  const lines = recent.map((o) => { const per = orderPeriod(o, sub); const left = Number(o.amount) - Number(o.refunded_amount || 0);
+    return { order_id: o.id, kind: 'WITHDRAWAL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
+      days: per ? kstDaysBetween(at, per.end) : 0, period_days: per ? kstDaysBetween(per.start, per.end) : 0, amount: left }; });
+  return { sub, lines, total: lines.reduce((s2, l) => s2 + l.amount, 0), withdrawal: true, eligible: true, reason: null, refund_until: refundUntil };
 }
 
 /**
@@ -158,6 +173,7 @@ export async function cancelWithRefund(db, provider, { workspaceId, userId = nul
     const sub = await t.get('SELECT * FROM subscriptions WHERE workspace_id = ? FOR UPDATE', [workspaceId]);
     if (!sub || !['ACTIVE', 'PAST_DUE'].includes(sub.status)) return { error: 'no_active_subscription' };
     const q = await refundQuote(t, workspaceId);
+    if (!q.eligible) return { error: 'not_refundable', reason: q.reason };
     for (const l of q.lines) await t.get('SELECT id FROM billing_orders WHERE id = ? FOR UPDATE', [l.order_id]);
     const rows = [];
     for (const l of q.lines) {

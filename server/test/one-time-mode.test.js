@@ -10,6 +10,7 @@ import { testDb } from './helpers.js';
 import { createApp } from '../app.js';
 import { createFakeProvider } from '../billing/provider.js';
 import { resetBillingCache } from '../billing-admin.js';
+import { project } from './api-helpers.js';
 
 process.env.PAYMENTS_ENABLED = 'true';
 process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.AI_MODEL = '';
@@ -113,5 +114,38 @@ test('one-time mode: 해지 환불 = the whole payment, listed in 관리자 › 
     assert.equal((await env.c('POST', `/api/billing/admin/subscription-refunds/${r.id}/reopen`, {})).status, 200);
     assert.equal((await env.c('GET', '/api/billing/admin/subscription-refunds')).json.refunds[0].status, 'REQUESTED');
     assert.equal(Number((await env.db.get('SELECT refunded_amount FROM billing_orders WHERE id = ?', [order.id])).refunded_amount), 0);
+  } finally { env.done(); }
+});
+
+test('refund policy: within 7 days and unused → full refund; used or after 7 days → no refund, plan runs to the end', async () => {
+  const env = await boot(true);
+  try {
+    const pay = async (tid) => {
+      const co = await env.c('POST', `/api/workspaces/${env.w}/billing/checkout`, { plan: 'PRO', cycle: 'MONTHLY' });
+      assert.equal(co.status, 201, JSON.stringify(co.json));
+      const o = await env.db.get("SELECT id FROM billing_orders WHERE workspace_id = ? AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1", [env.w]);
+      assert.equal(await env.deliver(env.provider.signedEvent('subscription.activated', { order_id: o.id, workspace_id: env.w,
+        payment: { amount: 30000, currency: 'KRW', status: 'PAID', provider_tid: tid, moid: o.id } })), 200);
+      return o.id;
+    };
+    const oid = await pay('tid_used_1');
+    // a project write after the payment = used
+    const pr = await env.c('POST', `/api/workspaces/${env.w}/projects`, project({ name: '결제 후 만든 프로젝트' }));
+    assert.ok(pr.status < 300, JSON.stringify(pr.json));
+    await new Promise((r) => setTimeout(r, 200));
+    const b = (await env.c('GET', `/api/workspaces/${env.w}/billing`)).json.billing;
+    assert.equal(b.refund.eligible, false); assert.equal(b.refund.reason, 'used');
+    const q = (await env.c('GET', `/api/workspaces/${env.w}/billing/refund-quote`)).json.refund;
+    assert.equal(q.total, 0); assert.equal(q.eligible, false);
+    const c = await env.c('POST', `/api/workspaces/${env.w}/billing/cancel`, { refund: true });
+    assert.equal(c.status, 409); assert.equal(c.json.error.code, 'not_refundable');
+    assert.equal((await env.c('GET', `/api/workspaces/${env.w}/billing`)).json.billing.plan, 'PRO', 'still PRO to the end');
+
+    // paid 8 days ago (and nothing used since) → period over
+    await env.db.run("UPDATE billing_orders SET paid_at = now() - interval '8 days' WHERE id = ?", [oid]);
+    await env.db.run('UPDATE workspaces SET content_changed_at = NULL WHERE id = ?', [env.w]);
+    await env.db.run("UPDATE projects SET created_at = now() - interval '9 days' WHERE workspace_id = ?", [env.w]);
+    const q2 = (await env.c('GET', `/api/workspaces/${env.w}/billing/refund-quote`)).json.refund;
+    assert.equal(q2.eligible, false); assert.equal(q2.reason, 'period_over');
   } finally { env.done(); }
 });

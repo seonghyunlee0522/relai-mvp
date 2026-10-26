@@ -75,6 +75,9 @@ test('Billing page (live T1 shape): null buckets → total only; empty scheduled
   assert.match(billingHtml(fixture()), /id="bl-cancel-refund"/);
   assert.match(billingHtml(fixture({ cancel_at_period_end: true, cancel_url: null, subscription: { ...FIX.subscription, cancel_at_period_end: true } })), /id="bl-cancel-refund"/);
   assert.doesNotMatch(billingHtml(fixture({ refund_quote_url: null })), /id="bl-cancel-refund"/);
+  // founder 2026-10-26: only within 7 days and unused — otherwise no refund button, the rule is explained instead
+  const used = billingHtml(fixture({ refund: { eligible: false, total: 0, reason: 'used', refund_until: null } }));
+  assert.doesNotMatch(used, /id="bl-cancel-refund"/); assert.match(used, /서비스를 이용해 환불 대상이 아니에요/);
   assert.doesNotMatch(billingHtml(fixture({ can_manage: false })), /id="bl-cancel-refund"/);
   // a scheduled change without cancel_url (T3 not live) is listed but not cancellable
   assert.doesNotMatch(billingHtml(fixture({ scheduled: [{ kind: 'CYCLE', to: 'ANNUAL', effective_at: '2026-11-20' }] })), /data-sched-cancel/);

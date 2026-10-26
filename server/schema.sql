@@ -1793,3 +1793,8 @@ CREATE TABLE IF NOT EXISTS ai_prompt_versions (
   UNIQUE (key, version)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_key ON ai_prompt_versions(key, version DESC);
+
+/* Refund policy (migration 72, founder 2026-10-26): a cancel within 7 days of the payment refunds the whole payment only when the
+ * workspace did not use the service since — no AI credit spent, no project created, no project data written (입력·수정·삭제).
+ * content_changed_at = the last successful write under /api/workspaces/:wid/projects (server/app.js), at most once every 10 seconds. */
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS content_changed_at timestamptz;

@@ -315,44 +315,49 @@ test('cancel any time (monthly and annual): auto-renew off at once, plan to peri
   t.server.close();
 });
 
-test('cancel + refund: plan ends now, unused days refunded (rounded up, no penalty, 청약철회 within 7 days), partial cancel with a new orderId; flag off → REQUESTED for the operator', async () => {
+test('cancel + refund (founder 2026-10-26): full refund only within 7 days and unused; otherwise no refund, the plan runs to the end', async () => {
   const t = await boot();
   const A = await owner(t);
   await subscribe(A, { plan: 'PRO', cycle: 'ANNUAL' });
-  // annual: 100 days used of 365 → refund = ceil(288,000 × unused / 365) — NOT re-priced at the monthly list price
+  // annual paid 100 days ago → no refund at all (no 일할 계산); a plain cancel still stops renewal
   await t.db.run(`UPDATE subscriptions SET current_period_start = now() - interval '100 days', current_period_end = now() - interval '100 days' + interval '365 days' WHERE workspace_id = ?`, [A.w]);
   await t.db.run(`UPDATE billing_orders SET period_start = NULL, period_end = NULL, paid_at = now() - interval '100 days' WHERE workspace_id = ?`, [A.w]);
-  const s0 = await sub(t.db, A.w);
-  const want = prorate({ unit: 288000, qty: 1, periodStart: s0.current_period_start, periodEnd: s0.current_period_end, at: new Date(Date.now() + 86400e3), dir: 'up' }).amount;
-  assert.ok(want > 288000 * 0.7 && want < 288000 * 0.75, String(want));
   const q = (await A.c('GET', `${B(A)}/refund-quote`)).json.refund;
-  assert.equal(q.total, want); assert.equal(q.withdrawal, false); assert.equal(q.lines[0].kind, 'CANCEL');
+  assert.equal(q.total, 0); assert.equal(q.eligible, false); assert.equal(q.reason, 'period_over');
+  const no = await A.c('POST', `${B(A)}/cancel`, { refund: true });
+  assert.equal(no.status, 409); assert.equal(no.json.error.code, 'not_refundable');
+  const plain = await A.c('POST', `${B(A)}/cancel`, {});
+  assert.equal(plain.status, 200, JSON.stringify(plain.json)); assert.equal(plain.json.billing.plan, 'PRO'); assert.equal(plain.json.billing.cancel_at_period_end, true);
+
+  // paid 2 days ago, nothing used since → the whole payment, executed as a partial cancel when REFUND_PARTIAL_ENABLED
+  const D = await owner(t, 'd@x.com');
+  await subscribe(D, { plan: 'PRO' });
+  await t.db.run(`UPDATE billing_orders SET paid_at = now() - interval '2 days' WHERE workspace_id = ?`, [D.w]);
+  await t.db.run(`UPDATE workspaces SET content_changed_at = now() - interval '3 days' WHERE id = ?`, [D.w]);
+  await t.db.run(`UPDATE projects SET created_at = now() - interval '3 days' WHERE workspace_id = ?`, [D.w]);
   process.env.REFUND_PARTIAL_ENABLED = 'true';
   try {
-    const r = await A.c('POST', `${B(A)}/cancel`, { refund: true });
+    const r = await D.c('POST', `${B(D)}/cancel`, { refund: true });
     assert.equal(r.status, 200, JSON.stringify(r.json));
-    assert.equal(r.json.cancel.immediate, true); assert.equal(r.json.cancel.refund_total, want); assert.equal(r.json.billing.plan, 'FREE');
+    assert.equal(r.json.cancel.immediate, true); assert.equal(r.json.cancel.refund_total, 30000); assert.equal(r.json.billing.plan, 'FREE');
     const call = t.provider.calls.refund.at(-1);
-    assert.equal(call.partial, true); assert.equal(call.amount, want); assert.ok(call.cancel_order_id && call.cancel_order_id !== call.order_id);
-    const rf = await t.db.get('SELECT * FROM subscription_refunds WHERE workspace_id = ?', [A.w]);
-    assert.equal(rf.status, 'DONE'); assert.equal(rf.amount, want);
-    assert.equal((await t.db.get('SELECT refunded_amount FROM billing_orders WHERE id = ?', [rf.order_id])).refunded_amount, want);
-    const s = await sub(t.db, A.w);
+    assert.equal(call.partial, true); assert.equal(call.amount, 30000); assert.ok(call.cancel_order_id && call.cancel_order_id !== call.order_id);
+    const rf = await t.db.get('SELECT * FROM subscription_refunds WHERE workspace_id = ?', [D.w]);
+    assert.equal(rf.status, 'DONE'); assert.equal(rf.amount, 30000); assert.equal(rf.kind, 'WITHDRAWAL');
+    const s = await sub(t.db, D.w);
     assert.equal(s.status, 'CANCELED'); assert.ok(s.data_retention_until); assert.equal(s.billing_key_enc, null);
-    assert.equal(Number((await t.db.get('SELECT plan_balance FROM workspace_credit_accounts WHERE workspace_id = ?', [A.w])).plan_balance), 0);
+    assert.equal(Number((await t.db.get('SELECT plan_balance FROM workspace_credit_accounts WHERE workspace_id = ?', [D.w])).plan_balance), 0);
   } finally { delete process.env.REFUND_PARTIAL_ENABLED; }
   t.server.close();
 
-  // within 7 days: 청약철회; REFUND_PARTIAL_ENABLED off → REQUESTED, the operator marks it done
+  // REFUND_PARTIAL_ENABLED off → REQUESTED for the operator (관리자 › 환불 관리), who marks it done
   const t2 = await boot();
   const C = await owner(t2, 'c@x.com');
   await subscribe(C, { plan: 'PRO' });
-  await t2.db.run(`UPDATE subscriptions SET current_period_start = now() - interval '2 days', current_period_end = now() - interval '2 days' + interval '30 days' WHERE workspace_id = ?`, [C.w]);
-  await t2.db.run(`UPDATE billing_orders SET period_start = now() - interval '2 days', period_end = now() - interval '2 days' + interval '30 days' WHERE workspace_id = ?`, [C.w]);
   const r = await C.c('POST', `${B(C)}/cancel`, { refund: true });
-  assert.equal(r.status, 200);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal(r.json.cancel.withdrawal, true); assert.equal(r.json.cancel.refunds[0].kind, 'WITHDRAWAL'); assert.equal(r.json.cancel.refunds[0].status, 'REQUESTED');
-  assert.equal(r.json.cancel.refunds[0].amount, 27000);   // 30,000 × 27 / 30 (3 KST days used incl. today)
+  assert.equal(r.json.cancel.refunds[0].amount, 30000);
   assert.equal(t2.provider.calls.refund.length, 0);
   await t2.db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE email = 'c@x.com'`);
   const list = await C.c('GET', '/api/billing/admin/subscription-refunds');

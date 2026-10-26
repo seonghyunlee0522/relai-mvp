@@ -11,6 +11,7 @@
   "cancel_at_period_end": false,
   "cancel_url": "/api/workspaces/W/billing/cancel",
   "refund_quote_url": "/api/workspaces/W/billing/refund-quote",
+  "refund": { "eligible": true, "total": 32000, "reason": null, "refund_until": "2026-10-27T00:00:00.000Z" },
   "limits": {
    "projects": 3,
    "users": 17
