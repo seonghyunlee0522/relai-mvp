@@ -20,7 +20,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
-import { CREDIT_PACKS, CREDIT_PRICE_KRW, REFUND_FULL_DAYS, REFUND_FEE_PCT, TOPUP_STEP_KRW, TOPUP_MAX_KRW, PLANS, splitVat } from '../plans.js';
+import { CREDIT_PACKS, CREDIT_PRICE_KRW, REFUND_FULL_DAYS, REFUND_FEE_PCT, TOPUP_STEP_KRW, TOPUP_MAX_KRW, PLANS, splitVat, creditsOnlyMode } from '../plans.js';
 import { applyCredits, ensureAccount, bucketBalances } from '../ai/credits.js';
 import { effectivePlan } from './subscriptions.js';
 import { newOrderId, OrderError } from './orders.js';
@@ -54,6 +54,7 @@ export function topupQuote(amount) {
  */
 export async function topupEligibility(db, wid) {
   const plan = await effectivePlan(db, wid);
+  if (creditsOnlyMode()) return { allowed: true, plan, reason: null };   // 심사 모드: credits are the only product, every plan buys them
   const t = PLANS[plan]?.topup;
   if (t === true) return { allowed: true, plan, reason: null };
   if (t === 'contract') {

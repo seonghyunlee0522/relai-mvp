@@ -6,7 +6,7 @@
  * button. Payments off → the panel still shows, but 결제 only says SUBSCRIBE_SOON and calls nothing; the 문의하기 link stays. */
 import { api } from './core/api.js';
 import { $, html, raw, fmtDT } from './core/dom.js';
-import { state } from './core/state.js';
+import { state, creditsOnly } from './core/state.js';
 import { toast, confirmDialog } from './shared/dialogs.js';
 import { isPhone, pcLine } from './core/device.js';
 import { loadPromos, promoHtml } from './shared/promo.js';
@@ -101,9 +101,9 @@ export async function creditsPage(main = $('#main')) {
       : !s.can_buy ? '<p class="hint">충전과 환불 요청은 워크스페이스 소유자가 할 수 있습니다.</p>'
         : isPhone() ? '<p class="hint" data-phone-pay>결제는 PC에서 할 수 있습니다.</p>'
           : topupForm())}
-    <p class="hint" style="margin-top:10px">크레딧은 기본 월 크레딧 → 무료 크레딧 → 구매 크레딧 순서로 씁니다. 기본 월 크레딧은 지급 주기가 끝나면 남은 만큼 소멸합니다.
-      구매 크레딧은 ${s.purchased_valid_years}년간 유효하고, 구독이 끝나 Free가 되어도 남은 만큼 쓸 수 있습니다.
-      환불: ${refundText()}을 돌려 드립니다. 무료·플랜 기본 제공·프로모션 크레딧은 환불되지 않습니다.${s.sandbox ? ' (샌드박스 결제 환경)' : ''}</p>
+    <p class="hint" style="margin-top:10px">${creditsOnly() || s.credits_only ? '크레딧은 무료 크레딧 → 구매 크레딧 순서로 씁니다.' : '크레딧은 기본 월 크레딧 → 무료 크레딧 → 구매 크레딧 순서로 씁니다. 기본 월 크레딧은 지급 주기가 끝나면 남은 만큼 소멸합니다.'}
+      구매 크레딧은 ${s.purchased_valid_years}년간 유효${creditsOnly() || s.credits_only ? '합니다. 결제는 신용카드 1회 결제이며 자동 결제는 없습니다.' : '하고, 구독이 끝나 Free가 되어도 남은 만큼 쓸 수 있습니다.'}
+      환불: ${refundText()}을 돌려 드립니다. 무료·${s.credits_only ? '' : '플랜 기본 제공·'}프로모션 크레딧은 환불되지 않습니다.${s.sandbox ? ' (샌드박스 결제 환경)' : ''}</p>
     ${raw(s.can_buy && s.refundable > 0 && !isPhone() ? html`<p style="margin-top:8px"><button type="button" class="link linkbtn" id="cr-refund">환불 요청</button> <small class="dim">환불 가능한 미사용 구매 크레딧 ${n(s.refundable)}</small></p>` : '')}</div></div>`;
   const opt = (v, label, cur) => html`<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${label}</option>`;
   const log = () => {
