@@ -49,6 +49,14 @@ export async function plansPage(main = $('#main')) {
   </div>`;
   bindCycleToggle(main);
   main.querySelectorAll('[data-plan-buy]').forEach((btn) => { btn.onclick = () => buyPass(btn.dataset.planBuy, btn); });
+  // ?buy=PRO|TEAM (landing 'Pro 1개월 이용권 구매' after sign-in): open the purchase dialog once; the URL loses the param.
+  const want = new URLSearchParams(location.search).get('buy');
+  if (want) {
+    history.replaceState(null, '', '/app/billing/plans');
+    const btn = main.querySelector(`[data-plan-buy="${want === 'TEAM' ? 'TEAM' : 'PRO'}"]`);
+    if (btn) buyPass(btn.dataset.planBuy, btn);
+    else if (oneTime && !owner) toast('이용권 구매는 워크스페이스 소유자만 할 수 있어요.');
+  }
   main.querySelectorAll('a[data-plan-cta]').forEach((a) => { if (a.dataset.planCta === 'ENTERPRISE') return; a.onclick = (e) => {
     e.preventDefault();
     if (!open) return toast(SUBSCRIBE_SOON);
