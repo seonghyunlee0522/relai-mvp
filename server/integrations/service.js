@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
-import { integrationConfig } from './config.js';
+import { integrationConfig, jiraLive } from './config.js';
 import { encrypt, decrypt, randomToken } from './crypto.js';
 import { getProvider } from './registry.js';
 import { OAuthError } from './jira/oauth.js';
@@ -34,12 +34,13 @@ export async function listIntegrations(db, workspaceId, env = process.env) {
   const c = await getConnection(db, workspaceId, 'JIRA');
   const connectedBy = c?.connected_by ? await db.get('SELECT name FROM users WHERE id = ?', [c.connected_by]) : null;
   const mappings = c ? await db.get(`SELECT COUNT(*) n FROM integration_project_mappings WHERE connection_id = ? AND status = 'ACTIVE'`, [c.id]) : { n: 0 };
-  return { providers: [{ provider: 'JIRA', configured: cfg.jira.configured, connection: c ? { ...c, connected_by_name: connectedBy?.name || null, reconnect_required: c.status === 'ERROR' && /재연결/.test(c.last_error || ''), mapped_projects: mappings.n } : null }] };
+  return { providers: [{ provider: 'JIRA', coming_soon: !jiraLive(env), configured: cfg.jira.configured, connection: c ? { ...c, connected_by_name: connectedBy?.name || null, reconnect_required: c.status === 'ERROR' && /재연결/.test(c.last_error || ''), mapped_projects: mappings.n } : null }] };
 }
 
 /* ---------- OAuth ---------- */
 export async function startOAuth(db, { workspaceId, userId, provider = 'JIRA' }, env = process.env) {
   const cfg = integrationConfig(env);
+  if (!jiraLive(env)) throw new IntegrationError(409, 'integration_coming_soon', '지라 연동은 출시 예정입니다.');
   if (!cfg.jira.configured && cfg.provider !== 'fake') throw new IntegrationError(503, 'integration_not_configured', '지라 연동이 아직 서버에 설정되지 않았습니다. 운영자에게 문의해 주세요.');
   const p = getProvider(provider, env);
   const state = randomToken(32); const expires = new Date(Date.now() + cfg.oauthStateTtlMs).toISOString();

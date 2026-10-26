@@ -5,6 +5,8 @@ import { openDb } from '../db.js';
 
 // Plan limits (billing/limits.js) are off for the legacy suites, whose fixtures build more rows than FREE allows; billing.test.js turns them on.
 process.env.PLAN_LIMITS ??= 'off';
+// Jira ships behind JIRA_INTEGRATION (default off = '출시 예정'); the suites exercise the built integration, so it is on here. jira-soon.test.js checks off.
+process.env.JIRA_INTEGRATION ??= 'on';
 // Signup samples (server/samples/) are off for the legacy suites, which expect an empty workspace; samples.test.js turns them on.
 process.env.SAMPLE_PROJECTS ??= 'false';
 

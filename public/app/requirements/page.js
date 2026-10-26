@@ -25,7 +25,7 @@ import { reqDocMenu, bindReqDocMenu } from '../project/initiation.js';
 import { josa } from '../shared/josa.js';
 import { toolMenu, tmItem, aiPrice } from '../shared/toolmenu.js';
 import { bindArrowNav } from '../shared/drawer.js';
-import { reqJiraPaneHtml, bindReqJiraPane, reqJiraCell, bulkCreateReqIssues } from '../shared/jira.js';
+import { reqJiraPaneHtml, bindReqJiraPane, reqJiraCell, bulkCreateReqIssues, jiraSoon } from '../shared/jira.js';
 import * as OP from '../shared/owner-picker.js';
 
 export async function requirementsPage(id) {
@@ -111,7 +111,7 @@ export async function requirementsPage(id) {
       { key: 'requester_name', label: '요청자', width: 110, hidden: true, sort: (r) => r.requester_name || '', render: (r) => r.requester_name || dim() },
       { key: 'requester_organization', label: '요청자 소속', width: 120, hidden: true, sort: (r) => r.requester_organization || '', render: (r) => r.requester_organization || dim() },
       { key: 'updated', label: '수정일', width: 80, card: false, hidden: desk, sort: (r) => r.updated_at, cls: 'mono', render: (r) => fmtShort(r.updated_at) },
-      { key: 'jira', label: '지라', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v43: column option (⋯ → 보기)
+      { key: 'jira', label: jiraSoon() ? '지라 (출시 예정)' : '지라', width: 150, card: false, hidden: true, sort: jiraSort, render: jiraCell },   // v43: column option (⋯ → 보기)
     ],
   });
   /* #13 연결 현황: a matrix, not a second 목록 — WBS 작업 · 테스트 · 최근 결과 · 지라 per requirement, 연결 안 된 것 먼저 */
@@ -599,9 +599,9 @@ export async function requirementsPage(id) {
   const bindDetail = () => {
     const r = sel; const d = $('#drawer'); const status = $('#dsave');
     $('#dclose').onclick = closeDrawer;
-    bindDtabs(d, (k) => { dtab = k; if (k === 'jira' && !reqJiraDetail) loadJira(); });
+    bindDtabs(d, (k) => { dtab = k; if (k === 'jira' && !reqJiraDetail && !jiraSoon()) loadJira(); });
     const loadJira = async () => { const rid = r.id; try { reqJiraDetail = await api('GET', rApi(`/${rid}/jira`)); } catch (e) { reqJiraDetail = { error: e.message }; } if (sel && sel.id === rid) drawDetail(); };
-    if (dtab === 'jira' && !reqJiraDetail) loadJira();
+    if (dtab === 'jira' && !reqJiraDetail && !jiraSoon()) loadJira();
     bindReqJiraPane(d.querySelector('[data-pane="jira"]'), { pid: id, rid: r.id, r, onChange: async (j) => { reqJiraDetail = j; try { await load(); sel = (await api('GET', rApi(`/${r.id}`))).requirement; } catch { /* keep */ } curGrid().refresh(); drawDetail(); } });
     d.querySelectorAll('[data-nav]').forEach((b) => b.onclick = () => { const ids = curGrid().orderedIds(); const n = ids[ids.indexOf(r.id) + Number(b.dataset.nav)]; if (n) openDetail(n); });
     bindArrowNav((dir) => { if (!sel) return; const ids = curGrid().orderedIds(); const n = ids[ids.indexOf(sel.id) + dir]; if (n) openDetail(n); });   // R2: keyboard ↑/↓ between items

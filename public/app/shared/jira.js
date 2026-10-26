@@ -6,6 +6,9 @@ import { $, fmtShort, html, raw } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { confirmDialog, toast } from './dialogs.js';
 
+/** Release gate: the server reports features.jira=false (JIRA_INTEGRATION not on) → every Jira surface shows '출시 예정' instead of actions. */
+export const jiraSoon = () => Boolean(state.features && state.features.jira === false);
+export const JIRA_SOON_HTML = '<div class="jsoon" data-jira-soon><span class="chip chip--muted">출시 예정</span><p class="hint">요구사항·WBS 작업을 지라 이슈와 연결하고, 지라 진행 상태를 RELAI에서 바로 확인하는 기능을 준비하고 있습니다.</p></div>';
 export const JIRA_CAT = { new: '할 일', indeterminate: '진행 중', done: '완료' };
 export const JIRA_CAT_CHIP = { new: 'chip--muted', indeterminate: 'chip--active', done: 'chip--done' };
 export const relTime = (iso) => { if (!iso) return '-'; const d = Date.now() - new Date(iso).getTime(); const m = Math.round(d / 60000); if (m < 1) return '방금'; if (m < 60) return `${m}분 전`; const h = Math.round(m / 60); if (h < 24) return `${h}시간 전`; const dd = Math.round(h / 24); return dd < 30 ? `${dd}일 전` : fmtShort(iso); };
@@ -118,7 +121,7 @@ function linkIssuesDialog(ctx) {
 
 /* ---------- Project ⋯ → Jira 연동 설정 (modal) ---------- */
 export async function openJiraProjectSettings(pid) {
-  if (isPhone()) return;   // phone = view mode: Jira is PC-only
+  if (isPhone() || jiraSoon()) return;   // phone = view mode: Jira is PC-only · 출시 예정: no settings modal
   document.querySelector('.scrim--jira')?.remove();
   const el = document.createElement('div'); el.className = 'scrim scrim--jira';
   el.innerHTML = '<div class="dialog dialog--wide" role="dialog" aria-modal="true"><h3>지라 연동 설정</h3><p class="hint">불러오는 중…</p></div>';
@@ -193,6 +196,7 @@ export function bindJiraEmpty(root, pid) {
 }
 /** Requirement drawer → Jira tab. `d` = GET …/requirements/:rid/jira. */
 export function reqJiraPaneHtml(d, r, { ro = false } = {}) {
+  if (jiraSoon()) return JIRA_SOON_HTML;
   if (!d) return '<p class="hint" style="padding:12px 2px">불러오는 중…</p>';
   if (d.error) return html`<p class="err">${d.error}</p>`;
   if (!d.mapped || !d.connected || d.reconnect_required) return jiraEmptyHtml(d, { ro });

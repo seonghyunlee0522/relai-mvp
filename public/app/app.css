@@ -1808,6 +1808,7 @@ a.exec__k:hover b,a.exec__big:hover b{color:var(--blue-deep)}
 .icard{display:flex;gap:14px;align-items:flex-start}
 .icard__logo{width:40px;height:40px;border-radius:var(--r-lg);background:#0052CC;/* exception: Jira brand mark */color:#fff;font-weight:800;font-size:var(--fs-xl);display:flex;align-items:center;justify-content:center;flex:none}
 .icard__m{min-width:0;flex:1}
+.jsoon{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:16px 2px}
 .icard__t{display:flex;align-items:center;gap:8px;font-size:var(--fs-md)}
 .icard__site{margin:2px 0 8px;font-size:var(--fs-sm)}
 .icard__d{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;margin:0;font-size:var(--fs-sm)}

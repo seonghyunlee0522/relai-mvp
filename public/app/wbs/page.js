@@ -30,7 +30,7 @@ import { fsConflicts, fsWarning } from '../shared/wbs-deps.js';
 import * as OP from '../shared/owner-picker.js';
 import { aiStatus } from '../shared/ai.js';
 import { openWbsPlanner } from '../ai/wbs-planner.js';
-import { bindJiraPane, execChip, jiraPaneHtml } from '../shared/jira.js';
+import { bindJiraPane, execChip, jiraPaneHtml, jiraSoon } from '../shared/jira.js';
 
 const GHOST = '__new';
 const STATUS_EDIT = { NOT_STARTED: '예정', IN_PROGRESS: '진행중', COMPLETED: '완료', ON_HOLD: '보류' };
@@ -234,7 +234,7 @@ export async function wbsPage(id) {
       { key: 'status', label: '상태', width: desk ? 104 : 118, edit: { type: 'select', field: 'status', options: STATUS_EDIT, cls: (r) => (r.computed_status === 'DELAYED' ? 'cell--late' : ''), prefix: (r) => (r.computed_status === 'DELAYED' ? '<i class="wlate" title="계획 종료일이 지났습니다">지연</i>' : '') }, render: (r) => (r._ghost ? '' : statusBadge(r)) },   // UI-006: leaf rows show 지연 on the select too
       { key: 'weight', label: '가중치', width: 76, hidden: true, align: 'right', edit: { type: 'number', field: 'weight', value: (r) => r.weight, min: 0, max: 1000 }, render: (r) => (r._ghost || r.item_type === 'MILESTONE' ? '' : html`${r.weight}`) },
       { key: 'type', label: '유형', width: 80, hidden: true, render: (r) => (r._ghost ? '' : r.is_group ? '작업 그룹' : WBS_TYPE[r.item_type]) },
-      { key: 'jira', label: '지라 실행', width: 110, hidden: true, render: (r) => (r._ghost || !jira || r.item_type === 'MILESTONE' ? '' : execChip(jira.by[r.id]) || dim()) },
+      { key: 'jira', label: jiraSoon() ? '지라 실행 (출시 예정)' : '지라 실행', width: 110, hidden: true, render: (r) => (r._ghost || !jira || r.item_type === 'MILESTONE' ? '' : execChip(jira.by[r.id]) || dim()) },
     ],
     empty: () => (items.length ? emptyState({ title: '조건에 맞는 작업이 없습니다.', body: '검색어나 필터를 바꾸거나 초기화하세요.', cta: { id: 'clear2', label: '필터 초기화' }, small: true }) : ''),
   });
