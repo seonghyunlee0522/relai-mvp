@@ -1798,3 +1798,41 @@ CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_key ON ai_prompt_versions(key,
  * workspace did not use the service since — no AI credit spent, no project created, no project data written (입력·수정·삭제).
  * content_changed_at = the last successful write under /api/workspaces/:wid/projects (server/app.js), at most once every 10 seconds. */
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS content_changed_at timestamptz;
+
+/* 프로모션 코드 (migration 73, founder 2026-10-26; server/billing/promo-codes.js). Separate from the display-only promotions table.
+ *   promo_codes        one benefit per code: PERCENT / AMOUNT (plan purchase discount), FREE_MONTHS (plan n months, 0원 order),
+ *                      CREDITS (promo bucket). starts_on / ends_on are KST days (NULL = open), max_uses NULL = no limit.
+ *   promo_redemptions  one row per use, once per (code, workspace) and per e-mail hash; written with the paid order or the grant.
+ *   billing_orders.promo_code_id / promo_discount   the code a plan order used and the won it took off (amount is already net). */
+CREATE TABLE IF NOT EXISTS promo_codes (
+  id          TEXT PRIMARY KEY,
+  code        TEXT NOT NULL UNIQUE,
+  kind        TEXT NOT NULL CHECK (kind IN ('PERCENT','AMOUNT','FREE_MONTHS','CREDITS')),
+  value       INTEGER NOT NULL CHECK (value > 0),
+  plan        TEXT,
+  starts_on   date,
+  ends_on     date,
+  max_uses    INTEGER,
+  used_count  INTEGER NOT NULL DEFAULT 0,
+  active      boolean NOT NULL DEFAULT true,
+  created_by  TEXT,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+  id               TEXT PRIMARY KEY,
+  code_id          TEXT NOT NULL REFERENCES promo_codes(id) ON DELETE CASCADE,
+  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id          TEXT REFERENCES users(id) ON DELETE SET NULL,
+  email_hash       TEXT,
+  order_id         TEXT,
+  discount_amount  INTEGER NOT NULL DEFAULT 0,
+  credits          INTEGER NOT NULL DEFAULT 0,
+  months           INTEGER NOT NULL DEFAULT 0,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (code_id, workspace_id)
+);
+CREATE INDEX IF NOT EXISTS idx_promo_redemptions_code ON promo_redemptions(code_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_promo_redemptions_email ON promo_redemptions(code_id, email_hash);
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS promo_code_id TEXT;
+ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS promo_discount INTEGER NOT NULL DEFAULT 0;

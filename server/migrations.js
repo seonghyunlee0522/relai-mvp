@@ -285,6 +285,7 @@ export const migrations = [
     }
   } },
   { version: 72, name: 'Refund policy (founder 2026-10-26): workspaces.content_changed_at — last successful write to project data, so a cancel within 7 days refunds in full only when the service was not used (schema.sql, additive, nullable)', up() {} },
+  { version: 73, name: '프로모션 코드 (founder 2026-10-26): promo_codes, promo_redemptions, billing_orders.promo_code_id / promo_discount (schema.sql, additive)', up() {} },
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

@@ -8,6 +8,7 @@
  *     (OWNER: POLICY.billing); GET /api/billing/nicepay/pay/:orderId (the order's buyer); POST /api/billing/admin/payments/:id/refund
  *     (SYSTEM_ADMIN); GET /api/billing/cron/daily (CRON_SECRET: renewal reminders, renewal charges, monthly AI credit grants, 서비스 결제 cleanup).
  */
+import { usableCode, applyDiscount, DISCOUNT_KINDS, PromoCodeError } from './promo-codes.js';
 import { aiConfig } from '../ai/config.js';
 import express from 'express';
 import { rateLimiter } from '../security.js';
@@ -224,12 +225,17 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
         : quoteUpgrade({ wid, sub, plan: String(src.plan || 'TEAM') });
       return { quote: q, disclosure: disclosure(kind, q), sub };
     }
-    const q = await quoteFor(db, wid, { plan: String(src.plan || 'PRO'), cycle: String(src.cycle || 'MONTHLY'), users: src.users ?? src.seats, extra_users: src.extra_users, extra_projects: src.extra_projects });
+    let q = await quoteFor(db, wid, { plan: String(src.plan || 'PRO'), cycle: String(src.cycle || 'MONTHLY'), users: src.users ?? src.seats, extra_users: src.extra_users, extra_projects: src.extra_projects });
+    if (src.promo_code) q = applyDiscount(q, await usableCode(db, { raw: src.promo_code, wid, email: src.email, kinds: DISCOUNT_KINDS }));   // 프로모션 코드 (할인)
     return { quote: q, disclosure: disclosure('CHECKOUT', q) };
   };
   app.get(`${b}/quote`, guard, wrap(async (req, res) => {
-    try { const { quote, disclosure: d } = await quoteOf(req.params.wid, req.query); res.json({ quote, disclosure: d }); }
-    catch (e) { if (e instanceof OrderError) return orderFail(res, e); throw e; }
+    try { const { quote, disclosure: d } = await quoteOf(req.params.wid, { ...req.query, email: req.user.email }); res.json({ quote, disclosure: d }); }
+    catch (e) {
+      if (e instanceof OrderError) return orderFail(res, e);
+      if (e instanceof PromoCodeError) return fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {});
+      throw e;
+    }
   }));
 
   /** Shared checkout validation: PRO / TEAM, purchasable, provider present. Returns the quote or null after answering. */
@@ -258,9 +264,14 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   app.post(`${b}/checkout`, payer, wrap(async (req, res) => {
     if (paymentsEnabled() && checkoutOpen() && req.body?.card) return subscribe(req, res);
     if (paymentsEnabled() && !oneTimeOpen()) return checkoutOpen() ? fail(res, 400, 'card_required', '정기결제에 쓸 카드 정보를 입력해 주세요.') : notOpen(res);
-    const q = await prepare(req, res); if (!q) return;
+    let q = await prepare(req, res); if (!q) return;
+    if (req.body?.promo_code) {   // 프로모션 코드 (할인): the window charges the net amount; the use is recorded when the order is paid
+      try { q = applyDiscount(q, await usableCode(db, { raw: req.body.promo_code, wid: req.params.wid, email: req.user.email, kinds: DISCOUNT_KINDS })); }
+      catch (e) { if (e instanceof PromoCodeError) return fail(res, e.status, e.code, e.message, e.fields ? { fields: e.fields } : {}); throw e; }
+    }
     const workspace = await db.get('SELECT id, name FROM workspaces WHERE id = ?', [req.params.wid]);
-    const order = await createOrder(db, { workspaceId: workspace.id, userId: req.user.id, provider: provider.name, kind: 'ONE_TIME', q });
+    let order = await createOrder(db, { workspaceId: workspace.id, userId: req.user.id, provider: provider.name, kind: 'ONE_TIME', q });
+    if (q.promo) order = await db.get('UPDATE billing_orders SET promo_code_id = ?, promo_discount = ? WHERE id = ? RETURNING *', [q.promo.id, q.promo.discount, order.id]);
     const out = await provider.createCheckout({ workspace, plan: q.plan, order, customer: { id: req.user.id, email: req.user.email, name: req.user.name },
       successUrl: '/app/settings', cancelUrl: '/app/settings' });
     res.status(201).json({ checkout_url: out.checkout_url, session_id: out.session_id, provider: provider.name, order: publicOrder(order) });

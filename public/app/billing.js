@@ -141,6 +141,16 @@ function actionsPanel(b) {
     <p class="hint" style="margin-top:10px">${raw(f.one_time ? '환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>을 확인하세요.' : '해지·환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>, 자동 결제는 <a class="link" href="/terms#recurring" target="_blank" rel="noopener">정기결제 안내</a>를 확인하세요.')}</p></div></div>`;
 }
 
+/** 프로모션 코드 등록 (OWNER): 무료 기간 · 크레딧 코드. 할인 코드는 요금제 구매 창에서 입력한다. */
+function promoPanel(b) {
+  if (!b.can_manage) return '';
+  return html`<div class="panel bl-panel" id="bl-promo"><div class="panel__h">프로모션 코드 등록</div><div class="panel__b">
+    <p class="hint" style="margin:0 0 8px">크레딧이나 무료 이용 기간을 받는 코드를 입력하세요. 할인 코드는 요금제 구매 창에서 입력해요.</p>
+    <div style="display:flex;gap:8px;max-width:480px"><label for="bl-promo-code" class="sr-only">프로모션 코드</label>
+      <input class="input" id="bl-promo-code" autocomplete="off" placeholder="예: WELCOME500" style="flex:1;text-transform:uppercase"><button type="button" class="btn btn--primary" id="bl-promo-go">등록</button></div>
+    <p class="hint" id="bl-promo-msg" role="status" style="margin:8px 0 0"></p><div id="bl-promo-list"></div></div></div>`;
+}
+
 /** Ledger labels (credit-routes.js) carry the won amount of a top-up ('충전 ₩10,000'); this page shows credits only. */
 const creditLabel = (l) => String(l || '').replace(/\u20a9[\d,]+/g, '').trim();
 const ledgerHtml = (rows) => (!rows?.length ? '<p class="hint" style="margin-top:10px">아직 크레딧 사용 내역이 없어요.</p>'
@@ -155,7 +165,7 @@ export const ordersHtml = (orders) => html`<div class="panel bl-panel" id="bl-or
 /** The whole page body (pure: unit-tested against the v3 fixture). */
 export function billingHtml(b, { orders = null } = {}) {
   return html`${raw(overLimitBanner(b))}<div class="bl-grid">${raw(planPanel(b))}${raw(usagePanel(b))}</div>
-    ${raw(scheduledPanel(b))}${raw(creditsPanel(b))}${raw(actionsPanel(b))}${raw(policyPanel(b))}${raw(orders ? ordersHtml(orders) : '')}`;
+    ${raw(scheduledPanel(b))}${raw(creditsPanel(b))}${raw(actionsPanel(b))}${raw(promoPanel(b))}${raw(policyPanel(b))}${raw(orders ? ordersHtml(orders) : '')}`;
 }
 
 /** Billing body inside another page (settings › 요금제 tab). Loads its own data. */
@@ -165,6 +175,25 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
   const orders = b.can_manage ? await api('GET', `/api/workspaces/${wid}/billing/orders`).then((r) => r.orders).catch(() => []) : null;
   el.innerHTML = billingHtml(b, { orders });
   api('GET', `/api/workspaces/${wid}/credits/ledger`).then((r) => { const box = el.querySelector('#bl-ledger'); if (box) box.innerHTML = ledgerHtml((r.rows || []).slice(0, 8)); }).catch(() => {});
+  // 프로모션 코드 등록
+  const promoList = () => api('GET', `/api/workspaces/${wid}/promo-codes`).then((r) => { const box = el.querySelector('#bl-promo-list'); if (!box || !r.redemptions?.length) return;
+    box.innerHTML = html`<ul class="bl-list" style="margin-top:10px">${raw(r.redemptions.map((x) => html`<li><span class="mono">${x.code}</span> · ${x.benefit} <small class="dim">${day(x.at)}${x.user_name ? ` · ${x.user_name}` : ''}</small></li>`).join(''))}</ul>`; }).catch(() => {});
+  if (el.querySelector('#bl-promo')) promoList();
+  const promoGo = el.querySelector('#bl-promo-go');
+  if (promoGo) {
+    const input = el.querySelector('#bl-promo-code'); const msg = el.querySelector('#bl-promo-msg');
+    const go = async () => {
+      const code = (input.value || '').trim(); if (!code) { input.focus(); return; }
+      promoGo.disabled = true;
+      try {
+        const r = (await api('POST', `/api/workspaces/${wid}/promo-codes/redeem`, { code })).redeemed;
+        toast(r.kind === 'CREDITS' ? `AI 크레딧 ${n(r.credits)}이 충전됐어요.` : `${r.benefit}이 적용됐어요.`);
+        await mountBilling(el, { wid });
+      } catch (e) { msg.textContent = e.fields?.promo_code || e.message; msg.style.color = '#B42318'; promoGo.disabled = false; }
+    };
+    promoGo.onclick = go;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  }
   const cancel = el.querySelector('#bl-cancel');
   if (cancel) cancel.onclick = async () => {
     const end = day(b.subscription?.current_period_end);

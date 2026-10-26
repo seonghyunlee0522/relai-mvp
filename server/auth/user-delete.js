@@ -35,6 +35,7 @@ export const USER_REFS = [
   ['email_deliveries', 'related_user_id', 'DELETE'],
   ['analytics_events', 'user_id', 'DELETE'],          // no FK
   ['analytics_active_days', 'user_id', 'DELETE'],     // no FK
+  ['promo_redemptions', 'user_id', 'NULL'],          // the use stays (email_hash keeps a code from being used again after re-signup)
   ['invitations', 'invited_by', 'NULL'],              // still PENDING ones are deleted first (below)
   ['invitations', 'accepted_by', 'NULL'],
   ['workspaces', 'owner_id', 'NULL'],                 // only the closed solo workspaces still point here (shared ones were handed over)
