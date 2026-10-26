@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { LEGAL, koDate, legalFooterHtml } from '../public/app/shared/legal-info.js';
-import { PLANS, annualView, catalogue, ANNUAL_DISCOUNT_PCT, CREDIT_PRICE_KRW, TOPUP_STEP_KRW, TOPUP_MAX_KRW, MIN_CARD_KRW, PURCHASED_VALID_YEARS } from './plans.js';
+import { PLANS, annualView, catalogue, ANNUAL_DISCOUNT_PCT, CREDIT_PRICE_KRW, CREDIT_PACKS, TOPUP_STEP_KRW, TOPUP_MAX_KRW, MIN_CARD_KRW, PURCHASED_VALID_YEARS, FREE_ONCE_CREDITS, creditsOnlyMode, CREDITS_URL } from './plans.js';
 import { pricingHtml, PRICING_CSS, soonCta } from '../public/app/shared/pricing.js';
 import { paymentsEnabled } from './billing/provider.js';
 import { shareMeta } from './share-meta.js';
@@ -491,6 +491,36 @@ export function landingPricingHtml(cat = catalogue(), { open = paymentsEnabled()
   return `<style>${PRICING_CSS}</style>${pricingHtml(cat, { cta })}`;
 }
 
+/**
+ * NicePay 심사 모드 (CREDITS_ONLY_MODE): landing #pricing sells AI credit packs only (카드 1회 결제). Prices come from
+ * plans.js CREDIT_PACKS (VAT included); the <!--CO:x--> … <!--/CO:x--> spans of index.html get credit-only copy instead of
+ * the plan wording, so no 정기결제 product (Pro / Team, 활성 프로젝트 · 기본 사용자) is shown.
+ */
+const num = (v) => Number(v || 0).toLocaleString('ko-KR');
+export const CREDITS_ONLY_COPY = {
+  hero: '무료로 시작',
+  head: `<h2 class="h2">필요한 만큼만,<br>AI 크레딧 충전.</h2>
+      <p class="lead" style="margin-top:18px">RELAI는 무료로 쓰고, AI 기능은 크레딧으로 이용합니다. 가입하면 AI 크레딧 ${num(FREE_ONCE_CREDITS)}을 드리고, 더 필요하면 아래 상품을 신용카드로 한 번 결제해 충전하세요. 자동 결제는 없습니다.</p>`,
+  aiprice: `크레딧은 워크스페이스 공용입니다. 가입하면 처음 한 번 <b>AI 크레딧 ${num(FREE_ONCE_CREDITS)}</b>을 드리고, 워크스페이스 소유자가 설정 › AI 크레딧에서 필요한 만큼 충전할 수 있습니다.`,
+};
+export function creditPacksHtml(packs = CREDIT_PACKS) {
+  const next = `/login?next=${encodeURIComponent(CREDITS_URL)}`;
+  const card = (p, i) => `<div class="plan${i === 1 ? ' plan--team' : ''}" data-credit-pack="${esc(p.key)}">
+      <div class="plan__n">AI 크레딧 ${num(p.credits)}</div>
+      <div class="plan__p">${num(p.amount)}원 <small>VAT 포함</small></div>
+      <p class="plan__d">AI 크레딧 ${num(p.credits)}을 충전합니다. 1크레딧 = ${num(CREDIT_PRICE_KRW)}원</p>
+      <ul><li>신용카드 1회 결제 (자동 결제 없음)</li><li>구매일부터 ${PURCHASED_VALID_YEARS}년간 사용</li><li>쓰지 않은 구매 크레딧은 환불 요청 가능</li></ul>
+      <a href="${next}" class="btn ${i === 1 ? 'btn--primary' : 'btn--secondary'} btn--block" data-loc="pricing_credit_${esc(p.key.toLowerCase())}">로그인하고 충전하기</a>
+    </div>`;
+  return `<div class="pgrid" id="credit-packs">${packs.map(card).join('')}</div>
+    <p class="pricing__note">결제는 신용카드 1회 결제로만 진행됩니다. 충전 금액은 설정 › AI 크레딧에서 ${num(TOPUP_STEP_KRW)}원 단위로 고를 수도 있습니다.</p>`;
+}
+/** Applies credit-only copy to the landing page HTML when the mode is on (otherwise only strips the markers' content-neutral comments). */
+export function applyCreditsOnly(html, on = creditsOnlyMode()) {
+  if (!on) return html;
+  return html.replace(/<!--CO:(\w+)-->[\s\S]*?<!--\/CO:\1-->/g, (m, k) => (k in CREDITS_ONLY_COPY ? CREDITS_ONLY_COPY[k] : m));
+}
+
 /** Mounts /terms, /privacy, /pricing and the landing page (with the footer filled in). Call before express.static. */
 export function mountLegal(app, { pub, plans, onLanding = null, landingPromo = null }) {
   const cache = {};
@@ -502,8 +532,8 @@ export function mountLegal(app, { pub, plans, onLanding = null, landingPromo = n
   let landing = null;
   app.get(['/', '/index.html'], async (req, res) => {
     if (onLanding) await onLanding(req);
-    landing ||= readFileSync(resolve(pub, 'index.html'), 'utf8').replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replace('<!--PRICING:landing-->', landingPricingHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
-    const promo = landingPromo ? await landingPromo() : '';   // 관리자 › 프로모션 (placement landing), rendered per request
+    landing ||= applyCreditsOnly(readFileSync(resolve(pub, 'index.html'), 'utf8')).replace('<!--LEGAL_FOOTER-->', legalFooterHtml()).replace('<!--PRICING:landing-->', creditsOnlyMode() ? creditPacksHtml() : landingPricingHtml()).replaceAll('__CONTACT_EMAIL__', esc(LEGAL.contactEmail));
+    const promo = landingPromo && !creditsOnlyMode() ? await landingPromo() : '';   // 심사 모드: the #pricing promo (관리자 › 프로모션, free-text plan copy) is not shown   // 관리자 › 프로모션 (placement landing), rendered per request
     res.type('html').send(landing.replace('<!--SHARE_META-->', shareMeta(req) + ga4For(req)).replace('<!--PROMO:landing-->', promo));
   });
 }

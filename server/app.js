@@ -66,7 +66,7 @@ import { assertWithinLimit, PlanLimitError, OverLimitError, ProjectReadOnlyError
 import { providerFromEnv } from './billing/provider.js';
 import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
-import { PLANS } from './plans.js';
+import { PLANS, creditsOnlyMode } from './plans.js';
 import { mountCreditRoutes } from './billing/credit-routes.js';
 import { mountBillingHistory } from './billing/history.js';
 import { mountServicePayReturn, mountServicePay, mountServicePayAdmin } from './service-pay.js';
@@ -309,7 +309,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.json({ holidays: [...map].map(([day, name]) => ({ day, name })) });
   }));
   app.get('/api/me', (req, res, next) => (!req.user && req.query.optional ? res.json({ user: null, workspaces: [] }) : next()), requireAuth, wrap(async (req, res) => {
-    res.json({ user: toPublicUser(req.user), workspaces: await q.memberships.all(req.user.id) });
+    res.json({ user: toPublicUser(req.user), workspaces: await q.memberships.all(req.user.id), features: { credits_only: creditsOnlyMode() } });
   }));
 
   /* ---------- admin console API (operator role only; see admin-routes.js) ---------- */

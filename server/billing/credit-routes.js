@@ -15,7 +15,7 @@ import { writeAudit } from '../admin.js';
 import { sendEmail } from '../email/service.js';
 import { emailConfig } from '../email/config.js';
 import { creditRefundRequestEmail } from '../email/templates.js';
-import { CREDIT_PACKS, CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS, PLANS, PLANS_URL, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, TOPUP_STEP_KRW, TOPUP_MAX_KRW, splitVat } from '../plans.js';
+import { CREDIT_PACKS, CREDIT_PRICE_KRW, LOW_BALANCE_CREDITS, PLANS, PLANS_URL, REFUND_FULL_DAYS, REFUND_FEE_PCT, PURCHASED_VALID_YEARS, TOPUP_STEP_KRW, TOPUP_MAX_KRW, splitVat, creditsOnlyMode } from '../plans.js';
 import { FEATURE_LABEL, featureCreditCost, aiConfig } from '../ai/config.js';
 import { getBalance, bucketBalances } from '../ai/credits.js';
 import { effectivePlan } from './subscriptions.js';
@@ -65,7 +65,7 @@ export async function creditSummary(db, wid, { role = null, provider = null } = 
     prices: CHARGED.map((f) => ({ feature: f, label: shortLabel(f), credits: featureCreditCost(f), krw: won(featureCreditCost(f)) })),
     packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount, ...splitVat(p.amount) })),
     starter_credits: aiConfig().trialCredits, purchased_valid_years: PURCHASED_VALID_YEARS, refund_policy: { full_days: REFUND_FULL_DAYS, fee_pct: refundRule() === 'v2' ? REFUND_FEE_PCT : 0, rule: refundRule() },
-    can_buy: owner, ai_enabled: aiConfig().enabled, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), sandbox: provider?.mode === 'sandbox', refundable: owner ? await refundableCredits(db, wid) : null,
+    credits_only: creditsOnlyMode(), can_buy: owner, ai_enabled: aiConfig().enabled, provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), sandbox: provider?.mode === 'sandbox', refundable: owner ? await refundableCredits(db, wid) : null,
     plan, plan_label: PLANS[plan].label, early_access_until: w?.early_access_until || null, workspace_name: w?.name || '',
   };
 }
