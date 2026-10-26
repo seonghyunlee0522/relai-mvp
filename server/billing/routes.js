@@ -25,7 +25,7 @@ import { FREE_POLICY, FREE_KEEP } from '../email/templates.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices, expireEndedSubscriptions, notifyPriceIncreases, sendCancelNotice } from './cron.js';
 import { disclosure, checkConsent, recordConsent } from './consent.js';
-import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange, refundQuote, cancelWithRefund, executeRefund, markRefundDone, listRefunds, refundPartialEnabled } from './lifecycle.js';
+import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange, refundQuote, cancelWithRefund, executeRefund, markRefundDone, reopenRefund, listRefunds, refundPartialEnabled } from './lifecycle.js';
 import { grantDueMonthlyCredits } from './ai-grants.js';
 import { isCreditOrder } from './credit-packs.js';
 import { bucketBalances } from '../ai/credits.js';
@@ -465,14 +465,27 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   const admin = (req, res) => { if (req.user?.system_role !== 'SYSTEM_ADMIN') { fail(res, 403, 'forbidden', '운영자 권한이 필요합니다.'); return false; } return true; };
   app.get('/api/billing/admin/subscription-refunds', requireAuth, wrap(async (req, res) => {
     if (!admin(req, res)) return;
+    // ?status=REQUESTED|FAILED|DONE|ALL (default: open = not DONE). 관리자 › 환불 관리 lists who must be refunded by hand.
     const status = ['REQUESTED', 'FAILED', 'DONE'].includes(req.query.status) ? req.query.status : null;
-    res.json({ refunds: await db.all(`SELECT r.id, r.workspace_id, w.name AS workspace_name, r.order_id, r.kind, r.amount, r.days, r.period_days, r.status, r.failure_message, r.created_at, r.done_at
-      FROM subscription_refunds r JOIN workspaces w ON w.id = r.workspace_id ${status ? 'WHERE r.status = ?' : "WHERE r.status <> 'DONE'"} ORDER BY r.created_at DESC LIMIT 200`, status ? [status] : []) });
+    const where = status ? 'WHERE r.status = ?' : req.query.status === 'ALL' ? '' : "WHERE r.status <> 'DONE'";
+    const rows = await db.all(`SELECT r.id, r.workspace_id, w.name AS workspace_name, u.name AS owner_name, u.email AS owner_email, r.order_id, o.goods_name, o.amount AS paid_amount, o.paid_at,
+        o.provider_tid, r.kind, r.amount, r.days, r.period_days, r.status, r.failure_message, r.reason, r.created_at, r.done_at
+      FROM subscription_refunds r JOIN workspaces w ON w.id = r.workspace_id LEFT JOIN users u ON u.id = w.owner_id LEFT JOIN billing_orders o ON o.id = r.order_id
+      ${where} ORDER BY r.created_at DESC LIMIT 300`, status ? [status] : []);
+    const open = await db.get(`SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0)::int AS amount FROM subscription_refunds WHERE status <> 'DONE'`);
+    res.json({ refunds: rows.map(({ provider_tid, ...r }) => ({ ...r, provider_tid: provider_tid || null })), open });
   }));
   app.post('/api/billing/admin/subscription-refunds/:id/:action', requireAuth, wrap(async (req, res) => {
     if (!admin(req, res)) return;
     const r = await db.get('SELECT id, workspace_id, status, amount FROM subscription_refunds WHERE id = ?', [req.params.id]);
     if (!r) return fail(res, 404, 'not_found', '환불 건을 찾을 수 없습니다.');
+    if (req.params.action === 'reopen') {
+      if (r.status !== 'DONE') return fail(res, 409, 'not_done', '완료된 환불만 되돌릴 수 있습니다.');
+      const ok = await reopenRefund(db, r.id);
+      if (!ok) return fail(res, 409, 'not_reopenable', '결제사에서 자동 취소된 환불은 되돌릴 수 없습니다.');
+      await writeAudit(db, { adminUserId: req.user.id, action: 'SUBSCRIPTION_REFUND_REOPEN', targetType: 'SUBSCRIPTION_REFUND', targetId: r.id, metadata: { amount: r.amount, workspace_id: r.workspace_id } });
+      return res.json({ refund: { id: r.id, status: 'REQUESTED' } });
+    }
     if (r.status === 'DONE') return fail(res, 409, 'already_done', '이미 처리된 환불입니다.');
     let out;
     if (req.params.action === 'retry') { if (!provider?.refundPartial) return unavailable(res); out = await executeRefund(db, provider, r.id); }

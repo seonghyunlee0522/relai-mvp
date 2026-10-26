@@ -44,6 +44,7 @@ import { adminFeedbackPage, adminFeedbackDetailPage } from './admin/feedback.js'
 import { adminAuditPage } from './admin/audit.js';
 import { adminIntegrationsPage } from './admin/integrations.js';
 import { adminInvitationsPage, adminEmailDeliveriesPage } from './admin/invitations.js';
+import { adminRefundsPage } from './admin/refunds.js';
 
 registerRoutes([
   [/^\/app\/?$/, homePage],
@@ -80,6 +81,7 @@ registerRoutes([
   [/^\/admin\/subscriptions\/([\w-]+)\/?$/, adminSubscriptionPage],
   [/^\/admin\/payments\/?$/, adminPaymentsPage],
   [/^\/admin\/payments\/([\w-]+)\/?$/, adminPaymentPage],
+  [/^\/admin\/refunds\/?$/, adminRefundsPage],   // 환불 관리: 구독 해지 · 청약철회 환불 대상 (수동 처리)
   [/^\/admin\/usage\/?$/, adminUsagePage],
   [/^\/admin\/deliverables\/?$/, adminDeliverablesPage],
   [/^\/admin\/ai-prompts\/?$/, adminPromptsPage],

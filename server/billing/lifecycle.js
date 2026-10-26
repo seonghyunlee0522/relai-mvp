@@ -14,7 +14,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
-import { PLANS, PAID_PLANS, CYCLES, limitsFor } from '../plans.js';
+import { PLANS, PAID_PLANS, CYCLES, limitsFor, oneTimeMode } from '../plans.js';
 import { prorate, kstDaysBetween } from './prorate.js';
 import { renewalAmount, newOrderId, OrderError } from './orders.js';
 import { countUsage } from './limits.js';
@@ -134,7 +134,8 @@ export async function refundQuote(db, workspaceId, { at = new Date() } = {}) {
     const per = orderPeriod(o, sub);
     if (!per || new Date(per.end) <= at) continue;
     const r = prorate({ unit: Number(o.amount), qty: 1, periodStart: per.start, periodEnd: per.end, at: tomorrow, dir: 'up' });
-    const amount = Math.min(left, r.amount);
+    // 단건결제 모드 (founder 2026-10-26): a cancel refunds what the customer paid for the order (the payment unit), not unused days.
+    const amount = oneTimeMode() ? left : Math.min(left, r.amount);
     if (!(amount > 0)) continue;
     const withdrawal = o.paid_at && kstDaysBetween(o.paid_at, at) < WITHDRAWAL_DAYS;
     lines.push({ order_id: o.id, kind: withdrawal ? 'WITHDRAWAL' : 'CANCEL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
@@ -200,6 +201,15 @@ export async function executeRefund(db, provider, refundId) {
 }
 
 /** Operator: a refund paid by hand (bank transfer, console cancel) is marked DONE and counted on its order. */
+/** Operator undo of a manual DONE (marked by mistake): back to REQUESTED, the order's refunded_amount restored. Provider-executed refunds (cancelled_tid) are never reopened. */
+export async function reopenRefund(db, refundId) {
+  return tx(db, async (t) => {
+    const r = await t.get(`UPDATE subscription_refunds SET status = 'REQUESTED', done_at = NULL, failure_message = NULL WHERE id = ? AND status = 'DONE' AND cancelled_tid IS NULL RETURNING order_id, amount`, [String(refundId || '')]);
+    if (r) await t.run('UPDATE billing_orders SET refunded_amount = GREATEST(0, refunded_amount - ?), updated_at = now() WHERE id = ?', [Number(r.amount), r.order_id]);
+    return Boolean(r);
+  });
+}
+
 export async function markRefundDone(db, refundId, { note = '' } = {}) {
   return tx(db, async (t) => {
     const r = await t.get(`UPDATE subscription_refunds SET status = 'DONE', done_at = now(), failure_message = ? WHERE id = ? AND status <> 'DONE' RETURNING order_id, amount`, [note ? `수동 처리: ${String(note).slice(0, 200)}` : '수동 처리', String(refundId || '')]);
