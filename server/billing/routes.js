@@ -12,7 +12,7 @@ import { aiConfig } from '../ai/config.js';
 import express from 'express';
 import { rateLimiter } from '../security.js';
 import { requireAction, can } from '../authz.js';
-import { PLANS, PAID_PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, CREDIT_PRICE_KRW, PURCHASED_VALID_YEARS, CREDIT_PACKS, catalogue as planCatalogue } from '../plans.js';
+import { PLANS, PAID_PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, CREDIT_PRICE_KRW, PURCHASED_VALID_YEARS, CREDIT_PACKS, catalogue as planCatalogue, oneTimeMode } from '../plans.js';
 import { workspaceUsage } from '../usage.js';
 import { writeAudit } from '../admin.js';
 import { emailConfig } from '../email/config.js';
@@ -106,6 +106,7 @@ function payPage({ order, params, sdkUrl, sandbox }) {
   const pack = isCreditOrder(order);
   const back = pack ? '/app/settings/credits' : '/app/settings#billing';
   const rows = pack ? `${row('AI 크레딧', `${Number(order.credits).toLocaleString('ko-KR')} 크레딧 (1 크레딧 = ₩${CREDIT_PRICE_KRW})`)}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`
+    : oneTimeMode() && Number(order.months) === 1 ? `${row('상품', '1개월 이용권 (자동 갱신 없음)')}${row('사용자', `${order.seats}명 (소유자 포함)`)}${row('이용 기간', '결제일부터 1개월')}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`
     : `${row('사용자', `${order.seats}명 (소유자 포함)`)}${row('월 이용료', `${won(order.unit_price)} / 월`)}${row('이용 기간', order.months === 12 ? '12개월 (연간 선결제)' : '1개월')}${row('정가', won(order.list_amount))}
 ${order.discount_amount ? row(order.founding ? `할인 (파운딩 고객 ${FOUNDING_OFFER.pct}% 포함)` : '할인', `−${won(order.discount_amount)}`) : ''}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`;
   const note = pack ? `충전한 크레딧은 구매일로부터 ${PURCHASED_VALID_YEARS}년간 쓸 수 있습니다. 미사용 크레딧은 환불 규정에 따라 환불받을 수 있습니다. 자동 결제되지 않습니다.`
@@ -143,9 +144,10 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
    * ONE_TIME_PLANS_ENABLED=true re-opens the retired one-time plan checkout (kept for the existing tests; never set in prod).
    */
   const flags = () => ({ payments: paymentsEnabled(), recurring: Boolean(provider?.recurringEnabled), checkout_open: checkoutOpen(),
-    addons: process.env.ADDONS_ENABLED === 'true', plan_change: process.env.PLAN_CHANGE_ENABLED === 'true', refund_partial: refundPartialEnabled() });
+    one_time: oneTimeMode(), addons: process.env.ADDONS_ENABLED === 'true' && !oneTimeMode(), plan_change: process.env.PLAN_CHANGE_ENABLED === 'true', refund_partial: refundPartialEnabled() });
   const checkoutOpen = () => paymentsEnabled() && Boolean(provider?.recurringEnabled && provider.registerBillingKey);
-  const oneTimeOpen = () => process.env.ONE_TIME_PLANS_ENABLED === 'true';
+  // 단건결제 모드 (ONE_TIME_PAYMENT_MODE) opens the one-time plan checkout as Pro / Team 1개월 이용권.
+  const oneTimeOpen = () => process.env.ONE_TIME_PLANS_ENABLED === 'true' || oneTimeMode();
   const notOpen = (res) => fail(res, 409, 'checkout_not_open', CHECKOUT_NOT_OPEN_MESSAGE);
   /** Gate for paid checkout: payments off → payments_disabled; recurring not approved → checkout_not_open. True when it answered. */
   const closed = (res) => { if (!paymentsEnabled()) { paymentsOff(res); return true; } if (!checkoutOpen()) { notOpen(res); return true; } return false; };
@@ -240,7 +242,10 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const current = await effectivePlan(db, req.params.wid);
     if (current === plan && sub?.auto_renew) { fail(res, 409, 'already_subscribed', `이미 ${PLANS[plan].label} 플랜을 사용 중입니다.`); return null; }
     if (recurring && PAID_PLANS.includes(current) && sub?.auto_renew && !sub.cancel_at_period_end) { fail(res, 409, 'already_subscribed', `이미 ${PLANS[current].label} 플랜을 구독 중입니다. 플랜 변경을 이용해 주세요.`); return null; }
-    try { return await quoteFor(db, req.params.wid, { plan, cycle: String(req.body?.cycle || 'MONTHLY'), users: req.body?.users ?? req.body?.seats, extra_users: req.body?.extra_users, extra_projects: req.body?.extra_projects }); }
+    // 단건결제 모드: 1개월 이용권 only — MONTHLY, the plan's included users and projects, no add-ons
+    if (!recurring && oneTimeMode() && String(req.body?.cycle || 'MONTHLY') !== 'MONTHLY') { fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { cycle: '1개월 이용권만 구매할 수 있습니다.' } }); return null; }
+    const one = !recurring && oneTimeMode();
+    try { return await quoteFor(db, req.params.wid, { plan, cycle: one ? 'MONTHLY' : String(req.body?.cycle || 'MONTHLY'), users: one ? undefined : req.body?.users ?? req.body?.seats, extra_users: one ? 0 : req.body?.extra_users, extra_projects: one ? 0 : req.body?.extra_projects }); }
     catch (e) { if (e instanceof OrderError) { orderFail(res, e); return null; } throw e; }
   };
 

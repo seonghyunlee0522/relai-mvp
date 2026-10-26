@@ -3,27 +3,21 @@
  * once). The calling screen still gets the error. Every upsell points at the plans page (/app/billing/plans). Calm copy: what happened,
  * that nothing was lost, and where to look — no fear words, no prices (payments are off; the plans page says '가격 안내 예정'). */
 import { html, raw } from '../core/dom.js';
-import { state, creditsOnly } from '../core/state.js';
+import { state, oneTimeMode } from '../core/state.js';
 import { navigate } from '../core/router.js';
 import { confirmDialog, noticeDialog } from './dialogs.js';
 import { isPhone } from '../core/device.js';
 
 export const PLANS_URL = '/app/billing/plans';
-const CREDITS_URL = '/app/settings/credits';
 let open = false;
 const fmt = (n) => Number(n).toLocaleString('ko-KR');
 
 /** { title, body } for a plan-limit or credit error payload (data.error from the API). */
 export function upsellCopy(err) {
   const l = err?.limit || {};
-  if (err?.code === 'AI_CREDIT_INSUFFICIENT' && creditsOnly()) {   // 심사 모드: no plan copy, the way out is 충전
+  if (err?.code === 'AI_CREDIT_INSUFFICIENT' && oneTimeMode()) {   // 단건결제 모드: every plan can top up, so the way out is 충전
     return { title: 'AI 크레딧이 조금 모자라요', body: html`<p>이 AI 기능에는 <b>${fmt(err.required ?? 0)}</b> 크레딧이 필요하고, 지금 잔액은 <b>${fmt(err.balance ?? 0)}</b> 크레딧이에요.</p>
-      <p class="dim" style="margin-top:8px">설정 › AI 크레딧에서 필요한 만큼 충전할 수 있어요. 직접 입력하는 기능은 그대로 쓸 수 있어요.</p>`, cta: 'AI 크레딧 충전', url: CREDITS_URL };
-  }
-  if (creditsOnly() && !l.seats) {
-    return { title: '무료 이용 한도에 도달했어요', body: html`<p>${err?.message || '이용 한도에 도달했어요.'}</p>
-      ${raw(l.dimension ? html`<p class="dim" style="margin-top:8px" data-upsell-usage>${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중</p>` : '')}
-      <p class="dim" style="margin-top:8px">지금까지 만든 내용은 모두 그대로 있어요.</p>`, cta: null };
+      <p class="dim" style="margin-top:8px">설정 › AI 크레딧에서 필요한 만큼 충전할 수 있어요. 직접 입력하는 기능은 그대로 쓸 수 있어요.</p>`, cta: 'AI 크레딧 충전', url: '/app/settings/credits' };
   }
   if (err?.code === 'AI_CREDIT_INSUFFICIENT') {
     return { title: 'AI 크레딧이 조금 모자라요', body: html`<p>이 AI 기능에는 <b>${fmt(err.required ?? 0)}</b> 크레딧이 필요하고, 지금 잔액은 <b>${fmt(err.balance ?? 0)}</b> 크레딧이에요.</p>
@@ -39,14 +33,13 @@ export async function showUpgradePrompt(err) {
   if (open) return; open = true;
   try {
     const { title, body, cta = '플랜 살펴보기', url: ctaUrl } = upsellCopy(err);
-    if (cta === null) { await noticeDialog({ title, bodyHtml: html`<div data-upsell>${raw(body)}</div>` }); return; }   // 심사 모드 plan limit: nothing to buy
     const url = ctaUrl || err?.upgrade?.url || PLANS_URL;
     if (isPhone()) {   // phone = view mode: the reason + a link, 닫기 only
       await noticeDialog({ title, bodyHtml: html`${raw(body)}<p style="margin-top:8px"><a href="${url}" data-link data-upsell-cta>${cta}</a></p>` });
       return;
     }
     const isOwner = state.workspace?.role === 'OWNER';
-    const who = isOwner ? '' : html`<p class="dim" style="margin-top:8px">${creditsOnly() ? '크레딧은 워크스페이스 소유자가 충전할 수 있어요.' : '플랜은 워크스페이스 소유자가 바꿀 수 있어요.'}</p>`;
+    const who = isOwner ? '' : html`<p class="dim" style="margin-top:8px">플랜은 워크스페이스 소유자가 바꿀 수 있어요.</p>`;
     const go = await confirmDialog({ title, bodyHtml: html`<div data-upsell>${raw(body)}${raw(who)}</div>`, confirm: cta, cancel: '닫기' });
     if (go) navigate(url);
   } finally { open = false; }

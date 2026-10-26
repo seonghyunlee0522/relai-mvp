@@ -1,5 +1,5 @@
 
 export const state = { user: null, workspace: null, workspaces: [] };
 
-/** NicePay 심사 모드 (server CREDITS_ONLY_MODE, /api/me features): AI credits are the only product — no plan / 구독 screens or copy. */
-export const creditsOnly = () => Boolean(state.features && state.features.credits_only);
+/** 단건결제 모드 (server ONE_TIME_PAYMENT_MODE, /api/me features): Pro / Team = 1개월 이용권, AI credits for every plan, no 정기결제 screens. */
+export const oneTimeMode = () => Boolean(state.features && state.features.one_time_payment);

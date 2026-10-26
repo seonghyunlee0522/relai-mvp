@@ -140,11 +140,12 @@ export const monthlyPrice = (plan, users) => (plan?.price ? plan.price.MONTHLY +
 /** Where every plan-limit / credit upsell points (subscription page, batch7 T5). */
 export const PLANS_URL = '/app/billing/plans';
 /**
- * NicePay 카드사 심사 모드 (CREDITS_ONLY_MODE=true, NicePay 2026-10-26): the site sells AI credits only, as one-time card payments.
- * Paid plans (Pro / Team, 정기결제) and their wording leave the landing page and the app; every workspace (Free included) may top up.
- * Plan limits stay enforced. Read per call so a redeploy can flip it; turn it off once NicePay approves 정기결제.
+ * 단건결제 모드 (ONE_TIME_PAYMENT_MODE=true; NicePay 카드사 심사 2026-10-26, 정기결제 승인 전): everything is sold as a one-time card
+ * payment through the NicePay window. Pro / Team = 1개월 이용권 (no auto renewal, MONTHLY only, no add-ons; the existing ONE_TIME
+ * plan order), AI credits = top-ups any workspace (Free included) may buy. Screens drop 연간 · 정기결제 · 자동 갱신 wording.
+ * Read per call so a redeploy can flip it; turn it off once NicePay approves 정기결제.
  */
-export const creditsOnlyMode = () => /^(1|true|yes|on)$/i.test(String(process.env.CREDITS_ONLY_MODE || '').trim());
+export const oneTimeMode = () => /^(1|true|yes|on)$/i.test(String(process.env.ONE_TIME_PAYMENT_MODE || '').trim());
 export const CREDITS_URL = '/app/settings/credits';
 
 /** Usage dimension labels in UI order (v3: active projects and users only — D1). */
