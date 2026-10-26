@@ -319,15 +319,35 @@ test('cancel + refund (founder 2026-10-26): full refund only within 7 days and u
   const t = await boot();
   const A = await owner(t);
   await subscribe(A, { plan: 'PRO', cycle: 'ANNUAL' });
-  // annual paid 100 days ago → no refund at all (no 일할 계산); a plain cancel still stops renewal
-  await t.db.run(`UPDATE subscriptions SET current_period_start = now() - interval '100 days', current_period_end = now() - interval '100 days' + interval '365 days' WHERE workspace_id = ?`, [A.w]);
-  await t.db.run(`UPDATE billing_orders SET period_start = NULL, period_end = NULL, paid_at = now() - interval '100 days' WHERE workspace_id = ?`, [A.w]);
+  // annual, 11 months in → months × monthly list ≥ paid → no refund, the plan runs to the end of the paid year (plain cancel)
+  await t.db.run(`UPDATE subscriptions SET current_period_start = now() - interval '320 days', current_period_end = now() - interval '320 days' + interval '365 days' WHERE workspace_id = ?`, [A.w]);
+  await t.db.run(`UPDATE billing_orders SET period_start = NULL, period_end = NULL, paid_at = now() - interval '320 days' WHERE workspace_id = ?`, [A.w]);
   const q = (await A.c('GET', `${B(A)}/refund-quote`)).json.refund;
-  assert.equal(q.total, 0); assert.equal(q.eligible, false); assert.equal(q.reason, 'period_over');
+  assert.equal(q.total, 0); assert.equal(q.eligible, false); assert.equal(q.reason, 'annual_nothing');
   const no = await A.c('POST', `${B(A)}/cancel`, { refund: true });
   assert.equal(no.status, 409); assert.equal(no.json.error.code, 'not_refundable');
+  assert.ok((await sub(t.db, A.w)).billing_key_enc, 'a refused refund leaves the billing key alone');
   const plain = await A.c('POST', `${B(A)}/cancel`, {});
   assert.equal(plain.status, 200, JSON.stringify(plain.json)); assert.equal(plain.json.billing.plan, 'PRO'); assert.equal(plain.json.billing.cancel_at_period_end, true);
+
+  // annual, 100 days in (4th billing month) → use to the end of that month, refund 288,000 − 30,000 × 4 = 168,000 (no annual discount)
+  const Y = await owner(t, 'y@x.com');
+  await subscribe(Y, { plan: 'PRO', cycle: 'ANNUAL' });
+  await t.db.run(`UPDATE subscriptions SET current_period_start = now() - interval '100 days', current_period_end = now() - interval '100 days' + interval '365 days' WHERE workspace_id = ?`, [Y.w]);
+  await t.db.run(`UPDATE billing_orders SET period_start = NULL, period_end = NULL, paid_at = now() - interval '100 days' WHERE workspace_id = ?`, [Y.w]);
+  const yq = (await Y.c('GET', `${B(Y)}/refund-quote`)).json.refund;
+  assert.equal(yq.mode, 'ANNUAL'); assert.equal(yq.total, 168000); assert.equal(yq.lines[0].months_used, 4); assert.equal(yq.lines[0].monthly_price, 30000);
+  const ys0 = await sub(t.db, Y.w);
+  const yr = await Y.c('POST', `${B(Y)}/cancel`, { refund: true });
+  assert.equal(yr.status, 200, JSON.stringify(yr.json));
+  assert.equal(yr.json.cancel.mode, 'ANNUAL'); assert.equal(yr.json.cancel.immediate, false); assert.equal(yr.json.cancel.refund_total, 168000);
+  assert.equal(yr.json.billing.plan, 'PRO', 'still PRO until the end of the billing month');
+  const ys = await sub(t.db, Y.w);
+  const want = new Date(ys0.current_period_start); want.setUTCMonth(want.getUTCMonth() + 4);
+  assert.equal(new Date(ys.current_period_end).toISOString(), want.toISOString());
+  assert.equal(ys.status, 'ACTIVE'); assert.equal(ys.auto_renew, false); assert.equal(ys.cancel_at_period_end, true); assert.equal(ys.billing_key_enc, null);
+  const yrf = await t.db.get('SELECT * FROM subscription_refunds WHERE workspace_id = ?', [Y.w]);
+  assert.equal(yrf.amount, 168000); assert.equal(yrf.kind, 'CANCEL'); assert.equal(yrf.status, 'REQUESTED');
 
   // paid 2 days ago, nothing used since → the whole payment, executed as a partial cancel when REFUND_PARTIAL_ENABLED
   const D = await owner(t, 'd@x.com');

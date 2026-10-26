@@ -24,7 +24,7 @@ const kday = (d) => new Date(d).toLocaleDateString('ko-KR', { timeZone: 'Asia/Se
 const sha = (s) => createHash('sha256').update(String(s), 'utf8').digest('hex');
 
 export const CANCEL_TEXT = '설정 › 플랜 · 결제에서 언제든 해지할 수 있습니다(월간 · 연간 모두). 해지하면 자동 갱신이 즉시 중단되고, 이미 결제한 기간이 끝날 때까지 이용합니다.';
-export const REFUND_TEXT = `결제일부터 ${WITHDRAWAL_DAYS}일 이내이고 결제 후 서비스를 이용하지 않았다면(AI 사용, 프로젝트 생성, 프로젝트 입력·수정·삭제 없음) 결제 금액 전액을 환불합니다. 그 외에는 환불하지 않으며, 해지하면 결제한 기간이 끝날 때까지 이용하고 다음 결제는 되지 않습니다. 위약금은 없습니다. 해지 후 ${RETENTION_DAYS}일 동안 프로젝트 데이터를 조회하고 내보낼 수 있습니다.`;
+export const REFUND_TEXT = `결제일부터 ${WITHDRAWAL_DAYS}일 이내이고 결제 후 서비스를 이용하지 않았다면(AI 사용, 프로젝트 생성, 프로젝트 입력·수정·삭제 없음) 결제 금액 전액을 환불합니다. 연간 요금제를 중도 해지하면 해지한 이용월(결제일 기준)까지 이용하고, 연간 결제 금액에서 이용한 개월 수 × 월간 정가(할인 없음)를 뺀 나머지를 환불합니다. 그 외에는 환불하지 않으며, 해지하면 결제한 기간이 끝날 때까지 이용하고 다음 결제는 되지 않습니다. 위약금은 없습니다. 해지 후 ${RETENTION_DAYS}일 동안 프로젝트 데이터를 조회하고 내보낼 수 있습니다.`;
 
 /**
  * Disclosure for a quote. `kind`: CHECKOUT (new subscription: plan + add-ons), ADDON, UPGRADE, PRICE_INCREASE.

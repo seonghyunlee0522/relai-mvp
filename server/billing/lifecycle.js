@@ -133,30 +133,72 @@ export async function usageSince(db, workspaceId, since) {
   return { used: ai.n > 0 || pr.n > 0 || edits, ai: ai.n, projects: pr.n, edits };
 }
 
+const addMonths = (d, m) => { const x = new Date(d); x.setUTCMonth(x.getUTCMonth() + m); return x; };
+/** Billing months of `start` begun by `at` (the month containing `at` counts) and the date that month ends (결제일 기준 월). */
+export function monthsBegun(start, at) {
+  let k = 1;
+  while (k < 120 && addMonths(start, k) <= at) k += 1;
+  return { months: k, ends_at: addMonths(start, k) };
+}
+
 /**
- * Refund preview for an immediate cancel at `at` (founder policy 2026-10-26, 정기결제 · 단건결제 alike): a paid period order is refunded
- * IN FULL (what is left of it) only when it was paid within WITHDRAWAL_DAYS (7 KST days) AND the workspace has not used the service
- * since that payment (usageSince). Otherwise there is no refund: the customer keeps the plan to the end of the period and auto renewal
- * stops. No 일할 계산. → { sub, lines, total, withdrawal, eligible, reason: null | 'period_over' | 'used' | 'nothing_paid', refund_until }.
+ * Refund preview for a cancel at `at` (founder policy 2026-10-26, 정기결제 · 단건결제 alike). In this order:
+ *   1. FULL     paid within WITHDRAWAL_DAYS (7 KST days) and the service not used since (usageSince) → the whole payment, the plan ends now.
+ *   2. ANNUAL   an annual subscription cancelled mid-term → the plan runs to the end of the current billing month (결제일 기준), and the
+ *               refund = annual payment − months begun × the MONTHLY list price (no annual discount). Add-on / upgrade orders of the
+ *               period: amount − months begun since their own start × their own monthly share. When nothing is left to refund
+ *               (reason 'annual_nothing'), there is no refund and the customer keeps the plan to the end of the paid year.
+ *   3. NONE     anything else: no refund; a cancel just stops renewal (the plan runs to the end of the paid period).
+ * → { sub, lines, total, withdrawal, eligible, mode: 'FULL' | 'ANNUAL' | null, ends_at, reason, refund_until }.
  */
 export async function refundQuote(db, workspaceId, { at = new Date() } = {}) {
   const sub = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [workspaceId]);
-  const none = (reason, extra = {}) => ({ sub, lines: [], total: 0, withdrawal: false, eligible: false, reason, refund_until: null, ...extra });
+  const none = (reason, extra = {}) => ({ sub, lines: [], total: 0, withdrawal: false, eligible: false, mode: null, ends_at: null, reason, refund_until: null, ...extra });
   if (!sub || !['ACTIVE', 'PAST_DUE'].includes(sub.status) || !PAID_PLANS.includes(sub.plan)) return none('nothing_paid');
   const orders = await db.all(`SELECT * FROM billing_orders WHERE workspace_id = ? AND status = 'PAID' AND kind IN (${PERIOD_KINDS.map(() => '?').join(',')}) ORDER BY paid_at`, [workspaceId, ...PERIOD_KINDS]);
-  const open = orders.filter((o) => Number(o.amount) - Number(o.refunded_amount || 0) > 0 && o.paid_at && (() => { const per = orderPeriod(o, sub); return per && new Date(per.end) > at; })());
+  const leftOf = (o) => Number(o.amount) - Number(o.refunded_amount || 0);
+  const open = orders.filter((o) => leftOf(o) > 0 && o.paid_at && (() => { const per = orderPeriod(o, sub); return per && new Date(per.end) > at; })());
   if (!open.length) return none('nothing_paid');
-  const recent = open.filter((o) => kstDaysBetween(o.paid_at, at) < WITHDRAWAL_DAYS);
   const last = open[open.length - 1];
   const refundUntil = new Date(new Date(last.paid_at).getTime() + WITHDRAWAL_DAYS * DAY).toISOString();
-  if (!recent.length) return none('period_over', { refund_until: refundUntil });
-  // usage since the earliest refundable payment: anything used after it means that payment was used
-  const u = await usageSince(db, workspaceId, recent[0].paid_at);
-  if (u.used) return none('used', { refund_until: refundUntil, usage: u });
-  const lines = recent.map((o) => { const per = orderPeriod(o, sub); const left = Number(o.amount) - Number(o.refunded_amount || 0);
-    return { order_id: o.id, kind: 'WITHDRAWAL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
-      days: per ? kstDaysBetween(at, per.end) : 0, period_days: per ? kstDaysBetween(per.start, per.end) : 0, amount: left }; });
-  return { sub, lines, total: lines.reduce((s2, l) => s2 + l.amount, 0), withdrawal: true, eligible: true, reason: null, refund_until: refundUntil };
+
+  // 1. FULL — within 7 days and unused since the earliest of those payments
+  const recent = open.filter((o) => kstDaysBetween(o.paid_at, at) < WITHDRAWAL_DAYS);
+  let usage = null;
+  if (recent.length) {
+    usage = await usageSince(db, workspaceId, recent[0].paid_at);
+    if (!usage.used) {
+      const lines = recent.map((o) => { const per = orderPeriod(o, sub);
+        return { order_id: o.id, kind: 'WITHDRAWAL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
+          days: per ? kstDaysBetween(at, per.end) : 0, period_days: per ? kstDaysBetween(per.start, per.end) : 0, months_used: 0, monthly_price: null, amount: leftOf(o) }; });
+      return { sub, lines, total: lines.reduce((s2, l) => s2 + l.amount, 0), withdrawal: true, eligible: true, mode: 'FULL', ends_at: at.toISOString(), reason: null, refund_until: refundUntil };
+    }
+  }
+
+  // 2. ANNUAL — mid-term cancel of a yearly subscription, re-priced month by month at the monthly list price
+  if ((sub.billing_cycle || 'MONTHLY') === 'ANNUAL' && sub.current_period_start) {
+    const { months, ends_at: endsAt } = monthsBegun(sub.current_period_start, at);
+    if (months >= 12) return none('annual_nothing', { refund_until: refundUntil, usage });
+    const lines = [];
+    for (const o of open) {
+      const per = orderPeriod(o, sub); if (!per) continue;
+      let monthly; let used;
+      if (Number(o.months) === 12) { monthly = Math.round(Number(o.list_amount) / 12); used = months; }   // list_amount = monthly list × 12
+      else {   // add-on / upgrade bought during the year: its own months, at its own monthly share
+        const span = monthsBegun(per.start, new Date(new Date(per.end).getTime() - 1)).months;
+        monthly = Math.ceil(Number(o.amount) / Math.max(1, span)); used = monthsBegun(per.start, at).months;
+      }
+      const amount = Math.max(0, Math.min(leftOf(o), Number(o.amount) - used * monthly));
+      if (amount > 0) lines.push({ order_id: o.id, kind: 'CANCEL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
+        days: kstDaysBetween(endsAt, per.end), period_days: kstDaysBetween(per.start, per.end), months_used: used, monthly_price: monthly, amount });
+    }
+    const total = lines.reduce((s2, l) => s2 + l.amount, 0);
+    if (!(total > 0)) return none('annual_nothing', { refund_until: refundUntil, usage });
+    return { sub, lines, total, withdrawal: false, eligible: true, mode: 'ANNUAL', ends_at: endsAt.toISOString(), reason: null, refund_until: refundUntil };
+  }
+
+  // 3. NONE
+  return none(recent.length ? 'used' : 'period_over', { refund_until: refundUntil, usage });
 }
 
 /**
@@ -168,6 +210,8 @@ export async function refundQuote(db, workspaceId, { at = new Date() } = {}) {
 export async function cancelWithRefund(db, provider, { workspaceId, userId = null, reason = '고객 해지 환불' }) {
   const pre = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [workspaceId]);
   if (!pre || !['ACTIVE', 'PAST_DUE'].includes(pre.status) || !PAID_PLANS.includes(pre.plan)) return { error: 'no_active_subscription' };
+  const pq = await refundQuote(db, workspaceId);   // checked before the billing key is expired: a refused refund changes nothing
+  if (!pq.eligible) return { error: 'not_refundable', reason: pq.reason };
   if (pre.billing_key_enc && provider?.cancel) await provider.cancel({ subscription: pre });
   const out = await tx(db, async (t) => {
     const sub = await t.get('SELECT * FROM subscriptions WHERE workspace_id = ? FOR UPDATE', [workspaceId]);
@@ -182,11 +226,16 @@ export async function cancelWithRefund(db, provider, { workspaceId, userId = nul
         [id, workspaceId, sub.id, l.order_id, l.kind, l.amount, l.days, l.period_days, String(reason).slice(0, 100), userId]);
       rows.push({ id, ...l });
     }
+    if (q.mode === 'ANNUAL') {   // 연간 중도 해지: 이번 결제 월이 끝날 때까지 이용, 자동 갱신 중단, 그 뒤 만료 job이 Free로 전환
+      await t.run(`UPDATE subscriptions SET auto_renew = false, cancel_at_period_end = true, billing_key_enc = NULL, current_period_end = ? WHERE id = ?`, [q.ends_at, sub.id]);
+      await t.run(`UPDATE subscription_changes SET status = 'CANCELED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED'`, [sub.id]);
+      return { refunds: rows, total: q.total, withdrawal: false, mode: 'ANNUAL', ends_at: q.ends_at, subscription_id: sub.id };
+    }
     await transition(t, sub, 'subscription.canceled', { immediate: true });
     await t.run(`UPDATE subscriptions SET auto_renew = false, cancel_at_period_end = false, billing_key_enc = NULL, current_period_end = LEAST(current_period_end, now()) WHERE id = ?`, [sub.id]);
     await t.run(`UPDATE subscription_changes SET status = 'CANCELED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED'`, [sub.id]);
     await expirePlanCredits(t, workspaceId, { reason: '기본 크레딧 소멸 (구독 해지)', referenceId: `cancel:${sub.id}:${Date.now()}` });
-    return { refunds: rows, total: q.total, withdrawal: q.withdrawal, subscription_id: sub.id };
+    return { refunds: rows, total: q.total, withdrawal: q.withdrawal, mode: 'FULL', ends_at: q.ends_at, subscription_id: sub.id };
   });
   if (out.error) return out;
   out.executed = false;
@@ -204,7 +253,7 @@ export async function executeRefund(db, provider, refundId) {
   const order = await db.get('SELECT * FROM billing_orders WHERE id = ?', [r.order_id]);
   const cancelOrderId = newOrderId();
   try {
-    const p = await provider.refundPartial({ order, amount: Number(r.amount), reason: r.kind === 'WITHDRAWAL' ? '청약철회' : '해지 환불 (미사용 기간)', cancelOrderId });
+    const p = await provider.refundPartial({ order, amount: Number(r.amount), reason: r.kind === 'WITHDRAWAL' ? '청약철회' : '연간 중도 해지 환불', cancelOrderId });
     await tx(db, async (t) => {
       const done = await t.get(`UPDATE subscription_refunds SET status = 'DONE', cancel_order_id = ?, cancelled_tid = ?, failure_message = NULL, done_at = now() WHERE id = ? AND status <> 'DONE' RETURNING id`, [cancelOrderId, p.cancelled_tid || null, r.id]);
       if (done) await t.run('UPDATE billing_orders SET refunded_amount = refunded_amount + ?, refund_tid_seq = refund_tid_seq + 1, updated_at = now() WHERE id = ?', [Number(r.amount), r.order_id]);

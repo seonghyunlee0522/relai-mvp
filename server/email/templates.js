@@ -131,8 +131,10 @@ export function cancelEmail({ workspaceName, planLabel, immediate, periodEnd, re
   const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 해지 안내`;
   const what = immediate
     ? `구독을 해지해 지금 Free 플랜이 되었습니다. ${refundTotal > 0 ? `환불 ${wonKr(refundTotal)}을(를) ${executed ? '결제한 카드로 취소 처리했습니다' : '3영업일 안에 결제한 카드로 취소해 드립니다'}(위약금 없음).` : '환불할 미사용 기간이 없습니다.'}`
-    : `자동 갱신을 중단했습니다. ${periodEnd ? `${kDate(periodEnd)}까지` : '결제한 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 더 이상 결제되지 않습니다.`;
-  const unit = (l) => (Number(l.amount) === Number(l.paid) ? '결제 금액 전액' : `미사용 ${l.days}/${l.period_days}일`);   // 단건결제 모드 refunds the whole payment
+    : refundTotal > 0   // 연간 중도 해지: 이번 결제 월 끝까지 이용, 월간 정가로 다시 계산한 나머지 환불
+      ? `연간 구독을 해지했습니다. ${periodEnd ? `${kDate(periodEnd)}까지` : '이번 결제 월이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 이용한 개월 수를 월간 요금(할인 없음)으로 계산한 나머지 ${wonKr(refundTotal)}을(를) ${executed ? '결제한 카드로 취소 처리했습니다' : '3영업일 안에 결제한 카드로 취소해 드립니다'}.`
+      : `자동 갱신을 중단했습니다. ${periodEnd ? `${kDate(periodEnd)}까지` : '결제한 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 더 이상 결제되지 않습니다.`;
+  const unit = (l) => (Number(l.amount) === Number(l.paid) ? '결제 금액 전액' : l.months_used ? `결제 ${wonKr(l.paid)} − 월 ${wonKr(l.monthly_price)} × ${l.months_used}개월` : `미사용 ${l.days}/${l.period_days}일`);
   const lines = refundLines.map((l) => `<li>${esc(l.label || '결제')}: ${esc(wonKr(l.amount))} (${esc(unit(l))}${l.kind === 'WITHDRAWAL' ? ', 청약철회' : ''})</li>`).join('');
   void retentionUntil;   // TODO(retention-legal, research/relai-retention-legal.md): personal-data retention periods are set after the legal review — never here
   const keep = `${FREE_POLICY} ${FREE_KEEP}`;
