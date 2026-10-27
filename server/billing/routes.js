@@ -28,6 +28,9 @@ import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange,
 import { usageSummary, publicUsage } from '../ai/usage-limit.js';
 import { applyServiceEvent, serviceOrdersDaily } from './service-orders.js';
 
+/** Card registration attempts allowed: per user / per IP per hour, per workspace per day (env CARD_ATTEMPTS_USER / _IP / _WORKSPACE). */
+const envN = (k, d) => { const n = Number(process.env[k]); return Number.isInteger(n) && n > 0 ? n : d; };
+export const CARD_ATTEMPTS = { get user() { return envN('CARD_ATTEMPTS_USER', 5); }, get ip() { return envN('CARD_ATTEMPTS_IP', 10); }, get workspace() { return envN('CARD_ATTEMPTS_WORKSPACE', 10); } };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
 const settingsUrl = (status, reason) => `/app/settings?checkout=${status}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}#billing`;
@@ -293,8 +296,19 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (o?.status === 'PENDING') return fail(res, 409, 'order_in_progress', '결제를 처리하고 있습니다. 잠시 후 화면을 새로 고쳐 주세요.');
     return fail(res, 409, 'order_closed', '이미 처리된 주문입니다. 화면을 새로 고쳐 주세요.');
   };
+  /* Card registration attempts (카드 도용 시도 방지): every attempt that reaches NicePay counts, success or not — per user and per IP
+   * (1 hour) and per workspace (1 day). A blocked attempt answers 429 before the card is parsed or sent anywhere. */
+  const cardLimits = [
+    ['user', rateLimiter(db, { name: 'card-register-user', max: CARD_ATTEMPTS.user, windowMs: 60 * 60 * 1000 }), (req) => req.user.id],
+    ['ip', rateLimiter(db, { name: 'card-register-ip', max: CARD_ATTEMPTS.ip, windowMs: 60 * 60 * 1000 }), (req) => req.ip],
+    ['workspace', rateLimiter(db, { name: 'card-register-ws', max: CARD_ATTEMPTS.workspace, windowMs: 24 * 60 * 60 * 1000 }), (req) => req.params.wid],
+  ];
+  const cardBlocked = async (req) => { for (const [scope, l, key] of cardLimits) if (await l.blocked(key(req))) return scope; return null; };
+  const cardHit = (req) => Promise.all(cardLimits.map(([, l, key]) => l.hit(key(req))));
   const subscribe = async (req, res) => {
     if (closed(res)) return;
+    const over = await cardBlocked(req);
+    if (over) return fail(res, 429, 'card_attempts_exceeded', over === 'workspace' ? '오늘 이 워크스페이스의 카드 등록 시도 횟수를 넘었습니다. 내일 다시 시도해 주세요.' : '카드 등록 시도가 너무 많습니다. 1시간 후 다시 시도해 주세요.', { scope: over });
     let card;
     try { card = parseCard(req.body?.card); } catch (e) { if (e instanceof BillingError) return fail(res, e.status, e.code, e.message, { fields: e.fields }); throw e; }
     const q = await prepare(req, res, { recurring: true }); if (!q) return;
@@ -306,6 +320,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     await recordConsent(db, { workspaceId: req.params.wid, userId: req.user.id, orderId: order.id, kind: 'CHECKOUT', d, amount: q.total, renewalAmount: q.next_renewal_amount, cycle: q.cycle, nextChargeAt: q.next_renewal_at, req });
     const customer = { email: req.user.email, name: req.user.name };
     let bid;
+    await cardHit(req);   // counted before the card leaves for NicePay
     try {
       ({ bid } = await provider.registerBillingKey({ order, card, customer }));
       const ev = await provider.chargeBillingKey({ bid, order });
