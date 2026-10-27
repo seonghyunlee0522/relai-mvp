@@ -2,6 +2,7 @@
  *  - billing summary carries the priced products (Team 플랜 + 3 AI 크레딧 packs) for the plans page
  *  - payments off → the card registration endpoint refuses (409) and NicePay is never called, even with 정기결제 on
  *  - 정기결제 on: card data reaches NicePay only as encData; never in the DB, the response or the server log (also on a decline)
+ *  - card registration attempts are limited per user / IP / workspace (429 before NicePay is called)
  *  - the order page that opens the NicePay window shows 결제 수단 신용카드, and no review screen source says sample/test/샘플/테스트
  * Nothing here reaches NicePay (stubbed fetch). */
 import { test } from 'node:test';
@@ -111,6 +112,22 @@ test('정기결제 decline: 402, nothing stored, card data not in the log', asyn
   assert.ok(!log.includes(CARD_DIGITS) && !log.includes('800101'));
   assert.ok(!JSON.stringify(await db.all('SELECT * FROM billing_orders')).includes(CARD_DIGITS));
   done();
+});
+
+test('card registration attempts are limited: after the limit 429 card_attempts_exceeded and NicePay is never called', async () => {
+  process.env.CARD_ATTEMPTS_USER = '2';
+  const { c, w, np, done } = await boot({ decline: true });
+  try {
+    const hash = (await c('GET', `/api/workspaces/${w}/billing/quote?plan=TEAM&cycle=MONTHLY&users=1`)).json.disclosure.hash;
+    const attempt = () => c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', users: 1, card: CARD, agree: true, disclosure_hash: hash });
+    assert.equal((await attempt()).status, 402); assert.equal((await attempt()).status, 402);   // declined attempts count too
+    const before = np.calls.length;
+    const r = await attempt();
+    assert.equal(r.status, 429); assert.equal(r.json.error.code, 'card_attempts_exceeded'); assert.equal(r.json.error.scope, 'user');
+    assert.equal(np.calls.length, before, 'blocked before any NicePay call');
+    // a malformed card never reaches NicePay and is not counted (validation runs first) — but the block still answers first
+    assert.equal((await c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'TEAM', cycle: 'MONTHLY', users: 1, card: { number: '1' }, agree: true, disclosure_hash: hash })).status, 429);
+  } finally { delete process.env.CARD_ATTEMPTS_USER; done(); }
 });
 
 test('AI credit packs are no longer sold: the old checkout answers 410 and no order row is created', async () => {
