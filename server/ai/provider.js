@@ -17,6 +17,13 @@ export class AiProviderError extends Error {
   constructor(code, message, { status = null, transient = false } = {}) { super(message); this.code = code; this.status = status; this.transient = transient; }
 }
 
+/** Usage of a response: { input_tokens, output_tokens, cached_input_tokens } (cached is part of input_tokens, billed at the cached rate). */
+export const openaiUsage = (json) => ({ input_tokens: json?.usage?.prompt_tokens ?? null, output_tokens: json?.usage?.completion_tokens ?? null,
+  cached_input_tokens: json?.usage?.prompt_tokens_details?.cached_tokens ?? null });
+/* Anthropic reports cache reads apart from input_tokens; they are folded into input_tokens here so both vendors share one shape. */
+export const anthropicUsage = (json) => { const u = json?.usage || {}; const cached = u.cache_read_input_tokens ?? null;
+  return { input_tokens: u.input_tokens == null ? null : u.input_tokens + (cached || 0) + (u.cache_creation_input_tokens || 0), output_tokens: u.output_tokens ?? null, cached_input_tokens: cached }; };
+const withUsage = (e, usage) => { e.usage = usage; return e; };
 const short = (s, n = 200) => String(s || '').replace(/\s+/g, ' ').slice(0, n);
 
 /** fetch with a hard timeout. Any abort surfaces as AI_TIMEOUT; other network failures are transient provider errors. */
@@ -71,8 +78,8 @@ function anthropicProvider({ apiKey, model, timeoutMs, maxOutputTokens }) {
       }, timeoutMs);
       const json = await readJson(res);
       const tool = (json.content || []).find((c) => c.type === 'tool_use');
-      if (!tool || typeof tool.input !== 'object' || tool.input === null) throw new AiProviderError('AI_INVALID_OUTPUT', 'AI가 구조화된 결과를 반환하지 않았습니다.');
-      return { data: tool.input, usage: { input_tokens: json.usage?.input_tokens ?? null, output_tokens: json.usage?.output_tokens ?? null } };
+      if (!tool || typeof tool.input !== 'object' || tool.input === null) throw withUsage(new AiProviderError('AI_INVALID_OUTPUT', 'AI가 구조화된 결과를 반환하지 않았습니다.'), anthropicUsage(json));
+      return { data: tool.input, usage: anthropicUsage(json) };
     },
   };
 }
@@ -108,11 +115,12 @@ function openaiProvider({ apiKey, model, timeoutMs, maxOutputTokens }) {
       }, timeoutMs);
       const json = await readJson(res);
       const choice = json.choices?.[0]; const msg = choice?.message;
-      const usage = { input_tokens: json.usage?.prompt_tokens ?? null, output_tokens: json.usage?.completion_tokens ?? null };
-      if (!msg || msg.refusal) throw new AiProviderError('AI_INVALID_OUTPUT', 'AI가 요청을 처리하지 않았습니다. 입력을 바꿔 다시 시도해 주세요.');
-      if (choice.finish_reason === 'length') throw new AiProviderError('AI_INVALID_OUTPUT', 'AI 응답이 너무 길어 끝까지 만들지 못했습니다. 입력을 줄여 다시 시도해 주세요.');
+      const usage = openaiUsage(json);
+      // Every exit after a 200 carries the usage: the tokens were billed whether or not the output is usable (failed runs count, 2026-10-27).
+      if (!msg || msg.refusal) throw withUsage(new AiProviderError('AI_INVALID_OUTPUT', 'AI가 요청을 처리하지 않았습니다. 입력을 바꿔 다시 시도해 주세요.'), usage);
+      if (choice.finish_reason === 'length') throw withUsage(new AiProviderError('AI_INVALID_OUTPUT', 'AI 응답이 너무 길어 끝까지 만들지 못했습니다. 입력을 줄여 다시 시도해 주세요.'), usage);
       let data = null; try { data = JSON.parse(msg.content); } catch { /* invalid */ }
-      if (!data || typeof data !== 'object') throw new AiProviderError('AI_INVALID_OUTPUT', 'AI 응답 형식이 올바르지 않습니다. 다시 시도해 주세요.');
+      if (!data || typeof data !== 'object') throw withUsage(new AiProviderError('AI_INVALID_OUTPUT', 'AI 응답 형식이 올바르지 않습니다. 다시 시도해 주세요.'), usage);
       return { data: clampToSchema(schema, data), usage };
     },
   };

@@ -1,7 +1,7 @@
 /**
  * Promotions (migration 47): marketing offers in their own admin-editable area (관리자 › 프로모션), rendered by ONE shared
- * component (public/app/shared/promo.js) on signup, login, landing pricing, 설정 › AI 크레딧 and Home.
- * Display only: credit grants (server/ai/credits.js) never read this table.
+ * component (public/app/shared/promo.js) on signup, login, landing pricing, 설정 › AI 이용 현황 and Home.
+ * Display only: nothing that meters AI (ai/usage-limit.js) reads this table.
  *
  *   GET    /api/promotions?placement=signup     public — active rows for one placement (no auth; landing/signup are logged out)
  *   GET    /api/admin/promotions                operator — every row

@@ -30,12 +30,12 @@ export async function openWbsPlanner({ pid, onDone }) {
   if (list.active) {
     const a = list.active;
     // A backdrop click / Esc only closes (the plan stays and can be resumed later). Discarding needs 새로 시작 plus a second confirm,
-    // because a REVIEW plan already cost credits for its draft.
+    // because a REVIEW plan already used AI allowance for its draft.
     for (;;) {
       const resume = await confirmDialog({ title: '진행 중인 AI WBS 초안이 있습니다', body: `${a.status === 'REVIEW' ? '검토 단계' : '질문 단계'}에서 멈춘 초안(${new Date(a.created_at).toLocaleString('ko-KR')})이 있습니다. 이어서 진행할까요? "새로 시작"을 선택하면 기존 초안은 취소됩니다.`, confirm: '이어서 진행', cancel: '새로 시작', dismissable: true });
       if (resume === null) { d.close(); return; }
       if (resume) { plan = a; if (plan.status === 'REVIEW') { loadItems(); step = 4; } else step = 2; break; }
-      const sure = await confirmDialog({ title: '기존 초안을 취소하고 새로 시작할까요?', body: a.status === 'REVIEW' ? '이미 생성된 AI 초안(크레딧 사용됨)이 취소되며 되돌릴 수 없습니다. 새 초안을 만들면 크레딧이 다시 차감됩니다.' : '답변한 추가 확인 질문이 모두 취소되며 되돌릴 수 없습니다.', confirm: '취소하고 새로 시작', cancel: '돌아가기', danger: true, dismissable: true });
+      const sure = await confirmDialog({ title: '기존 초안을 취소하고 새로 시작할까요?', body: a.status === 'REVIEW' ? '이미 생성된 AI 초안이 취소되며 되돌릴 수 없습니다. 새 초안을 만들면 AI 이용량이 다시 사용됩니다.' : '답변한 추가 확인 질문이 모두 취소되며 되돌릴 수 없습니다.', confirm: '취소하고 새로 시작', cancel: '돌아가기', danger: true, dismissable: true });
       if (sure) { try { await api('POST', `${base}/${a.id}/cancel`, {}); } catch { /* ignore */ } break; }
     }
   }
@@ -50,7 +50,7 @@ export async function openWbsPlanner({ pid, onDone }) {
       ${raw(reqs.length ? html`<div class="pick-list pick-list--tall" id="wp-list">${raw(reqs.map((r) => html`<label class="pick ${picked.has(r.id) ? 'is-sel' : ''}" data-q="${(r.display_id + ' ' + r.title).toLowerCase()}"><input type="checkbox" data-pick="${r.id}" ${picked.has(r.id) ? 'checked' : ''}><span class="mono">${r.display_id}</span><span class="pick__t">${r.title}</span><small class="dim">${REQ_TYPE[r.type]} · ${REQ_PRIORITY[r.priority]}</small><span class="chip ${REQ_SCOPE_CHIP[r.scope]}">${REQ_SCOPE[r.scope]}</span><span class="chip ${REQ_STATUS_CHIP[r.status] || ''}">${REQ_STATUS[r.status]}</span></label>`).join(''))}</div>`
         : '<div class="aempty">등록된 요구사항이 없습니다. 요구사항 없이도 프로젝트 수행 WBS(관리·환경·전환 등)는 제안할 수 있습니다.</div>')}
       <p class="hint" id="wp-default">확정·작성 중(AI 추출 포함) 요구사항 ${defaultCount}건을 기본으로 선택했습니다. 반려·범위 외·보관된 요구사항은 제외됩니다. 검토 중·보류 요구사항은 직접 선택할 수 있습니다.</p>${raw(aiNotice(st))}`;
-    const paint = () => { const okRun = canRun(st, 'WBS_GENERATION'); foot(html`<span class="hint">${picked.size}건 선택 (최대 80건)${raw(okRun ? '' : ' · <em class="is-warn">AI 설정 또는 크레딧을 확인해 주세요</em>')}</span>`, html`<button type="button" class="btn btn--secondary btn--sm" data-close>취소</button><button type="button" class="btn btn--primary btn--sm" id="wp-next" ${okRun && picked.size <= 80 ? '' : 'disabled'}>다음: 추가 확인 질문</button>`); $('#wp-next', d.el).onclick = createPlan; };
+    const paint = () => { const okRun = canRun(st, 'WBS_GENERATION'); foot(html`<span class="hint">${picked.size}건 선택 (최대 80건)${raw(okRun ? '' : ' · <em class="is-warn">AI 설정 또는 AI 이용량을 확인해 주세요</em>')}</span>`, html`<button type="button" class="btn btn--secondary btn--sm" data-close>취소</button><button type="button" class="btn btn--primary btn--sm" id="wp-next" ${okRun && picked.size <= 80 ? '' : 'disabled'}>다음: 추가 확인 질문</button>`); $('#wp-next', d.el).onclick = createPlan; };
     paint();
     const sync = () => { const cnt = $('#wp-count', d.el); if (cnt) cnt.textContent = `${picked.size} / ${reqs.length}건 선택`; d.body.querySelectorAll('[data-pick]').forEach((cb) => { cb.checked = picked.has(cb.dataset.pick); cb.closest('.pick').classList.toggle('is-sel', cb.checked); }); d.body.querySelectorAll('[name=wp-mode]').forEach((r) => { r.checked = (r.value === 'all') === (picked.size === reqs.length); }); paint(); };
     d.body.querySelectorAll('[data-pick]').forEach((cb) => cb.onchange = () => { if (cb.checked) picked.add(cb.dataset.pick); else picked.delete(cb.dataset.pick); sync(); });
@@ -83,7 +83,7 @@ export async function openWbsPlanner({ pid, onDone }) {
           ${raw(q.help_text ? html`<p class="hint">${q.help_text}</p>` : '')}<div class="wpz__opts">${raw(opts)}</div>${raw(q.allow_other ? html`<input class="input input--sm" name="${q.id}__other" value="${a.other || ''}" maxlength="300" placeholder="기타 (직접 입력)">` : '')}
           <small class="wpz__why">${q.reason}</small><div class="err" data-for="${q.id}"></div></fieldset>`;
       }).join(''))}</form>` : '<div class="wpz__none"><b>추가로 확인할 내용이 없습니다.</b><p>프로젝트 정의와 요구사항에서 필요한 정보를 충분히 확인했습니다. 바로 초안을 생성할 수 있습니다.</p></div>')}`;
-    foot(html`<button type="button" class="btn btn--secondary btn--sm" id="wp-back">← 대상 다시 선택</button>`, html`<button type="button" class="btn btn--secondary btn--sm" data-close>나중에 이어하기</button><button type="button" class="btn btn--primary btn--sm" id="wp-gen">AI WBS 초안 생성 ${raw(st.costs?.WBS_GENERATION != null ? html`<small>(${st.costs.WBS_GENERATION} 크레딧)</small>` : '')}</button>`);
+    foot(html`<button type="button" class="btn btn--secondary btn--sm" id="wp-back">← 대상 다시 선택</button>`, html`<button type="button" class="btn btn--secondary btn--sm" data-close>나중에 이어하기</button><button type="button" class="btn btn--primary btn--sm" id="wp-gen">AI WBS 초안 생성</button>`);
     $('#wp-back', d.el).onclick = async () => { try { await api('POST', `${base}/${plan.id}/cancel`, {}); } catch { /* ignore */ } plan = null; drawPick(); };
     d.body.querySelectorAll('.wpz__opts input[type=radio],.wpz__opts input[type=checkbox]').forEach((inp) => { if (/__fu$/.test(inp.name)) return; inp.onchange = () => { const q = inp.closest('.wpz__q'); q.querySelectorAll('[data-fu]').forEach((f) => { const [, oid] = f.dataset.fu.split(':'); const on = [...q.querySelectorAll(`input[name="${inp.name}"]`)].some((x) => x.checked && x.value === oid); f.hidden = !on; }); }; });
     $('#wp-gen', d.el).onclick = generate;

@@ -29,7 +29,7 @@ test('migration 65 is the latest and only adds (no up() data change)', () => {
   assert.ok(LATEST_VERSION >= 65);
 });
 
-test('G-1 G-2 G-4 G-5: logs, ended invitations, free-credit claims and operator access logs go after their period; fresh rows stay', async () => {
+test('G-1 G-2 G-4 G-5: logs, ended invitations, Free AI allowance claims and operator access logs go after their period; fresh rows stay', async () => {
   const A = await setup(client, 'logs@x.com', '로그');
   const ago = (s) => `now() - interval '${s}'`;
   await db.run(`INSERT INTO analytics_events (name, user_id, created_at) VALUES ('screen', ?, ${ago('1 year 1 day')}), ('screen', ?, ${ago('360 days')})`, [A.uid, A.uid]);
@@ -122,7 +122,7 @@ test('G-8: 1 year without use → e-mail 30 days ahead, deleted after; signing i
 test('privacy policy 제3조 states the periods the code enforces', () => {
   const md = privacyMarkdown();
   const s3 = md.slice(md.indexOf('## 제3조'), md.indexOf('## 제4조'));
-  for (const phrase of ['기록일로부터 1년', '실행일로부터 1년', '발송일로부터 1년', '만료·취소일로부터 30일', '지급일로부터 3년', '접수일로부터 3년',
+  for (const phrase of ['기록일로부터 1년', '실행일로부터 1년', '발송일로부터 1년', '만료·취소일로부터 30일', '제공일로부터 3년', '접수일로부터 3년',
     '1년 동안 로그인하거나 서비스를 이용한 기록이 없는 계정은 삭제', '삭제 30일 전에 회원의 이메일로', '법정 신고기한부터 5년', '거래가 있었던 해의 다음 해 1월 1일부터 6년',
     '접속 기록(계정, 접속 일시, 접속지', '| 2년 |']) assert.ok(s3.includes(phrase), phrase);
   assert.equal(RETENTION_POLICY.LOG_YEARS, 1); assert.equal(RETENTION_POLICY.ENDED_INVITE_DAYS, 30); assert.equal(RETENTION_POLICY.FREE_CLAIM_YEARS, 3);

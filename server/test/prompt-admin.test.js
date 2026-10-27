@@ -1,6 +1,6 @@
 /* 관리자 › AI 프롬프트 (migration 68): DB-stored prompt overrides with code-default fallback, SYSTEM_ADMIN-only routes,
  * second-step save (check → save), history / restore / reset, audit, per-instance cache invalidation, and the 전송 내용
- * preview that builds the real request without calling the provider or touching credits. */
+ * preview that builds the real request without calling the provider or using AI allowance. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -9,11 +9,11 @@ import { setFakeProvider, fakeCalls, autoReply } from '../ai/provider.js';
 import { SYSTEM, COMMON_RULES, DEFAULT_PROMPTS, PROMPT_KEYS } from '../ai/prompts.js';
 import { systemPrompt, invalidatePromptCache, promptOverrides } from '../ai/prompt-store.js';
 
-process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '100'; process.env.AI_MODEL = '';
+process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.AI_MODEL = '';
 delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT;
 
 const grant = (db, uid) => db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [uid]);
-const balance = async (db, wid) => (await db.get('SELECT balance FROM workspace_credit_accounts WHERE workspace_id = ?', [wid])).balance;
+const balance = async (db, wid) => Number((await db.get('SELECT COUNT(*) AS n FROM ai_runs WHERE workspace_id = ?', [wid])).n);   // no run = nothing metered
 const B = '/api/admin/ai/prompts';
 
 test('empty table = the shipped prompts exactly (byte-identical to e25c3e1), for every key', async () => {
@@ -109,7 +109,7 @@ test('cache: another instance sees a direct DB change only after the TTL / inval
   server.close();
 });
 
-test('preview: exact request built by the feature code, no provider call, no credits, no ai_runs row; audited', async () => {
+test('preview: exact request built by the feature code, no provider call, no AI usage, no ai_runs row; audited', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'pa-prev@x.com'); await grant(db, A.uid);
   await A.c('POST', A.req, { title: '청구 조회', scope: 'IN_SCOPE', status: 'CONFIRMED', criteria: ['청구 내역이 보인다'] });

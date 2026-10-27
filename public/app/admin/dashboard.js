@@ -1,7 +1,7 @@
 /* Admin Dashboard: operator KPIs, 7-day activation funnel, attention queue, recent operator actions. Billing blocks appear only when Billing exists. */
 import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
-import { ACTIONS, adminApi, aiFeatureTable, bindRows, fmtD, head, kpis, n, rel, section, table, usd } from './ui.js';
+import { ACTIONS, adminApi, aiFeatureTable, barChart, bindRows, fmtD, fxNote, head, kpis, money, n, pctTxt, rel, section, table, usd } from './ui.js';
 
 export async function adminDashboardPage(main = $('#main')) {
   document.title = '대시보드 — RELAI 관리자';
@@ -32,15 +32,24 @@ export async function adminDashboardPage(main = $('#main')) {
         <p class="hint">가입 시 워크스페이스가 자동 생성되므로 2단계는 가입 수와 같습니다. 실질 활성화 지표는 프로젝트 생성입니다.</p></div>`))}
       ${raw(section('확인 필요', attn.length ? attn.map(([t, items]) => html`<div class="aattn"><div class="aattn__t">${t}</div><ul>${raw(items.map((i) => html`<li><a href="${i.href}" data-link><i class="adot adot--${i.tone}"></i><span class="aattn__n">${i.t}</span><small>${i.s}</small>${raw(i.at ? html`<time>${rel(i.at)}</time>` : '')}</a></li>`).join(''))}</ul></div>`).join('') : '<div class="aempty">확인할 항목이 없습니다. 정지된 계정/워크스페이스, 한도 초과 워크스페이스가 생기면 여기에 표시됩니다.</div>'))}
     </div>
-    ${raw(ai ? section(`AI 사용량 (최근 30일)${ai.config.enabled ? '' : ' — AI 미설정'}`, html`${raw(kpis([
-        { label: '오늘 AI 요청', value: n(ai.kpis.runs_today) }, { label: '30일 요청', value: n(ai.kpis.runs_30d), sub: `실패 ${n(ai.kpis.failed_30d)}` },
+    ${raw(ai ? section(`AI 사용량 · API 비용${ai.config.enabled ? ` — ${ai.config.provider} ${ai.config.model}` : ' — AI 미설정'}`, html`${raw(kpis([
+        { label: '이번 달 API 비용', value: money(ai.kpis.provider_cost_month, ai.fx) }, { label: '30일 API 비용', value: money(ai.kpis.provider_cost_30d, ai.fx), sub: `실패 요청 ${usd(ai.kpis.failed_cost_30d)}` },
+        { label: '오늘 AI 요청', value: n(ai.kpis.runs_today) }, { label: '30일 요청', value: n(ai.kpis.runs_30d), sub: `실패 ${n(ai.kpis.failed_30d)}${ai.kpis.estimated_runs_30d ? ` · 추정 비용 ${n(ai.kpis.estimated_runs_30d)}건` : ''}` },
         { label: '성공률', value: ai.kpis.success_rate_30d === null ? '-' : `${ai.kpis.success_rate_30d}%`, tone: ai.kpis.success_rate_30d !== null && ai.kpis.success_rate_30d < 90 ? 'warn' : '' },
-        { label: '평균 응답', value: ai.kpis.avg_latency_ms === null ? '-' : `${(ai.kpis.avg_latency_ms / 1000).toFixed(1)}s` },
-        { label: '크레딧 사용', value: n(ai.kpis.credits_30d), sub: ai.kpis.settlement_conflicts_30d ? `정산 충돌 ${n(ai.kpis.settlement_conflicts_30d)}` : '', tone: ai.kpis.settlement_conflicts_30d ? 'warn' : '' }, { label: 'AI 제공사 비용 (추정)', value: usd(ai.kpis.provider_cost_30d) }]))}
-      ${raw(aiFeatureTable(ai.features))}
-      ${raw(ai.workspaces.length ? html`<div class="agrid2" style="margin-top:12px"><div><div class="asec__h">워크스페이스별 (상위 10)</div>${raw(table([{ key: 'name', label: '워크스페이스', cls: 'ttl' }, { key: 'runs', label: '요청', w: 70, render: (w) => n(w.runs) }, { key: 'credits', label: '크레딧', w: 80, render: (w) => n(w.credits) }, { key: 'balance', label: '잔여', w: 80, render: (w) => n(w.balance) }], ai.workspaces, { rowHref: (w) => `/admin/workspaces/${w.id}`, id: 'aiwtbl' }))}</div>
-        <div><div class="asec__h">최근 실패</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'workspace_name', label: '워크스페이스', w: 150 }, { key: 'feature', label: '기능', w: 120 }, { key: 'error_code', label: '오류', render: (r) => html`<span class="mono">${r.error_code || ''}</span> <small class="dim">${r.error_message || ''}</small>` }], ai.recent_failures, { rowHref: (r) => `/admin/workspaces/${r.workspace_id}`, empty: '실패한 요청이 없습니다.', id: 'aiftl' }))}</div></div>` : '')}
-      <p class="hint">크레딧 비용은 기능별 설정값(개발 기본값)이며 가격 정책은 아직 정하지 않았습니다. AI 제공사 비용은 내부 단가표 기준 추정치입니다.</p>`) : '')}
+        { label: '토큰 (30일)', value: n(ai.kpis.input_tokens_30d + ai.kpis.output_tokens_30d), sub: `입력 ${n(ai.kpis.input_tokens_30d)} · 출력 ${n(ai.kpis.output_tokens_30d)} · 캐시 ${n(ai.kpis.cached_input_tokens_30d)}` },
+      ]))}
+      <div class="agrid2" style="margin-top:12px"><div><div class="asec__h">일별 API 비용 (30일)</div>${raw(barChart(ai.daily.map((x) => ({ label: x.date.slice(5), value: x.cost_usd })), { id: 'ai-daily' }))}</div>
+        <div><div class="asec__h">월별 API 비용 (12개월)</div>${raw(barChart(ai.monthly.map((x) => ({ label: x.month, value: x.cost_usd })), { id: 'ai-monthly' }))}</div></div>
+      <div class="asec__h" style="margin-top:12px">기능별 (30일)</div>${raw(aiFeatureTable(ai.features))}
+      <div class="asec__h" style="margin-top:12px">모델별 (30일)</div>${raw(table([{ key: 'model', label: '모델', w: 200, render: (r) => html`${r.model} <small class="dim">${r.provider}</small>` }, { key: 'runs', label: '요청', w: 70, render: (r) => n(r.runs) },
+        { key: 'input_tokens', label: '입력 토큰', w: 110, render: (r) => n(r.input_tokens) }, { key: 'output_tokens', label: '출력 토큰', w: 110, render: (r) => n(r.output_tokens) }, { key: 'cached_input_tokens', label: '캐시 토큰', w: 100, render: (r) => n(r.cached_input_tokens) },
+        { key: 'provider_cost', label: '비용', w: 150, render: (r) => money(r.provider_cost, ai.fx) }], ai.models, { empty: 'AI 요청 기록이 없습니다.', id: 'aimodels' }))}
+      ${raw(ai.workspaces.length ? html`<div style="margin-top:12px"><div><div class="asec__h">워크스페이스별 비용 (상위 10, 30일)</div>${raw(table([{ key: 'name', label: '워크스페이스', cls: 'ttl' }, { key: 'plan', label: '플랜', w: 70 },
+          { key: 'provider_cost', label: '30일 비용', w: 140, render: (r) => money(r.provider_cost, ai.fx) }, { key: 'used_pct', label: '사용률', w: 90, render: (r) => (r.limit_usd === null ? html`<span class="dim">무제한</span>` : html`<b class="${r.used_pct >= 95 ? 'txt-bad' : r.used_pct >= 80 ? 'txt-warn' : ''}">${pctTxt(r.used_pct)}</b>`) },
+          { key: 'limit_usd', label: '한도', w: 70, render: (r) => (r.limit_usd === null ? '-' : `$${r.limit_usd}`) }], ai.workspaces, { rowHref: (r) => `/admin/workspaces/${r.id}` }))}</div>
+        <div style="margin-top:12px"><div class="asec__h">최근 실패</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'workspace_name', label: '워크스페이스', w: 150 }, { key: 'error_code', label: '오류', w: 150 },
+          { key: 'provider_cost_amount', label: '비용', w: 90, render: (r) => html`${usd(r.provider_cost_amount)}${raw(r.cost_estimated ? ' <small class="dim">추정</small>' : '')}` }], ai.recent_failures, { rowHref: (r) => `/admin/workspaces/${r.workspace_id}`, empty: '최근 실패가 없습니다.' }))}</div></div>` : '')}
+      <p class="hint">비용은 AI 제공사 응답의 토큰 수 × 내부 단가표(server/ai/config.js)로 계산한 USD이며 실패한 요청도 포함합니다. 원화는 ${fxNote(ai.fx)} 기준 표시용입니다. 워크스페이스 한도(USD): Free 최초 $${ai.limits.FREE} · Pro 월 $${ai.limits.PRO} · Team 월 $${ai.limits.TEAM} · Enterprise ${ai.limits.ENTERPRISE === null ? '무제한' : `$${ai.limits.ENTERPRISE}`}.</p>`) : '')}
     ${raw(section('최근 운영자 조작', table([
       { key: 'created_at', label: '일시', w: 150, render: (r) => fmtD(r.created_at) }, { key: 'admin', label: '운영자', w: 200, render: (r) => html`${r.admin_name || '-'} <small class="dim">${r.admin_email || ''}</small>` },
       { key: 'action', label: '작업', w: 170, render: (r) => ACTIONS[r.action] || r.action }, { key: 'summary', label: '요약' },

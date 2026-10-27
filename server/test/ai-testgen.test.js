@@ -1,4 +1,4 @@
-/* batch7 #18 / B8: AI 테스트 시나리오 (TEST_GENERATION) — 30 credits, refund on failure, ≤ 20 requirements, default selection,
+/* batch7 #18 / B8: AI 테스트 시나리오 (TEST_GENERATION) — one metered run per generation (failures recorded too), ≤ 20 requirements, default selection,
  * out-of-scope ids dropped, commit creates tests + REQUIREMENT links with test_data / environment, nothing written by the AI call. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,10 +6,10 @@ import { boot, setup } from './api-helpers.js';
 import { setFakeProvider, fakeCalls, AiProviderError, autoReply } from '../ai/provider.js';
 import { environmentLines } from '../ai/test-gen.js';
 
-process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '100'; process.env.AI_MODEL = '';
-delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT; delete process.env.AI_CREDIT_COST_TEST_GENERATION;
+process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.AI_MODEL = '';
+delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT; delete process.env.AI_PRICE_FAKE_MODEL;
 
-const balance = async (db, wid) => (await db.get('SELECT balance FROM workspace_credit_accounts WHERE workspace_id = ?', [wid])).balance;
+const runCount = async (db, wid) => Number((await db.get(`SELECT COUNT(*) AS n FROM ai_runs WHERE workspace_id = ? AND feature = 'TEST_GENERATION'`, [wid])).n);
 async function project(client, email) {
   const A = await setup(client, email);
   const ids = [];
@@ -20,13 +20,13 @@ async function project(client, email) {
   return { A, reqs: ids };
 }
 
-test('generate: 30 credits, scenarios grouped per requirement with test_data / environment / steps; default = 확정·범위 내·미연결; nothing saved', async () => {
+test('generate: one metered run, scenarios grouped per requirement with test_data / environment / steps; default = 확정·범위 내·미연결; nothing saved', async () => {
   const { db, server, client } = await boot();
   const { A, reqs } = await project(client, 'tg1@x.com');
   setFakeProvider((req) => ({ data: autoReply(req), usage: { input_tokens: 800, output_tokens: 600 } }));
   const r = await A.c('POST', `${A.purl}/ai/tests/generate`, {});
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.equal(r.json.run.credit_cost, 30); assert.equal(await balance(db, A.w), 70);
+  assert.equal(r.json.run.feature, 'TEST_GENERATION'); assert.ok(r.json.run.usage); assert.equal(await runCount(db, A.w), 1);
   assert.deepEqual(r.json.requirements.map((g) => g.requirement.display_id), reqs.map((x) => x.display_id));
   const sc = r.json.requirements[0].scenarios[0];
   assert.deepEqual(Object.keys(sc).sort(), ['environment', 'expected_result', 'precondition', 'steps', 'temp_id', 'test_data', 'title', 'type']);
@@ -37,21 +37,20 @@ test('generate: 30 credits, scenarios grouped per requirement with test_data / e
   const one = await A.c('POST', `${A.purl}/ai/tests/generate`, { requirement_ids: [reqs[1].id] });
   assert.deepEqual(one.json.requirements.map((g) => g.requirement.id), [reqs[1].id]);
   assert.equal((await A.c('POST', `${A.purl}/ai/tests/generate`, { requirement_ids: Array.from({ length: 21 }, (_, i) => `x${i}`) })).status, 400);
-  assert.equal(await balance(db, A.w), 40);
+  assert.equal(await runCount(db, A.w), 2, '> 20 refused before any AI run');
   server.close();
 });
 
-test('generate: ids outside the selection are dropped with a warning; provider failure refunds (no charge)', async () => {
+test('generate: ids outside the selection are dropped with a warning; a provider failure is recorded as a FAILED run', async () => {
   const { db, server, client } = await boot();
   const { A, reqs } = await project(client, 'tg2@x.com');
   setFakeProvider(() => ({ data: { requirements: [{ requirement_id: 'REQ-999', scenarios: [{ title: 'x', type: '정상', precondition: '', test_data: '', environment: '', steps: [], expected_result: '' }] },
     { requirement_id: reqs[0].display_id, scenarios: [{ title: '정상 조회', type: '정상', precondition: 'p', test_data: 'd', environment: '', steps: [{ instruction: 'a', expected: 'b' }], expected_result: 'ok' }] }], notes: [] } }));
   const r = await A.c('POST', `${A.purl}/ai/tests/generate`, { requirement_ids: [reqs[0].id] });
   assert.equal(r.json.requirements.length, 1); assert.ok(r.json.warnings.some((w) => w.includes('REQ-999')));
-  const before = await balance(db, A.w);
   setFakeProvider(() => { throw new AiProviderError('AI_TIMEOUT', 'timeout'); });
   assert.equal((await A.c('POST', `${A.purl}/ai/tests/generate`, { requirement_ids: [reqs[0].id] })).status, 504);
-  assert.equal(await balance(db, A.w), before, 'failure → released, nothing charged');
+  assert.equal((await db.get(`SELECT status, error_code FROM ai_runs WHERE workspace_id = ? ORDER BY created_at DESC, seq DESC LIMIT 1`, [A.w])).error_code, 'AI_TIMEOUT');
   server.close();
 });
 

@@ -157,12 +157,12 @@ test('add-on now: prorated to the period end (rounded down), limit +2 only when 
   t.server.close();
 });
 
-test('upgrade PRO → TEAM now: prorated difference, plan TEAM at once, +2,000 PLAN credits once, renewal 80,000; scheduled downgrade dropped', async () => {
+test('upgrade PRO → TEAM now: prorated difference, plan TEAM at once (TEAM AI allowance for the current cycle), renewal 80,000; scheduled downgrade dropped', async () => {
   const t = await boot();
   const A = await owner(t);
   await subscribe(A, { plan: 'PRO' });
   await setPeriod(t.db, A.w, 19, 12);
-  await t.cron();   // the PRO grant of the (moved) current credit cycle: 1,000
+  await t.cron();
   process.env.PLAN_CHANGE_ENABLED = 'true';
   try {
     const s0 = await sub(t.db, A.w);
@@ -172,9 +172,9 @@ test('upgrade PRO → TEAM now: prorated difference, plan TEAM at once, +2,000 P
     assert.equal(r.json.order.amount, want);
     const s = await sub(t.db, A.w);
     assert.equal(s.plan, 'TEAM'); assert.equal(s.renewal_amount, 80000); assert.equal(await effectivePlan(t.db, A.w), 'TEAM');
-    const up = await t.db.all(`SELECT amount FROM credit_ledger WHERE workspace_id = ? AND reference_type = 'PLAN_UPGRADE'`, [A.w]);
-    assert.deepEqual(up.map((x) => Number(x.amount)), [2000]);
-    assert.equal(Number((await t.db.get('SELECT plan_balance FROM workspace_credit_accounts WHERE workspace_id = ?', [A.w])).plan_balance), 3000);
+    const { usageSummary } = await import('../ai/usage-limit.js');
+    const u = await usageSummary(t.db, A.w); assert.equal(u.plan, 'TEAM'); assert.equal(u.limit_usd, 30); assert.equal(u.allowance, 'MONTHLY');
+    assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM credit_ledger WHERE workspace_id = ?`, [A.w])).n, 0, 'no credit is granted any more');
     assert.equal(r.json.billing.limits.projects, 10);
     assert.equal((await A.c('POST', `${B(A)}/upgrade`, { plan: 'TEAM', agree: true, disclosure_hash: 'x' })).json.error.code, 'not_upgrade');   // already TEAM
   } finally { delete process.env.PLAN_CHANGE_ENABLED; }
@@ -262,7 +262,7 @@ test('price increase: 30-day notice + mail; renewal above the agreed amount with
   t2.server.close();
 });
 
-test('declined renewal: PAST_DUE, retried every 2 days ×3 with a mail each time, then no more; grace over → EXPIRED, FREE, PLAN credits gone, 30-day retention', async () => {
+test('declined renewal: PAST_DUE, retried every 2 days ×3 with a mail each time, then no more; grace over → EXPIRED, FREE (Free AI allowance), 30-day retention', async () => {
   const t = await boot();
   const A = await owner(t);
   await subscribe(A, { plan: 'PRO' });
@@ -279,7 +279,6 @@ test('declined renewal: PAST_DUE, retried every 2 days ×3 with a mail each time
   assert.equal((await t.cron()).renewals.due, 0);   // 1 attempt + 3 retries, then stop
   assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM email_deliveries WHERE type = 'BILLING_PAYMENT_FAILED'`)).n, 4);
   assert.equal(await effectivePlan(t.db, A.w), 'PRO');   // grace keeps the plan
-  assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM credit_ledger WHERE workspace_id = ? AND type = 'PLAN_GRANT'`, [A.w])).n, 1);   // failed renewal → no grant
   assert.equal((await t.db.get(`SELECT COUNT(*)::int AS n FROM billing_orders WHERE workspace_id = ? AND kind = 'RECURRING_RENEWAL' AND status = 'PAID'`, [A.w])).n, 0);
   await t.db.run(`UPDATE subscriptions SET grace_period_end = now() - interval '1 minute' WHERE workspace_id = ?`, [A.w]);
   const c = await t.cron();
@@ -287,7 +286,8 @@ test('declined renewal: PAST_DUE, retried every 2 days ×3 with a mail each time
   const s = await sub(t.db, A.w);
   assert.equal(s.status, 'EXPIRED'); assert.ok(s.ended_at); assert.ok(new Date(s.data_retention_until) > new Date(Date.now() + 29 * 86400e3)); assert.equal(s.billing_key_enc, null);
   assert.equal(await effectivePlan(t.db, A.w), 'FREE');
-  assert.equal(Number((await t.db.get('SELECT plan_balance FROM workspace_credit_accounts WHERE workspace_id = ?', [A.w])).plan_balance), 0);
+  const { usageSummary } = await import('../ai/usage-limit.js');
+  assert.equal((await usageSummary(t.db, A.w)).allowance, 'ONCE');
   t.server.close();
 });
 
@@ -339,7 +339,6 @@ test('cancel + refund: plan ends now, unused days refunded (rounded up, no penal
     assert.equal((await t.db.get('SELECT refunded_amount FROM billing_orders WHERE id = ?', [rf.order_id])).refunded_amount, want);
     const s = await sub(t.db, A.w);
     assert.equal(s.status, 'CANCELED'); assert.ok(s.data_retention_until); assert.equal(s.billing_key_enc, null);
-    assert.equal(Number((await t.db.get('SELECT plan_balance FROM workspace_credit_accounts WHERE workspace_id = ?', [A.w])).plan_balance), 0);
   } finally { delete process.env.REFUND_PARTIAL_ENABLED; }
   t.server.close();
 

@@ -1,18 +1,17 @@
 /* AI on with OpenAI (AI_PROVIDER=openai, default model) — every feature through the real OpenAI adapter against a mocked
  * api.openai.com (server/test/openai-mock.js; no network, no real key): strict-schema acceptance, schema-valid output, exact
- * credit charge at the current prices, per-feature token caps, and timeout / 429 / 5xx / invalid JSON / truncated / refusal
- * → Korean message, credits released. Also: AI off stays graceful, and the privacy page names OpenAI as an overseas processor. */
+ * usage cost at the model's prices (failed runs included), per-feature token caps, and timeout / 429 / 5xx / invalid JSON / truncated / refusal
+ * → Korean message, the tokens a failed call used still counted. Also: AI off stays graceful, and the privacy page names OpenAI as an overseas processor. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, setup } from './api-helpers.js';
 import { openaiMock, strictProblems } from './openai-mock.js';
 import { openaiSchema } from '../ai/provider.js';
 import { SCHEMAS, PLANNER_SCHEMAS, validateSchema } from '../ai/schemas.js';
-import { aiConfig, featureCreditCost, maxOutputTokensFor, FEATURES } from '../ai/config.js';
+import { aiConfig, adminAiConfig, estimateProviderCost, maxOutputTokensFor, FEATURES } from '../ai/config.js';
 import { privacyMarkdown } from '../legal.js';
 
-Object.assign(process.env, { AI_PROVIDER: 'openai', OPENAI_API_KEY: 'sk-test-NOT-REAL', AI_ENABLED: 'true', DEV_INITIAL_AI_CREDITS: '1000', AI_MODEL: '', AI_REQUEST_TIMEOUT_MS: '1000' });
-for (const f of FEATURES) delete process.env[`AI_CREDIT_COST_${f}`];
+Object.assign(process.env, { AI_PROVIDER: 'openai', OPENAI_API_KEY: 'sk-test-NOT-REAL', AI_ENABLED: 'true', AI_MODEL: '', AI_REQUEST_TIMEOUT_MS: '1000' });
 delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT; delete process.env.AI_MAX_OUTPUT_TOKENS;
 
 const mock = openaiMock();
@@ -22,7 +21,7 @@ test.after(() => { globalThis.fetch = realFetch; });
 
 const HANGUL = /[가-힣]/;
 const status = async (A) => (await A.c('GET', `${A.purl}/ai/status`)).json;
-const bal = async (A) => (await status(A)).credits.available;
+const spent = async (db, wid) => Number((await db.get('SELECT COALESCE(SUM(provider_cost_amount), 0) AS s FROM ai_runs WHERE workspace_id = ?', [wid])).s);
 const lastRun = (db, wid) => db.get('SELECT * FROM ai_runs WHERE workspace_id = ? ORDER BY created_at DESC, seq DESC LIMIT 1', [wid]);
 
 test('config: openai + key → enabled, default model gpt-4o-mini, sane per-feature output caps (≤ 8,000)', () => {
@@ -40,76 +39,80 @@ test('every schema sent to OpenAI passes strict mode (no size keywords, all prop
   }
 });
 
-test('all AI features through the OpenAI adapter: valid output per schemas.js, exact credit charge, model + token cap per call', async () => {
+test('all AI features through the OpenAI adapter: valid output per schemas.js, cost = tokens × gpt-4o-mini price, model + token cap per call', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'oa1@x.com');
   const st = await status(A);
-  assert.equal(st.enabled, true); assert.equal(st.provider, 'openai'); assert.equal(st.model, 'gpt-4o-mini');
+  assert.equal(st.enabled, true); assert.equal(st.provider, undefined, 'the browser is not told the vendor / model');
+  assert.deepEqual([adminAiConfig().provider, adminAiConfig().model], ['openai', 'gpt-4o-mini']);
   const reqs = []; for (const t of ['로그인 기능', '권한 관리', '주문 조회']) reqs.push((await A.c('POST', A.req, { title: t, status: 'CONFIRMED', scope: 'IN_SCOPE' })).json.requirement);
   const cr = (await A.c('POST', `${A.purl}/changes`, { title: '결제 수단 추가' })).json.change;
 
   const run = async (label, feature, schema, call) => {
-    const before = await bal(A); mock.calls = [];
+    mock.calls = [];
     const r = await call();
     assert.equal(r.status, label === 'planner questions' ? 201 : 200, `${label}: ${JSON.stringify(r.json?.error || '')}`);
     assert.deepEqual(validateSchema(schema, mock.lastData), [], `${label}: mock output valid`);
     const c = mock.calls.at(-1);
     assert.equal(c.model, 'gpt-4o-mini', label); assert.equal(c.max_completion_tokens, maxOutputTokensFor(feature), label);
-    assert.equal(before - await bal(A), featureCreditCost(feature), `${label}: charged ${featureCreditCost(feature)}`);
     const ar = await lastRun(db, A.w);
     assert.equal(ar.provider, 'openai'); assert.equal(ar.status, 'SUCCEEDED'); assert.ok(ar.input_tokens > 0);
+    assert.equal(Number(ar.provider_cost_amount), estimateProviderCost('gpt-4o-mini', ar.input_tokens, ar.output_tokens, 0), `${label}: cost`);
     return r.json;
   };
   const ex = await run('extract', 'REQUIREMENT_EXTRACTION', SCHEMAS.REQUIREMENT_EXTRACTION, () => A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '회원은 이메일로 로그인할 수 있어야 한다. 관리자는 권한을 부여할 수 있어야 한다. 응답 속도는 2초 이내여야 한다.' }));
-  assert.ok(ex.candidates.length >= 2); assert.equal(ex.run.credit_cost, 30);
+  assert.ok(ex.candidates.length >= 2); assert.ok(ex.run.usage);
   const wb = await run('wbs draft', 'WBS_GENERATION', SCHEMAS.WBS_GENERATION, () => A.c('POST', `${A.purl}/ai/wbs/generate`, { requirement_ids: reqs.map((r) => r.id) }));
-  assert.ok(wb.items.length > 0); assert.equal(wb.run.credit_cost, 50);
+  assert.ok(wb.items.length > 0);
   const im = await run('impact', 'CHANGE_IMPACT', SCHEMAS.CHANGE_IMPACT, () => A.c('POST', `${A.purl}/changes/${cr.id}/ai/impact`, {}));
-  assert.equal(typeof im.summary, 'string'); assert.equal(im.run.credit_cost, 20);
+  assert.equal(typeof im.summary, 'string');
   const qa = await run('ask', 'PROJECT_QA', SCHEMAS.PROJECT_QA, () => A.c('POST', `${A.purl}/ai/ask`, { question: '이번 주 확인할 일은?' }));
-  assert.ok(qa.answer); assert.equal(qa.run.credit_cost, 10);
+  assert.ok(qa.answer);
   const pl = await run('planner questions', 'WBS_PLAN_QUESTIONS', PLANNER_SCHEMAS.wbs_planning_questions, () => A.c('POST', `${A.purl}/ai/wbs-plans`, { all: true }));
   const plan = pl.plan;
   mock.transform = (name, d) => (name === 'project_wbs_draft' ? { ...d, items: d.items.filter((i) => !['TESTING', 'UAT'].includes(i.project_area)) } : d);   // leave a gap for 보완
   const g = await run('planner draft', 'WBS_GENERATION', PLANNER_SCHEMAS.project_wbs_draft, () => A.c('POST', `${A.purl}/ai/wbs-plans/${plan.id}/generate`, {}));
   mock.transform = null; assert.ok(g.plan);
   await run('planner fix', 'WBS_PLAN_FIX', PLANNER_SCHEMAS.wbs_plan_fix, () => A.c('POST', `${A.purl}/ai/wbs-plans/${plan.id}/fix`, {}));
-  assert.equal(await bal(A), 1000 - 30 - 50 - 20 - 10 - 50);
+  assert.equal((await db.get(`SELECT COUNT(*) AS n FROM ai_runs WHERE workspace_id = ? AND provider_cost_amount > 0`, [A.w])).n, 7);
   server.close();
 });
 
-test('failures: 429 / 5xx / timeout / invalid JSON / truncated / refusal → Korean message, no vendor text, credits released; one transient retry; oversize output clamped', async () => {
+test('failures: 429 / 5xx / timeout / invalid JSON / truncated / refusal → Korean message, no vendor text, used tokens counted; one transient retry; oversize output clamped', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'oa2@x.com');
   const ask = () => A.c('POST', `${A.purl}/ai/ask`, { question: '비밀 질문 내용 ZQX' });
-  const failsKorean = async (label, script, httpStatus, code) => {
-    const before = await bal(A); mock.script = script; mock.calls = [];
+  const failsKorean = async (label, script, httpStatus, code, counted) => {
+    mock.script = script; mock.calls = [];
     const r = await ask();
     assert.equal(r.status, httpStatus, `${label}: ${JSON.stringify(r.json)}`); assert.equal(r.json.error.code, code, label);
     const msg = r.json.error.message;
     assert.ok(HANGUL.test(msg), `${label}: Korean (${msg})`);
     assert.ok(!/org-TEST|Rate limit|server had an error|sk-test|schema/i.test(msg), `${label}: no vendor text (${msg})`);
-    assert.equal(await bal(A), before, `${label}: credits released`);
     const run = await lastRun(db, A.w);
-    assert.equal(run.status, 'FAILED'); assert.equal(run.credit_status, 'RELEASED'); assert.equal(run.error_code, code);
+    assert.equal(run.status, 'FAILED'); assert.equal(run.error_code, code);
+    assert.equal(Number(run.provider_cost_amount || 0) > 0, counted, `${label}: cost counted = ${counted}`);
     assert.ok(!String(run.error_message).includes('ZQX') && !String(run.input_summary || '').includes('sk-test'), `${label}: no prompt text / key on the run`);
     mock.script = [];
     return { run, calls: mock.calls.length };
   };
-  let x = await failsKorean('429 twice', ['429', '429'], 502, 'AI_PROVIDER_ERROR');
+  let x = await failsKorean('429 twice', ['429', '429'], 502, 'AI_PROVIDER_ERROR', false);
   assert.equal(x.calls, 2, '429 retried once'); assert.ok(x.run.error_message.includes('HTTP 429'), 'operators still see the vendor status');
-  x = await failsKorean('500 twice', ['500', '500'], 502, 'AI_PROVIDER_ERROR'); assert.equal(x.calls, 2);
-  x = await failsKorean('timeout', ['hang'], 504, 'AI_TIMEOUT'); assert.equal(x.calls, 1, 'timeout not retried');
-  x = await failsKorean('invalid JSON twice', ['invalid_json', 'invalid_json'], 502, 'AI_INVALID_OUTPUT'); assert.equal(x.calls, 2, 're-prompted once');
-  await failsKorean('truncated (finish_reason length) twice', ['length', 'length'], 502, 'AI_INVALID_OUTPUT');
-  await failsKorean('refusal twice', ['refusal', 'refusal'], 502, 'AI_INVALID_OUTPUT');
+  x = await failsKorean('500 twice', ['500', '500'], 502, 'AI_PROVIDER_ERROR', false); assert.equal(x.calls, 2);
+  x = await failsKorean('timeout', ['hang'], 504, 'AI_TIMEOUT', true);   // worst case (cost_estimated)
+  assert.equal(x.run.cost_estimated, true); assert.equal(x.calls, 1, 'timeout not retried');
+  x = await failsKorean('invalid JSON twice', ['invalid_json', 'invalid_json'], 502, 'AI_INVALID_OUTPUT', true); assert.equal(x.calls, 2, 're-prompted once');
+  await failsKorean('truncated (finish_reason length) twice', ['length', 'length'], 502, 'AI_INVALID_OUTPUT', true);
+  await failsKorean('refusal twice', ['refusal', 'refusal'], 502, 'AI_INVALID_OUTPUT', true);
 
-  // one transient failure, then success → charged once
-  let before = await bal(A); mock.script = ['429'];
-  let r = await ask(); assert.equal(r.status, 200); assert.equal(before - await bal(A), 10);
-  // one invalid JSON, then success → charged once
-  before = await bal(A); mock.script = ['invalid_json'];
-  r = await ask(); assert.equal(r.status, 200); assert.equal(before - await bal(A), 10);
+  // one transient failure, then success → one run, the successful call's tokens
+  let before = await spent(db, A.w); mock.script = ['429'];
+  let r = await ask(); assert.equal(r.status, 200); let run = await lastRun(db, A.w);
+  assert.equal(Number(run.provider_cost_amount), estimateProviderCost('gpt-4o-mini', run.input_tokens, run.output_tokens, 0));
+  // one invalid JSON, then success → both calls' tokens on the one run
+  before = await spent(db, A.w); mock.script = ['invalid_json'];
+  r = await ask(); assert.equal(r.status, 200); run = await lastRun(db, A.w);
+  assert.ok(Math.abs((await spent(db, A.w)) - before - Number(run.provider_cost_amount)) < 1e-9);
   // the model overshoots maxLength (strict mode cannot enforce it) → clamped, not failed
   mock.script = ['oversize'];
   r = await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '회원은 이메일로 로그인할 수 있어야 한다. 관리자는 권한을 부여할 수 있어야 한다.' });
@@ -123,7 +126,7 @@ test('AI off (AI_ENABLED=false or no key): status enabled:false, no provider/mod
   for (const [k, v] of [['AI_ENABLED', 'false'], ['OPENAI_API_KEY', '']]) {
     const keep = process.env[k]; process.env[k] = v; mock.calls = [];
     const st = await status(A);
-    assert.equal(st.enabled, false, k); assert.equal(st.provider, null); assert.equal(st.model, null); assert.equal(st.credits, null);
+    assert.equal(st.enabled, false, k); assert.equal(st.provider, undefined); assert.equal(st.model, undefined); assert.equal(st.credits, undefined);
     const r = await A.c('POST', `${A.purl}/ai/ask`, { question: '안녕' });
     assert.equal(r.status, 503); assert.equal(r.json.error.code, 'AI_DISABLED'); assert.ok(HANGUL.test(r.json.error.message));
     assert.equal(mock.calls.length, 0);

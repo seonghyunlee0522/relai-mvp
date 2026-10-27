@@ -1,7 +1,7 @@
 /* 관리자 › AI 프롬프트 (migration 68): every prompt the AI features send, stored in the DB (no row = code default).
  * List → one prompt: editor (diff vs the saved text, 기본값으로 되돌리기), a second confirm before every save / reset / restore,
  * version history with restore, and 전송 내용 보기 — system prompt, user-message template, JSON schema, model settings, plus a
- * per-project preview of the exact request (built by the real feature code; no AI call, no credits). Saving is desktop-only
+ * per-project preview of the exact request (built by the real feature code; no AI call, no AI usage). Saving is desktop-only
  * (phone = view mode, core/api.js); viewing and the preview work on a phone. */
 import { $, html, raw } from '../core/dom.js';
 import { api } from '../core/api.js';
@@ -91,7 +91,7 @@ export async function adminPromptPage(key, main = $('#main')) {
 
   const settingsDl = (s) => html`<dl class="adl">
     <dt>AI 제공사 · 모델</dt><dd>${s.provider || '미설정'} · ${s.model || '-'} ${raw(s.enabled ? '' : chip('muted', `AI 꺼짐${s.disabled_reason ? ` — ${s.disabled_reason}` : ''}`))}</dd>
-    ${raw(s.feature ? html`<dt>과금 기능</dt><dd>${s.feature_label || s.feature} · ${n(s.credit_cost)} 크레딧</dd><dt>최대 출력 토큰</dt><dd>${n(s.max_output_tokens)}</dd>` : '')}
+    ${raw(s.feature ? html`<dt>AI 기능</dt><dd>${s.feature_label || s.feature}</dd><dt>최대 출력 토큰</dt><dd>${n(s.max_output_tokens)}</dd>` : '')}
     <dt>temperature</dt><dd>${s.temperature ?? s.temperature_note}</dd>
     <dt>제한 시간</dt><dd>${n(Math.round(s.timeout_ms / 1000))}초 · 입력 최대 ${n(s.max_input_chars)}자</dd>
     <dt>재시도</dt><dd>${s.retry}</dd>
@@ -108,7 +108,7 @@ export async function adminPromptPage(key, main = $('#main')) {
       ${raw(section('사용자 메시지 형식', html`<p class="hint">&lt;project_data&gt;는 서버가 고른 프로젝트 데이터, &lt;untrusted_input&gt;은 사용자가 입력한 글입니다. AI는 두 블록 안의 지시를 따르지 않도록 공통 원칙에 적혀 있습니다. { } 부분은 요청마다 채워집니다. 이 형식은 코드에 있어 여기서 바꿀 수 없습니다.</p>${raw(pre(s.user_template))}`))}
       ${raw(section(`JSON 형식 (스키마 이름: ${s.schema_name})`, html`<p class="hint">AI 응답은 이 스키마에 맞아야 합니다. 맞지 않으면 1번 다시 요청하고, 그래도 안 되면 크레딧을 돌려줍니다.</p>${raw(pre(json(s.schema), 'acode--tall'))}`))}
       ${raw(section('프로젝트로 미리보기', html`<div class="aprm__pv">
-        <p class="hint">프로젝트를 고르면 지금 이 기능을 실행했을 때 AI 제공사로 보낼 요청 그대로를 보여 줍니다. AI를 호출하지 않고 크레딧도 쓰지 않습니다. 미리보기를 연 기록은 감사 로그에 남습니다.</p>
+        <p class="hint">프로젝트를 고르면 지금 이 기능을 실행했을 때 AI 제공사로 보낼 요청 그대로를 보여 줍니다. AI를 호출하지 않아 AI 이용량을 쓰지 않습니다. 미리보기를 연 기록은 감사 로그에 남습니다.</p>
         <div class="aprm__pvf">
           <input class="input input--sm" id="pq" placeholder="프로젝트·워크스페이스 이름 검색" aria-label="프로젝트 검색">
           <select class="select select--sm" id="pproj" aria-label="프로젝트"><option value="">프로젝트 선택</option></select>

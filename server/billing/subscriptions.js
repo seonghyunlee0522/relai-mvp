@@ -12,8 +12,6 @@
 import { randomUUID } from 'node:crypto';
 import { tx } from '../db.js';
 import { PLANS, DEFAULT_PLAN, FOUNDING_OFFER, EARLY_ACCESS } from '../plans.js';
-import { grantMonthlyCredits, grantUpgradeCredits } from './ai-grants.js';
-import { applyPackEvent, isCreditOrder } from './credit-packs.js';
 
 export const STATUSES = ['ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED'];
 export const GRACE_DAYS = 7;
@@ -196,8 +194,8 @@ export async function processWebhookEvent(db, provider, ev) {
       let order = null;
       if (ev.order_id) {
         order = await db.get('SELECT * FROM billing_orders WHERE id = ? FOR UPDATE', [String(ev.order_id)]);
-        // AI credit packs never touch the subscription: amount check → PURCHASE ledger row (billing/credit-packs.js).
-        if (isCreditOrder(order)) return finish(await applyPackEvent(db, provider, order, ev, ins.id), { workspace_id: order.workspace_id, id: null });
+        // AI credits were retired (2026-10-27): a late event for an old credit order is recorded and ignored, never applied to a plan.
+        if (['CREDIT_PACK', 'CREDIT_TOPUP'].includes(order?.kind)) return finish({ ignored: true, reason: 'credit_order_retired' }, { workspace_id: order.workspace_id, id: null });
         const checked = checkOrder(order, ev);
         if (checked.ignore) {
           if (checked.fail) await db.run(`UPDATE billing_orders SET status = 'FAILED', failure_code = ?, updated_at = now() WHERE id = ? AND status = 'PENDING'`, [checked.ignore, order.id]);
@@ -217,7 +215,6 @@ export async function processWebhookEvent(db, provider, ev) {
       if (order) await settleOrder(db, provider, order, ev, t.id, sub?.plan || null);
       const fresh = await db.get('SELECT * FROM subscriptions WHERE id = ?', [t.id]);
       const paymentId = ev.type === 'payment.refunded' ? null : await recordPayment(db, provider, fresh, ev, ins.id);
-      if (PAID_TYPES.includes(ev.type) && fresh.status === 'ACTIVE') await grantMonthlyCredits(db, fresh.workspace_id);   // same transaction: paid ⇔ granted
       return finish({ subscription_id: t.id, status: t.status, payment_id: paymentId, ...(order ? { order_id: order.id } : {}) }, fresh);
     });
   } catch (e) {
@@ -255,7 +252,7 @@ export function checkOrder(order, ev) {
  *     a renewal also starts the new period at the order's period_start and closes the scheduled changes it applied.
  *   ADDON: extra_* += the units bought; renewal_amount = the renewal with them (shown and consented on the add-on screen).
  *   UPGRADE: plan = the new plan, extra_* = the carried add-ons, seats cleared, renewal_amount recomputed, scheduled downgrade
- *     dropped, and the monthly-credit difference for the current credit cycle (T2 grantUpgradeCredits).
+ *     dropped. The AI allowance follows the plan at once: the current cycle is measured against the new plan's limit (ai/usage-limit.js).
  * A v2 order (bought before v3) changes nothing here: the legacy row keeps its seats until the period ends.
  */
 async function applyOrderToSubscription(db, order, subscriptionId, prevPlan) {
@@ -268,7 +265,6 @@ async function applyOrderToSubscription(db, order, subscriptionId, prevPlan) {
     await db.run(`UPDATE subscriptions SET plan = ?, extra_users = ?, extra_projects = ?, seats = NULL, updated_at = now() WHERE id = ?`,
       [order.plan, Number(order.addon_users || 0), Number(order.addon_projects || 0), subscriptionId]);
     await db.run(`UPDATE subscription_changes SET status = 'CANCELED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED' AND kind IN ('DOWNGRADE','ADDON_REDUCE')`, [subscriptionId]);
-    if (prevPlan && prevPlan !== order.plan) await grantUpgradeCredits(db, order.workspace_id, { from: prevPlan, to: order.plan, reference: order.id });
   } else if (['ONE_TIME', 'RECURRING_FIRST', 'RECURRING_RENEWAL'].includes(order.kind)) {
     await db.run(`UPDATE subscriptions SET extra_users = ?, extra_projects = ?, price_version = NULL, updated_at = now()${order.kind === 'RECURRING_RENEWAL' && order.period_start ? ', current_period_start = ?' : ''} WHERE id = ?`,
       [Number(order.addon_users || 0), Number(order.addon_projects || 0), ...(order.kind === 'RECURRING_RENEWAL' && order.period_start ? [order.period_start] : []), subscriptionId]);

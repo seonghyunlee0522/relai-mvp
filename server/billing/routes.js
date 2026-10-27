@@ -8,11 +8,10 @@
  *     (OWNER: POLICY.billing); GET /api/billing/nicepay/pay/:orderId (the order's buyer); POST /api/billing/admin/payments/:id/refund
  *     (SYSTEM_ADMIN); GET /api/billing/cron/daily (CRON_SECRET: renewal reminders, renewal charges, monthly AI credit grants, 서비스 결제 cleanup).
  */
-import { aiConfig } from '../ai/config.js';
 import express from 'express';
 import { rateLimiter } from '../security.js';
 import { requireAction, can } from '../authz.js';
-import { PLANS, PAID_PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, CREDIT_PRICE_KRW, PURCHASED_VALID_YEARS, CREDIT_PACKS, catalogue as planCatalogue, oneTimeMode } from '../plans.js';
+import { PLANS, PAID_PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, catalogue as planCatalogue, oneTimeMode } from '../plans.js';
 import { workspaceUsage } from '../usage.js';
 import { writeAudit } from '../admin.js';
 import { emailConfig } from '../email/config.js';
@@ -26,16 +25,12 @@ import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } fr
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices, expireEndedSubscriptions, notifyPriceIncreases, sendCancelNotice } from './cron.js';
 import { disclosure, checkConsent, recordConsent } from './consent.js';
 import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange, refundQuote, cancelWithRefund, executeRefund, markRefundDone, listRefunds, refundPartialEnabled } from './lifecycle.js';
-import { grantDueMonthlyCredits } from './ai-grants.js';
-import { isCreditOrder } from './credit-packs.js';
-import { bucketBalances } from '../ai/credits.js';
+import { usageSummary, publicUsage } from '../ai/usage-limit.js';
 import { applyServiceEvent, serviceOrdersDaily } from './service-orders.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const won = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
-const settingsUrl = (status, reason, order = null) => (isCreditOrder(order)
-  ? `/app/settings/credits?checkout=${status}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`
-  : `/app/settings?checkout=${status}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}#billing`);
+const settingsUrl = (status, reason) => `/app/settings?checkout=${status}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}#billing`;
 
 /** Applies an approved payment; if it cannot be applied, the payment is refunded so no customer is charged for nothing. */
 async function applyOrRefund(db, provider, order, ev) {
@@ -103,14 +98,11 @@ export function mountBillingWebhook(app, db, { provider, fail }) {
 function payPage({ order, params, sdkUrl, sandbox }) {
   const json = JSON.stringify(params).replace(/</g, '\\u003c');
   const row = (k, v, strong) => `<tr><th>${esc(k)}</th><td>${strong ? `<b>${esc(v)}</b>` : esc(v)}</td></tr>`;
-  const pack = isCreditOrder(order);
-  const back = pack ? '/app/settings/credits' : '/app/settings#billing';
-  const rows = pack ? `${row('AI 크레딧', `${Number(order.credits).toLocaleString('ko-KR')} 크레딧 (1 크레딧 = ₩${CREDIT_PRICE_KRW})`)}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`
-    : oneTimeMode() && Number(order.months) === 1 ? `${row('상품', '1개월 이용권 (자동 갱신 없음)')}${row('사용자', `${order.seats}명 (소유자 포함)`)}${row('이용 기간', '결제일부터 1개월')}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`
+  const back = '/app/settings#billing';
+  const rows = oneTimeMode() && Number(order.months) === 1 ? `${row('상품', '1개월 이용권 (자동 갱신 없음)')}${row('사용자', `${order.seats}명 (소유자 포함)`)}${row('이용 기간', '결제일부터 1개월')}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`
     : `${row('사용자', `${order.seats}명 (소유자 포함)`)}${row('월 이용료', `${won(order.unit_price)} / 월`)}${row('이용 기간', order.months === 12 ? '12개월 (연간 선결제)' : '1개월')}${row('정가', won(order.list_amount))}
 ${order.discount_amount ? row(order.founding ? `할인 (파운딩 고객 ${FOUNDING_OFFER.pct}% 포함)` : '할인', `−${won(order.discount_amount)}`) : ''}${row('공급가액', won(order.supply_amount))}${row('부가세 (10%)', won(order.vat_amount))}`;
-  const note = pack ? `충전한 크레딧은 구매일로부터 ${PURCHASED_VALID_YEARS}년간 쓸 수 있습니다. 미사용 크레딧은 환불 규정에 따라 환불받을 수 있습니다. 자동 결제되지 않습니다.`
-    : '자동 결제되지 않습니다. 이용 기간이 끝나기 7일 전에 연장 안내 메일을 보내 드립니다.';
+  const note = '자동 결제되지 않습니다. 이용 기간이 끝나기 7일 전에 연장 안내 메일을 보내 드립니다.';
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RELAI 결제</title>
 <style>body{margin:0;background:#F4F6FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#101828}
 main{max-width:460px;margin:48px auto;padding:0 16px}.card{background:#fff;border:1px solid #E4E8EF;border-radius:12px;padding:28px}
@@ -153,9 +145,9 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   const closed = (res) => { if (!paymentsEnabled()) { paymentsOff(res); return true; } if (!checkoutOpen()) { notOpen(res); return true; } return false; };
   const consentFail = (res, e, d) => fail(res, e.status, e.code, e.message, { fields: e.fields, disclosure: d });
   /**
-   * GET …/billing (pricing v3 shape, T1; T2 fills credits buckets, T3 scheduled changes / renewal state):
+   * GET …/billing (pricing v3 shape, T1; T3 scheduled changes / renewal state):
    * { plan, cycle, status, auto_renew, next_payment_at, next_payment_amount, limits {projects, users}, usage {projects_active, members, pending_invites, …dims},
-   *   addons {extra_users, extra_projects}, scheduled [], credits {total, plan, plan_expires_at, promo, purchased}, catalogue, flags, over_limit, … }
+   *   addons {extra_users, extra_projects}, scheduled [], ai_usage {used_pct, remaining_pct, tier, resets_at} (no amounts), catalogue, flags, over_limit, … }
    */
   const summary = async (wid, role) => {
     const { plan, limits } = await workspaceLimits(db, wid);
@@ -171,8 +163,6 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const access = await projectAccess(db, wid);
     const roRows = access.readOnly.size ? await db.all(`SELECT id, name FROM projects WHERE workspace_id = ? AND id IN (${[...access.readOnly].map(() => '?').join(',')}) ORDER BY created_at DESC, id DESC`, [wid, ...access.readOnly]) : [];
     const edRows = roRows.length && access.editable.length ? await db.all(`SELECT id, name FROM projects WHERE workspace_id = ? AND id IN (${access.editable.map(() => '?').join(',')}) ORDER BY created_at DESC, id DESC`, [wid, ...access.editable]) : [];
-    // T2: bucket view (ai/credits.js bucketBalances) — total = plan + promo + purchased; plan expires at plan_expires_at.
-    const creditBuckets = async (w) => { const c = await bucketBalances(db, w); return { total: c.total, plan: c.plan, plan_expires_at: c.plan_expires_at, promo: c.promo, purchased: c.purchased, available: c.available }; };
     // One-time purchases can be extended at any time; a renewing (recurring) subscription cannot be bought twice.
     const canPurchase = checkoutOpen() ? !(paid && renews) : paymentsEnabled() && oneTimeOpen() && (plan === 'FREE' || (subscription && !subscription.auto_renew));
     const early = await db.get('SELECT early_access_until FROM workspaces WHERE id = ?', [wid]);
@@ -195,14 +185,14 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
       limits, usage: { ...(await workspaceUsage(db, wid, plan)), ...counts, seats_left: limits.users === null ? null : Math.max(0, limits.users - counts.members - counts.pending_invites) },
       // to = what the screen names (plan key for DOWNGRADE, cycle key for CYCLE, null for ADDON_REDUCE); to_state = the full target fields.
       addons, scheduled: changes.map((c) => ({ id: c.id, kind: c.kind, from: c.from, to: c.kind === 'DOWNGRADE' ? c.to.plan : c.kind === 'CYCLE' ? c.to.cycle : null, to_state: c.to,
-        effective_at: c.effective_at, cancel_url: `/api/workspaces/${wid}/billing/changes/${c.id}/cancel` })), credits: await creditBuckets(wid),
+        effective_at: c.effective_at, cancel_url: `/api/workspaces/${wid}/billing/changes/${c.id}/cancel` })), ai_usage: publicUsage(await usageSummary(db, wid, { plan })),
       // 해지: POST cancel_url (auto-renew stops, plan to period end) · POST cancel_url { refund: true } (ends now + unused days refunded; preview: refund_quote_url).
       cancel_url: paid && renews ? `/api/workspaces/${wid}/billing/cancel` : null, refund_quote_url: paid ? `/api/workspaces/${wid}/billing/refund-quote` : null,
       catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null,
       read_only_projects: roRows.length ? { limit: access.limit, editable: edRows, read_only: roRows } : null,
       cancel_policy: { free: FREE_POLICY, keep: FREE_KEEP }, price_version: row?.price_version || null,
       subscription, early_access_until: early?.early_access_until || null,
-      plans: planCatalogue().plans, credit_packs: CREDIT_PACKS.map((p) => ({ key: p.key, credits: p.credits, amount: p.amount })), dims: USAGE_DIMS, starter_credits: aiConfig().trialCredits,
+      plans: planCatalogue().plans, dims: USAGE_DIMS,
       provider_available: Boolean(provider), payments_enabled: paymentsEnabled(), can_manage: can(role, 'billing'),
       checkout: { can_purchase: Boolean(canPurchase), plans: PAID_PLANS, cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
         min_users: await minUsers(db, wid), max_users: MAX_USERS, vat_rate: VAT_RATE, prices_include_vat: true, prices_exclude_vat: false,
@@ -376,7 +366,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   });
   /** POST …/billing/addons { extra_users, extra_projects, agree, disclosure_hash, client_key } — more users / projects now, prorated. */
   app.post(`${b}/addons`, payer, inPeriod('ADDON'));
-  /** POST …/billing/upgrade { plan: 'TEAM', agree, disclosure_hash, client_key } — PRO → TEAM now, prorated difference, +credits. */
+  /** POST …/billing/upgrade { plan: 'TEAM', agree, disclosure_hash, client_key } — PRO → TEAM now, prorated difference. */
   app.post(`${b}/upgrade`, payer, inPeriod('UPGRADE'));
 
   /**
@@ -452,7 +442,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (!pay) return fail(res, 404, 'not_found', '결제 내역을 찾을 수 없습니다.');
     const order = pay.provider === provider.name ? await getOrder(db, pay.moid) : null;
     if (!order || pay.status !== 'PAID' || order.status !== 'PAID') return fail(res, 409, 'not_refundable', '환불할 수 있는 결제가 아닙니다.');
-    if (isCreditOrder(order)) return fail(res, 409, 'use_credit_refund', 'AI 크레딧 결제는 워크스페이스 › AI 크레딧 환불로 처리합니다 (미사용 크레딧만 환불).');
+    if (['CREDIT_PACK', 'CREDIT_TOPUP'].includes(order?.kind)) return fail(res, 409, 'credit_order_retired', 'AI 크레딧 상품은 종료되었습니다. 결제사 관리 화면에서 직접 처리해 주세요.');
     let ev;
     try { ev = await provider.refund({ order, reason }); }
     catch (e) { if (e instanceof BillingError) return fail(res, e.status, e.code, e.message); throw e; }
@@ -488,7 +478,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (!secret) return fail(res, 503, 'cron_unconfigured', 'CRON_SECRET is not set');
     if (!safeEqual(req.get('authorization'), `Bearer ${secret}`)) return fail(res, 401, 'unauthenticated', '인증이 필요합니다.');
     res.json({ reminders: await sendRenewalReminders(db), price_notices: await notifyPriceIncreases(db), renewals: await chargeDueRenewals(db, provider),
-      expired: await expireEndedSubscriptions(db, provider), ai_credits: await grantDueMonthlyCredits(db), early_access: await sendEarlyAccessNotices(db),
+      expired: await expireEndedSubscriptions(db, provider), early_access: await sendEarlyAccessNotices(db),
       service_orders: await serviceOrdersDaily(db) });
   }));
 }

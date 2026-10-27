@@ -19,7 +19,6 @@ import { prorate, kstDaysBetween } from './prorate.js';
 import { renewalAmount, newOrderId, OrderError } from './orders.js';
 import { countUsage } from './limits.js';
 import { transition } from './subscriptions.js';
-import { expirePlanCredits } from './ai-grants.js';
 import { WITHDRAWAL_DAYS } from './consent.js';
 
 export const CHANGE_KINDS = ['DOWNGRADE', 'CYCLE', 'ADDON_REDUCE'];
@@ -145,7 +144,7 @@ export async function refundQuote(db, workspaceId, { at = new Date() } = {}) {
 
 /**
  * Immediate cancel with the refund of unused days. provider.cancel (billing key expiry) runs first, outside the DB lock; then in one
- * transaction the subscription ends now (CANCELED, ended_at, 30-day retention), PLAN credits expire, scheduled changes lapse and one
+ * transaction the subscription ends now (CANCELED, ended_at, 30-day retention), scheduled changes lapse and one
  * subscription_refunds row per order is written (REQUESTED). After the commit, when REFUND_PARTIAL_ENABLED, each refund is sent as a
  * partial cancel with a new orderId; a failure leaves the row FAILED for the operator (never retried blindly).
  */
@@ -168,7 +167,6 @@ export async function cancelWithRefund(db, provider, { workspaceId, userId = nul
     await transition(t, sub, 'subscription.canceled', { immediate: true });
     await t.run(`UPDATE subscriptions SET auto_renew = false, cancel_at_period_end = false, billing_key_enc = NULL, current_period_end = LEAST(current_period_end, now()) WHERE id = ?`, [sub.id]);
     await t.run(`UPDATE subscription_changes SET status = 'CANCELED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED'`, [sub.id]);
-    await expirePlanCredits(t, workspaceId, { reason: '기본 크레딧 소멸 (구독 해지)', referenceId: `cancel:${sub.id}:${Date.now()}` });
     return { refunds: rows, total: q.total, withdrawal: q.withdrawal, subscription_id: sub.id };
   });
   if (out.error) return out;

@@ -171,7 +171,7 @@ test('PRO with add-ons: limits = included + extra; plan limits from the subscrip
   assert.deepEqual(b.addons, { extra_users: 2, extra_projects: 1 });
   assert.equal(b.next_payment_amount, 30000 + 2000 + 10000); assert.ok(b.next_payment_at);
   assert.deepEqual([b.usage.projects_active, b.usage.members, b.usage.pending_invites], [4, 1, 0]);
-  assert.deepEqual(b.scheduled, []); assert.equal(typeof b.credits.total, 'number');
+  assert.deepEqual(b.scheduled, []); assert.equal(typeof b.ai_usage.used_pct, 'number'); assert.equal(b.credits, undefined);
   assert.deepEqual(b.catalogue.plans.map((p) => p.key), ['FREE', 'PRO', 'TEAM', 'ENTERPRISE']);
   assert.deepEqual(Object.keys(b.flags).sort(), ['addons', 'checkout_open', 'one_time', 'payments', 'plan_change', 'recurring', 'refund_partial']);
   assert.equal(b.over_limit, null);

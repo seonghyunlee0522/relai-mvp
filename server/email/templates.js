@@ -53,28 +53,6 @@ export function renewalReminderEmail({ workspaceName, periodEnd, seats, link, su
   return { subject, html, text };
 }
 
-/* ---------- AI-credits-only billing ---------- */
-const krw = (n) => `₩${Number(n).toLocaleString('ko-KR')}`;
-const credits = (n) => `${Number(n).toLocaleString('ko-KR')} 크레딧`;
-
-export function lowBalanceEmail({ workspaceName, balance, threshold, link, support }) {
-  const subject = `[RELAI] ${workspaceName} AI 크레딧 잔액이 ${credits(threshold)} 아래로 내려갔습니다`;
-  const html = shell('AI 크레딧 잔액이 얼마 남지 않았습니다', `<p><b>${esc(wsLabel(workspaceName))}</b>의 AI 크레딧 잔액이 <b>${esc(credits(balance))} (${esc(krw(balance * 10))})</b>입니다.</p>
-    <p>잔액이 0이 되면 AI 기능(요구사항 추출, WBS 초안, 영향 분석, 질문)을 쓸 수 없습니다. 다른 기능은 그대로 쓸 수 있습니다.</p>${link ? button(link, '크레딧 충전하기') : ''}
-    <p style="font-size:13px;color:#667085">충전은 워크스페이스 소유자가 설정 › AI 크레딧에서 할 수 있습니다. 이 안내는 충전 후 다시 ${esc(credits(threshold))} 아래로 내려갈 때만 다시 보내 드립니다.</p>`, support);
-  const text = `${workspaceName} 워크스페이스의 AI 크레딧 잔액이 ${credits(balance)} (${krw(balance * 10)})입니다.\n잔액이 0이 되면 AI 기능을 쓸 수 없습니다.\n${link ? `\n충전하기: ${link}\n` : ''}`;
-  return { subject, html, text };
-}
-
-export function creditRefundRequestEmail({ workspaceName, workspaceId, requester, refundable, note }) {
-  const subject = `[RELAI] AI 크레딧 환불 요청 — ${workspaceName}`;
-  const html = shell('AI 크레딧 환불 요청', `<p>워크스페이스 <b>${esc(workspaceName)}</b> (${esc(workspaceId)})</p><p>요청자: ${esc(requester)}</p>
-    <p>환불 가능한 미사용 구매 크레딧: <b>${esc(credits(refundable))}</b></p>${note ? `<p>메모: ${esc(note)}</p>` : ''}
-    <p style="font-size:13px;color:#667085">관리자 콘솔 › 워크스페이스 › AI 크레딧 환불에서 처리합니다.</p>`, '');
-  const text = `워크스페이스 ${workspaceName} (${workspaceId})\n요청자: ${requester}\n환불 가능: ${credits(refundable)}\n${note ? `메모: ${note}\n` : ''}`;
-  return { subject, html, text };
-}
-
 /* ---------- pricing v3 subscription lifecycle (T3) ---------- */
 const wonKr = (n) => `${Number(n || 0).toLocaleString('ko-KR')}원`;
 const kDate = (d) => new Date(d).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });

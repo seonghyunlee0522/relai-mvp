@@ -3,11 +3,11 @@
  * hive research/relai-pricing-v3/design.md §1).
  *
  * Every price is in KRW and VAT INCLUDED (부가세 포함): the list price is the card amount. supply/VAT for receipts = splitVat(amount).
- *              월간      연간 (12개월 한 번에, 20% 할인)   활성 프로젝트   기본 사용자   AI 크레딧
- *   FREE       0         0                                 1               3            최초 200 (once, no monthly grant, no top-up)
- *   PRO        30,000    288,000 (월 환산 24,000)          3               15           매월 1,000, top-up allowed
- *   TEAM       80,000    768,000 (월 환산 64,000)          10              40           매월 3,000, top-up allowed
- *   ENTERPRISE contact sales — limits set by an operator (subscriptions.seats / project_limit), top-up per contract
+ *              월간      연간 (12개월 한 번에, 20% 할인)   활성 프로젝트   기본 사용자   AI 이용량 (내부 USD 한도, 화면 비노출)
+ *   FREE       0         0                                 1               3            최초 $2 (once per owner, never renewed)
+ *   PRO        30,000    288,000 (월 환산 24,000)          3               15           매월 $10 (credit cycle, no carry-over)
+ *   TEAM       80,000    768,000 (월 환산 64,000)          10              40           매월 $30
+ *   ENTERPRISE contact sales — limits set by an operator (subscriptions.seats / project_limit); AI per contract (AI_LIMIT_USD_ENTERPRISE, default unlimited)
  * Add-ons (per workspace, per unit):        월간     연간 (12개월분)
  *   추가 사용자 1명 (PRO, TEAM)             1,000    9,600  (월 환산 800)
  *   추가 프로젝트 1개 PRO                   10,000   96,000 (월 환산 8,000)
@@ -19,10 +19,20 @@
  */
 const envInt = (v, d) => (Number.isInteger(Number(v)) && v !== undefined && v !== '' && Number(v) >= 0 ? Number(v) : d);
 
-/** Monthly AI credit grant per plan (0 = none). TEAM can be overridden with env AI_TEAM_MONTHLY_CREDITS, PRO with AI_PRO_MONTHLY_CREDITS. */
-export const AI_CREDITS_MONTHLY = { FREE: 0, PRO: envInt(process.env.AI_PRO_MONTHLY_CREDITS, 1000), TEAM: envInt(process.env.AI_TEAM_MONTHLY_CREDITS, 3000), ENTERPRISE: 0 };
-/** Credits a new Free workspace gets once (never again through re-signup, recovery or a plan change — ai/credits.js, T2). */
-export const FREE_ONCE_CREDITS = 200;
+/**
+ * AI allowance per plan in USD of provider cost (2026-10-27: credits retired). Internal only — users see a percentage, never these numbers,
+ * so they live outside PLANS / catalogue(). FREE is once (the workspace's whole life on Free), the others per monthly credit cycle.
+ * Overridable per plan with AI_LIMIT_USD_<PLAN>; ENTERPRISE defaults to null = no AI limit (contract).
+ */
+const envUsd = (k, d) => { const v = process.env[k]; if (v === undefined || v === '') return d; if (/^(none|null|unlimited)$/i.test(v)) return null; const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : d; };
+export const aiLimitUsd = (plan) => {
+  const key = plan === 'EARLY' ? 'FREE' : PLANS[plan] ? plan : DEFAULT_PLAN;
+  return envUsd(`AI_LIMIT_USD_${key}`, { FREE: 2, PRO: 10, TEAM: 30, ENTERPRISE: null }[key]);
+};
+/** How the allowance renews: ONCE (Free) | MONTHLY (Pro, Team) | CONTRACT (Enterprise). */
+export const AI_ALLOWANCE = { FREE: 'ONCE', PRO: 'MONTHLY', TEAM: 'MONTHLY', ENTERPRISE: 'CONTRACT', EARLY: 'ONCE' };
+/** What pricing screens say about AI — never an amount (founder 2026-10-27: "AI 이용량 포함", no difference shown between plans). */
+export const AI_INCLUDED_LABEL = { FREE: 'AI 이용량 포함 (최초 1회)', PRO: 'AI 이용량 포함', TEAM: 'AI 이용량 포함', ENTERPRISE: 'AI 이용량 협의', EARLY: 'AI 이용량 포함 (최초 1회)' };
 
 /** Free plan limits (also the limits of retired early-access workspaces). requirements / WBS / weekly reports: unlimited (D1). */
 export const FREE_LIMITS = Object.freeze({ projects: 1, members: 3, requirements: null, wbs: null, weekly_reports: null });
@@ -31,22 +41,22 @@ const UNLIMITED_CONTENT = { requirements: null, wbs: null, weekly_reports: null 
 export const PRICE_VERSION = 'v3-2026-10';
 export const PLANS = {
   FREE: { key: 'FREE', label: 'Free', price: { MONTHLY: 0, ANNUAL: 0 }, included: { projects: 1, users: 3 },
-    credits: { once: FREE_ONCE_CREDITS, monthly: 0 }, topup: false, addons: null,
-    base_monthly: 0, ai_credits_monthly: AI_CREDITS_MONTHLY.FREE, limits: FREE_LIMITS },
+    ai: { allowance: 'ONCE', label: AI_INCLUDED_LABEL.FREE }, addons: null,
+    base_monthly: 0, limits: FREE_LIMITS },
   PRO: { key: 'PRO', label: 'Pro', price: { MONTHLY: 30000, ANNUAL: 288000 }, included: { projects: 3, users: 15 },
-    credits: { once: 0, monthly: AI_CREDITS_MONTHLY.PRO }, topup: true,
+    ai: { allowance: 'MONTHLY', label: AI_INCLUDED_LABEL.PRO },
     addons: { user: { MONTHLY: 1000, ANNUAL: 9600 }, project: { MONTHLY: 10000, ANNUAL: 96000 } },
-    base_monthly: 30000, ai_credits_monthly: AI_CREDITS_MONTHLY.PRO, limits: { projects: 3, members: 15, ...UNLIMITED_CONTENT } },
+    base_monthly: 30000, limits: { projects: 3, members: 15, ...UNLIMITED_CONTENT } },
   TEAM: { key: 'TEAM', label: 'Team', price: { MONTHLY: 80000, ANNUAL: 768000 }, included: { projects: 10, users: 40 },
-    credits: { once: 0, monthly: AI_CREDITS_MONTHLY.TEAM }, topup: true,
+    ai: { allowance: 'MONTHLY', label: AI_INCLUDED_LABEL.TEAM },
     addons: { user: { MONTHLY: 1000, ANNUAL: 9600 }, project: { MONTHLY: 8000, ANNUAL: 76800 } },
-    base_monthly: 80000, ai_credits_monthly: AI_CREDITS_MONTHLY.TEAM, limits: { projects: 10, members: 40, ...UNLIMITED_CONTENT } },
+    base_monthly: 80000, limits: { projects: 10, members: 40, ...UNLIMITED_CONTENT } },
   ENTERPRISE: { key: 'ENTERPRISE', label: 'Enterprise', price: null, included: { projects: null, users: null },
-    credits: { once: 0, monthly: AI_CREDITS_MONTHLY.ENTERPRISE }, topup: 'contract', addons: null, contact_sales: true,
-    ai_credits_monthly: AI_CREDITS_MONTHLY.ENTERPRISE, limits: { projects: null, members: null, ...UNLIMITED_CONTENT } },
+    ai: { allowance: 'CONTRACT', label: AI_INCLUDED_LABEL.ENTERPRISE }, addons: null, contact_sales: true,
+    limits: { projects: null, members: null, ...UNLIMITED_CONTENT } },
   // Early access is retired (founder 2026-10-20): effectivePlan() never answers EARLY. The key stays so an old reference resolves, with FREE limits.
-  EARLY: { key: 'EARLY', label: 'Free', price: { MONTHLY: 0, ANNUAL: 0 }, included: { projects: 1, users: 3 }, credits: { once: 0, monthly: 0 }, topup: false, addons: null,
-    base_monthly: 0, ai_credits_monthly: 0, limits: FREE_LIMITS },
+  EARLY: { key: 'EARLY', label: 'Free', price: { MONTHLY: 0, ANNUAL: 0 }, included: { projects: 1, users: 3 }, ai: { allowance: 'ONCE', label: AI_INCLUDED_LABEL.EARLY }, addons: null,
+    base_monthly: 0, limits: FREE_LIMITS },
 };
 /** Plans sold through checkout (self-serve). */
 export const PAID_PLANS = ['PRO', 'TEAM'];
@@ -101,25 +111,6 @@ export function limitsFor(sub) {
   return { projects: inc.projects + nonNeg(sub.extra_projects), users: Math.max(users, nonNeg(sub.seats)) };
 }
 
-/**
- * AI credits. 1 credit = ₩10, VAT included. Top-ups are any multiple of TOPUP_STEP_KRW between TOPUP_STEP_KRW and TOPUP_MAX_KRW (T2).
- * CREDIT_PACKS: the v2 fixed packs, kept until the top-up screen moves to amounts (T2).
- */
-export const CREDIT_PRICE_KRW = 10;
-export const TOPUP_STEP_KRW = 10000;
-export const TOPUP_MAX_KRW = 500000;
-export const CREDIT_PACKS = [
-  { key: 'P10', amount: 10000, credits: 1000 },
-  { key: 'P30', amount: 30000, credits: 3000 },
-  { key: 'P100', amount: 100000, credits: 10000 },
-];
-/** Below this balance the page and the AI cost line turn amber and the OWNER gets one e-mail (re-armed by a purchase). */
-export const LOW_BALANCE_CREDITS = envInt(process.env.AI_LOW_BALANCE_CREDITS, 50);
-/** Refunds of unused purchased credits: in full, no fee (v3). The old v2 rule (CREDIT_REFUND_RULE=v2): full within REFUND_FULL_DAYS of an untouched pack, else less REFUND_FEE_PCT. */
-export const REFUND_FULL_DAYS = 7;
-export const REFUND_FEE_PCT = 10;
-/** Purchased credits are valid this many years (terms; no expiry job in this round). */
-export const PURCHASED_VALID_YEARS = 5;
 /** Prorated charges below this are waived until renewal (card minimum unverified; env MIN_CARD_KRW). */
 export const MIN_CARD_KRW = envInt(process.env.MIN_CARD_KRW, 100);
 /**
@@ -142,11 +133,12 @@ export const PLANS_URL = '/app/billing/plans';
 /**
  * 단건결제 모드 (ONE_TIME_PAYMENT_MODE=true; NicePay 카드사 심사 2026-10-26, 정기결제 승인 전): everything is sold as a one-time card
  * payment through the NicePay window. Pro / Team = 1개월 이용권 (no auto renewal, MONTHLY only, no add-ons; the existing ONE_TIME
- * plan order), AI credits = top-ups any workspace (Free included) may buy. Screens drop 연간 · 정기결제 · 자동 갱신 wording.
+ * plan order). Screens drop 연간 · 정기결제 · 자동 갱신 wording.
  * Read per call so a redeploy can flip it; turn it off once NicePay approves 정기결제.
  */
 export const oneTimeMode = () => /^(1|true|yes|on)$/i.test(String(process.env.ONE_TIME_PAYMENT_MODE || '').trim());
-export const CREDITS_URL = '/app/settings/credits';
+/** 설정 › AI 이용 현황 (the old /app/settings/credits path redirects here). */
+export const AI_USAGE_URL = '/app/settings/ai-usage';
 
 /** Usage dimension labels in UI order (v3: active projects and users only — D1). */
 export const USAGE_DIMS = [
@@ -159,14 +151,13 @@ export const planOf = (key) => PLANS[key] || PLANS[DEFAULT_PLAN];
 /** Public catalogue for screens and GET …/billing (derived values included, nothing typed twice). */
 export function catalogue() {
   return {
-    price_version: PRICE_VERSION, vat_included: true, annual_discount_pct: ANNUAL_DISCOUNT_PCT, credit_price_krw: CREDIT_PRICE_KRW,
-    topup: { step: TOPUP_STEP_KRW, max: TOPUP_MAX_KRW },
+    price_version: PRICE_VERSION, vat_included: true, annual_discount_pct: ANNUAL_DISCOUNT_PCT,
     cycles: Object.values(CYCLES).map((c) => ({ key: c.key, label: c.label, months: c.months, discount_pct: c.discount_pct })),
     plans: PLAN_ORDER.map((k) => {
       const p = PLANS[k];
       const price = p.price ? { MONTHLY: p.price.MONTHLY, ANNUAL: p.price.ANNUAL, ...annualView(p.price.MONTHLY, p.price.ANNUAL) } : null;
       const addons = p.addons ? Object.fromEntries(ADDON_KINDS.map((kind) => [kind, { ...p.addons[kind], monthly_equivalent: Math.floor(p.addons[kind].ANNUAL / 12) }])) : null;
-      return { key: p.key, label: p.label, contact_sales: Boolean(p.contact_sales), price, included: p.included, credits: p.credits, topup: p.topup, addons };
+      return { key: p.key, label: p.label, contact_sales: Boolean(p.contact_sales), price, included: p.included, ai: p.ai, addons };
     }),
   };
 }

@@ -1,10 +1,9 @@
 /* 설정 › 플랜 · 결제 — 워크스페이스 Billing (pricing v3, founder spec §4.2, design.md §8.5).
  * One screen over GET …/billing (v3 shape): current plan + cycle, next payment date + amount, active projects / users against limits
- * (pending invites hold a seat), AI credits (total + 기본 / 가입 / 유상 buckets, 기본 소멸일), scheduled changes, credit history,
- * payment history (OWNER), and the actions: 요금제 변경, 추가 사용자·프로젝트, AI 크레딧 충전 (Free → Pro 안내 instead), 해지.
+ * (pending invites hold a seat), AI 이용량 (percent used / left, next reset date — no amounts), scheduled changes,
+ * payment history (OWNER), and the actions: 요금제 변경, 추가 사용자·프로젝트, 해지.
  * No amount is computed here: every 원 figure is a server field (next_payment_amount, orders) or the catalogue.
- * Credits are a usage unit (batch7 #7): no won next to a credit number on this page.
- * T2/T3 fields not live yet render as absent, never as fake zeros: credits.plan/promo/purchased === null → total only;
+ * T3 fields not live yet render as absent, never as fake zeros:
  * scheduled[] empty → section hidden; a scheduled change is cancellable only when the server sends its cancel_url (T3). */
 import { api } from './core/api.js';
 import { $, html, raw, esc } from './core/dom.js';
@@ -63,20 +62,19 @@ function usagePanel(b) {
   </div></div>`;
 }
 
-function creditsPanel(b) {
-  const c = b.credits || {};
-  const split = c.plan !== null && c.plan !== undefined;
-  const row = (id, k, v, note) => html`<div class="bl-bucket" id="${id}"><span>${k}</span><b>${n(v)}</b>${raw(note ? `<small class="dim">${esc(note)}</small>` : '')}</div>`;
-  const free = b.plan === 'FREE';
-  return html`<div class="panel bl-panel" id="bl-credits"><div class="panel__h">AI 크레딧<a class="btn btn--ghost btn--sm" href="/app/settings/credits" data-link>사용 내역 전체</a></div><div class="panel__b">
-    <p class="bl-total"><span>사용 가능</span><b id="bl-credit-total">${n(c.total)}</b><small>크레딧</small></p>
-    ${raw(split ? html`<div class="bl-buckets">
-      ${raw(row('bl-b-plan', '기본 크레딧', c.plan, c.plan_expires_at ? `${day(c.plan_expires_at)} 소멸 · 이월 없음` : '매월 지급 · 이월 없음'))}
-      ${raw(row('bl-b-promo', '가입·프로모션', c.promo, ''))}
-      ${raw(row('bl-b-purchased', '유상(충전)', c.purchased, '충전일부터 5년'))}
-    </div><p class="hint">기본 → 가입·프로모션 → 유상 순서로 차감돼요.</p>` : '')}
-    ${raw(free ? '<p class="hint" id="bl-free-credits">Free는 처음 한 번 200 크레딧을 드리고, 매월 지급이나 충전은 없어요. Pro로 바꾸면 매월 1,000 크레딧을 받고 필요한 만큼 충전할 수 있어요.</p>' : '')}
-    <div id="bl-ledger"></div>
+/** AI 이용량 (2026-10-27, credits retired): percentages only — this period's use, what is left, the next reset date. */
+function aiUsagePanel(b) {
+  const u = b.ai_usage;
+  if (!u) return '';
+  const pct = (v) => `${Number(v || 0).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}%`;
+  const note = u.unlimited ? '계약에 따라 제공돼요.' : u.allowance === 'ONCE' ? 'Free는 처음 한 번 제공되고 다시 채워지지 않아요. Pro로 바꾸면 매월 AI 이용량이 제공돼요.'
+    : u.resets_at ? `${day(u.resets_at)}에 새로 제공되고, 남은 이용량은 이월되지 않아요.` : '매월 새로 제공돼요.';
+  const used = u.unlimited ? 0 : Math.min(100, Number(u.used_pct || 0));
+  const tone = u.blocked || u.tier === 'reached' || u.tier === 'critical' ? 'is-bad' : u.tier === 'warn' ? 'is-warn' : '';
+  return html`<div class="panel bl-panel au-sum ${tone}" id="bl-ai-usage"><div class="panel__h">AI 이용량<a class="btn btn--ghost btn--sm" href="/app/settings/ai-usage" data-link>이용 현황 보기</a></div><div class="panel__b">
+    ${raw(u.unlimited ? '<p class="bl-total"><b>제한 없음</b></p>' : html`<p class="bl-total"><span>사용</span><b id="bl-ai-used">${pct(u.used_pct)}</b><small>남은 이용량 ${pct(u.remaining_pct)}</small></p>
+    <div class="au-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${used}" aria-label="AI 이용량 사용률"><span style="width:${used}%"></span></div>`)}
+    <p class="hint" id="bl-ai-note" style="margin-top:8px">${note}</p>
   </div></div>`;
 }
 
@@ -125,25 +123,17 @@ function actionsPanel(b) {
   const btns = [
     html`<a class="btn btn--primary btn--sm" id="bl-change" href="/app/billing/plans" data-link>${b.plan === 'FREE' ? '요금제 살펴보기' : '요금제 변경'}</a>`,
     paid && f.addons ? html`<a class="btn btn--secondary btn--sm" id="bl-addon" href="/app/billing/subscribe?addon=1" data-link>사용자 · 프로젝트 추가</a>` : '',
-    paid || b.plan === 'ENTERPRISE' || f.one_time ? html`<a class="btn btn--secondary btn--sm" id="bl-topup" href="/app/settings/credits#cr-buy" data-link>AI 크레딧 충전</a>` : '',
     canCancel ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel" data-phone-ok>해지</button>` : '',
     // 이용약관 제11조 2항: end now + unused days refunded (also after a period-end cancel); shown only when the server sends refund_quote_url
     canRefund ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel-refund" data-phone-ok>지금 해지하고 환불</button>` : '',
   ].filter(Boolean).join('');
-  const free = b.plan === 'FREE' && f.one_time ? html`<p class="bl-upsell" id="bl-free-topup">Pro·Team 1개월 이용권을 구매하거나, 지금 요금제 그대로 AI 크레딧을 충전할 수 있어요.</p>`
-    : b.plan === 'FREE' ? html`<p class="bl-upsell" id="bl-free-topup">AI 크레딧 충전은 Pro부터 할 수 있어요. <a class="link" href="/app/billing/plans" data-link>Pro로 업그레이드</a>하면 매월 1,000 크레딧과 충전을 이용할 수 있어요.</p>` : '';
+  const free = b.plan === 'FREE' ? html`<p class="bl-upsell" id="bl-free-upsell">${raw(f.one_time ? 'Pro·Team 1개월 이용권을 구매하면' : '<a class="link" href="/app/billing/plans" data-link>Pro로 업그레이드</a>하면')} 매월 AI 이용량이 새로 제공돼요.</p>` : '';
   // D3 (founder 2026-10-20): no one-time passes — a paid plan without auto renewal has been cancelled
   const pass = paid && s && !s.auto_renew && !s.cancel_at_period_end ? html`<p class="hint" id="bl-pass">${f.one_time ? '1개월 이용권이에요.' : '자동 갱신이 꺼져 있어요.'} ${day(s.current_period_end)}까지 이용하고 이후 Free로 바뀌어요. 이후에는 최근 프로젝트 1개만 편집하고 나머지는 조회 전용이 돼요(데이터는 삭제되지 않아요).</p>` : '';
   const pending = paid && s?.cancel_at_period_end ? html`<p class="hint" id="bl-cancel-pending">해지가 예약됐어요. ${day(s.current_period_end)}까지 ${b.plan_label || b.plan}를 그대로 쓰고 이후 Free로 바뀌어요.</p>` : '';
   return html`<div class="panel bl-panel" id="bl-actions"><div class="panel__h">관리</div><div class="panel__b">${raw(free)}${raw(pass)}${raw(pending)}<div class="actions">${raw(btns)}</div>
     <p class="hint" style="margin-top:10px">${raw(f.one_time ? '환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>을 확인하세요.' : '해지·환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>, 자동 결제는 <a class="link" href="/terms#recurring" target="_blank" rel="noopener">정기결제 안내</a>를 확인하세요.')}</p></div></div>`;
 }
-
-/** Ledger labels (credit-routes.js) carry the won amount of a top-up ('충전 ₩10,000'); this page shows credits only. */
-const creditLabel = (l) => String(l || '').replace(/\u20a9[\d,]+/g, '').trim();
-const ledgerHtml = (rows) => (!rows?.length ? '<p class="hint" style="margin-top:10px">아직 크레딧 사용 내역이 없어요.</p>'
-  : html`<table class="rtable bl-tbl" id="bl-ledger-tbl"><thead><tr><th>일시</th><th>내용</th><th class="num">크레딧</th></tr></thead><tbody>
-    ${raw(rows.map((r) => html`<tr><td>${day(r.at)}</td><td>${creditLabel(r.label) || r.type}${raw(r.project_name ? html` <small class="dim">· ${r.project_name}</small>` : '')}</td><td class="num">${r.credits > 0 ? `+${n(r.credits)}` : r.credits < 0 ? `−${n(-r.credits)}` : '0'}</td></tr>`).join(''))}</tbody></table>`);
 
 export const ordersHtml = (orders) => html`<div class="panel bl-panel" id="bl-orders"><div class="panel__h">결제 내역</div><div class="panel__b">${raw(!orders?.length ? '<p class="hint">결제 내역이 없어요.</p>'
   : html`<div class="rtable-wrap--in"><table class="rtable bl-tbl" id="bl-orders-tbl"><thead><tr><th>일시</th><th>내용</th><th class="num">금액</th><th>상태</th><th></th></tr></thead><tbody>
@@ -153,7 +143,7 @@ export const ordersHtml = (orders) => html`<div class="panel bl-panel" id="bl-or
 /** The whole page body (pure: unit-tested against the v3 fixture). */
 export function billingHtml(b, { orders = null } = {}) {
   return html`${raw(overLimitBanner(b))}<div class="bl-grid">${raw(planPanel(b))}${raw(usagePanel(b))}</div>
-    ${raw(scheduledPanel(b))}${raw(creditsPanel(b))}${raw(actionsPanel(b))}${raw(policyPanel(b))}${raw(orders ? ordersHtml(orders) : '')}`;
+    ${raw(scheduledPanel(b))}${raw(aiUsagePanel(b))}${raw(actionsPanel(b))}${raw(policyPanel(b))}${raw(orders ? ordersHtml(orders) : '')}`;
 }
 
 /** Billing body inside another page (settings › 요금제 tab). Loads its own data. */
@@ -162,7 +152,6 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
   try { b = (await api('GET', `/api/workspaces/${wid}/billing`)).billing; } catch (e) { el.innerHTML = html`<p class="hint">${e.message || '결제 정보를 불러오지 못했어요.'}</p>`; return; }
   const orders = b.can_manage ? await api('GET', `/api/workspaces/${wid}/billing/orders`).then((r) => r.orders).catch(() => []) : null;
   el.innerHTML = billingHtml(b, { orders });
-  api('GET', `/api/workspaces/${wid}/credits/ledger`).then((r) => { const box = el.querySelector('#bl-ledger'); if (box) box.innerHTML = ledgerHtml((r.rows || []).slice(0, 8)); }).catch(() => {});
   const cancel = el.querySelector('#bl-cancel');
   if (cancel) cancel.onclick = async () => {
     const end = day(b.subscription?.current_period_end);
@@ -178,7 +167,7 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
     try { q = (await api('GET', b.refund_quote_url)).refund; } catch (e) { toast(e.message); return; }
     const lines = (q.lines || []).map((l) => html`<li>${l.label || '결제'} ${krw(l.paid)} · 남은 ${n(l.days)}/${n(l.period_days)}일 → <b>${krw(l.amount)}</b></li>`).join('');
     const bodyHtml = html`<p>${b.plan_label} 이용이 지금 끝나고 Free로 바뀌어요. 남은 기간을 일할 계산해 <b id="bl-refund-total">${krw(q.total)}</b>을 환불해요${q.withdrawal ? ' (청약철회)' : ''}. 위약금은 없어요.</p>
-      ${raw(lines ? html`<ul class="bl-list">${raw(lines)}</ul>` : '')}<p class="hint">이번 기간의 기본 AI 크레딧은 소멸해요.</p><ul class="bl-list" id="bl-refund-policy"><li>${policy(b).free}</li><li>${policy(b).keep}</li></ul>`;
+      ${raw(lines ? html`<ul class="bl-list">${raw(lines)}</ul>` : '')}<p class="hint">지금 해지하면 AI 이용량은 Free 기준으로 바뀌어요.</p><ul class="bl-list" id="bl-refund-policy"><li>${policy(b).free}</li><li>${policy(b).keep}</li></ul>`;
     if (!(await confirmDialog({ title: '지금 해지하고 환불받을까요?', bodyHtml, confirm: '해지하고 환불', danger: true }))) return;
     try {
       const r = await api('POST', `/api/workspaces/${wid}/billing/cancel`, { refund: true });
@@ -196,7 +185,7 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
 export async function billingPage(main = $('#main')) {
   document.title = '플랜 · 결제 — RELAI';
   main.innerHTML = html`<div class="page page--narrow page--billing" id="billing-page"><div class="page__head"><div><a class="link" href="/app/settings?tab=plan" data-link>← 설정</a>
-    <h1 style="margin-top:4px">플랜 · 결제</h1><p class="dim" style="margin-top:4px">${wsName(state.workspace.name)}의 요금제, 사용량, AI 크레딧과 결제를 관리해요.</p></div></div>
+    <h1 style="margin-top:4px">플랜 · 결제</h1><p class="dim" style="margin-top:4px">${wsName(state.workspace.name)}의 요금제, 사용량, AI 이용량과 결제를 관리해요.</p></div></div>
     <div id="bl-root"><p class="hint">불러오는 중…</p></div>${raw(legalFooterHtml(LEGAL))}</div>`;
   await mountBilling($('#bl-root'));
 }

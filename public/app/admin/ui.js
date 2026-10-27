@@ -79,14 +79,32 @@ export const usageBars = (usage) => (!usage ? '' : html`<div class="ause">${raw(
 export const errorBlock = (e) => html`<div class="aempty aempty--err">${e.message}</div>`;
 
 /* ---- AI usage (Phase 11) ---- */
-export const AI_FEATURE = { REQUIREMENT_EXTRACTION: '요구사항 추출', WBS_GENERATION: 'WBS 초안 (플래너 포함)', CHANGE_IMPACT: '변경 영향 분석', PROJECT_QA: '프로젝트 Q&A', WBS_PLAN_QUESTIONS: 'WBS 플래너 질문 (무과금)', WBS_PLAN_FIX: 'WBS 플래너 보완 (무과금)', TEST_GENERATION: '테스트 시나리오' };
+export const AI_FEATURE = { REQUIREMENT_EXTRACTION: '요구사항 추출', WBS_GENERATION: 'WBS 초안 (플래너 포함)', CHANGE_IMPACT: '변경 영향 분석', PROJECT_QA: '프로젝트 Q&A', WBS_PLAN_QUESTIONS: 'WBS 플래너 질문', WBS_PLAN_FIX: 'WBS 플래너 보완', TEST_GENERATION: '테스트 시나리오' };
 export const usd = (v) => (v === null || v === undefined ? '-' : `$${Number(v).toFixed(4)}`);
+/** USD → "₩1,234" at the latest 한국수출입은행 rate (fx = { krw_per_unit, rate_date }); display only. */
+export const krwOf = (v, fx) => (v === null || v === undefined || !fx?.krw_per_unit ? '' : `₩${Math.round(Number(v) * fx.krw_per_unit).toLocaleString('ko-KR')}`);
+/** "$1.2345 (₩1,700)" */
+export const money = (v, fx) => { const k = krwOf(v, fx); return k ? `${usd(v)} <small class="dim">${k}</small>` : usd(v); };
+export const fxNote = (fx) => (fx ? `환율 ${Number(fx.krw_per_unit).toLocaleString('ko-KR')}원/$ (한국수출입은행 매매기준율, ${fx.rate_date})` : '환율 미수집 (KOREAEXIM_API_KEY 설정 후 매일 10:00 조회)');
+const pctTxt = (v) => (v === null || v === undefined ? '-' : `${Number(v).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}%`);
+export { pctTxt };
+/** Simple inline SVG bar chart of [{ label, value }] (USD); labels thinned to ~8. */
+export function barChart(rows, { id = '', height = 160, fmt = (v) => `$${v.toFixed(2)}` } = {}) {
+  if (!rows?.length) return '<p class="hint">데이터가 없습니다.</p>';
+  const W = 720; const H = height; const L = 48; const B = 22; const T = 8;
+  const max = Math.max(...rows.map((r) => r.value), 0) || 1;
+  const bw = (W - L - 8) / rows.length;
+  const step = Math.max(1, Math.ceil(rows.length / 8));
+  const bars = rows.map((r, i) => { const h = ((H - T - B) * r.value) / max; const x = L + i * bw;
+    return `<rect x="${(x + 1).toFixed(1)}" y="${(H - B - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" class="abar"><title>${r.label} · ${fmt(r.value)}</title></rect>${i % step === 0 || (i === rows.length - 1 && i % step >= step / 2) ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="abar__ax">${r.label}</text>` : ''}`; }).join('');
+  return `<svg ${id ? `id="${id}" ` : ''}class="abarchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="비용 추이"><line x1="${L}" x2="${W}" y1="${H - B}" y2="${H - B}" class="abar__base"/><text x="${L - 6}" y="${T + 10}" text-anchor="end" class="abar__ax">${fmt(max)}</text>${bars}</svg>`;
+}
 /** Per-feature metering table shared by the dashboard and the workspace page. */
 export const aiFeatureTable = (features) => table([
   { key: 'label', label: '기능', w: 150, render: (f) => AI_FEATURE[f.feature] || f.feature },
   { key: 'runs', label: '요청', w: 70, render: (f) => n(f.runs) }, { key: 'succeeded', label: '성공', w: 70, render: (f) => n(f.succeeded) },
   { key: 'success_rate', label: '성공률', w: 70, render: (f) => (f.success_rate === null ? '-' : `${f.success_rate}%`) },
   { key: 'avg_input_tokens', label: '평균 입력 토큰', w: 110, render: (f) => n(f.avg_input_tokens) }, { key: 'avg_output_tokens', label: '평균 출력 토큰', w: 110, render: (f) => n(f.avg_output_tokens) },
-  { key: 'avg_provider_cost', label: '평균 AI 제공사 비용', w: 130, render: (f) => usd(f.avg_provider_cost) }, { key: 'avg_credit', label: '평균 크레딧', w: 90, render: (f) => n(f.avg_credit) },
-  { key: 'credits', label: '크레딧 합계', w: 90, render: (f) => n(f.credits) }, { key: 'avg_latency_ms', label: '평균 응답', w: 90, render: (f) => (f.avg_latency_ms === null ? '-' : `${(f.avg_latency_ms / 1000).toFixed(1)}s`) },
+  { key: 'cached_input_tokens', label: '캐시 토큰', w: 100, render: (f) => n(f.cached_input_tokens) },
+  { key: 'avg_provider_cost', label: '평균 비용', w: 100, render: (f) => usd(f.avg_provider_cost) }, { key: 'provider_cost', label: '비용 합계', w: 100, render: (f) => usd(f.provider_cost) }, { key: 'avg_latency_ms', label: '평균 응답', w: 90, render: (f) => (f.avg_latency_ms === null ? '-' : `${(f.avg_latency_ms / 1000).toFixed(1)}s`) },
 ], features, { empty: 'AI 요청 기록이 없습니다.', id: 'aiftbl' });

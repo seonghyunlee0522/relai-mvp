@@ -69,11 +69,11 @@ async function capture(fn) {
   return out.join('\n');
 }
 
-test('billing summary lists the priced products: Team 플랜 and the 3 AI 크레딧 packs', async () => {
+test('billing summary lists the priced products: the plans only (AI credit packs retired 2026-10-27; AI is "AI 이용량 포함")', async () => {
   const { c, w, done } = await boot({ payments: false });
   const b = (await c('GET', `/api/workspaces/${w}/billing`)).json.billing;
   assert.equal(b.plans.find((p) => p.key === 'TEAM').price.MONTHLY, 80000);   // pricing v3, VAT included
-  assert.deepEqual(b.credit_packs.map((p) => p.amount), [10000, 30000, 100000]);
+  assert.equal(b.credit_packs, undefined); assert.equal(b.plans.find((p) => p.key === 'TEAM').ai.label, 'AI 이용량 포함');
   assert.equal(b.payments_enabled, false);
   done();
 });
@@ -113,25 +113,19 @@ test('정기결제 decline: 402, nothing stored, card data not in the log', asyn
   done();
 });
 
-test('credit pack → order page that opens the NicePay window shows 결제 수단 신용카드, no test wording', async () => {
-  const prev = [process.env.AI_ENABLED, process.env.AI_PROVIDER]; process.env.AI_ENABLED = 'true'; process.env.AI_PROVIDER = 'fake';   // packs are sold only while AI is on
+test('AI credit packs are no longer sold: the old checkout answers 410 and no order row is created', async () => {
   const { c, w, db, done } = await boot({ recurring: false });
-  // pricing v3 (T2): top-ups are for PRO / TEAM workspaces
-  await db.run(`INSERT INTO subscriptions (id, workspace_id, plan, status, provider, auto_renew, current_period_start, current_period_end) VALUES (?, ?, 'PRO', 'ACTIVE', 'fake', false, now(), now() + interval '30 days')`, [`s_${w}`, w]);
   const o = await c('POST', `/api/workspaces/${w}/credits/checkout`, { pack: 'P30' });
-  assert.equal(o.status, 201, o.text);
-  const page = await c('GET', o.json.checkout_url);
-  assert.match(page.text, /결제 수단<\/th><td>신용카드/); assert.match(page.text, /30,000/);
-  assert.doesNotMatch(page.text.replace(/<script[\s\S]*?<\/script>/g, ''), /테스트|샘플|\btest\b|\bsample\b/i);
+  assert.equal(o.status, 410); assert.equal(o.json.error.code, 'credits_retired');
+  assert.equal((await db.get(`SELECT COUNT(*) AS n FROM billing_orders WHERE workspace_id = ?`, [w])).n, 0);
   done();
-  for (const [k, v] of [['AI_ENABLED', prev[0]], ['AI_PROVIDER', prev[1]]]) if (v === undefined) delete process.env[k]; else process.env[k] = v;
 });
 
 test('review screens: footer business facts + 상호, and no sample/test/샘플/테스트 in their user-facing copy', () => {
   const foot = legalFooterHtml(LEGAL);
   for (const v of [LEGAL.company, LEGAL.ceo, LEGAL.bizNo, LEGAL.address, LEGAL.mailOrderNo, LEGAL.contactEmail]) assert.ok(foot.includes(v.replace(/&/g, '&amp;')), v);
   const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
-  for (const f of ['public/app/plans.js', 'public/app/subscribe.js', 'public/app/credits.js', 'public/app/shared/legal-info.js']) {
+  for (const f of ['public/app/plans.js', 'public/app/subscribe.js', 'public/app/ai-usage.js', 'public/app/shared/legal-info.js']) {
     const strings = strip(readFileSync(join(root, f), 'utf8')).match(/'[^'\n]*'|`[^`]*`/g) || [];
     const bad = strings.filter((s) => /샘플|테스트|\bsample\b|\btest\b/i.test(s));
     assert.deepEqual(bad, [], f);

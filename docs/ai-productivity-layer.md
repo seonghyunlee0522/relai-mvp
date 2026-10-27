@@ -1,5 +1,7 @@
 # Phase 11 — AI Productivity Layer + Credit Metering
 
+> **2026-10-27: AI 크레딧은 폐지되었습니다.** 과금·한도는 [ai-usage-metering.md](ai-usage-metering.md)를 따릅니다. 이 문서의 Credit Account / Ledger / 기능별 크레딧 설명은 이력으로만 남깁니다.
+
 RELAI의 AI는 "결정자"가 아니라 "PM 보조자"다. 모든 AI 결과는 초안/후보이며, 사용자가 검토·선택한 항목만 기존 서비스 경로(요구사항·WBS·Traceability·변경 관계)를 통해 저장된다. AI 경로는 프로젝트 데이터를 쓰지 않고, 승인(commit) 경로는 AI를 호출하지 않는다.
 
 ## 구성

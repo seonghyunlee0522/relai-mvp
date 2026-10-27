@@ -115,7 +115,7 @@ export function quoteUpgrade({ wid = null, sub, plan, at = new Date() } = {}) {
   carry('user', '추가 사용자 이전 (남은 기간)', eu, nu);
   carry('project', '추가 프로젝트 이전 (남은 기간)', ep, np);
   return { ...finish(lines, { kind: 'UPGRADE', wid, from_plan: sub.plan, plan, cycle: per.cycle, extra_users: nu, extra_projects: np,
-    credits_delta: Math.max(0, to.credits.monthly - from.credits.monthly), period_start: new Date(per.start).toISOString(), period_end: new Date(per.end).toISOString() }),
+    period_start: new Date(per.start).toISOString(), period_end: new Date(per.end).toISOString() }),
   next_renewal_amount: renewalAmount(plan, per.cycle, nu, np), next_renewal_at: new Date(per.end).toISOString(),
   limits_after: limitsFor({ ...sub, plan, extra_users: nu, extra_projects: np, seats: null }) };
 }

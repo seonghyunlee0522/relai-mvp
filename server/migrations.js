@@ -182,9 +182,8 @@ export const migrations = [
   } },
   { version: 40, name: 'B9 signup consent: users.terms_agreed_at/terms_version/privacy_agreed_at/privacy_version + auth_oauth_states.consent — DDL in schema.sql', up() {} },
   { version: 41, name: 'AI-credits-only billing: workspaces.early_access_until (+ 30/7-day notice stamps), billing_orders CREDIT_PACK (credits, refunded_amount/credits, receipt_url), credit_ledger PURCHASE, low_balance_notified_at (schema.sql) + backfill early access = max(created_at, launch) + 12 months for workspaces created before the cut-off + starter credits topped up to 500 once', async up(db) {
-    const [{ grantEarlyAccess }, { topUpStarterCredits }] = await Promise.all([import('./billing/subscriptions.js'), import('./ai/credits.js')]);
-    await grantEarlyAccess(db);
-    await topUpStarterCredits(db);
+    const { grantEarlyAccess } = await import('./billing/subscriptions.js');
+    await grantEarlyAccess(db);   // the starter-credit top-up of this version is moot since v72 retired credits
   } },
   { version: 42, name: 'Sample projects: projects.sample_key (schema.sql) — example projects for new users, excluded from usage and plan limits', up() {} },
   { version: 43, name: 'Jira requirement links: integration_entity_links.requirement_id + link_role REQUIREMENT (wbs_item_id nullable), WBS-only unique index, integration_project_mappings.auto_mark_requirements, requirements.jira_done_at (columns/indexes in schema.sql)', async up(db) {
@@ -206,8 +205,7 @@ export const migrations = [
   { version: 50, name: 'batch7 T3: wbs_items.system_key + uq_wbs_system_key (WBS 고정 최상위 뼈대), public_holidays + 2026–2027 seed (schema.sql) — additive; existing projects get their fixed nodes when the WBS is first opened', up() {} },
   { version: 51, name: 'Batch7 T4: requirements.owner_stakeholder_id, test_executions.step_results, test_cases.test_data + environment (schema.sql, additive)', up() {} },
   { version: 52, name: 'Batch7 T5 plan limits + paywall: 500 free AI credits once per WORKSPACE — accounts that never got a starter grant are topped up to a 500 balance (credit_ledger PROMOTION STARTER_WORKSPACE_52, idempotent, additive). Early access → FREE limits is code only; no rows changed or deleted', async up(db) {
-    const { grantMissingWorkspaceStarter } = await import('./ai/credits.js');
-    await grantMissingWorkspaceStarter(db);
+    /* starter credits: moot since v72 retired AI credits (no balance is read any more) */
   } },
   { version: 53, name: 'Early access retired for everyone (founder 2026-10-20): seeded promotions that promise 12개월 무료 / 얼리 액세스 get Free-plan copy, the {until} rows (promo-home, promo-credits) are deactivated — only rows an operator never edited; data update only, nothing deleted', async up(db) {
     for (const [id, from, to] of PROMO_COPY_53) {
@@ -231,8 +229,7 @@ export const migrations = [
   } },
   { version: 61, name: 'Pricing v3 T1: idx_projects_ws_active (active = DRAFT/ACTIVE/ON_HOLD, samples excluded; schema.sql, index only)', up() {} },
   { version: 62, name: 'Pricing v3 T2: AI credit buckets (workspace_credit_accounts plan / promo / purchased + plan_expires_at, credit_ledger d_* + type EXPIRY), free_credit_claims, workspaces.enterprise_topup (schema.sql, additive). Data: balances split without changing any total (purchased = unused purchased, rest = promo, plan = 0); owners who already got a starter grant are recorded as Free-claimed. Idempotent', async up(db) {
-    const { backfillCreditBuckets } = await import('./ai/credits.js');
-    await backfillCreditBuckets(db);
+    /* credit bucket backfill: moot since v72 retired AI credits; free_credit_claims are claimed on first use (ai/usage-limit.js) */
   } },
   { version: 63, name: 'Pricing v3 T3: subscription_changes (scheduled downgrade / cycle / add-on reduction at renewal), subscription_refunds (해지 환불 · 청약철회, unused days prorated, no penalty), subscriptions ended_at / data_retention_until / last_failed_at (schema.sql, additive)', up() {} },
   { version: 64, name: 'Pricing v3 T3: billing_consents (정기결제 · 추가 구매 · 증액 동의, disclosure hash, append-only) and price_change_notices (schema.sql, additive). Data: the seeded launch promotions still on v2 copy (프로젝트 2개, 크레딧 500, 월 기본료 없이) get v3 copy (Free 1 project · 3 users · 100 credits once, Pro 1,000 / Team 3,000 a month) — only rows an operator never edited; nothing deleted', async up(db) {
@@ -284,6 +281,30 @@ export const migrations = [
       else await db.run('INSERT INTO project_definitions (project_id, stakeholders) VALUES (?, ?)', [pid, JSON.stringify(d.list)]);
     }
   } },
+  { version: 72, name: 'AI usage metering (founder 2026-10-27): AI credits retired — ai_runs cached_input_tokens / reserved_usd / plan_key / cost_estimated + idx_ai_runs_ws_metered, fx_rates (한국수출입은행 USD/KRW, admin display only) (schema.sql, additive). Data: every credit balance set to 0 with one ADJUSTMENT ledger row each (no paid credit was ever sold); credit tables kept as history; seeded promotion copy that names AI credits gets usage copy — only rows an operator never edited', async up(db) {
+    await db.run(`INSERT INTO credit_ledger (id, workspace_id, type, amount, balance_after, reason, reference_type, reference_id, d_plan, d_promo, d_purchased, created_at)
+      SELECT gen_random_uuid()::text, a.workspace_id, 'ADJUSTMENT', -a.balance, 0, 'AI 크레딧 종료 (AI 이용량으로 전환)', 'MIGRATION', 'v72', -a.plan_balance, -a.promo_balance, -a.purchased_balance, clock_timestamp()
+      FROM workspace_credit_accounts a WHERE a.balance <> 0`);
+    await db.run('UPDATE workspace_credit_accounts SET balance = 0, plan_balance = 0, promo_balance = 0, purchased_balance = 0, plan_expires_at = NULL, updated_at = now()');
+    for (const [id, froms, to] of PROMO_COPY_72) {
+      for (const f of froms) await db.run('UPDATE promotions SET title = ?, body = ?, badge = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ?', [to.title, to.body, to.badge, id, f.title, f.body]);
+    }
+  } },
+];
+
+/** Migration 72: [id, every seeded copy it may still have (seed / 49 / 64 / 66), AI-usage copy]. Never an amount (users see percentages). */
+export const PROMO_COPY_72 = [
+  ['promo-ai-credits', [{ title: '가입하면 AI 크레딧 500 무료', body: '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.' },
+    { title: '가입하면 AI 크레딧 100 무료', body: '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다. 처음 한 번 드립니다.' },
+    { title: '가입하면 AI 크레딧 200 무료', body: '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다. 처음 한 번 드립니다.' }],
+  { title: 'AI 기능도 무료로 체험', body: '요구사항 추출·WBS 초안 같은 AI 기능을 처음 한 번 제공되는 이용량 안에서 써 볼 수 있습니다.', badge: 'AI 이용량' }],
+  ['promo-ai-payg', [{ title: '이후 AI는 쓴 만큼만', body: '월 기본료 없이 쓴 만큼만 크레딧이 차감됩니다.' },
+    { title: 'Pro · Team은 매월 AI 크레딧', body: 'Pro는 매월 1,000, Team은 매월 3,000 크레딧을 드립니다. 모자라면 충전해서 씁니다.' }],
+  { title: 'Pro · Team은 AI 이용량 포함', body: '매월 AI 이용량이 새로 제공됩니다. 남은 이용량은 사용률(%)로 확인합니다.', badge: '유료 플랜' }],
+  ['promo-login', [{ title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 500도 함께 드립니다.' },
+    { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 100도 함께 드립니다.' },
+    { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 크레딧 200도 함께 드립니다.' }],
+  { title: '지금 가입하면 무료 플랜으로 시작', body: 'AI 기능도 처음 한 번 무료로 체험할 수 있습니다.', badge: '무료 플랜' }],
 ];
 
 /** Migration 49: launch-offer promotion bodies [id, seeded text, text without ₩] — credits are a usage unit on every user screen (batch7 #7). */

@@ -1,8 +1,8 @@
 /* 단건결제 모드 (ONE_TIME_PAYMENT_MODE; NicePay 카드사 심사 2026-10-26, 정기결제 승인 전).
  *  on:  Pro / Team = 1개월 이용권 (one-time order through the card window, MONTHLY only, no add-ons, no auto renewal),
- *       AI credits for every plan (Free tops up), landing shows the plan cards without 월간/연간 · 정기결제 wording + 3 credit packs,
+ *       landing shows the plan cards without 월간/연간 · 정기결제 wording (AI is "AI 이용량 포함"; credits retired 2026-10-27),
  *       /api/me and the billing summary carry the flag.
- *  off: unchanged (plan checkout 409 checkout_not_open, Free cannot top up, no credit packs on the landing).
+ *  off: unchanged (plan checkout 409 checkout_not_open). No credit product either way.
  * Fake billing and fake AI only. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,7 +35,7 @@ async function boot(on) {
 }
 const pricingSection = (html) => html.slice(html.indexOf('id="pricing"'), html.indexOf('<!-- CLOSING -->'));
 
-test('one-time mode: Pro 1개월 이용권 + credits for Free, landing without 정기결제 wording', async () => {
+test('one-time mode: Pro 1개월 이용권, AI 이용량 포함 on every card, landing without 정기결제 wording', async () => {
   const env = await boot(true);
   try {
     assert.equal((await env.c('GET', '/api/me')).json.features.one_time_payment, true);
@@ -51,10 +51,8 @@ test('one-time mode: Pro 1개월 이용권 + credits for Free, landing without �
     assert.equal(order.months, 1); assert.equal(order.cycle, 'MONTHLY'); assert.equal(Number(order.amount), 30000);
     assert.match(order.goods_name, /1개월 이용권/);
 
-    // credits for Free
-    const sum = (await env.c('GET', `/api/workspaces/${env.w}/credits/summary`)).json.credits;
-    assert.equal(sum.plan, 'FREE'); assert.equal(sum.topup.allowed, true); assert.equal(sum.one_time_mode, true);
-    assert.equal((await env.c('POST', `/api/workspaces/${env.w}/credits/checkout`, { amount: 10000 })).status, 201);
+    // no credit product any more
+    assert.equal((await env.c('POST', `/api/workspaces/${env.w}/credits/checkout`, { amount: 10000 })).status, 410);
 
     const sec = pricingSection((await env.c('GET', '/')).text);
     assert.match(sec, /data-plan="PRO"/); assert.match(sec, /data-plan="TEAM"/);
@@ -63,8 +61,7 @@ test('one-time mode: Pro 1개월 이용권 + credits for Free, landing without �
     // signed in: /signup?next=… goes straight there
     const r = await env.c('GET', '/signup?next=%2Fapp%2Fbilling%2Fplans%3Fbuy%3DPRO');
     assert.equal(r.status, 302);
-    assert.equal((sec.match(/data-credit-pack=/g) || []).length, 1);
-    assert.match(sec, /10,000원/); assert.match(sec, /href="\/login\?next=%2Fapp%2Fsettings%2Fcredits"/);
+    assert.ok(!sec.includes('data-credit-pack')); assert.doesNotMatch(sec, /크레딧/); assert.match(sec, /AI 이용량 포함/);
     for (const w of ['연간', '정기결제', '자동 결제됩니다', '추가 사용자 1명', '정기결제 준비 중', 'Pro·Team은 필요한 만큼']) assert.ok(!sec.includes(w), `pricing section must not say ${w}`);
   } finally { env.done(); }
 });
@@ -75,8 +72,7 @@ test('one-time mode off: unchanged', async () => {
     assert.equal((await env.c('GET', '/api/me')).json.features.one_time_payment, false);
     const co = await env.c('POST', `/api/workspaces/${env.w}/billing/checkout`, { plan: 'PRO', cycle: 'MONTHLY' });
     assert.equal(co.status, 409); assert.equal(co.json.error.code, 'checkout_not_open');
-    const cr = await env.c('POST', `/api/workspaces/${env.w}/credits/checkout`, { amount: 10000 });
-    assert.equal(cr.status, 402); assert.equal(cr.json.error.code, 'AI_TOPUP_PLAN_REQUIRED');
+    assert.equal((await env.c('POST', `/api/workspaces/${env.w}/credits/checkout`, { amount: 10000 })).status, 410);
     const sec = pricingSection((await env.c('GET', '/')).text);
     assert.ok(!sec.includes('data-credit-pack')); assert.match(sec, /연간 결제/);
   } finally { env.done(); }

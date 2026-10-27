@@ -1,5 +1,5 @@
 /* Admin test fixes (Jim, 2026-10-19): P1-1 early-access workspaces read EARLY (not FREE) in 워크스페이스 list/detail, 회원 detail and
- * AI 사용량; P2-1 감사 로그 labels; P2-2 AI 사용량 shows AI runs/credits over the last 30 days. */
+ * AI 사용량; P2-1 감사 로그 labels; P2-2 AI 사용량 shows AI runs / API cost over the last 30 days and the allowance used. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -54,27 +54,26 @@ test('P1-1 (T5: early access retired): an early-access workspace reads FREE in e
   server.close();
 });
 
-test('P2-2: AI 사용량 lists AI runs / charged credits / failures over the last 30 days and the credit balance, sorted by AI use by default', async () => {
+test('P2-2: AI 사용량 lists AI runs / API cost (failed runs included) / failures over the last 30 days and the allowance used, sorted by AI cost by default', async () => {
   const { db, server, client } = await boot();
   const ops = await operator(db, client);
   const A = await setup(client, 'a@x.com', '가');
   const B = await setup(client, 'b@x.com', '나');
-  const run = (w, { status = 'SUCCEEDED', credit_status = 'CHARGED', credit_cost = 10, ago = '1 day' } = {}) => db.run(
-    `INSERT INTO ai_runs (id, workspace_id, user_id, feature, provider, model, status, credit_cost, credit_status, created_at) VALUES (?, ?, NULL, 'PROJECT_QA', 'mock', 'mock', ?, ?, ?, now() - ?::interval)`,
-    [randomUUID(), w, status, credit_cost, credit_status, ago]);
-  await run(B.w); await run(B.w, { credit_cost: 25 }); await run(B.w, { status: 'FAILED', credit_status: 'RELEASED', credit_cost: 30 });
-  await run(B.w, { credit_cost: 99, ago: '40 days' });                         // outside the window
-  await run(A.w, { credit_cost: 5 });
+  const run = (w, { status = 'SUCCEEDED', cost = 0.1, ago = '1 day' } = {}) => db.run(
+    `INSERT INTO ai_runs (id, workspace_id, user_id, feature, provider, model, status, provider_cost_amount, plan_key, created_at) VALUES (?, ?, NULL, 'PROJECT_QA', 'mock', 'mock', ?, ?, 'FREE', now() - ?::interval)`,
+    [randomUUID(), w, status, cost, ago]);
+  await run(B.w); await run(B.w, { cost: 0.25 }); await run(B.w, { status: 'FAILED', cost: 0.3 });
+  await run(B.w, { cost: 0.99, ago: '40 days' });                         // outside the 30-day window (still in the Free allowance)
+  await run(A.w, { cost: 0.05 });
 
   const u = (await ops.c('GET', '/api/admin/usage')).json;
   assert.equal(u.sort, 'ai');
   const rows = u.items.filter((x) => [A.w, B.w].includes(x.workspace_id));
-  assert.deepEqual(rows.map((x) => x.workspace_id), [B.w, A.w]);               // most AI runs first
+  assert.deepEqual(rows.map((x) => x.workspace_id), [B.w, A.w]);               // highest AI cost first
   const b = rows[0].ai;
-  assert.deepEqual([b.runs_30d, b.failed_30d, b.credits_30d], [3, 1, 35]);   // released credits are not counted
+  assert.deepEqual([b.runs_30d, b.failed_30d, b.cost_usd_30d], [3, 1, 0.65]);   // failed runs count (founder 2026-10-27)
   assert.ok(b.last_run_at);
-  const bal = (await db.get('SELECT balance FROM workspace_credit_accounts WHERE workspace_id = ?', [B.w]))?.balance;
-  assert.equal(b.balance, bal === undefined ? null : Number(bal));
+  assert.equal(b.limit_usd, 2); assert.equal(b.used_pct, 82); assert.equal(b.allowance, 'ONCE');   // Free allowance: all Free runs (1.64 of 2)
   assert.ok(Array.isArray(rows[0].dims));                                      // plan limits kept as the secondary column
   for (const s of ['projects', 'requirements', 'wbs', 'activity']) assert.equal((await ops.c('GET', `/api/admin/usage?sort=${s}`)).status, 200);
   server.close();

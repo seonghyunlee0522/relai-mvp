@@ -26,17 +26,15 @@ const BLURB = {
 export function planRows(p, cat, { oneTime = false } = {}) {
   const inc = p.included || {};
   const lim = (v, unit) => (v === null || v === undefined ? '협의' : `${num(v)}${unit}`);
-  const credits = p.contact_sales ? '협의' : p.credits?.monthly ? `매월 ${num(p.credits.monthly)} 크레딧` : p.credits?.once ? `최초 ${num(p.credits.once)} 크레딧 (1회)` : '-';
-  const rows = [['활성 프로젝트', lim(inc.projects, '개')], ['기본 사용자', lim(inc.users, '명')], ['AI 크레딧', credits]];
+  // AI (2026-10-27): "AI 이용량 포함" on every plan — never an amount, no difference shown between Pro and Team (founder).
+  const ai = p.contact_sales ? '협의' : p.ai?.allowance === 'ONCE' ? '포함 (최초 1회)' : p.ai?.allowance === 'MONTHLY' ? '포함 (매월 제공)' : '포함';
+  const rows = [['활성 프로젝트', lim(inc.projects, '개')], ['기본 사용자', lim(inc.users, '명')], ['AI 이용량', ai]];
   const a = p.addons;
   const out = rows.map(([k, v]) => [k, v, v]);
   if (a && !oneTime) {   // 단건결제 모드: no add-on is sold
     out.push(['추가 사용자 1명', `월 ${krw(a.user.MONTHLY)}`, `월 ${krw(a.user.monthly_equivalent)} 환산`]);
     out.push(['추가 프로젝트 1개', `월 ${krw(a.project.MONTHLY)}`, `월 ${krw(a.project.monthly_equivalent)} 환산`]);
   }
-  const step = cat?.topup?.step || 10000;
-  const topup = p.topup === 'contract' ? '계약에 따름' : p.topup === true || oneTime ? `${krw(step)} 단위` : '불가';   // 단건결제 모드: every plan tops up
-  out.push(['AI 크레딧 충전', topup, topup]);
   return out;
 }
 
@@ -79,12 +77,12 @@ export function pricingHtml(cat, { current = null, cta = () => '', cycle = 'MONT
 `;
   return `<div class="pcw" data-cycle="${oneTime || cycle !== 'ANNUAL' ? 'MONTHLY' : 'ANNUAL'}">
 ${toggle}<div class="pc-grid">${cat.plans.map(card).join('\n')}</div>
-${oneTime ? oneTimeNote(cat) : `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. AI 크레딧 충전은 Pro·Team에서 ${krw(cat.topup?.step || 10000)} = ${num((cat.topup?.step || 10000) / (cat.credit_price_krw || 10))} 크레딧 단위로 할 수 있습니다. 연간 결제는 12개월분을 한 번에 결제하고, AI 기본 크레딧은 연간 결제에도 매월 지급됩니다. 매월 지급되는 기본 크레딧은 그 달이 끝나면 소멸하며 다음 달로 이월되지 않습니다. 한도를 넘어도 데이터는 삭제되지 않습니다. 해지·환불 기준은 <a href="/terms#billing">이용약관</a>과 <a href="/terms#recurring">정기결제 안내</a>를 확인해 주세요.</p>`}
+${oneTime ? oneTimeNote() : `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. AI 이용량은 워크스페이스 공용이며 Pro·Team은 매월 새로 제공되고(연간 결제 포함) 남은 이용량은 이월되지 않습니다. Free는 처음 한 번 제공됩니다. 한도를 넘어도 데이터는 삭제되지 않습니다. 해지·환불 기준은 <a href="/terms#billing">이용약관</a>과 <a href="/terms#recurring">정기결제 안내</a>를 확인해 주세요.</p>`}
 </div>`;
 }
 
 /** 단건결제 모드 note under the cards: no 정기결제 / 연간 / 해지 wording. */
-const oneTimeNote = (cat) => `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. Pro·Team은 1개월 이용권으로 신용카드 1회 결제하며 자동으로 다시 결제되지 않습니다. 이용 기간이 끝나면 Free로 바뀌고 데이터는 삭제되지 않습니다. AI 크레딧은 모든 요금제에서 ${krw(cat.topup?.step || 10000)} = ${num((cat.topup?.step || 10000) / (cat.credit_price_krw || 10))} 크레딧 단위로 충전할 수 있습니다. 매월 지급되는 기본 크레딧은 그 달이 끝나면 소멸하며 다음 달로 이월되지 않습니다. 환불 기준은 <a href="/terms#billing">이용약관</a>을 확인해 주세요.</p>`;
+const oneTimeNote = () => `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. Pro·Team은 1개월 이용권으로 신용카드 1회 결제하며 자동으로 다시 결제되지 않습니다. 이용 기간이 끝나면 Free로 바뀌고 데이터는 삭제되지 않습니다. AI 이용량은 워크스페이스 공용이며 Pro·Team은 이용 기간 동안 매월 새로 제공되고 남은 이용량은 이월되지 않습니다. Free는 처음 한 번 제공됩니다. 환불 기준은 <a href="/terms#billing">이용약관</a>을 확인해 주세요.</p>`;
 
 /** Browser: wire the 월간/연간 switch inside `root` (switches data-cycle only; nothing is computed). */
 export function bindCycleToggle(root) {
@@ -126,14 +124,14 @@ export const PRICING_CSS = `[data-plan-soon]{opacity:.65;cursor:default;pointer-
 .pc__cta:empty{display:none}
 .pc-note{margin:18px auto 0;max-width:860px;text-align:center;font-size:13px;color:var(--muted,#64748b);line-height:1.6}`;
 
-/** 단건결제 모드 FAQ (plans page): 1개월 이용권, credits for every plan; no 연간 · 해지 · 추가 구매. */
+/** 단건결제 모드 FAQ (plans page): 1개월 이용권, AI 이용량; no 연간 · 해지 · 추가 구매. */
 export const FAQ_ONE_TIME = [
   ['1개월 이용권은 어떻게 결제되나요?', 'Pro·Team 1개월 이용권은 신용카드로 한 번 결제해요. 자동으로 다시 결제되지 않고, 이용 기간이 끝나면 Free로 바뀌어요. 계속 쓰려면 이용권을 다시 구매하면 남은 기간에 1개월이 더해져요.'],
   ['활성 프로젝트는 어떻게 세나요?', '준비·진행·보류 상태의 프로젝트만 한도에 들어가요. 완료하거나 보관한 프로젝트는 세지 않고, 계속 보고 내보낼 수 있어요.'],
   ['사용자는 어떻게 세나요?', '워크스페이스에 참여한 활성 사용자 기준이에요. 한 사람이 여러 프로젝트에 참여해도 1명이고, 초대를 보내면 수락 전까지 자리 하나를 잡아 둬요.'],
   ['이용 기간이 끝나면 데이터는 어떻게 되나요?', '데이터는 삭제되지 않아요. Free로 바뀌어 활성 프로젝트가 한도를 넘으면 생성일이 가장 최근인 프로젝트 1개만 편집할 수 있고 나머지는 조회 전용이 돼요. 이용권을 다시 구매하면 한도만큼 편집 권한이 돌아와요.'],
-  ['AI 크레딧은 어떻게 받나요?', 'Free는 처음 한 번 200 크레딧, Pro는 매월 1,000, Team은 매월 3,000 크레딧을 받아요. 매월 받은 기본 크레딧은 그 달이 끝나면 소멸하고 이월되지 않아요.'],
-  ['AI 크레딧은 어떻게 충전하나요?', '모든 요금제에서 10,000원 단위로 충전해요(10,000원 = 1,000 크레딧). 신용카드 1회 결제이고, 충전한 크레딧은 5년간 쓸 수 있으며 쓰지 않은 충전 크레딧은 환불받을 수 있어요.'],
+  ['AI는 얼마나 쓸 수 있나요?', '모든 요금제에 AI 이용량이 포함돼 있어요. 기능별 횟수 제한 없이 쓴 만큼 사용률(%)이 올라가고, 설정 › AI 이용 현황에서 사용률과 다음 제공일을 확인할 수 있어요. Free는 처음 한 번, Pro·Team은 이용 기간 동안 매월 새로 제공돼요.'],
+  ['AI 이용량을 다 쓰면 어떻게 되나요?', '다음 제공일까지 AI 기능만 쉬고, 직접 입력하는 기능은 그대로 쓸 수 있어요. 사용률이 80%, 95%에 이르면 미리 알려 드려요. 남은 이용량은 다음 달로 이월되지 않아요.'],
 ];
 
 /** 요금제 FAQ (plans page). '한도를 넘으면' follows the 10-21 해지 policy: newest project(s) editable, the rest 조회 전용 (P2, Jim prod 10-21 #5). */
@@ -141,9 +139,9 @@ export const FAQ = [
   ['활성 프로젝트는 어떻게 세나요?', '준비·진행·보류 상태의 프로젝트만 한도에 들어가요. 완료하거나 보관한 프로젝트는 세지 않고, 계속 보고 내보낼 수 있어요. 보관을 풀거나 다시 진행할 때 한도를 확인해요.'],
   ['사용자는 어떻게 세나요?', '워크스페이스에 참여한 활성 사용자 기준이에요. 한 사람이 여러 프로젝트에 참여해도 1명이고, 초대를 보내면 수락 전까지 자리 하나를 잡아 둬요. 내보낸 사용자는 세지 않아요.'],
   ['한도를 넘으면 데이터는 어떻게 되나요?', '데이터는 삭제되지 않아요. 요금제를 낮추거나 이용 기간이 끝나 활성 프로젝트가 한도를 넘으면, 생성일이 가장 최근인 프로젝트부터 한도만큼만 편집할 수 있고 나머지는 자동으로 조회 전용이 돼요(편집할 프로젝트는 고를 수 없어요). 모든 프로젝트는 계속 조회·내보내기·보관할 수 있고, 한도 안으로 정리될 때까지 새 프로젝트·초대만 막혀요. 다시 구독하거나 플랜을 올리면 한도만큼 최근 프로젝트부터 편집 권한이 돌아와요.'],
-  ['AI 크레딧은 어떻게 받나요?', 'Free는 처음 한 번 200 크레딧, Pro는 매월 1,000, Team은 매월 3,000 크레딧을 받아요. 매월 받은 기본 크레딧은 그 달이 끝나면 소멸하고 이월되지 않아요. 크레딧은 워크스페이스 공용이고, 실패한 AI 요청은 차감하지 않아요.'],
-  ['AI 크레딧은 어떻게 충전하나요?', 'Pro·Team에서 10,000원 단위로 충전해요(10,000원 = 1,000 크레딧). 충전한 크레딧은 5년간 쓸 수 있고, 쓰지 않은 충전 크레딧은 언제든 전액 환불받을 수 있어요(무료로 받은 크레딧은 환불되지 않아요). Free에서는 충전할 수 없어요.'],
-  ['연간 결제는 어떻게 다른가요?', '12개월분을 한 번에 결제하고 20% 할인돼요. AI 기본 크레딧은 연간 결제에도 매월 지급돼요. 언제든 해지할 수 있고, 남은 기간은 실제 결제 금액 기준으로 일할 계산해 위약금 없이 환불해요.'],
+  ['AI는 얼마나 쓸 수 있나요?', '모든 요금제에 AI 이용량이 포함돼 있어요. 기능별 횟수 제한 없이 쓴 만큼 사용률(%)이 올라가고, 설정 › AI 이용 현황에서 사용률과 다음 제공일을 확인할 수 있어요. Free는 처음 한 번, Pro·Team은 매월 새로 제공돼요.'],
+  ['AI 이용량을 다 쓰면 어떻게 되나요?', '다음 제공일까지 AI 기능만 쉬고, 직접 입력하는 기능은 그대로 쓸 수 있어요. 사용률이 80%, 95%에 이르면 미리 알려 드려요. 남은 이용량은 다음 달로 이월되지 않고, 따로 충전하는 상품은 없어요.'],
+  ['연간 결제는 어떻게 다른가요?', '12개월분을 한 번에 결제하고 20% 할인돼요. AI 이용량은 연간 결제에도 매월 새로 제공돼요. 언제든 해지할 수 있고, 남은 기간은 실제 결제 금액 기준으로 일할 계산해 위약금 없이 환불해요.'],
   ['해지하면 어떻게 되나요?', '월간·연간 모두 언제든 해지할 수 있고 자동 갱신은 바로 멈춰요. 위약금은 없어요. 이용 기간이 끝나면 Free로 바뀌고, 생성일이 가장 최근인 프로젝트 1개만 편집할 수 있으며 나머지는 조회 전용이 돼요. 데이터는 삭제되지 않고 계속 조회·내보내기할 수 있으며, 다시 구독하면 한도만큼 최근 프로젝트부터 편집 권한이 돌아와요.'],
   ['추가 사용자·프로젝트는 얼마인가요?', '추가 사용자는 1명당 월 1,000원, 추가 프로젝트는 Pro 월 10,000원 · Team 월 8,000원이에요. 이용 기간 중간에 사면 남은 일수만큼만 결제하고, 결제 전에 금액과 다음 갱신 금액을 보여 드려요.'],
 ];

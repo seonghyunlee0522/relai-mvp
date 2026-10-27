@@ -50,7 +50,7 @@ export async function subscribePage(main = $('#main')) {
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
   const opt = (v, l) => html`<option value="${v}">${l}</option>`;
   const planRadio = (p) => html`<label class="sub-plan"><input type="radio" name="plan" value="${p.key}"${raw(p.key === sel.plan ? ' checked' : '')}>
-    <span><b>${p.label}</b> <small class="dim">활성 프로젝트 ${p.included?.projects} · 사용자 ${p.included?.users}명 · 매월 AI 크레딧 ${n(p.credits?.monthly)}</small></span></label>`;
+    <span><b>${p.label}</b> <small class="dim">활성 프로젝트 ${p.included?.projects} · 사용자 ${p.included?.users}명 · AI 이용량 포함</small></span></label>`;
   const stepper = (name, text) => html`<label class="sub-step"><span>${text}</span><span class="sub-step__ctl"><button type="button" class="btn btn--secondary btn--sm" data-step="${name}" data-d="-1" aria-label="${text} 줄이기">−</button>
     <input class="input input--sm" name="${name}" type="number" inputmode="numeric" min="0" max="200" step="1" value="${sel[name]}" aria-label="${text}"><button type="button" class="btn btn--secondary btn--sm" data-step="${name}" data-d="1" aria-label="${text} 늘리기">+</button></span></label>`;
 

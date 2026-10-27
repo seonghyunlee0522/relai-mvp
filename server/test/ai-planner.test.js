@@ -7,15 +7,14 @@ import { normalizeQuestions, normalizeCandidates, computeCoverage, knownAreasFro
 import { SYSTEM } from '../ai/prompts.js';
 import { plannerDefaultReq } from '../../public/app/shared/constants.js';
 
-process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '1000'; process.env.AI_MODEL = '';
-// Planner mechanics are asserted at the pre-v41 WBS price (15); the current price (50) is covered by credits-billing.test.js.
-process.env.AI_CREDIT_COST_WBS_GENERATION = '15';
+process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.AI_MODEL = '';
+delete process.env.AI_PRICE_FAKE_MODEL;   // fake-model costs $0 here; usage metering is covered by ai-usage.test.js
 delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT;
 
 const mkReq = async (A, body) => (await A.c('POST', A.req, body)).json.requirement;
 const mkWbs = async (A, body) => (await A.c('POST', A.wbs, body)).json.item;
 const runsOf = (db, wid) => db.all('SELECT * FROM ai_runs WHERE workspace_id = ? ORDER BY created_at, seq', [wid]);
-const balance = async (A) => (await A.c('GET', `${A.purl}/ai/status`)).json.credits.balance;
+const runCount = async (db, A) => (await db.get('SELECT COUNT(*) AS n FROM ai_runs WHERE workspace_id = ?', [A.w])).n;
 const P = (A) => `${A.purl}/ai/wbs-plans`;
 const q = (area, question, options, extra = {}) => ({ id: `q_${area.toLowerCase()}`, area, question, help_text: null, type: 'SINGLE', required: false, options: options.map(([id, label, followups = []]) => ({ id, label, followups: followups.map(([f, l]) => ({ id: f, label: l })) })), allow_other: false, reason: 'WBS에 영향', ...extra });
 const QUESTIONS = (extra = []) => ({ areas: [{ area: 'FUNCTIONAL_DEVELOPMENT', status: 'REQUIRED', source: 'REQUIREMENT', reason: '요구사항' }, { area: 'DATA_MIGRATION', status: 'UNKNOWN', source: 'INFERRED', reason: '확인 불가' }, { area: 'INFRASTRUCTURE', status: 'UNKNOWN', source: 'INFERRED', reason: '확인 불가' }, { area: 'INTERFACE', status: 'UNKNOWN', source: 'INFERRED', reason: '확인 불가' }, { area: 'TRAINING', status: 'POSSIBLE', source: 'INFERRED', reason: '보통 필요' }],
@@ -70,7 +69,7 @@ test('planner: AI disabled → 503; questions from fake provider; all vs selecte
   assert.ok(areasQ.includes('INTERFACE'), '11. unknown area asked');
   assert.ok(plan.areas.find((a) => a.area === 'INFRASTRUCTURE').source === 'PROJECT_DEFINITION' && plan.areas.find((a) => a.area === 'DATA_MIGRATION').status === 'REQUIRED');
   assert.ok(!areasQ.includes('BOGUS_AREA'), '15. invalid area removed'); assert.ok(plan.questions.length <= 8, '13. max 8 questions'); assert.equal(new Set(areasQ).size, areasQ.length, 'no duplicate area question');
-  assert.equal(r.json.run.credit_cost, 0, 'question generation is free'); assert.equal(await balance(A), 1000);
+  assert.equal(r.json.run.feature, 'WBS_PLAN_QUESTIONS'); assert.ok(r.json.run.usage, 'every run reports the workspace usage %');
   // 3. selected requirements only
   setFakeProvider(() => ({ data: QUESTIONS() }));
   const sel = await A.c('POST', P(A), { requirement_ids: [r1.id, r3.id, 'nope'] });
@@ -113,7 +112,7 @@ test('planner: final draft — requirement-linked + delivery tasks, hallucinated
   const A = await setup(client, 'p3@x.com');
   await mkWbs(A, { item_type: 'TASK', title: '주간보고' });   // existing → similarity hit for the AI "주간보고"
   const { plan, reqs, run } = await toReview(A);
-  assert.equal(plan.status, 'REVIEW'); assert.equal(run.feature, 'WBS_GENERATION'); assert.equal(run.credit_cost, 15); assert.equal(await balance(A), 985, '49. charged once (questions free)');
+  assert.equal(plan.status, 'REVIEW'); assert.equal(run.feature, 'WBS_GENERATION'); assert.ok(run.usage);
   const items = plan.draft.items; const by = Object.fromEntries(items.map((i) => [i.temp_id, i]));
   assert.deepEqual(by['AI-WBS-10'].related_requirement_ids, [reqs[0].display_id]); assert.deepEqual(by['AI-WBS-10'].requirement_ids, [reqs[0].id], '21. requirement-linked');
   assert.deepEqual(by['AI-WBS-30'].related_requirement_ids, [], '22. delivery task with no requirement'); assert.equal(by['AI-WBS-30'].project_area, 'INFRASTRUCTURE');
@@ -135,8 +134,8 @@ test('planner: final draft — requirement-linked + delivery tasks, hallucinated
   assert.deepEqual(b2.H1.related_requirement_ids, [], '24. fake requirement id rejected'); assert.equal(b2.H1.project_area, 'OTHER', '15. invalid area → OTHER');
   // 50. provider cost / tokens recorded on the draft run
   const runs = await runsOf(db, A.w); const draftRun = runs.find((x) => x.feature === 'WBS_GENERATION'); const qRun = runs.find((x) => x.feature === 'WBS_PLAN_QUESTIONS');
-  assert.equal(draftRun.status, 'SUCCEEDED'); assert.equal(draftRun.credit_status, 'CHARGED'); assert.equal(draftRun.input_tokens, 100); assert.equal(Number(draftRun.provider_cost_amount), 0); assert.ok(!draftRun.input_summary.includes('로그인'));
-  assert.equal(qRun.credit_status, 'NONE'); assert.equal(qRun.credit_cost, 0); assert.equal(qRun.input_tokens, 100);
+  assert.equal(draftRun.status, 'SUCCEEDED'); assert.equal(draftRun.plan_key, 'FREE'); assert.equal(draftRun.input_tokens, 100); assert.equal(Number(draftRun.provider_cost_amount), 0); assert.ok(!draftRun.input_summary.includes('로그인'));
+  assert.equal(qRun.plan_key, 'FREE'); assert.equal(qRun.input_tokens, 100);
   assert.equal(plan.ai_run_id, draftRun.id); assert.equal(plan.question_run_id, qRun.id);
   server.close();
 });
@@ -167,7 +166,7 @@ test('planner: coverage — requirement coverage + missing warning, delivery cov
   assert.equal(r.json.plan.draft.items.length, before + 4, '38. existing tree kept, candidates appended'); assert.deepEqual(r.json.added, ['AI-FIX-1', 'AI-FIX-2', 'AI-FIX-3', 'AI-FIX-4']);
   assert.equal(r.json.plan.draft.items.find((i) => i.temp_id === 'AI-FIX-4').parent_temp_id, 'AI-WBS-4', 'fix item can attach under an existing draft item');
   const d2 = Object.fromEntries(r.json.plan.coverage.delivery_coverage.map((x) => [x.area, x])); assert.equal(d2.TRAINING.status, 'COVERED', '37. fixed'); assert.equal(r.json.plan.coverage.requirement_summary.covered, 3);
-  assert.equal(r.json.run.credit_cost, 0, 'fix is free'); assert.equal(await balance(A), 985);
+  assert.equal(r.json.run.feature, 'WBS_PLAN_FIX');
   assert.equal((await A.c('POST', `${P(A)}/${plan.id}/fix`, { areas: ['UAT'] })).status, 409, 'nothing to fix for that area');
   // pure helpers
   const cc = computeCoverage({ areas: [{ area: 'DATA_MIGRATION', status: 'NOT_NEEDED', source: 'USER_ANSWER', reason: '' }], items: [], reqs: [] });
@@ -228,7 +227,7 @@ test('openai adapter regression: structured output, refusal, invalid JSON, 401, 
     let seen;
     globalThis.fetch = async (url, init) => { seen = { url, init }; return resp(200, { choices: [{ message: { content: JSON.stringify({ a: 'ok' }) } }], usage: { prompt_tokens: 11, completion_tokens: 5 } }); };
     const out = await p.generateStructured(req);
-    assert.deepEqual(out, { data: { a: 'ok' }, usage: { input_tokens: 11, output_tokens: 5 } });
+    assert.deepEqual(out, { data: { a: 'ok' }, usage: { input_tokens: 11, output_tokens: 5, cached_input_tokens: null } });
     const body = JSON.parse(seen.init.body); assert.equal(body.response_format.type, 'json_schema'); assert.equal(body.response_format.json_schema.strict, true); assert.equal(body.model, 'gpt-test'); assert.equal(body.max_completion_tokens, 500); assert.equal(seen.init.headers.authorization, 'Bearer sk-SECRET-123');
     globalThis.fetch = async () => resp(200, { choices: [{ message: { refusal: 'no' } }] });
     await assert.rejects(() => p.generateStructured(req), (e) => e instanceof AiProviderError && e.code === 'AI_INVALID_OUTPUT');

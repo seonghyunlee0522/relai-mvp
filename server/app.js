@@ -38,6 +38,7 @@ import * as H from './health.js';
 import * as WR from './reports.js';
 import * as CLS from './closing.js';
 import { mountCronRoutes } from './cron-routes.js';
+import { mountFxRoutes } from './fx.js';
 import { mountRequirementRoutes, mountWbsRoutes, mountDashboardRoute, mountReportExportRoutes, mountTestRoutes, BIG_JSON_PATH } from './routes-extra.js';
 import { ImportFileError } from './xlsx.js';
 import { requireAction, listMembers, addMember, changeRole, removeMember, POLICY } from './authz.js';
@@ -61,14 +62,13 @@ import { recordFirst } from './onboarding.js';
 import { guidanceContext, workspaceHome } from './home.js';
 import * as XL from './xlsx.js';
 import { wbsExecutionMap, executionForWbs, executionForRequirement, homeSummary, requirementJiraMap } from './integrations/jira/sync.js';
-import { AiError, CreditError } from './ai/service.js';
-import { ensureAccount } from './ai/credits.js';
+import { AiError, AiUsageError } from './ai/service.js';
+import { mountUsageRoutes } from './ai/usage-limit.js';
 import { assertWithinLimit, PlanLimitError, OverLimitError, ProjectReadOnlyError, projectReadOnly, projectAccess, readOnlyNotice, ACTIVE_PROJECT_STATUSES } from './billing/limits.js';
 import { providerFromEnv } from './billing/provider.js';
 import { mountBillingWebhook, mountBillingRoutes } from './billing/routes.js';
 import { mountLegal, consentFromBody, CONSENT_ERROR } from './legal.js';
 import { PLANS, oneTimeMode } from './plans.js';
-import { mountCreditRoutes } from './billing/credit-routes.js';
 import { mountBillingHistory } from './billing/history.js';
 import { mountServicePayReturn, mountServicePay, mountServicePayAdmin } from './service-pay.js';
 import * as SMP from './samples/index.js';
@@ -329,7 +329,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
    *   COMPLETED  (완료)  read-only except 재개, 보관, 완료보고서                            → 409 project_completed
    *   active, read-only after a downgrade (more active projects than the plan allows; the newest by created_at stay
    *              editable — billing/limits.js projectReadOnly)                           → 409 project_read_only, except 보관.
-   *              AI drafts are refused too (they spend credits on something that cannot be saved); 질문 · 미리보기 stay open.
+   *              AI drafts are refused too (they spend AI allowance on something that cannot be saved); 질문 · 미리보기 stay open.
    * Sample projects are never locked. Only members are answered here; anyone else falls through to the route's own 401/403/404.
    */
   // POSTs that only read or draft (previews, AI drafts before commit, error sheets) stay open in every state.
@@ -1449,6 +1449,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountDashboardRoute({ app, db, guard, wrap, loadProject, base });
   mountAiRoutes({ app, db, guard, wrap, fail, loadProject, mutable, base });   // Phase 11 AI (draft/candidate endpoints + approval commits)
   mountIntegrationRoutes({ app, db, guard, wrap, fail, requireAuth, loadProject, mutable, base });   // Phase 12 integrations (Jira)
+  mountFxRoutes({ app, db, wrap, fail });                                               // GET /api/cron/fx (USD/KRW 10:00 KST, admin display)
   mountCronRoutes({ app, db, wrap, fail });                                             // GET /api/cron/integrations (Vercel cron, CRON_SECRET)
   mountAuthRoutes({ app, db, guard, wrap, fail, requireAuth, startSession, afterLogin });   // Phase 13 Google sign-in + invitations
   mountAccountSecurityRoutes({ app, db, wrap, fail, requireAuth });                       // password reset + e-mail verification
@@ -1458,7 +1459,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountOnboardingRoutes({ app, db, guard, requireAuth, wrap, fail });                   // Phase 14 onboarding / tour / guides / activation
   mountBillingRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });
   mountServicePay({ app, db, wrap, fail, provider: billingProvider });   // 서비스 결제: public /pay/agent page, buyer orders, 관리자 list (before mountLegal's /pricing redirect)
-  mountCreditRoutes({ app, db, guard, wrap, fail, requireAuth, provider: billingProvider });    // AI credits: customer page, pack checkout, refund request, operator refund   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
+  mountUsageRoutes({ app, db, guard, wrap, fail });    // 설정 › AI 이용 현황 (AI credits retired 2026-10-27)   // Phase 10 billing: plan summary, checkout, cancel, NicePay pay page, refund, cron
   mountBillingHistory({ app, db, guard, wrap });   // pricing v3 T4: 설정 › 플랜 · 결제 결제 내역 (read-only)
   const wrbase = `${base}/:pid/weekly-reports`;
   const loadReport = async (req, res, project) => { const r = (await WR.getReport(db, project.id, req.params.rid)); if (!r) fail(res, 404, 'not_found', '보고서를 찾을 수 없습니다.'); return r; };
@@ -1556,7 +1557,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     if (err instanceof ImportFileError) return fail(res, err.status, err.code, err.message);
     if (err instanceof AdminError) return fail(res, err.status, err.code, err.message);
     if (err instanceof PlanLimitError || err instanceof OverLimitError || err instanceof ProjectReadOnlyError) return fail(res, err.status, err.code, err.message, err.extra);
-    if (err instanceof AiError || err instanceof CreditError) return fail(res, err.status, err.code, err.message, err.extra || {});
+    if (err instanceof AiError || err instanceof AiUsageError) return fail(res, err.status, err.code, err.message, err.extra || {});
     const dbe = dbErrorInfo(err);
     const ref = ` (오류 ID: ${String(req.id).slice(-12)})`;
     if (dbe && dbe.status < 500) return fail(res, dbe.status, dbe.code, dbe.message);

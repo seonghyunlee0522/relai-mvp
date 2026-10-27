@@ -23,7 +23,7 @@ import { changesPage } from './changes/page.js';
 import { raidPage } from './raid/page.js';
 import { testsPage } from './testing/page.js';
 import { settingsPage } from './settings.js';
-import { creditsPage } from './credits.js';
+import { aiUsagePage } from './ai-usage.js';
 import { plansPage } from './plans.js';
 import { billingPage } from './billing.js';   // 설정 › 플랜 · 결제 (pricing v3 T4)
 import { subscribePage } from './subscribe.js';   // 구독 · 카드 등록 (NicePay 정기결제)
@@ -67,7 +67,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/tests\/?$/, testsPage],
   [/^\/app\/settings\/?$/, settingsPage],
   [/^\/app\/settings\/billing\/?$/, billingPage],     // 워크스페이스 Billing (pricing v3 T4)
-  [/^\/app\/settings\/credits\/?$/, creditsPage],      // 설정 › AI 크레딧 (AI-credits-only billing)
+  [/^\/app\/settings\/(?:ai-usage|credits)\/?$/, aiUsagePage],      // 설정 › AI 이용 현황 (AI credits retired 2026-10-27; the old /credits path lands here)
   [/^\/app\/billing\/plans\/?$/, plansPage],          // 플랜 · 구독 (batch7 T5: every limit / credit upsell lands here)
   [/^\/app\/billing\/subscribe\/?$/, subscribePage],  // 구독하기 → 카드 등록 · 정기결제 동의 (NicePay review path)
   // Admin Console — separate shell, operator-only (the server refuses /admin and /api/admin/* to everyone else)

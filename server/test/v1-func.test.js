@@ -142,18 +142,13 @@ test('payments off by default: no checkout (409 payments_disabled), summaries sa
   const { server, client, db } = await boot();
   const A = await setup(client, 'pay@x.com');
   await db.run('UPDATE users SET email_verified_at = now() WHERE id = ?', [A.uid]);
-  let r = await A.c('POST', `/api/workspaces/${A.w}/credits/checkout`, { pack: 'S' });
+  let r = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'ANNUAL', users: 1 });
   assert.equal(r.status, 409); assert.equal(r.json.error.code, 'payments_disabled'); assert.match(r.json.error.message, /초기 고객은 무료로 이용합니다/);
-  r = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'ANNUAL', users: 1 });
-  assert.equal(r.status, 409); assert.equal(r.json.error.code, 'payments_disabled');
-  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/credits/summary`)).json.credits.payments_enabled, false);
   const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
   assert.equal(b.payments_enabled, false); assert.equal(b.checkout.can_purchase, false);
-  assert.equal((await A.c('GET', `${A.purl}/ai/status`)).json.payments_enabled, false);
-  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/credits/ledger`)).status, 200);   // ledger unchanged
   process.env.PAYMENTS_ENABLED = 'true';
-  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/credits/summary`)).json.credits.payments_enabled, true);
-  r = await A.c('POST', `/api/workspaces/${A.w}/credits/checkout`, { pack: 'S' });
+  assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing.payments_enabled, true);
+  r = await A.c('POST', `/api/workspaces/${A.w}/billing/checkout`, { plan: 'TEAM', cycle: 'ANNUAL', users: 1 });
   assert.notEqual(r.json?.error?.code, 'payments_disabled');
   if (prev === undefined) delete process.env.PAYMENTS_ENABLED; else process.env.PAYMENTS_ENABLED = prev;
   server.close();

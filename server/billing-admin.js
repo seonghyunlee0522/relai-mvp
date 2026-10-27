@@ -11,6 +11,7 @@
  *            provider_tid, moid, paid_at, failed_at, failure_code, failure_message, created_at)
  * Columns are whitelisted below — billing keys, card data, merchant keys, raw TIDs never leave this module.
  */
+import { usageSummary } from './ai/usage-limit.js';
 import { PLANS, CYCLES, monthlyPrice, planPrice, addonPrice } from './plans.js';
 import { GRANTS_PLAN_SQL } from './billing/subscriptions.js';
 import { countUsage, workspaceLimits, overLimit } from './billing/limits.js';
@@ -122,8 +123,6 @@ export async function workspaceBillingV3(db, wid) {
   const usage = await countUsage(db, wid);
   const sub = await workspaceSubscription(db, wid);
   const paid = sub && sub.plan === plan && plan !== 'FREE';
-  const acc = await db.get('SELECT * FROM workspace_credit_accounts WHERE workspace_id = ?', [wid]);
-  const bucket = (k) => (acc && k in acc && acc[k] !== null ? Number(acc[k]) : null);
   const over = await overLimit(db, wid);
   return {
     plan, plan_label: PLANS[plan]?.label || plan, cycle: paid ? sub.billing_cycle || 'MONTHLY' : null, price_version: sub?.price_version || null,
@@ -131,7 +130,7 @@ export async function workspaceBillingV3(db, wid) {
     renewal_amount: paid ? sub.renewal_amount ?? null : null, mrr: paid ? subscriptionMrr(sub) : 0,
     limits, usage: { ...usage, seats_left: limits.users === null ? null : Math.max(0, limits.users - usage.members - usage.pending_invites) },
     addons: { extra_users: paid ? Number(sub.extra_users || 0) : 0, extra_projects: paid ? Number(sub.extra_projects || 0) : 0 },
-    credits: { total: acc ? Number(acc.balance) : 0, plan: bucket('plan_balance'), plan_expires_at: acc?.plan_expires_at || null, promo: bucket('promo_balance'), purchased: bucket('purchased_balance') },
+    ai_usage: await usageSummary(db, wid, { plan }),
     over_limit: over ? { projects: over.projects, members: over.members, since: sub?.over_limit_since || null } : null,
     orders: await workspaceOrders(db, wid, { limit: 10 }),
   };
