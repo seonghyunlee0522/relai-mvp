@@ -2,8 +2,7 @@
  *  - "아직 지원 / 준비 중입니다 / 곧 제공 / coming soon" never appear in user-facing strings of public/app or server
  *    (exceptions: 착수보고회 summary '준비 중 · n/m', a state name, server/definition.js; and the plans page 구독하기 reply
  *    '결제 준비 중입니다. 곧 오픈 예정이에요.' — founder decision 2026-10-20, batch7 T5, public/app/plans.js SUBSCRIBE_SOON only).
- *  - '₩' never appears in the app outside the admin console, the credit-pack purchase buttons (credits.js `krw`, only rendered while
- *    payments are on), the Team purchase form (settings.js / upgrade.js `won`, payments on only) and comments. */
+ *  - '₩' never appears in the app outside the admin console, the Team purchase form (settings.js / upgrade.js `won`, payments on only) and comments. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -38,7 +37,7 @@ test('#7 no ₩ on user screens of the app (admin console, purchase-only helpers
   }
   assert.deepEqual(bad, []);
   const landing = readFileSync(join(root, 'public/index.html'), 'utf8');
-  const at = landing.indexOf('id="ai-credits"'); const ai = landing.slice(at, landing.indexOf('</div>', at));
-  assert.ok(ai.length > 50 && !ai.includes('₩'), 'landing AI credit card has no won amounts');
-  assert.match(ai, /AI 크레딧 200/);   // pricing v3: Free gets 200 once (2026-10-21)
+  const at = landing.indexOf('id="ai-usage"'); const ai = landing.slice(at, landing.indexOf('</div>', at));
+  assert.ok(ai.length > 50 && !ai.includes('₩') && !ai.includes('$'), 'landing AI card has no amounts');
+  assert.match(ai, /AI 이용량 포함/); assert.doesNotMatch(landing, /크레딧/);   // 2026-10-27: credits retired, "AI 이용량 포함"
 });

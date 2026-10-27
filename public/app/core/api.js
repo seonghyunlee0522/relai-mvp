@@ -32,7 +32,7 @@ export async function api(method, url, body) {
   if (!res.ok) {
     if (res.status === 401 && !location.pathname.match(/^\/(login|signup|invite)/)) { location.href = '/login'; }
     if (res.status === 403 && data?.error?.code === 'account_suspended') { location.href = '/login?suspended=1'; }
-    if (res.status === 402 && ['plan_limit_reached', 'AI_CREDIT_INSUFFICIENT'].includes(data?.error?.code)) window.dispatchEvent(new CustomEvent('relai:plan-limit', { detail: data.error }));   // shared/upgrade.js → plans page
+    if (res.status === 402 && ['plan_limit_reached', 'AI_USAGE_LIMIT_REACHED'].includes(data?.error?.code)) window.dispatchEvent(new CustomEvent('relai:plan-limit', { detail: data.error }));   // shared/upgrade.js → plans page
     const e = new Error(data?.error?.message || (res.status >= 500 ? '서버가 잠시 응답하지 못했습니다. 잠시 후 다시 시도해 주세요.' : '요청을 처리하지 못했습니다.'));   // 5xx without JSON = boot 503 / platform error page
     e.status = res.status; e.code = data?.error?.code; e.fields = data?.error?.fields || {}; e.error = data?.error || null;   // full error payload (AI credit balance/required etc.)
     throw e;

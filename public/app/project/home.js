@@ -15,7 +15,7 @@ import { isPhone, pcLine } from '../core/device.js';
 import { LIFECYCLE_PHASES } from '../shared/lifecycle.js';
 import { pickJosa } from '../shared/josa.js';
 import { wsLabel } from '../shared/workspace-name.js';
-import { homeCreditLine } from '../shared/ai.js';
+import { homeUsageLine } from '../shared/ai.js';
 import { upcomingList, activityList } from './next.js';
 import { isSample, sampleChip, readOnlyChip, deleteAllSamples } from './samples.js';
 import { loadPromos, promoHtml } from '../shared/promo.js';
@@ -208,10 +208,11 @@ export async function homePage(main = $('#main')) {
   const hide = main.querySelector('[data-obcl="dismiss"]');   // hidden 시작하기 → the summary line comes back (오늘 할 일 + the sample notice)
   if (hide) hide.onclick = async () => { hide.closest('.obcl').remove(); await ob.update('CHECKLIST', 'skip'); homePage(main); };
   const sd = main.querySelector('[data-samples-delete]'); if (sd) sd.onclick = async () => { if (await deleteAllSamples()) homePage(main); };
-  // AI credits at a glance (AI-credits-only billing): balance, linked to 설정 › AI 크레딧. Never blocks Home.
-  api('GET', `/api/workspaces/${state.workspace.id}/credits/summary`).then(({ credits: c }) => {
+  // AI usage at a glance (2026-10-27): "AI 이용량 67.5% 남음", linked to 설정 › AI 이용 현황. Percent only. Never blocks Home.
+  api('GET', `/api/workspaces/${state.workspace.id}/ai-usage?days=7`).then(({ usage: u }) => {
     const el = $('#home-credits', main); if (!el) return;
-    el.innerHTML = html` · <a class="link home__credits ${c.low ? 'is-low' : ''}" href="/app/settings/credits" data-link>${homeCreditLine(c)}</a><span class="home__promo"></span>`;
+    const line = homeUsageLine(u);
+    el.innerHTML = html`${raw(line ? html` · <a class="link home__credits ${u.tier !== 'ok' ? 'is-low' : ''}" href="/app/settings/ai-usage" data-link>${line}</a>` : '')}<span class="home__promo"></span>`;
     // the offer next to the balance comes from 관리자 › 프로모션 (placement home)
     loadPromos('home').then((list) => { const p = promoHtml(list, { placement: 'home', variant: 'line' }); const slot = $('.home__promo', el); if (slot && p) slot.innerHTML = ` · ${p}`; });
   }).catch(() => {});

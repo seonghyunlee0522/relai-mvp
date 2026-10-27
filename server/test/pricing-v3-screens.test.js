@@ -2,7 +2,7 @@
  *  - shared plan cards (landing #pricing / plans page): founder numbers for both cycles, annual card amount at least as prominent
  *    as the monthly equivalent (legal-review §8.9), 월간 default, nothing pre-selected, no ₩;
  *  - Billing page renderer against the v3 fixture (T2 buckets / T3 scheduled changes filled in) and against the live T1 shape
- *    (buckets null → total only, never fake zeros); Free → Pro upgrade instead of 충전; credits never next to won;
+ *    AI 이용량 as percentages only (no amount, no credit); Free → Pro upgrade;
  *  - GET …/billing/orders: OWNER only, whitelisted columns, isolated per workspace;
  *  - admin workspace detail: v3 billing block (plan, cycle, limits, seats, add-ons, orders); admin MRR at v3 card amounts. */
 import { test } from 'node:test';
@@ -26,14 +26,14 @@ test('plan cards: founder numbers for 월간 and 연간, VAT 포함, 월간 defa
   const t = text(h);
   for (const s of ['30,000원 /월', '80,000원 /월', '연 288,000원 결제', '월 24,000원 환산', '72,000원 할인(20%)', '연 768,000원 결제', '월 64,000원 환산', '192,000원 할인(20%)',
     '활성 프로젝트 1개', '활성 프로젝트 3개', '활성 프로젝트 10개', '기본 사용자 3명', '기본 사용자 15명', '기본 사용자 40명',
-    '최초 200 크레딧 (1회)', '매월 1,000 크레딧', '매월 3,000 크레딧', '추가 사용자 1명 월 1,000원', '추가 사용자 1명 월 800원 환산',
+    'AI 이용량 포함 (최초 1회)', 'AI 이용량 포함 (매월 제공)', 'AI 이용량 협의', '추가 사용자 1명 월 1,000원', '추가 사용자 1명 월 800원 환산',
     '추가 프로젝트 1개 월 10,000원', '추가 프로젝트 1개 월 8,000원 환산', '추가 프로젝트 1개 월 8,000원', '추가 프로젝트 1개 월 6,400원 환산',
-    'AI 크레딧 충전 불가', 'AI 크레딧 충전 10,000원 단위', '10,000원 = 1,000 크레딧 단위', '계약에 따름', '별도 견적', 'VAT 10%', '12개월분을 한 번에 결제', '이월되지 않습니다']) assert.ok(t.includes(s), `cards lack "${s}"`);
+    '별도 견적', 'VAT 10%', '12개월분을 한 번에 결제', '이월되지 않습니다']) assert.ok(t.includes(s), `cards lack "${s}"`);
   // §21의2①1: in 연간 the big price (.pc__p) is the amount charged, the monthly equivalent is the smaller line
   const pro = h.slice(h.indexOf('data-plan="PRO"')); const annual = pro.slice(pro.indexOf('<div class="pc-a">'));
   assert.match(annual, /^<div class="pc-a"><div class="pc__p" data-amount="288000">연 288,000원/);
-  assert.doesNotMatch(h, /₩|checked(?!=)|selected/);
-  assert.deepEqual(planRows(catalogue().plans[0], catalogue()).map((r) => r[0]), ['활성 프로젝트', '기본 사용자', 'AI 크레딧', 'AI 크레딧 충전']);
+  assert.doesNotMatch(h, /₩|\$|크레딧|checked(?!=)|selected/);
+  assert.deepEqual(planRows(catalogue().plans[0], catalogue()).map((r) => r[0]), ['활성 프로젝트', '기본 사용자', 'AI 이용량']);
   // the landing wraps the same cards with its CTAs (Enterprise → 도입 문의 mail), no price typed in index.html
   const l = landingPricingHtml();
   assert.match(l, /<style>/); assert.match(l, /data-loc="pricing_enterprise">도입 문의/); // founder 2026-10-20 (D3): no one-time passes; Pro/Team buy buttons say 정기결제 준비 중 until recurring is approved
@@ -44,25 +44,25 @@ test('plan cards: founder numbers for 월간 and 연간, VAT 포함, 월간 defa
   assert.doesNotMatch(sec.replace(/<!--[\s\S]*?-->/g, ''), /\d{1,3},000원|₩/);
 });
 
-test('Billing page (v3 fixture): plan, cycle, next payment, usage vs limits with seats, credit buckets, scheduled change, actions', () => {
+test('Billing page (v3 fixture): plan, cycle, next payment, usage vs limits with seats, AI 이용량 %, scheduled change, actions', () => {
   const t = text(billingHtml(fixture(), { orders: [] }));
   for (const s of ['현재 요금제', 'Pro', '월간', '이용 중', '다음 결제일 2026.11.20', '다음 결제 예정 금액 32,000원 VAT 포함 · 추가 이용 포함', '추가 이용 사용자 2명',
     '활성 프로젝트 2 / 3', '완료·보관한 프로젝트는 포함하지 않아요', '사용자 10 / 17', '초대 대기 1명 포함 · 남은 자리 7명',
-    '사용 가능 1,450 크레딧', '기본 크레딧 900', '2026.11.20 소멸 · 이월 없음', '가입·프로모션 50', '유상(충전) 500', '충전일부터 5년',
-    '예약된 변경', '요금제 변경 → Free', '2026.11.20 적용', '예약 취소', '요금제 변경', '사용자 · 프로젝트 추가', 'AI 크레딧 충전', '해지', '결제 내역이 없어요']) assert.ok(t.includes(s), `billing lacks "${s}"`);
+    'AI 이용량', '사용 32.5%', '남은 이용량 67.5%', '2026.11.20에 새로 제공되고, 남은 이용량은 이월되지 않아요.',
+    '예약된 변경', '요금제 변경 → Free', '2026.11.20 적용', '예약 취소', '요금제 변경', '사용자 · 프로젝트 추가', '해지', '결제 내역이 없어요']) assert.ok(t.includes(s), `billing lacks "${s}"`);
   const h = billingHtml(fixture(), { orders: [] });
   assert.doesNotMatch(h, /₩/);
-  assert.doesNotMatch(t, /크레딧[^.]{0,12}\d원|\d원[^.]{0,6}크레딧/, 'no won amount next to a credit number');
+  assert.doesNotMatch(t, /크레딧|\$/, 'no credit and no AI amount on the billing page'); assert.doesNotMatch(h, /id="bl-topup"/);
   assert.match(h, /href="\/terms#refund"/); assert.match(h, /href="\/terms#recurring"/);
 });
 
-test('Billing page (live T1 shape): null buckets → total only; empty scheduled hidden; Free → Pro upgrade, no 충전 / 해지; member read-only', () => {
+test('Billing page (Free): AI 이용량 once; empty scheduled hidden; Free → Pro upgrade, no 해지; member read-only', () => {
   const free = fixture({ plan: 'FREE', plan_label: 'Free', cycle: null, status: null, auto_renew: false, next_payment_at: null, next_payment_amount: null, addons: { extra_users: 0, extra_projects: 0 },
     limits: { projects: 1, users: 3 }, usage: { projects_active: 1, members: 2, pending_invites: 0, seats_left: 1 }, scheduled: [], subscription: null,
-    credits: { total: 200, plan: null, plan_expires_at: null, promo: null, purchased: null } });
+    ai_usage: { plan: 'FREE', allowance: 'ONCE', unlimited: false, used_pct: 10, remaining_pct: 90, tier: 'ok', resets_at: null, blocked: false } });
   const h = billingHtml(free); const t = text(h);
-  assert.ok(t.includes('사용 가능 200 크레딧')); assert.doesNotMatch(h, /bl-b-plan|bl-scheduled|id="bl-topup"|id="bl-cancel"|id="bl-addon"/);
-  assert.ok(t.includes('AI 크레딧 충전은 Pro부터 할 수 있어요')); assert.ok(t.includes('요금제 살펴보기')); assert.ok(t.includes('결제 정보 없이 이용 중'));
+  assert.ok(t.includes('사용 10%')); assert.ok(t.includes('Free는 처음 한 번 제공되고 다시 채워지지 않아요')); assert.doesNotMatch(h, /bl-scheduled|id="bl-topup"|id="bl-cancel"|id="bl-addon"/);
+  assert.ok(t.includes('매월 AI 이용량이 새로 제공돼요')); assert.ok(t.includes('요금제 살펴보기')); assert.ok(t.includes('결제 정보 없이 이용 중'));
   const member = billingHtml({ ...free, can_manage: false });
   assert.match(member, /id="bl-owner-only"/); assert.doesNotMatch(member, /id="bl-change"/);
   // auto renewal off (cancelled; D3: no one-time passes): no 해지 button, the end date, 'Free로 전환' and the read-only policy (founder 2026-10-21)
@@ -110,7 +110,8 @@ test('GET …/billing/orders: OWNER only, own workspace only; v3 billing summary
     assert.deepEqual((await B.c('GET', `/api/workspaces/${B.w}/billing/orders`)).json.orders, []);
     // the summary the Billing page reads (T1 v3 shape): limits, usage with pending invites and seats_left, catalogue
     const b = (await A.c('GET', `/api/workspaces/${A.w}/billing`)).json.billing;
-    for (const k of ['plan', 'cycle', 'limits', 'usage', 'addons', 'scheduled', 'credits', 'catalogue', 'flags', 'over_limit']) assert.ok(k in b, k);
+    for (const k of ['plan', 'cycle', 'limits', 'usage', 'addons', 'scheduled', 'ai_usage', 'catalogue', 'flags', 'over_limit']) assert.ok(k in b, k);
+    assert.ok(!('credits' in b));
     assert.equal(b.usage.members, 2); assert.equal(typeof b.usage.seats_left, 'number');
     // admin: the workspace detail carries the v3 billing block
     await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE email = 'owner-b@x.com'`);

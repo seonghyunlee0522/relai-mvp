@@ -71,7 +71,7 @@ test('platform invitation: admin only, unknown/existing e-mail, duplicate pendin
   const { c: pm, r: sr } = await signup(client, { name: '김PM', email: 'pm@acme.co.kr', invite_token: t2 }); assert.equal(sr.status, 201, JSON.stringify(sr.json));
   assert.equal(sr.json.workspaces.length, 1); assert.equal(sr.json.workspaces[0].name, 'ACME'); assert.equal(sr.json.workspaces[0].role, 'OWNER'); assert.equal(sr.json.accepted.type, 'WORKSPACE_CREATE');
   assert.equal(await db.get(`SELECT COUNT(*) n FROM workspaces WHERE name LIKE '%님의 워크스페이스' AND owner_id = ?`, [sr.json.user.id]).then((x) => Number(x.n)), 0);
-  assert.ok(await db.get('SELECT 1 FROM workspace_credit_accounts WHERE workspace_id = ?', [sr.json.workspaces[0].id]), 'AI account initialized');
+  assert.ok(await db.get('SELECT 1 FROM free_credit_claims WHERE workspace_id = ?', [sr.json.workspaces[0].id]), 'the Free AI allowance is claimed for the new workspace');
   const after = await ad.c('GET', `/api/admin/invitations?status=ACCEPTED`); assert.ok(after.json.items.some((x) => x.id === inv.id && x.status === 'ACCEPTED' && x.accepted_by_name === '김PM'));
   // double accept / replay
   r = await pm('POST', `/api/invitations/${t2}/accept`, {}); assert.equal(r.status, 409);

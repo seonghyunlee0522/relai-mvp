@@ -2,11 +2,11 @@
  * Account primitives shared by direct signup, invitation acceptance and Google sign-in. All functions run inside the
  * caller's transaction (tx) and never create a session — the route layer does that.
  *   createUser            users + PASSWORD/GOOGLE identity (no workspace)
- *   createWorkspaceForOwner  workspaces + OWNER membership + AI credit account (the one place this initialization lives)
+ *   createWorkspaceForOwner  workspaces + OWNER membership + Free AI allowance claim (the one place this initialization lives)
  *   createDirectSignupUser   user + personal workspace (existing signup behaviour)
  */
 import { randomUUID } from 'node:crypto';
-import { ensureAccount } from './ai/credits.js';
+import { freeEligible } from './ai/usage-limit.js';
 
 export const normEmail = (e) => String(e || '').trim().toLowerCase();
 /** p***@acme.co.kr — public invite pages never show the raw address. */
@@ -34,7 +34,7 @@ export async function createWorkspaceForOwner(db, { ownerId, name }) {
   const wsId = randomUUID();
   await db.run('INSERT INTO workspaces (id, name, owner_id) VALUES (?,?,?)', [wsId, String(name).trim().slice(0, 100), ownerId]);
   await db.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?,?,?)', [wsId, ownerId, 'OWNER']);
-  await ensureAccount(db, wsId);   // AI credit account (trial / dev starter credits per policy)
+  await freeEligible(db, wsId);   // claims the owner's one Free AI allowance for this workspace when it is still open (ai/usage-limit.js)
   return wsId;
 }
 /** Direct signup: user + "{name}님의 워크스페이스". Returns { userId, workspaceId }. */

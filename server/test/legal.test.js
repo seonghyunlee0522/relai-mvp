@@ -68,16 +68,18 @@ test('public legal pages: /terms /privacy /pricing and the landing footer, no dr
     const terms = (await c('GET', '/terms', undefined, { raw: true })).buf.toString('utf8');
     assert.match(terms, /이용약관/); assert.match(terms, new RegExp(`${koDate(LEGAL.termsEffectiveDate)}부터 시행`)); assert.match(terms, new RegExp(`버전 ${LEGAL.termsVersion}`));
     // pricing v3 (founder spec 2026-10-20, VAT 포함): the terms table carries exactly the founder's numbers
-    for (const s of ['월 30,000원', '연 288,000원', '월 24,000원 환산', '월 80,000원', '연 768,000원', '월 64,000원 환산', '최초 200 크레딧(1회)', '매월 1,000 크레딧', '매월 3,000 크레딧',
-      '월 1,000원', '연 9,600원(월 800원)', '월 10,000원', '연 96,000원(월 8,000원)', '월 8,000원', '연 76,800원(월 6,400원)', '부가가치세 10%를 포함', '10,000원 단위', '1 크레딧은 10원']) assert.ok(terms.includes(s), `terms lacks ${s}`);
+    for (const s of ['월 30,000원', '연 288,000원', '월 24,000원 환산', '월 80,000원', '연 768,000원', '월 64,000원 환산', '포함(최초 1회 제공)', '포함(매월 제공)', 'AI 이용량',
+      '월 1,000원', '연 9,600원(월 800원)', '월 10,000원', '연 96,000원(월 8,000원)', '월 8,000원', '연 76,800원(월 6,400원)', '부가가치세 10%를 포함']) assert.ok(terms.includes(s), `terms lacks ${s}`);
     // legal-review §10: no v2 wording (VAT 별도, Team 20,000 + 5,000/인, Free 2 projects / 500 credits, 정상가 + 위약금 10%)
     assert.doesNotMatch(terms, /얼리 액세스|12개월 동안 요금 없이|부가가치세 별도|20,000원|5,000원|진행 중 프로젝트 2개|500 크레딧|위약금\(잔여 금액의 10%\)/);
-    for (const id of ['billing', 'credits', 'recurring', 'refund']) assert.match(terms, new RegExp(`id="${id}"`));   // anchors the pricing note / checkout link to
+    for (const id of ['billing', 'ai-usage', 'recurring', 'refund']) assert.match(terms, new RegExp(`id="${id}"`));   // anchors the pricing note / checkout link to
     assert.match(terms, /간주동의|제4항은 이용요금의 증액/); assert.match(terms, /종전 금액으로 결제하거나 정기결제를 해지/); assert.match(terms, /환불액은 209,096원/);
     // founder decisions 2026-10-20: no one-time passes, prorated refunds with no deduction, purchased credits refundable in full, 30-day export after cancel
     assert.match(terms, /이용권은 판매하지 않습니다/); assert.match(terms, /정기결제 준비 중/); assert.doesNotMatch(terms, /이용권 결제|10%를 공제|잔여 금액의 10%|월간 정상가로 다시 계산하여/);
     assert.match(terms, /일할 계산하여 환불하며, 위약금이나 수수료를 공제하지 않습니다/); assert.match(terms, /월간 정상가로 다시 계산하지 않습니다/);
-    assert.match(terms, /유효기간\(충전일부터 5년\) 안에서는 사용하지 않은 유상 크레딧에 해당하는 금액 전액을 공제 없이 환불/); assert.match(terms, /무상으로 지급한 크레딧과 이미 사용한 크레딧은 환불하지 않습니다/);
+    // 2026-10-27: AI credits retired → AI 이용량 (no amount, failed runs counted, no carry-over, no top-up)
+    assert.match(terms, /요청이 실패하더라도 AI 처리가 이미 이루어진 경우에는 사용한 처리량이 반영/); assert.match(terms, /남은 이용량은 다음 달로 이월되거나 환불되지 않습니다/);
+    assert.match(terms, /별도로 구매하거나 충전할 수 없습니다/); assert.doesNotMatch(terms, /1 크레딧은|크레딧 충전은|유상 크레딧:|기본 크레딧\(/);
     assert.match(terms, /자동 갱신은 즉시 중단/); assert.match(terms, /해지나 전환만으로 프로젝트 데이터는 삭제되지 않습니다/); assert.match(terms, /생성일이 가장 최근인 활성 프로젝트부터/); assert.match(terms, /고객이 수정할 프로젝트를 고르지 않습니다/); assert.match(terms, /법정 청약철회권\(제12조\)을 먼저 적용/);
     const privacy = (await c('GET', '/privacy', undefined, { raw: true })).buf.toString('utf8');
     for (const v of ['Vercel Inc.', '나이스페이먼츠', 'Resend', 'Neon', 'Anthropic', 'Google LLC', `개인정보 보호책임자: ${LEGAL.privacyOfficer.name}`, '결제·정기결제 동의 기록', '이메일 주소의 해시값', '부분 취소']) assert.ok(privacy.includes(v), v);

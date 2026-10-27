@@ -1313,6 +1313,7 @@ td[style*="right"] .cedit__v,.cedit>.cell--num+.cedit__v{justify-content:flex-en
 .ahead{margin-bottom:14px}.ahead__r{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.ahead h1{font-size:var(--fs-xl);margin:0}.ahead__a{margin-left:auto;display:flex;gap:8px;align-items:center}
 .acrumb{display:inline-block;font-size:var(--fs-sm);color:var(--text-3);margin-bottom:6px}.acrumb:hover{color:var(--navy)}
 .akpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:14px}
+.abarchart{width:100%;height:auto;display:block}.abar{fill:var(--blue)}.abar:hover{fill:var(--blue-deep)}.abar__base{stroke:var(--border-strong)}.abar__ax{font-size:10px;fill:var(--text-3);font-family:inherit}
 .akpi__i{display:block;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 14px;min-width:0;color:inherit}
 a.akpi__i:hover{border-color:var(--border-blue)}
 .akpi__i span{display:block;font-size:var(--fs-xs);color:var(--text-3)}.akpi__i b{display:block;font-size:var(--fs-2xl);font-weight:800;color:var(--navy);letter-spacing:-0.03em;line-height:1.25;font-variant-numeric:tabular-nums}
@@ -3018,56 +3019,30 @@ html.is-phone .shell--ws .page--wide>.coach{margin-bottom:0}
 html.is-phone .summary--inline>div{padding-top:4px;padding-bottom:4px}
 html.is-phone .rhead .summary--inline>div{padding:3px 10px;min-height:0}
 html.is-phone .rhead .seg{height:32px}
-/* AI 크레딧 (설정 › AI 크레딧, AI-credits-only billing) */
-.cr-kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px}
-.cr-kpi{display:flex;flex-direction:column;gap:2px}
-.cr-kpi__l{font-size:var(--fs-sm);color:var(--text-3)}
-.cr-kpi__v{font-size:var(--fs-xl);font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums}
-.cr-kpi__w{font-size:var(--fs-md);color:var(--text-2);font-variant-numeric:tabular-nums}
-.cr-sum.is-low{border-color:var(--warn-bd);background:var(--warn-bg)}
-.cr-sum.is-low .cr-kpi__v{color:var(--warn-fg)}
-.cr-warn{margin:14px 0 0;color:var(--warn-fg);font-weight:600;font-size:var(--fs-md)}
-.cr-gift{margin:12px 0 0;padding:10px 12px;border-radius:var(--r-sm);background:var(--bg-tint);color:var(--blue-deep);font-size:var(--fs-md)}
-.cr-early{margin:0 0 12px;font-size:var(--fs-md);color:var(--text-2)}
-.cr-feat{margin:12px 0 0;display:flex;flex-wrap:wrap;gap:4px 8px;font-size:var(--fs-sm)}
-.cr-feat__i b{font-variant-numeric:tabular-nums}
-.cr-packs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.cr-pack{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:14px;border:1px solid var(--border);border-radius:var(--r-lg);background:#fff;cursor:pointer;text-align:left;font:inherit;color:inherit}
-.cr-pack:hover{border-color:var(--blue);box-shadow:inset 3px 0 0 var(--blue)}
-.cr-pack b{font-size:var(--fs-lg);color:var(--navy)}
-.cr-pack small{font-size:var(--fs-2xs);color:var(--text-3)}
-.cr-pack:disabled{opacity:.6;cursor:default}
-.cr-filt{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 20px 0}
-.cr-total{margin:10px 20px;font-size:var(--fs-md)}
-.cr-log td.is-plus{color:var(--ok-fg)}
-.cr-log tr.is-zero td{color:var(--text-3)}
-.cr-log tbody tr,.cr-price tbody tr{cursor:default}
-.cr-krw-m{display:none}
-.cr-chips{display:flex;flex-wrap:wrap;gap:8px}
-.cr-amt{height:34px;padding:0 14px;border:1px solid var(--border);border-radius:999px;background:#fff;font:inherit;font-weight:600;color:var(--text-2);cursor:pointer;font-variant-numeric:tabular-nums}
-.cr-amt:hover{border-color:var(--blue)}.cr-amt.is-on{border-color:var(--blue);background:var(--bg-tint);color:var(--blue-deep)}
-.cr-stepper{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0}.cr-stepper b{font-size:var(--fs-lg);color:var(--navy);min-width:110px;text-align:center;font-variant-numeric:tabular-nums}
-.cr-quote{margin:4px 0 0}.cr-quote th{width:140px;text-align:left;color:var(--text-3);font-weight:600}.cr-quote tbody tr{cursor:default}
-#cr-pay{margin-top:12px}
-.cr-upsell{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0;font-weight:600;color:var(--navy)}
-@media (max-width:767px){.cr-quote th{width:auto}}
+/* AI 이용 현황 (설정 › AI 이용 현황, ai-usage.js; credits retired 2026-10-27) — percentages only */
+.au-kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px}
+.au-kpi{display:flex;flex-direction:column;gap:2px}
+.au-kpi__l{font-size:var(--fs-sm);color:var(--text-3)}
+.au-kpi__v{font-size:var(--fs-2xl);font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums}
+.au-big{margin:0;font-size:var(--fs-xl);font-weight:800;color:var(--navy)}
+.au-bar{position:relative;height:12px;margin-top:16px;border-radius:999px;background:var(--border-soft);overflow:hidden}
+.au-bar span{display:block;height:100%;border-radius:999px;background:var(--blue);transition:width .3s}
+.au-bar i{position:absolute;top:0;bottom:0;width:1px;background:var(--border-strong)}
+.au-sum.is-warn .au-bar span{background:var(--warn)}.au-sum.is-warn .au-kpi__v#au-used{color:var(--warn-fg)}
+.au-sum.is-bad .au-bar span{background:var(--danger)}.au-sum.is-bad .au-kpi__v#au-used{color:var(--danger-fg)}
+.au-chart{width:100%;height:auto;display:block}
+.au-grid{stroke:var(--border-soft);stroke-width:1}.au-grid.is-warn{stroke:var(--warn-bd);stroke-dasharray:4 4}.au-grid.is-max{stroke:var(--danger-bd)}
+.au-ax{font-size:11px;fill:var(--text-3);font-family:inherit}
+.au-line{fill:none;stroke:var(--blue);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.au-area{fill:var(--blue-soft);opacity:.8}.au-dot{fill:var(--blue);stroke:#fff;stroke-width:2}
+.panel__h small{margin-left:8px;font-weight:500}
 .ai-credit.is-low{color:var(--warn-fg)}
-@media (max-width:767px){
-  .cr-kpis{grid-template-columns:1fr}.cr-packs{grid-template-columns:1fr}.cr-filt{padding:10px 12px 0}.cr-filt .select{flex:1 1 40%;min-width:0;max-width:100%;text-overflow:ellipsis}.cr-total{margin:10px 12px}
-  .cr-log th:nth-child(3),.cr-log td:nth-child(3),.cr-log th:nth-child(6),.cr-log td:nth-child(6),.cr-log th:nth-child(7),.cr-log td:nth-child(7){display:none}
-  .cr-log .cr-krw-m{display:block;font-size:var(--fs-2xs);color:var(--text-3);white-space:nowrap}.cr-log td,.cr-log th{padding:8px 8px}
-  .cr-log td{white-space:normal}
-}
-#ai-credits b.is-warn{color:var(--warn-fg)}
+.ai-credit.is-short{color:var(--danger-fg)}
+.ai-credit a{text-decoration:underline;text-underline-offset:2px}
+@media (max-width:767px){.au-kpis{gap:8px 16px}.au-kpi__v{font-size:var(--fs-xl)}.au-ax{font-size:13px}}
 .ai-credit.is-short{white-space:normal}
 .home__credits.is-low{color:var(--warn-fg)}
-/* phone = view mode: the AI 크레딧 dashboard stays readable — its two small tables stay tables (not the 3-line cards) */
-html.is-phone .rtable.cr-price,html.is-phone .rtable.cr-log{display:table;width:100%}
-html.is-phone .rtable.cr-price thead,html.is-phone .rtable.cr-log thead{display:table-header-group}
-html.is-phone .rtable.cr-price tbody,html.is-phone .rtable.cr-log tbody{display:table-row-group}
-html.is-phone .rtable.cr-price tbody tr,html.is-phone .rtable.cr-log tbody tr{display:table-row;padding:0;border:0;border-radius:0;margin:0;background:none;min-height:0}
-html.is-phone .rtable.cr-price td,html.is-phone .rtable.cr-log td{display:table-cell;padding:8px;border-bottom:1px solid var(--border-soft);font-size:13px}
-html.is-phone .rtable.cr-log td:nth-child(3),html.is-phone .rtable.cr-log td:nth-child(6),html.is-phone .rtable.cr-log td:nth-child(7){display:none}
+
 
 /* =====================================================================================================================
  * REDESIGN R1 — desktop frame (≥ 768px; hive research/relai-redesign-spec.md §4): 56px top bar · 76px rail · section tabs ·

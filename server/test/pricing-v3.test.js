@@ -18,8 +18,9 @@ test('catalogue: list prices are the card amounts (VAT included) for FREE / PRO 
   assert.deepEqual([addonPrice('PRO', 'user', 'ANNUAL'), addonPrice('PRO', 'project', 'ANNUAL'), addonPrice('TEAM', 'project', 'ANNUAL')], [9600, 96000, 76800]);
   assert.equal(addonPrice('FREE', 'user', 'MONTHLY'), null);
   assert.deepEqual([PLANS.FREE.included, PLANS.PRO.included, PLANS.TEAM.included], [{ projects: 1, users: 3 }, { projects: 3, users: 15 }, { projects: 10, users: 40 }]);
-  assert.deepEqual([PLANS.FREE.credits, PLANS.PRO.credits.monthly, PLANS.TEAM.credits.monthly], [{ once: 200, monthly: 0 }, 1000, 3000]);
-  assert.deepEqual([PLANS.FREE.topup, PLANS.PRO.topup, PLANS.TEAM.topup], [false, true, true]);
+  // AI (2026-10-27): credits retired — an allowance per plan, shown as "AI 이용량 포함"; the USD limits are internal (aiLimitUsd)
+  assert.deepEqual([PLANS.FREE.ai.allowance, PLANS.PRO.ai.allowance, PLANS.TEAM.ai.allowance, PLANS.ENTERPRISE.ai.allowance], ['ONCE', 'MONTHLY', 'MONTHLY', 'CONTRACT']);
+  assert.ok(Object.values(PLANS).every((p) => p.credits === undefined && p.topup === undefined));
   assert.deepEqual([CYCLES.MONTHLY.months, CYCLES.ANNUAL.months], [1, 12]);
 });
 
@@ -114,9 +115,9 @@ test('quoteAddon: Pro monthly +2 users = 774원 now, 32,000원 next renewal; Tea
   assert.throws(() => quoteAddon({ sub: { ...proMonthly, price_version: 'v2' }, extra_users: 1 }), (e) => e.code === 'legacy_plan');
 });
 
-test('quoteUpgrade: Pro→Team monthly 19,354원, annual 235,397원; add-ons carried and netted; +2,000 credits', () => {
+test('quoteUpgrade: Pro→Team monthly 19,354원, annual 235,397원; add-ons carried and netted', () => {
   const m = quoteUpgrade({ sub: proMonthly, plan: 'TEAM', at: '2026-10-20T10:00:00+09:00' });
-  assert.deepEqual([m.total, m.credits_delta, m.next_renewal_amount, m.from_plan, m.plan, m.cycle], [19354, 2000, 80000, 'PRO', 'TEAM', 'MONTHLY']);
+  assert.deepEqual([m.total, m.next_renewal_amount, m.from_plan, m.plan, m.cycle], [19354, 80000, 'PRO', 'TEAM', 'MONTHLY']); assert.equal(m.credits_delta, undefined);
   const y = quoteUpgrade({ sub: { ...proMonthly, billing_cycle: 'ANNUAL', current_period_start: teamAnnual.current_period_start, current_period_end: teamAnnual.current_period_end }, plan: 'TEAM', at: '2026-07-20T10:00:00+09:00' });
   assert.equal(y.total, 235397); assert.equal(y.next_renewal_amount, 768000);
   // Pro +2 projects (5 ≤ Team 10 included) → dropped: credit line for the Pro add-on, renewal is plain Team

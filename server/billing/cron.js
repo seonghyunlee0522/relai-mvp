@@ -153,14 +153,12 @@ export async function notifyPriceIncreases(db, env = process.env) {
 
 /**
  * Status hygiene after the end: ACTIVE subscriptions that will not renew and whose period has passed, and PAST_DUE ones whose grace
- * is over, become EXPIRED (ended_at, 30-day data_retention_until), their billing key is expired, scheduled changes lapse and PLAN
- * credits expire. The effective plan is already FREE at that moment (GRANTS_PLAN_SQL); this only records it.
+ * is over, become EXPIRED (ended_at, 30-day data_retention_until), their billing key is expired, scheduled changes lapse. The effective plan is already FREE at that moment (GRANTS_PLAN_SQL); this only records it.
  */
 export async function expireEndedSubscriptions(db, provider) {
   const rows = await db.all(`SELECT * FROM subscriptions WHERE (status = 'ACTIVE' AND (cancel_at_period_end OR NOT auto_renew) AND current_period_end IS NOT NULL AND current_period_end <= now())
     OR (status = 'PAST_DUE' AND grace_period_end IS NOT NULL AND grace_period_end <= now())`);
   let expired = 0;
-  const { expirePlanCredits } = await import('./ai-grants.js');
   for (const s of rows) {
     try {
       if (s.billing_key_enc && provider?.cancel) await provider.cancel({ subscription: s }).catch((e) => console.error('[billing] billing key expiry failed', s.id, e.message));
@@ -172,7 +170,6 @@ export async function expireEndedSubscriptions(db, provider) {
         await transition(t, cur, 'subscription.expired', {});
         await t.run('UPDATE subscriptions SET billing_key_enc = NULL, auto_renew = false WHERE id = ?', [cur.id]);
         await t.run(`UPDATE subscription_changes SET status = 'CANCELED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED'`, [cur.id]);
-        await expirePlanCredits(t, cur.workspace_id, { reason: '기본 크레딧 소멸 (구독 종료)', referenceId: `expired:${cur.id}:${new Date(cur.current_period_end || Date.now()).toISOString().slice(0, 10)}` });
         return true;
       });
       if (done) { expired += 1; await sendFreeTransitionNotice(db, s.workspace_id).catch((e) => console.error('[billing] free-transition mail failed', s.id, e.message)); }

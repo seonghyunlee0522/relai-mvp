@@ -1,5 +1,5 @@
 /* Promotions (migration 47, founder feedback 2026-10-15): one admin-editable source for the offers on signup · login · landing ·
- * 설정 › AI 크레딧 · Home, rendered by the shared component public/app/shared/promo.js. Display only. UI: scripts/e2e-fb-public.cjs. */
+ * 설정 › AI 이용 현황 · Home, rendered by the shared component public/app/shared/promo.js. Display only. UI: scripts/e2e-fb-public.cjs. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot } from './api-helpers.js';
@@ -14,9 +14,10 @@ test('seed: the launch offer per placement; public read needs no login', async (
   const { client } = await boot();
   const c = client();
   const by = async (p) => (await c('GET', `/api/promotions?placement=${p}`)).json.promotions;
-  assert.deepEqual((await by('signup')).map((p) => p.badge), ['무료 플랜', 'AI 크레딧', '이후 AI']);
+  assert.deepEqual((await by('signup')).map((p) => p.badge), ['무료 플랜', 'AI 이용량', '유료 플랜']);
   assert.deepEqual((await by('landing')).map((p) => p.id), ['promo-early-access', 'promo-ai-credits', 'promo-ai-payg']);
-  assert.match((await by('signup'))[2].body, /쓴 만큼만 크레딧이 차감/);
+  assert.match((await by('signup'))[2].body, /매월 AI 이용량이 새로 제공/);
+  for (const p of ['signup', 'landing', 'login']) for (const x of await by(p)) assert.doesNotMatch(`${x.title} ${x.body} ${x.badge || ''}`, /크레딧/, `${p} ${x.id}`);
   assert.equal((await by('login'))[0].link_url, '/signup');
   // b7-fix P0-1: early access retired — no 12개월 / 얼리 액세스 promise and no {until} rows on a fresh database
   for (const p of ['signup', 'landing', 'login']) for (const x of await by(p)) assert.doesNotMatch(`${x.title} ${x.body} ${x.badge || ''}`, /12개월|얼리 액세스|\{until\}|₩/, `${p} ${x.id}`);
@@ -38,9 +39,9 @@ test('admin CRUD: operator only, validated, audited, honours active + KST date w
   const c = client();
   const s = await c('POST', '/api/auth/signup', { agree_terms: true, agree_privacy: true, name: '운영자', email: 'promo-op@x.com', password: 'passw0rd!' });
   assert.equal((await c('GET', '/api/admin/promotions')).status, 403);
-  // credit grant is untouched by promotions: the starter grant still lands
+  // the AI allowance is untouched by promotions: a new Free workspace starts at 0 % used
   const w = s.json.workspaces[0].id;
-  assert.equal((await c('GET', `/api/workspaces/${w}/credits/summary`)).json.credits.balance, 200);   // pricing v3: Free 최초 200 (2026-10-21)
+  assert.equal((await c('GET', `/api/workspaces/${w}/ai-usage`)).json.usage.used_pct, 0);
   await db.run(`UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?`, [s.json.user.id]);
   const list = await c('GET', '/api/admin/promotions');
   assert.equal(list.status, 200); assert.equal(list.json.promotions.length, 4); assert.ok(list.json.placements.credits);

@@ -3,7 +3,7 @@ import { $, html, raw } from '../core/dom.js';
 import { navigate } from '../core/router.js';
 import { api } from '../core/api.js';
 import { promptDialog, toast } from '../shared/dialogs.js';
-import { ACTIONS, AI_FEATURE, adminApi, aiFeatureTable, bindFilters, bindPager, bindRows, chip, dl, errorBlock, fmtD, fmtDay, head, kpis, n, pager, qs, rel, sel, section, table, usageBars, usd } from './ui.js';
+import { ACTIONS, AI_FEATURE, adminApi, aiFeatureTable, barChart, bindFilters, bindPager, bindRows, chip, dl, errorBlock, fmtD, fmtDay, fxNote, head, kpis, money, n, pager, pctTxt, qs, rel, sel, section, table, usageBars, usd } from './ui.js';
 
 const STATUS = { ACTIVE: '정상', SUSPENDED: '정지', CLOSED: '종료' };
 const ACT = { PROJECT_CREATED: '프로젝트 생성', PROJECT_ARCHIVED: '프로젝트 보관', MEMBER_JOINED: '멤버 합류', WEEKLY_REPORT: '주간보고 생성' };
@@ -34,10 +34,9 @@ export async function adminWorkspacesPage(main = $('#main')) {
 }
 
 const CYCLE_KO = { MONTHLY: '월간', ANNUAL: '연간' };
-/** 요금 · 한도 (pricing v3, read-only): effective plan, cycle, seats used / pending / left, active projects, add-ons, credit buckets. */
+/** 요금 · 한도 (pricing v3, read-only): effective plan, cycle, seats used / pending / left, active projects, add-ons, AI allowance. */
 function billingV3Section(b) {
   const lim = (v) => (v === null || v === undefined ? '협의' : n(v));
-  const bucket = (v) => (v === null || v === undefined ? '<span class="dim">-</span>' : n(v));
   return section('요금 · 한도 (v3)', dl([
     ['플랜', html`${b.plan_label}${raw(b.cycle ? ` · ${CYCLE_KO[b.cycle] || b.cycle}` : '')}${raw(b.price_version === 'v2' ? ' <span class="achip achip--warn">v2 계약</span>' : '')}`],
     ['상태', b.status ? html`${b.status}${raw(b.auto_renew ? ' · 자동 갱신' : ' · 자동 갱신 꺼짐(해지)')}${raw(b.current_period_end ? ` · ${fmtDay(b.current_period_end)}까지` : '')}` : '<span class="dim">Free</span>'],
@@ -45,7 +44,7 @@ function billingV3Section(b) {
     ['활성 프로젝트', `${n(b.usage.projects_active)} / ${lim(b.limits.projects)}`],
     ['사용자 (좌석)', `${n(b.usage.members)} 참여 + ${n(b.usage.pending_invites)} 초대 대기 / ${lim(b.limits.users)} · 남은 좌석 ${b.usage.seats_left === null ? '협의' : n(b.usage.seats_left)}`],
     ['추가 이용', `사용자 ${n(b.addons.extra_users)}명 · 프로젝트 ${n(b.addons.extra_projects)}개`],
-    ['AI 크레딧', html`합계 ${n(b.credits.total)} · 기본 ${raw(bucket(b.credits.plan))} · 가입/프로모션 ${raw(bucket(b.credits.promo))} · 유상 ${raw(bucket(b.credits.purchased))}`],
+    ['AI 이용량', b.ai_usage ? (b.ai_usage.limit_usd === null ? '무제한 (계약)' : `${pctTxt(b.ai_usage.used_pct)} 사용 · $${Number(b.ai_usage.used_usd).toFixed(4)} / $${b.ai_usage.limit_usd} (${b.ai_usage.allowance === 'ONCE' ? '최초 1회' : '월'})${b.ai_usage.resets_at ? ` · ${fmtDay(b.ai_usage.resets_at)} 초기화` : ''}${b.ai_usage.free_eligible === false ? ' · 같은 소유자의 다른 워크스페이스가 Free 이용량 수령' : ''}`) : '-'],
     ['한도 초과', b.over_limit ? html`<span class="achip achip--bad">초과</span> 프로젝트 ${n(b.over_limit.projects)} · 사용자 ${n(b.over_limit.members)}` : '<span class="dim">없음</span>'],
   ]) + '<p class="hint">완료·보관 프로젝트는 활성 프로젝트에 넣지 않습니다. 초대 대기는 좌석을 차지합니다. 데이터는 한도를 넘어도 삭제되지 않습니다.</p>');
 }
@@ -79,18 +78,24 @@ export async function adminWorkspacePage(id, main = $('#main')) {
         { key: 'status', label: '상태', w: 80, render: (i) => chip(i.status, { PENDING: '대기', ACCEPTED: '수락', REVOKED: '취소', EXPIRED: '만료' }[i.status]) }, { key: 'last_email_status', label: '메일', w: 90, render: (i) => (i.last_email_status ? chip(i.last_email_status === 'SENT' ? 'ok' : i.last_email_status, { SENT: '발송됨', FAILED: '발송 실패', PENDING: '발송 중' }[i.last_email_status]) : '-') },
         { key: 'expires_at', label: '만료', w: 110, render: (i) => fmtDay(i.expires_at) },
       ], (d.invitations || []).filter((i) => i.status !== 'ACCEPTED'), { empty: '대기 중인 멤버 초대가 없습니다.' }) + (d.origin_invitation ? html`<p class="hint">이 워크스페이스는 고객 초대(${d.origin_invitation.email}, ${fmtDay(d.origin_invitation.accepted_at)} 수락)로 생성되었습니다.</p>` : '<p class="hint">멤버 초대는 워크스페이스 소유자·관리자가 설정 › 팀원에서 관리합니다. 운영자는 조회만 할 수 있습니다.</p>')))}
-      ${raw(ai ? section('AI 크레딧 · 사용량 (최근 30일)', html`${raw(kpis([
-          { label: '현재 크레딧', value: n(ai.account.balance), sub: `누적 지급 ${n(ai.account.lifetime_granted)} · 누적 사용 ${n(ai.account.lifetime_used)}` },
-          { label: '30일 AI 요청', value: n(ai.kpis.runs_30d), sub: `성공률 ${ai.kpis.success_rate_30d === null ? '-' : ai.kpis.success_rate_30d + '%'}` },
-          { label: '입력 / 출력 토큰', value: `${n(ai.kpis.input_tokens_30d)} / ${n(ai.kpis.output_tokens_30d)}` },
-          { label: 'AI 제공사 비용 (추정)', value: usd(ai.kpis.provider_cost_30d), sub: `크레딧 사용 ${n(ai.kpis.credits_30d)}` }]))}
+      ${raw(ai ? section('AI 이용량 · API 비용', html`${raw(kpis([
+          { label: '이번 기간 사용률', value: ai.usage.limit_usd === null ? '무제한' : pctTxt(ai.usage.used_pct), tone: ai.usage.used_pct >= 95 ? 'bad' : ai.usage.used_pct >= 80 ? 'warn' : '',
+            sub: ai.usage.limit_usd === null ? '계약' : `${money(ai.usage.used_usd, ai.fx)} / $${ai.usage.limit_usd} · 남은 ${pctTxt(ai.usage.remaining_pct)}` },
+          { label: ai.usage.allowance === 'ONCE' ? '한도 (최초 1회)' : '다음 초기화', value: ai.usage.allowance === 'ONCE' ? (ai.usage.free_eligible === false ? '0 (수령 완료)' : `$${ai.usage.limit_usd}`) : (ai.usage.resets_at ? fmtDay(ai.usage.resets_at) : '-') },
+          { label: '30일 API 비용', value: money(ai.kpis.provider_cost_30d, ai.fx), sub: `요청 ${n(ai.kpis.runs_30d)} · 성공률 ${ai.kpis.success_rate_30d === null ? '-' : ai.kpis.success_rate_30d + '%'}` },
+          { label: '토큰 (30일)', value: n(ai.kpis.input_tokens_30d + ai.kpis.output_tokens_30d), sub: `입력 ${n(ai.kpis.input_tokens_30d)} · 출력 ${n(ai.kpis.output_tokens_30d)} · 캐시 ${n(ai.kpis.cached_input_tokens_30d)}` }]))}
+        <div class="asec__h" style="margin-top:12px">일별 API 비용 (30일)</div>${raw(barChart(ai.daily.map((x) => ({ label: x.date.slice(5), value: x.cost_usd })), { id: 'ws-ai-daily', fmt: (v) => `$${v.toFixed(3)}` }))}
         ${raw(aiFeatureTable(ai.features))}
         <div class="agrid2" style="margin-top:12px">
-          <div><div class="asec__h">최근 AI 요청</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'feature', label: '기능', w: 120, render: (r) => AI_FEATURE[r.feature] || r.feature }, { key: 'user_name', label: '사용자', w: 90 }, { key: 'status', label: '상태', w: 90, render: (r) => chip(r.status === 'SUCCEEDED' ? (r.error_code ? 'ON_HOLD' : 'ACTIVE') : r.status === 'FAILED' ? 'SUSPENDED' : 'DRAFT', r.status === 'SUCCEEDED' ? (r.error_code ? '성공 · 정산 충돌' : '성공') : r.status === 'FAILED' ? `실패 ${r.error_code || ''}` : '진행 중') }, { key: 'credit_cost', label: '크레딧', w: 70, render: (r) => (r.credit_status === 'CHARGED' ? n(r.credit_cost) : html`<span class="dim">0</span>`) }, { key: 'tokens', label: '토큰', w: 110, render: (r) => `${n(r.input_tokens)} / ${n(r.output_tokens)}` }], ai.runs, { empty: 'AI 요청 기록이 없습니다.', id: 'airuns' }))}</div>
-          <div><div class="asec__h">크레딧 원장</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'type', label: '유형', w: 110 }, { key: 'amount', label: '증감', w: 70, render: (r) => html`<b style="color:${r.amount < 0 ? '#B42318' : '#067647'}">${r.amount > 0 ? '+' : ''}${n(r.amount)}</b>` }, { key: 'balance_after', label: '잔액', w: 80, render: (r) => n(r.balance_after) }, { key: 'reason', label: '사유', render: (r) => html`${r.feature ? AI_FEATURE[r.feature] || r.feature : r.reason}${r.created_by_name ? html` <small class="dim">· ${r.created_by_name}</small>` : ''}` }], ai.ledger, { empty: '원장 기록이 없습니다.', id: 'ailed' }))}</div>
+          <div><div class="asec__h">사용자별 (30일)</div>${raw(table([{ key: 'name', label: '사용자', w: 140, render: (r) => r.name || '(탈퇴)' }, { key: 'runs', label: '요청', w: 70, render: (r) => n(r.runs) },
+            { key: 'tokens', label: '토큰', w: 120, render: (r) => `${n(r.input_tokens)} / ${n(r.output_tokens)}` }, { key: 'provider_cost', label: '비용', w: 130, render: (r) => money(r.provider_cost, ai.fx) }], ai.users, { empty: 'AI 요청 기록이 없습니다.', id: 'aiusers' }))}
+            <div class="asec__h" style="margin-top:12px">모델별 (30일)</div>${raw(table([{ key: 'model', label: '모델', w: 160 }, { key: 'runs', label: '요청', w: 70, render: (r) => n(r.runs) }, { key: 'provider_cost', label: '비용', w: 130, render: (r) => money(r.provider_cost, ai.fx) }], ai.models, { empty: '-', id: 'aimodels' }))}</div>
+          <div><div class="asec__h">최근 AI 요청</div>${raw(table([{ key: 'created_at', label: '일시', w: 130, render: (r) => fmtD(r.created_at) }, { key: 'feature', label: '기능', w: 120, render: (r) => AI_FEATURE[r.feature] || r.feature }, { key: 'user_name', label: '사용자', w: 90 },
+            { key: 'status', label: '상태', w: 90, render: (r) => chip(r.status === 'SUCCEEDED' ? 'ACTIVE' : r.status === 'FAILED' ? 'SUSPENDED' : 'DRAFT', r.status === 'SUCCEEDED' ? '성공' : r.status === 'FAILED' ? `실패 ${r.error_code || ''}` : '진행 중') },
+            { key: 'tokens', label: '토큰 (입/출/캐시)', w: 140, render: (r) => `${n(r.input_tokens)} / ${n(r.output_tokens)} / ${n(r.cached_input_tokens)}` },
+            { key: 'provider_cost_amount', label: '비용', w: 100, render: (r) => html`${usd(r.provider_cost_amount)}${raw(r.cost_estimated ? ' <small class="dim">추정</small>' : '')}` }], ai.runs, { empty: 'AI 요청 기록이 없습니다.', id: 'airuns' }))}</div>
         </div>
-        <p class="hint">크레딧은 원장을 통해서만 증감합니다. 1 크레딧 = ₩10 (부가세 포함). 지급·조정·환불은 운영자 사유와 함께 감사 기록에 남습니다.</p>`,
-        w.status === 'CLOSED' ? '' : '<button class="btn btn--secondary btn--sm" id="ai-grant">크레딧 지급 / 조정</button> <button class="btn btn--secondary btn--sm" id="ai-refund">미사용 크레딧 환불</button>') : '')}
+        <p class="hint">사용률 = 이번 기간 API 비용 ÷ 플랜 한도(USD). 실패한 요청도 포함합니다. 원화는 ${fxNote(ai.fx)} 기준 표시용입니다.</p>`) : '')}
       <div class="agrid2">
         ${raw(section('최근 활동', d.activity.length ? html`<ul class="aact">${raw(d.activity.map((x) => html`<li><time>${fmtD(x.at)}</time><span>${ACT[x.type] || x.type}</span></li>`).join(''))}</ul>` : '<div class="aempty">활동 기록이 없습니다.</div>'))}
         ${raw(section('운영자 조작', table([{ key: 'created_at', label: '일시', w: 150, render: (r) => fmtD(r.created_at) }, { key: 'admin_name', label: '운영자', w: 150 }, { key: 'summary', label: '요약', render: (r) => html`${ACTIONS[r.action] || r.action}${r.metadata?.reason ? ` — ${r.metadata.reason}` : ''}` }], d.audit, { empty: '기록 없음' })))}
@@ -103,50 +108,7 @@ export async function adminWorkspacePage(id, main = $('#main')) {
       try { await api('POST', `/api/admin/workspaces/${id}/${path}`, { reason }); toast(`${confirm} 처리했습니다.`); await draw(); } catch (e) { toast(e.message); }
     };
     const sb = $('#suspend'); if (sb) sb.onclick = () => run('suspend', `'${w.name}' 워크스페이스를 정지할까요?`, '멤버의 로그인은 유지되지만 이 워크스페이스의 모든 API 호출(조회 포함)이 차단됩니다. 데이터는 삭제되지 않고 구독도 해지되지 않습니다.', '정지', true);
-    const gb = $('#ai-grant'); if (gb) gb.onclick = async () => {
-      const r = await creditDialog(w.name, ai ? ai.account.balance : 0);
-      if (!r) return;
-      try { const out = await api('POST', `/api/admin/workspaces/${id}/ai/credits`, r); toast(`크레딧을 반영했습니다. 현재 잔액 ${out.balance.toLocaleString('ko-KR')}`); await draw(); } catch (e) { toast(e.message); }
-    };
-    // AI-credits-only billing: refund of unused PURCHASED credits (newest pack first; v3: always in full, no fee — the v2 rule charged 10% after 7 days) via NicePay partial cancel.
-    const rf = $('#ai-refund'); if (rf) rf.onclick = async () => {
-      const base = `/api/billing/admin/workspaces/${id}/credit-refund`;
-      try {
-        const { refundable } = await api('GET', base);
-        if (!refundable) return toast('환불할 수 있는 미사용 구매 크레딧이 없습니다. 무료 크레딧은 환불되지 않습니다.');
-        const c = await promptDialog({ title: '미사용 크레딧 환불', body: `환불 가능한 미사용 구매 크레딧: ${refundable.toLocaleString('ko-KR')}`, label: '환불할 크레딧 수', required: true, confirm: '금액 계산' });
-        if (c === null) return;
-        const { quote } = await api('GET', `${base}?credits=${encodeURIComponent(c)}`);
-        const lines = quote.allocations.map((a) => `${a.credits.toLocaleString('ko-KR')} 크레딧 → ₩${a.amount.toLocaleString('ko-KR')}${a.full ? ' (전액)' : ' (수수료 10% 차감)'}${a.manual ? ' · 카드 취소 기한 지남: 계좌 환불' : ''}`).join(' / ');
-        const reason = await promptDialog({ title: `₩${quote.amount.toLocaleString('ko-KR')} 환불할까요?`, body: `${lines}. 결제한 카드로 부분 취소하고, 크레딧 원장과 감사 기록에 남깁니다.`, label: '환불 사유 (필수)', required: true, confirm: '환불', danger: true });
-        if (reason === null) return;
-        const out = await api('POST', base, { credits: Number(c), reason });
-        toast(out.failed?.length ? `일부 환불 실패: ${out.failed.map((f) => f.error).join(', ')}` : `₩${out.amount.toLocaleString('ko-KR')} 환불했습니다. 현재 잔액 ${out.balance.toLocaleString('ko-KR')}`);
-        await draw();
-      } catch (e) { toast(e.message); }
-    };
     const rb = $('#reactivate'); if (rb) rb.onclick = () => run('reactivate', `'${w.name}' 워크스페이스 정지를 해제할까요?`, '멤버가 다시 접근할 수 있게 됩니다.', '정지 해제', false);
   };
   await draw();
-}
-
-/** Grant / adjust dialog: signed integer amount + required reason (recorded in the ledger and the admin audit). */
-function creditDialog(name, balance) {
-  return new Promise((resolve) => {
-    const el = document.createElement('div'); el.className = 'scrim';
-    el.innerHTML = html`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cdT"><h3 id="cdT">AI 크레딧 지급 / 조정</h3>
-      <div class="dialog__b">'${name}' 워크스페이스 · 현재 ${balance.toLocaleString('ko-KR')} 크레딧. 양수는 지급, 음수는 조정(잔액 이내)입니다. 원장과 감사 기록에 남습니다.</div>
-      <div class="field"><label for="cd-amt">수량 <span class="req">*</span></label><input class="input" id="cd-amt" type="number" step="1" placeholder="예: 500 또는 -100"><div class="err" id="cd-err"></div></div>
-      <div class="field"><label for="cd-reason">사유 <span class="req">*</span></label><textarea class="textarea" id="cd-reason" maxlength="500" placeholder="예: 파일럿 고객 지원" style="min-height:72px"></textarea></div>
-      <div class="actions"><button class="btn btn--secondary" data-v="0">취소</button><button class="btn btn--primary" data-v="1">반영</button></div></div>`;
-    const done = (v) => { el.remove(); resolve(v); };
-    el.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (!b) { if (e.target === el) done(null); return; }
-      if (b.dataset.v === '0') return done(null);
-      const amount = Number($('#cd-amt', el).value); const reason = $('#cd-reason', el).value.trim();
-      if (!Number.isInteger(amount) || amount === 0) { $('#cd-err', el).textContent = '0이 아닌 정수를 입력해 주세요.'; return; }
-      if (!reason) { $('#cd-err', el).textContent = '사유를 입력해 주세요.'; return; }
-      done({ amount, reason }); });
-    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); });
-    document.body.append(el); $('#cd-amt', el).focus();
-  });
 }

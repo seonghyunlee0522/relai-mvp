@@ -1,10 +1,10 @@
-/* 플랜 (/app/billing/plans, pricing v3 T4): where every plan-limit / AI-credit upsell lands.
+/* 플랜 (/app/billing/plans, pricing v3 T4): where every plan-limit / AI-usage upsell lands.
  * The same plan cards as the landing #pricing (shared/pricing.js) built from the server catalogue (GET …/billing → catalogue),
  * so no number is typed here; 월간/연간 switch (default 월간), the current plan badge, and per card 선택 → the checkout screen
  * (/app/billing/subscribe?plan=&cycle=, T3) which shows the server quote and the 정기결제 고지 before any payment.
  * Checkout closed (PAYMENTS_ENABLED unset, or NicePay recurring not approved — founder 2026-10-20, no one-time passes) → the
  * button reads 정기결제 준비 중 and calls nothing; a stale 선택 link still only answers SUBSCRIBE_SOON. Plan prices are shown in won, VAT
- * included (a priced product list; spec §4.1); AI feature costs stay in credits (batch7 #7). */
+ * included (a priced product list; spec §4.1); AI is "AI 이용량 포함" (no amount). */
 import { api } from './core/api.js';
 import { $, html, raw } from './core/dom.js';
 import { state } from './core/state.js';
@@ -41,7 +41,7 @@ export async function plansPage(main = $('#main')) {
   };
   main.innerHTML = html`<div class="page page--plans" id="plans-page">
     <div class="page__head"><div><a class="link" href="/app/settings?tab=plan" data-link>← 플랜 · 결제</a><h1 style="margin-top:4px">요금제</h1>
-      <p class="dim" style="margin-top:4px">${oneTime ? '워크스페이스 단위 요금제예요. Pro·Team은 1개월 이용권으로 신용카드 1회 결제하며 자동으로 다시 결제되지 않아요.' : '워크스페이스 단위 요금제예요. 활성 프로젝트와 사용자 수, AI 크레딧으로 고르세요.'}</p></div></div>
+      <p class="dim" style="margin-top:4px">${oneTime ? '워크스페이스 단위 요금제예요. Pro·Team은 1개월 이용권으로 신용카드 1회 결제하며 자동으로 다시 결제되지 않아요.' : '워크스페이스 단위 요금제예요. 활성 프로젝트와 사용자 수로 고르세요. 모든 요금제에 AI 이용량이 포함돼 있어요.'}</p></div></div>
     <div id="pl-cards">${raw(b?.catalogue ? pricingHtml(b.catalogue, { current: cur, cta, oneTime }) : '<p class="hint">요금 정보를 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p>')}</div>
     <div class="panel" style="margin-top:20px" id="pl-faq"><div class="panel__h">자주 묻는 질문</div><div class="panel__b">
       ${raw((oneTime ? FAQ_ONE_TIME : FAQ).map(([q, a]) => html`<details class="pl-faq"><summary>${q}</summary><p class="dim">${a}</p></details>`).join(''))}</div></div>

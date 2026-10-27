@@ -7,22 +7,23 @@ import { setFakeProvider, fakeCalls, AiProviderError } from '../ai/provider.js';
 import { classifyQuestion } from '../ai/context.js';
 import { titleSimilarity } from '../ai/features.js';
 
-process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.DEV_INITIAL_AI_CREDITS = '1000'; process.env.AI_MODEL = '';
-// Metering mechanics are asserted at the pre-v41 per-feature prices; the current prices (30/50/20/10) are covered by credits-billing.test.js.
-Object.assign(process.env, { AI_CREDIT_COST_REQUIREMENT_EXTRACTION: '10', AI_CREDIT_COST_WBS_GENERATION: '15', AI_CREDIT_COST_CHANGE_IMPACT: '8', AI_CREDIT_COST_PROJECT_QA: '3' });
+process.env.AI_PROVIDER = 'fake'; process.env.AI_ENABLED = 'true'; process.env.AI_MODEL = '';
+// Usage metering (2026-10-27): the fake model is priced $1 / $2 / $0.5 per 1M input / output / cached tokens so runs have a cost;
+// the allowance itself is covered by ai-usage.test.js.
+process.env.AI_PRICE_FAKE_MODEL = '1,2,0.5';
 delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT;
 
 const mkReq = async (A, body) => (await A.c('POST', A.req, body)).json.requirement;
 const mkWbs = async (A, body) => { const r = await A.c('POST', A.wbs, body); assert.equal(r.status, 201, JSON.stringify(r.json)); return r.json.item; };
 const cand = (o = {}) => ({ title: 'SSO 로그인 지원', description: '사내 IdP와 연동한 SSO 로그인', type: 'SECURITY', priority: 'HIGH', scope: 'UNDECIDED', requester_name: null, requester_organization: null, acceptance_criteria: ['IdP 로그인 후 자동 진입'], source_text: 'SSO로 로그인하고 싶다', confidence: 'HIGH', similar_to: null, ...o });
 const runsOf = (db, wid) => db.all('SELECT * FROM ai_runs WHERE workspace_id = ? ORDER BY created_at, seq', [wid]);
-const balance = async (A) => (await A.c('GET', `${A.purl}/ai/status`)).json.credits.balance;
+const costOf = (r) => (r.provider_cost_amount === null ? null : Number(r.provider_cost_amount));
 
 test('feature flag: AI_ENABLED=false or missing provider → status.enabled=false, AI endpoints 503, everything else unaffected', async () => {
   const { server, client } = await boot();
   const A = await setup(client, 'f@x.com');
   process.env.AI_ENABLED = 'false';
-  let s = (await A.c('GET', `${A.purl}/ai/status`)).json; assert.equal(s.enabled, false); assert.equal(s.credits, null);
+  let s = (await A.c('GET', `${A.purl}/ai/status`)).json; assert.equal(s.enabled, false); assert.equal(s.credits, undefined); assert.equal(s.usage.used_pct, 0);
   let r = await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '회의록 내용입니다. 로그인 기능이 필요합니다.' });
   assert.equal(r.status, 503); assert.equal(r.json.error.code, 'AI_DISABLED');
   assert.equal((await A.c('POST', A.req, { title: '일반 요구사항' })).status, 201);     // non-AI features keep working
@@ -32,8 +33,9 @@ test('feature flag: AI_ENABLED=false or missing provider → status.enabled=fals
   assert.equal((await A.c('GET', `${A.purl}/ai/status`)).json.enabled, false);           // provider named but no credential
   process.env.AI_PROVIDER = 'fake';
   s = (await A.c('GET', `${A.purl}/ai/status`)).json;
-  assert.equal(s.enabled, true); assert.equal(s.provider, 'fake'); assert.deepEqual(Object.keys(s.costs).sort(), ['CHANGE_IMPACT', 'PROJECT_QA', 'REQUIREMENT_EXTRACTION', 'TEST_GENERATION', 'WBS_GENERATION', 'WBS_PLAN_FIX', 'WBS_PLAN_QUESTIONS']);
-  assert.equal(s.credits.balance, 1000); assert.ok(s.notice.includes('초안'));
+  assert.equal(s.enabled, true); assert.equal(s.costs, undefined); assert.equal(s.usage.allowance, 'ONCE'); assert.equal(s.usage.remaining_pct, 100);
+  assert.ok(s.notice.includes('초안'));
+  for (const k of ['limit_usd', 'used_usd', 'reserved_usd', 'provider', 'model']) assert.ok(!JSON.stringify(s).includes(`"${k}"`), k);   // users see percentages only
   assert.ok(!JSON.stringify(s).includes('API_KEY'));
   server.close();
 });
@@ -49,11 +51,12 @@ test('requirement extraction: structured candidates, duplicate hint, enum/JSON v
   assert.equal(r.json.candidates[0].duplicates[0].display_id, 'REQ-001');           // "SSO 로그인 지원" ~ "SSO 로그인"
   assert.deepEqual(r.json.candidates[1].duplicates, []);
   assert.equal(r.json.candidates[1].similar_to, null); assert.ok(r.json.warnings.some((w) => w.includes('REQ-999')));
-  assert.equal(r.json.run.feature, 'REQUIREMENT_EXTRACTION'); assert.equal(r.json.run.credit_cost, 10); assert.equal(r.json.run.balance, 990);
+  assert.equal(r.json.run.feature, 'REQUIREMENT_EXTRACTION'); assert.equal(r.json.run.credit_cost, undefined); assert.ok(r.json.run.usage.used_pct > 0); assert.ok(!('used_usd' in r.json.run.usage));
   const call = fakeCalls()[0];
   assert.ok(call.system.includes('지시문')); assert.ok(call.user.includes('<untrusted_input>')); assert.ok(call.user.includes('REQ-001'));
   const runs = await runsOf(db, A.w);
-  assert.equal(runs.length, 1); assert.equal(runs[0].status, 'SUCCEEDED'); assert.equal(runs[0].credit_status, 'CHARGED'); assert.equal(runs[0].input_tokens, 1200); assert.equal(runs[0].output_tokens, 300);
+  assert.equal(runs.length, 1); assert.equal(runs[0].status, 'SUCCEEDED'); assert.equal(runs[0].plan_key, 'FREE'); assert.equal(runs[0].input_tokens, 1200); assert.equal(runs[0].output_tokens, 300);
+  assert.equal(costOf(runs[0]), 0.0018);   // 1,200 × $1/M + 300 × $2/M
   assert.equal(runs[0].provider, 'fake'); assert.ok(runs[0].latency_ms >= 0); assert.equal(runs[0].input_summary.includes('chars'), true); assert.ok(!runs[0].input_summary.includes('SSO'));
 
   // invalid enum on the first attempt → re-prompt carries the validation problem → second attempt accepted
@@ -70,8 +73,9 @@ test('requirement extraction: structured candidates, duplicate hint, enum/JSON v
   const r4 = await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '네 번째 회의록: JSON이 깨졌습니다.' });
   assert.equal(r4.status, 502); assert.equal(fakeCalls().length, 2);
   const after = await runsOf(db, A.w);
-  assert.deepEqual(after.map((x) => [x.status, x.credit_status]), [['SUCCEEDED', 'CHARGED'], ['SUCCEEDED', 'CHARGED'], ['FAILED', 'RELEASED'], ['FAILED', 'RELEASED']]);
-  assert.equal(await balance(A), 980);
+  assert.deepEqual(after.map((x) => x.status), ['SUCCEEDED', 'SUCCEEDED', 'FAILED', 'FAILED']);
+  assert.ok(costOf(after[2]) > 0, 'a failed run that used tokens is counted (founder 2026-10-27)');
+  assert.equal(costOf(after[3]), null, 'no usage reported, not a timeout → nothing to count');
   // input guards
   assert.equal((await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: '짧음' })).status, 400);
   assert.equal((await A.c('POST', `${A.purl}/ai/requirements/extract`, { text: 'a'.repeat(20001) })).json.error.code, 'AI_INPUT_TOO_LARGE');
@@ -125,7 +129,7 @@ test('WBS generation: hierarchy, invalid parent / cycle / depth / foreign requir
   assert.equal(by['AI-WBS-7'].depth, 3); assert.ok(r.json.warnings.some((w) => w.includes('깊이')));
   assert.deepEqual(by['AI-WBS-2'].related_requirement_ids, ['REQ-001']); assert.deepEqual(by['AI-WBS-2'].requirement_ids, [q1.id]); assert.ok(r.json.warnings.some((w) => w.includes('REQ-777')));
   assert.equal(r.json.items.findIndex((i) => i.temp_id === 'AI-WBS-1') < r.json.items.findIndex((i) => i.temp_id === 'AI-WBS-2'), true);   // parents first
-  assert.equal(r.json.run.credit_cost, 15); assert.ok(fakeCalls()[0].user.includes('기존 작업'));
+  assert.ok(r.json.run.usage); assert.ok(fakeCalls()[0].user.includes('기존 작업'));
   assert.equal((await A.c('POST', `${A.purl}/ai/wbs/generate`, { requirement_ids: [] })).status, 400);
 
   // approval: user keeps 1, 2 (under 1), 8 and reparents 3 under 1 — codes/sequence come from RELAI, links from the trace service
@@ -174,7 +178,7 @@ test('change impact: only existing, active, same-project entities survive; alrea
   assert.ok(r.json.affected_wbs[0].id === w1.id && r.json.affected_wbs[0].href === `wbs?sel=${w1.id}`);
   assert.ok(!fakeCalls()[0].user.includes('다른 프로젝트'));   // other project's data never enters the prompt
   assert.ok(!fakeCalls()[0].user.includes('보관될 요구사항'));
-  assert.equal(r.json.run.credit_cost, 8);
+  assert.ok(r.json.run.usage);
 
   const c = await A.c('POST', `${A.purl}/changes/${cr.id}/ai/impact/commit`, { requirements: [{ id: q1.id, relation_type: 'MODIFIES' }], wbs: [{ id: w1.id, impact_type: 'REWORK', reason: 'REQ-001 구현 작업' }], risks: [{ id: rk.id }] });
   assert.equal(c.status, 201, JSON.stringify(c.json));
@@ -211,7 +215,7 @@ test('assistant: intent routing picks context, references are validated against 
   assert.ok(call.user.includes('이전 대화'));
   assert.ok(!call.user.includes('secret-mail.example') && !call.system.includes('secret-mail.example'), 'no e-mail in context');
   assert.ok(call.system.includes('읽기 전용'));
-  assert.equal(r.json.run.credit_cost, 3);
+  assert.ok(r.json.run.usage);
   // scope question loads requirements and flags unlinked ones; entity id in the question adds its detail block
   setFakeProvider(() => ({ data: { answer: 'REQ-001 [DRAFT/UNDECIDED/HIGH]이 WBS에 연결되어 있지 않습니다.', references: [{ type: 'REQUIREMENT', display_id: 'REQ-001' }], warnings: [] } }));
   const r2 = await A.c('POST', `${A.purl}/ai/ask`, { question: 'REQ-001 요구사항은 WBS에 연결됐어?' });
@@ -238,10 +242,9 @@ test('prompt injection: pasted instructions stay inside the untrusted block (clo
   server.close();
 });
 
-test('provider failures: timeout (no retry, 504), non-transient error (502, no retry), transient error retried once, every failure releases credits and records ai_runs', async () => {
+test('provider failures: timeout (no retry, 504), non-transient error (502, no retry), transient error retried once, every failure records ai_runs with its cost', async () => {
   const { db, server, client } = await boot();
   const A = await setup(client, 'pf@x.com');
-  const before = await balance(A);
   setFakeProvider(() => { throw new AiProviderError('AI_TIMEOUT', 'AI 응답 시간이 25초를 초과했습니다.', { transient: false }); });
   let r = await A.c('POST', `${A.purl}/ai/ask`, { question: '오늘 할 일은?' });
   assert.equal(r.status, 504); assert.equal(r.json.error.code, 'AI_TIMEOUT'); assert.equal(fakeCalls().length, 1); assert.ok(r.json.error.run_id);
@@ -257,13 +260,14 @@ test('provider failures: timeout (no retry, 504), non-transient error (502, no r
   r = await A.c('POST', `${A.purl}/ai/ask`, { question: '오늘 할 일은?' });
   assert.equal(r.status, 502); assert.equal(n, 2, 'exactly one retry');
   const runs = await runsOf(db, A.w);
-  assert.deepEqual(runs.map((x) => [x.status, x.credit_status, x.error_code]), [['FAILED', 'RELEASED', 'AI_TIMEOUT'], ['FAILED', 'RELEASED', 'AI_PROVIDER_ERROR'], ['SUCCEEDED', 'CHARGED', null], ['FAILED', 'RELEASED', 'AI_PROVIDER_ERROR']]);
+  assert.deepEqual(runs.map((x) => [x.status, x.error_code]), [['FAILED', 'AI_TIMEOUT'], ['FAILED', 'AI_PROVIDER_ERROR'], ['SUCCEEDED', null], ['FAILED', 'AI_PROVIDER_ERROR']]);
   assert.ok(runs.every((x) => !x.error_message || x.error_message.length <= 300));
-  assert.equal(await balance(A), before - 3);
+  assert.equal(runs[0].cost_estimated, true); assert.ok(costOf(runs[0]) > 0, 'a timed-out call is counted at its worst case');
+  assert.equal(costOf(runs[1]), null); assert.ok(costOf(runs[2]) > 0);
   server.close();
 });
 
-test('rate limits: per-user per-minute and per-workspace daily caps return 429 without touching the provider or credits', async () => {
+test('rate limits: per-user per-minute and per-workspace daily caps return 429 without touching the provider', async () => {
   const { server, client } = await boot();
   const A = await setup(client, 'rl@x.com');
   setFakeProvider(() => ({ data: { answer: 'ok', references: [], warnings: [] } }));
@@ -276,7 +280,7 @@ test('rate limits: per-user per-minute and per-workspace daily caps return 429 w
   const r2 = await A.c('POST', `${A.purl}/ai/ask`, { question: '넷째 질문' });
   assert.equal(r2.status, 429); assert.equal(r2.json.error.scope, 'workspace');
   delete process.env.AI_USER_MINUTE_LIMIT; delete process.env.AI_DAILY_LIMIT;
-  assert.equal(await balance(A), 1000 - 6);
+  assert.equal(fakeCalls().length, 2, 'refused requests never reach the provider');
   server.close();
 });
 

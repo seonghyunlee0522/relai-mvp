@@ -15,7 +15,7 @@
  *
  * Real user runs are not logged in full (privacy / retention): ai_runs keeps only an input summary.
  */
-import { aiConfig, featureCreditCost, maxOutputTokensFor, FEATURE_LABEL } from './config.js';
+import { aiConfig, maxOutputTokensFor, FEATURE_LABEL } from './config.js';
 import { previewPrompt, runAiFeature } from './service.js';
 import { providerRequest } from './provider.js';
 import { retryHint, DEFAULT_PROMPTS } from './prompts.js';
@@ -106,7 +106,6 @@ function settingsFor(key) {
     max_output_tokens: feature ? maxOutputTokensFor(feature) : null,
     temperature: null, temperature_note: '설정하지 않음 — 제공사 기본값(OpenAI·Anthropic 모두 1.0)으로 전송됩니다.',
     timeout_ms: cfg.timeoutMs, max_input_chars: cfg.maxInputChars,
-    credit_cost: feature ? featureCreditCost(feature) : null,
     retry: '제공사 일시 오류(429·5xx·네트워크)는 0.3초 뒤 1번 재시도, 응답이 JSON 스키마에 맞지 않으면 문제 목록을 붙여 1번 다시 요청합니다. 시간 초과는 재시도하지 않습니다.',
     retry_hint: retryHint(['(검증 오류 내용)']).trim(),
     cache_seconds: PROMPT_CACHE_MS / 1000,

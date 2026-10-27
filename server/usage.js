@@ -2,6 +2,7 @@
  * Workspace usage counts against plan limits. One aggregate query per call — never per-row counting.
  * Counts are live (no counter cache; see docs/production-readiness.md §10 for the supporting indexes).
  */
+import { usageSummary } from './ai/usage-limit.js';
 import { PLANS, DEFAULT_PLAN, USAGE_DIMS, pctOf, tierOf, limitsFor } from './plans.js';
 import { GRANTS_PLAN_SQL, EFFECTIVE_PLAN_SQL, effectivePlan } from './billing/subscriptions.js';
 import { ACTIVE_PROJECT_SQL, SEAT_MEMBER_SQL, PENDING_INVITE_SQL, OPERATOR_OWNED_SQL } from './billing/limits.js';
@@ -22,9 +23,8 @@ const USAGE_SQL = `
     (SELECT row_to_json(s) FROM subscriptions s WHERE s.workspace_id = w.id AND ${GRANTS_PLAN_SQL}) AS sub,   -- whole row: limitsFor reads seats / extra_* / project_limit / price_version
     (SELECT COUNT(*) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days') AS ai_runs_30d,
     (SELECT COUNT(*) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days' AND r.status = 'FAILED') AS ai_failed_30d,
-    (SELECT COALESCE(SUM(r.credit_cost), 0) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days' AND r.credit_status = 'CHARGED') AS ai_credits_30d,
-    (SELECT MAX(r.created_at) FROM ai_runs r WHERE r.workspace_id = w.id) AS ai_last_run_at,
-    (SELECT a.balance FROM workspace_credit_accounts a WHERE a.workspace_id = w.id) AS ai_balance
+    (SELECT COALESCE(SUM(r.provider_cost_amount), 0) FROM ai_runs r WHERE r.workspace_id = w.id AND r.created_at >= now() - interval '30 days') AS ai_cost_30d,
+    (SELECT MAX(r.created_at) FROM ai_runs r WHERE r.workspace_id = w.id) AS ai_last_run_at
   FROM workspaces w`;
 
 /** Shape one usage row: { plan, dims: [{key,label,used,limit,pct}], max_pct, tier, pending_invites, seats_left }. Limits = plans.js limitsFor (v3: projects + users). */
@@ -48,7 +48,7 @@ export async function workspaceUsage(db, workspaceId, planKey = null) {
 }
 
 const SORTS = {
-  ai: 'ai_runs_30d DESC, ai_credits_30d DESC, ai_last_run_at DESC NULLS LAST',
+  ai: 'ai_cost_30d DESC, ai_runs_30d DESC, ai_last_run_at DESC NULLS LAST',
   projects: 'pct_projects DESC NULLS LAST, projects DESC',
   requirements: 'pct_requirements DESC NULLS LAST, requirements DESC',
   wbs: 'pct_wbs DESC NULLS LAST, wbs DESC',
@@ -57,8 +57,8 @@ const SORTS = {
 export const USAGE_SORTS = Object.keys(SORTS);
 
 /** AI use of one usage row over the last 30 days (Admin Console "AI 사용량"). */
-const shapeAi = (r) => ({ runs_30d: Number(r.ai_runs_30d || 0), failed_30d: Number(r.ai_failed_30d || 0), credits_30d: Number(r.ai_credits_30d || 0),
-  last_run_at: r.ai_last_run_at || null, balance: r.ai_balance === null || r.ai_balance === undefined ? null : Number(r.ai_balance) });
+const shapeAi = (r) => ({ runs_30d: Number(r.ai_runs_30d || 0), failed_30d: Number(r.ai_failed_30d || 0), cost_usd_30d: Number(Number(r.ai_cost_30d || 0).toFixed(6)),
+  last_run_at: r.ai_last_run_at || null });
 
 /**
  * Paged usage of every workspace: AI use over the last 30 days (`ai`) plus plan-limit use. Each row carries its effective plan (`plan_key`); percentages exist only for limited plans
@@ -72,7 +72,12 @@ export async function allWorkspacesUsage(db, { sort = 'ai', page = 1, size = 50,
   const total = (await db.get(`SELECT COUNT(*) AS n FROM (${USAGE_SQL}) u ${where}`, params)).n;
   const rows = await db.all(`SELECT u.*, ${pctExpr('projects')} AS pct_projects, ${pctExpr('requirements')} AS pct_requirements, ${pctExpr('wbs')} AS pct_wbs
     FROM (${USAGE_SQL}) u ${where} ORDER BY ${SORTS[sort] || SORTS.projects}, u.name LIMIT ? OFFSET ?`, [...params, size, (page - 1) * size]);
-  return { total, items: rows.map((r) => ({ workspace_id: r.workspace_id, name: r.name, status: r.status, last_activity_at: r.last_activity_at, ai: shapeAi(r), ...shapeUsage(r, r.plan_key) })) };
+  const items = await Promise.all(rows.map(async (r) => {
+    const u = await usageSummary(db, r.workspace_id, { plan: r.plan_key });   // the workspace's own allowance window (same numbers it sees as %)
+    return { workspace_id: r.workspace_id, name: r.name, status: r.status, last_activity_at: r.last_activity_at,
+      ai: { ...shapeAi(r), limit_usd: u.limit_usd, used_usd: u.used_usd, used_pct: u.used_pct, remaining_pct: u.remaining_pct, allowance: u.allowance, resets_at: u.resets_at }, ...shapeUsage(r, r.plan_key) };
+  }));
+  return { total, items };
 }
 
 /** FREE workspaces at ≥ `minPct` of any FREE limit (dashboard attention). */

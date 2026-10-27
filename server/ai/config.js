@@ -2,8 +2,8 @@
  * AI layer configuration (Phase 11). Everything is read from the environment once per call so tests can flip it.
  * Secrets never leave this module except into the provider adapter; `publicConfig()` is what the frontend may see.
  *
- * Credits vs. tokens: tokens and provider cost are internal metering; the user-facing unit is the Credit.
- * FEATURE_CREDIT_COST is the single place feature prices live (development defaults — the Pricing phase changes them here).
+ * Usage metering (2026-10-27, credits retired): every run records its tokens and its provider cost in USD (ai_runs.provider_cost_amount),
+ * and a workspace's AI allowance is a USD budget per plan (plans.js AI_LIMIT_USD, ai/usage-limit.js). Users only ever see a percentage.
  */
 export const FEATURES = ['REQUIREMENT_EXTRACTION', 'WBS_GENERATION', 'CHANGE_IMPACT', 'PROJECT_QA', 'WBS_PLAN_QUESTIONS', 'WBS_PLAN_FIX', 'TEST_GENERATION'];
 export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI 요구사항 추출', WBS_GENERATION: 'AI WBS 초안', CHANGE_IMPACT: 'AI 영향 분석', PROJECT_QA: 'RELAI에게 물어보기', WBS_PLAN_QUESTIONS: 'AI WBS Planner 질문', WBS_PLAN_FIX: 'AI WBS Planner 보완', TEST_GENERATION: '테스트 시나리오 만들기' };
@@ -11,30 +11,33 @@ export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI 요구사항 추출',
 const envInt = (k, def) => { const n = Number(process.env[k]); return Number.isFinite(n) && process.env[k] !== undefined && process.env[k] !== '' ? n : def; };
 
 /**
- * Per-feature price in credits (1 credit = ₩10 VAT incl., plans.js CREDIT_PRICE_KRW) — a fixed price per action, never per token,
- * shown before every click. AI-credits-only billing §3.2. Overridable per feature with AI_CREDIT_COST_<FEATURE>.
- */
-export function featureCreditCost(feature) {
-  const def = { REQUIREMENT_EXTRACTION: 30, WBS_GENERATION: 50, CHANGE_IMPACT: 20, PROJECT_QA: 10, WBS_PLAN_QUESTIONS: 0, WBS_PLAN_FIX: 0, TEST_GENERATION: 30 }[feature];   // Planner: one WBS_GENERATION charge per plan; question / fix calls are free (token cost still recorded)
-  if (def === undefined) throw new Error(`unknown AI feature ${feature}`);
-  return Math.max(0, envInt(`AI_CREDIT_COST_${feature}`, def));
-}
-export const featureCreditCosts = () => Object.fromEntries(FEATURES.map((f) => [f, featureCreditCost(f)]));
-
-/**
- * Provider price table in USD per 1M tokens [input, output]. Used only to estimate provider_cost_amount for ops analytics.
- * Unknown models estimate as null (never block a request over a missing price).
+ * Provider price table in USD per 1M tokens: [input, output, cached input]. A dated model id (…-20250929) falls back to its base id.
+ * Check against the vendors' price pages whenever a model is added or a price changes; AI_PRICE_<MODEL>="in,out,cached" overrides one
+ * model without a deploy of this file (model id upper-cased, non-alphanumerics → _). Unknown models cost null and are never blocked.
  */
 export const PROVIDER_PRICES = {
-  'claude-sonnet-4-5': [3, 15], 'claude-sonnet-4-5-20250929': [3, 15], 'claude-haiku-4-5': [1, 5], 'claude-haiku-4-5-20251001': [1, 5], 'claude-opus-4-1': [15, 75],
-  'gpt-4o': [2.5, 10], 'gpt-4o-mini': [0.15, 0.6], 'gpt-4.1': [2, 8], 'gpt-4.1-mini': [0.4, 1.6], 'gpt-5': [1.25, 10], 'gpt-5-mini': [0.25, 2],
-  'fake-model': [0, 0],
+  'claude-sonnet-4-5': [3, 15, 0.3], 'claude-haiku-4-5': [1, 5, 0.1], 'claude-opus-4-1': [15, 75, 1.5],
+  'gpt-4o': [2.5, 10, 1.25], 'gpt-4o-mini': [0.15, 0.6, 0.075], 'gpt-4.1': [2, 8, 0.5], 'gpt-4.1-mini': [0.4, 1.6, 0.1], 'gpt-5': [1.25, 10, 0.125], 'gpt-5-mini': [0.25, 2, 0.025],
+  'fake-model': [0, 0, 0],
 };
-export function estimateProviderCost(model, inputTokens, outputTokens) {
-  const p = PROVIDER_PRICES[model] || PROVIDER_PRICES[String(model).replace(/-\d{8}$/, '')];
-  if (!p || inputTokens == null || outputTokens == null) return null;
-  return Number(((inputTokens * p[0] + outputTokens * p[1]) / 1e6).toFixed(6));
+export function priceOf(model) {
+  const id = String(model || '');
+  const env = process.env[`AI_PRICE_${id.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`];
+  if (env) { const p = env.split(',').map(Number); if (p.length >= 2 && p.every((x) => Number.isFinite(x) && x >= 0)) return [p[0], p[1], p[2] ?? p[0]]; }
+  return PROVIDER_PRICES[id] || PROVIDER_PRICES[id.replace(/-\d{8}$/, '')] || null;
 }
+/** USD cost of one call. cached ⊂ input (billed at the cached rate). null when the model has no price or no usage was reported. */
+export function estimateProviderCost(model, inputTokens, outputTokens, cachedTokens = 0) {
+  const p = priceOf(model);
+  if (!p || inputTokens == null || outputTokens == null) return null;
+  const cached = Math.min(Math.max(0, Number(cachedTokens) || 0), inputTokens);
+  return Number((((inputTokens - cached) * p[0] + cached * p[2] + outputTokens * p[1]) / 1e6).toFixed(6));
+}
+/**
+ * Worst-case USD of a call that has not run yet: every input character counted as a token (Korean runs ≈ 1 token per 1–2 chars, so this
+ * over-estimates) plus the feature's whole output cap. Used to reserve the allowance and as the recorded cost of a run that timed out.
+ */
+export const worstCaseCost = (model, inputChars, maxOutputTokens) => estimateProviderCost(model, Math.ceil(Number(inputChars) || 0), maxOutputTokens, 0);
 
 /**
  * Output-token cap per call, sized to each feature's schema so a run cannot run away (gpt-4o-mini: $0.6 per 1M output tokens,
@@ -64,19 +67,20 @@ export function aiConfig(env = process.env) {
     maxInputChars: Math.max(500, envInt('AI_MAX_INPUT_CHARS', 20_000)),
     dailyLimit: Math.max(0, envInt('AI_DAILY_LIMIT', 300)),            // per workspace per day (0 = unlimited)
     userMinuteLimit: Math.max(0, envInt('AI_USER_MINUTE_LIMIT', 10)),  // per user per minute (0 = unlimited)
-    devInitialCredits: Math.max(0, envInt('DEV_INITIAL_AI_CREDITS', 0)),      // dev/test only; when > 0 it REPLACES the production trial grant
-    trialCredits: Math.max(0, envInt('AI_INITIAL_TRIAL_CREDITS', 200)),       // production: Free 최초 200 (pricing v3, founder 2026-10-21) when a workspace's account is first created (0 = none)
-    // D7: who the Free 200 is "once" for. 'owner' (default) = once per owner account and per e-mail hash (free_credit_claims) as well as
-    // per workspace; 'workspace' = once per workspace only.
+    // Who the Free allowance (once) is for. 'owner' (default) = one workspace per owner account and per e-mail hash (free_credit_claims);
+    // 'workspace' = every workspace. ai/usage-limit.js.
     freeClaimScope: String(env.AI_FREE_CLAIM_SCOPE || 'owner').toLowerCase() === 'workspace' ? 'workspace' : 'owner',
     maxOutputTokens: Math.max(256, envInt('AI_MAX_OUTPUT_TOKENS', 4_000)),
     disabledReason: !flag ? 'AI_ENABLED=false' : !provider ? 'AI_PROVIDER 미설정' : !apiKey ? 'Provider API Key 미설정' : null,
   };
 }
 
+/** Operator view (Admin console only): which vendor and model are live. */
+export function adminAiConfig() { const c = aiConfig(); return { enabled: c.enabled, provider: c.enabled ? c.provider : null, model: c.enabled ? c.model : null, disabled_reason: c.disabledReason }; }
+
 /** What the frontend is allowed to know. No keys, no limits that would help abuse. */
 export function publicConfig() {
   const c = aiConfig();
-  return { enabled: c.enabled, provider: c.enabled ? c.provider : null, model: c.enabled ? c.model : null, costs: featureCreditCosts(),
+  return { enabled: c.enabled,
     notice: '현재 프로젝트의 요구사항, WBS, 이슈·리스크, 테스트, 변경 데이터를 참고합니다. AI 결과는 초안·후보이며 사용자가 검토·승인한 항목만 저장됩니다.' };
 }

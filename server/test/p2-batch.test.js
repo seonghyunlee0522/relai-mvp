@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { boot, setup, project } from './api-helpers.js';
 import { memberInviteEmail, platformInviteEmail, wsLabel as wsLabelServer, FREE_POLICY } from '../email/templates.js';
 import { wsLabel } from '../../public/app/shared/workspace-name.js';
-import { homeCreditLine as creditLine } from '../../public/app/shared/ai.js';
+import { homeUsageLine } from '../../public/app/shared/ai.js';
 import { FAQ } from '../../public/app/shared/pricing.js';
 import { FIXED_NODES, inferPlanPhase, allocateSchedule, sameAsNode } from '../../public/app/shared/wbs-structure.js';
 import { DOORS } from '../../public/app/shared/lifecycle.js';
@@ -35,12 +35,13 @@ test('#1 workspace label: never "워크스페이스 워크스페이스" (client 
   assert.match(src('public/app/project/home.js'), /\$\{wsName\(state\.workspace\.name\)\}에 참여 중입니다/);
 });
 
-test('#2 home: 진행 중인 프로젝트 counts own projects only; the credit line is the balance, never "무료 제공"', () => {
+test('#2 home: 진행 중인 프로젝트 counts own projects only; the AI line is the % left (2026-10-27), never "무료 제공" or an amount', () => {
   const h = src('public/app/project/home.js');
   assert.match(h, /desk && real\.length \? html`진행 중인 프로젝트 \$\{real\.length\}개/);
   assert.doesNotMatch(h, /무료 제공/);
-  assert.equal(creditLine({ balance: 40, free_remaining: 40, purchased_remaining: 0 }), 'AI 크레딧 잔액 40');
-  assert.equal(creditLine({ balance: 1234 }), 'AI 크레딧 잔액 1,234');
+  assert.equal(homeUsageLine({ remaining_pct: 67.5, unlimited: false }), 'AI 이용량 67.5% 남음');
+  assert.equal(homeUsageLine({ remaining_pct: 0, unlimited: false }), 'AI 이용량 0% 남음');
+  assert.equal(homeUsageLine({ unlimited: true }), '');
 });
 
 test('#3 requirements: quick-add repaints the status segments with the KPI chips (one paint, re-bound)', () => {
@@ -122,8 +123,8 @@ test('#8 new/edit project form is kept across the 768px crossing (draft save/res
 });
 
 test('#9 AI extraction: closing with unregistered candidates asks and keeps them; 다시 입력 asks before discarding', () => {
-  const c = discardCopy(5, 30);
-  assert.match(c.title, /등록하지 않은 요구사항 후보 5건/); assert.match(c.body, /30 크레딧은 이미 차감/); assert.match(c.body, /다시 열면 그대로/);
+  const c = discardCopy(5);
+  assert.match(c.title, /등록하지 않은 요구사항 후보 5건/); assert.match(c.body, /AI 이용량은 이미 반영/); assert.match(c.body, /다시 열면 그대로/);
   assert.equal(c.confirm, '보관하고 닫기'); assert.equal(c.cancel, '계속 검토');
   const e = src('public/app/ai/extract.js'); const ai = src('public/app/shared/ai.js');
   assert.match(e, /d\.setGuard\(/); assert.match(e, /kept\.set\(pid/); assert.match(e, /d\.close\(\{ force: true \}\)/); assert.match(e, /결과 버리고 다시 입력/);

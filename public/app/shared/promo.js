@@ -6,7 +6,7 @@
  * Variants: 'cards' (a small pricing-style grid; signup, landing, credits, login) · 'line' (one inline sentence; Home).
  * Token {until} (legacy, early access retired 2026-10-20): a promo still using it is skipped, since no viewer has an end date any more.
  */
-export const PROMO_PLACEMENTS = { signup: '회원가입', login: '로그인', landing: '랜딩 · 요금', credits: '설정 › AI 크레딧', home: '홈' };
+export const PROMO_PLACEMENTS = { signup: '회원가입', login: '로그인', landing: '랜딩 · 요금', credits: '설정 › AI 이용 현황', home: '홈' };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fill = (s, until) => String(s || '').replaceAll('{until}', until || '');

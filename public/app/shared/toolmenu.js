@@ -8,8 +8,8 @@ import { closeOnOutsideTap } from '../core/outside.js';
 export const toolMenu = (sections, { label = '더보기' } = {}) => html`<span class="tmore" data-tmore-wrap><button type="button" class="btn btn--secondary btn--sm tmore__b" data-tmore aria-haspopup="true" aria-expanded="false" aria-label="${label}" title="${label}">⋯</button><div class="tmenu" hidden>${raw(sections.filter((s) => s && s[1]).map(([title, body]) => html`<div class="tmenu__sec">${raw(title ? html`<div class="tmenu__t">${title}</div>` : '')}${raw(body)}</div>`).join(''))}</div></span>`;
 /** A plain menu row (button). `attrs` is trusted attribute markup. */
 export const tmItem = (label, attrs, sub = '') => html`<button type="button" class="tmenu__i" ${raw(attrs)}>${label}${raw(sub ? html`<small>${raw(sub)}</small>` : '')}</button>`;
-/** " · 50 크레딧" — the AI price shown before the click (credits AC3); from the server's /ai/status, never hard-coded. No won amount (batch7 #7). */
-export const aiPrice = (st, feature) => { const c = st && st.costs ? st.costs[feature] : null; return typeof c === 'number' ? `${c.toLocaleString('ko-KR')} 크레딧` : ''; };
+/** @deprecated AI has no per-feature price since 2026-10-27 (usage % only); kept so older menus render nothing. */
+export const aiPrice = () => '';
 
 const closeAll = (except = null) => document.querySelectorAll('.tmenu').forEach((m) => { if (m === except) return; m.hidden = true; const b = m.previousElementSibling; if (b) b.setAttribute('aria-expanded', 'false'); });
 if (typeof document !== 'undefined' && document.body && !document.body.dataset.tmoreBound) {

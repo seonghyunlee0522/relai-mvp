@@ -10,7 +10,7 @@ import { createFakeProvider, assertProvider, providerFromEnv } from '../billing/
 import { effectivePlan } from '../billing/subscriptions.js';
 import { resetBillingCache } from '../billing-admin.js';
 import { LATEST_VERSION } from '../migrations.js';
-process.env.EARLY_ACCESS_CUTOFF = '2000-01-01T00:00:00Z';   // these suites test FREE/TEAM on fresh workspaces: no early access (AI-credits billing is in credits-billing.test.js)
+process.env.EARLY_ACCESS_CUTOFF = '2000-01-01T00:00:00Z';   // these suites test FREE/TEAM on fresh workspaces: no early access (AI usage metering is in ai-usage.test.js)
 
 process.env.PLAN_LIMITS = 'on';   // helpers.js turns enforcement off for the legacy suites
 
@@ -210,8 +210,7 @@ test('orders through the fake provider: server-priced checkout, paid event verif
   const s = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [A.w]);
   assert.equal(s.auto_renew, false); assert.equal(s.seats, 40); assert.ok(Math.abs((new Date(s.current_period_end) - Date.now()) / 86400e3 - 30.5) < 2);
   assert.equal((await db.get('SELECT status FROM billing_orders WHERE id = ?', [co2.json.order.id])).status, 'PAID');
-  const grants = await db.all(`SELECT amount FROM credit_ledger WHERE workspace_id = ? AND type = 'PLAN_GRANT' AND reference_type = 'PLAN_MONTHLY'`, [A.w]);
-  assert.deepEqual(grants.map((g) => Number(g.amount)), [3000]);   // TEAM monthly AI credits (v3: 3,000) granted with the payment
+  assert.equal((await db.get(`SELECT COUNT(*) AS n FROM credit_ledger WHERE workspace_id = ?`, [A.w])).n, 0, 'no credit is granted any more (2026-10-27)');
   // a renewing subscription: cancel calls the provider with no subscription row lock held
   await db.run(`UPDATE subscriptions SET auto_renew = true WHERE workspace_id = ?`, [A.w]);
   assert.equal((await A.c('POST', `/api/workspaces/${A.w}/billing/cancel`, {})).status, 200);

@@ -1,12 +1,14 @@
-/* AI layer helpers shared by the four feature dialogs: status cache (flag + credits), large dialog shell, error copy.
- * Design rule: AI results are always labelled 초안/후보, stay inside the existing blue B2B look, and are never auto-saved. */
+/* AI layer helpers shared by the AI feature dialogs: status cache (flag + workspace AI usage %), large dialog shell, error copy.
+ * Design rule: AI results are always labelled 초안/후보, stay inside the existing blue B2B look, and are never auto-saved.
+ * AI usage (2026-10-27, credits retired): the server sends percentages only (usage.used_pct / remaining_pct / tier / blocked / resets_at);
+ * no amount, token count or price ever reaches the browser. */
 import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { toast } from './dialogs.js';
 
 const cache = new Map();   // pid → promise of /ai/status
 export const aiStatus = (pid, { fresh = false } = {}) => {
-  if (fresh || !cache.has(pid)) { const p = api('GET', wsApi(`/${pid}/ai/status`)).catch(() => ({ enabled: false, credits: null, costs: {} })); cache.set(pid, p); }
+  if (fresh || !cache.has(pid)) { const p = api('GET', wsApi(`/${pid}/ai/status`)).catch(() => ({ enabled: false, usage: null })); cache.set(pid, p); }
   return cache.get(pid);
 };
 export const aiStatusReset = (pid) => cache.delete(pid);
@@ -14,36 +16,41 @@ export const FEATURE_LABEL = { REQUIREMENT_EXTRACTION: 'AI로 요구사항 추�
 export const CONF = { HIGH: ['높음', 'is-good'], MEDIUM: ['보통', 'is-warn'], LOW: ['낮음', 'is-crit'] };
 export const confChip = (c) => html`<span class="hchip hchip--sm ${(CONF[c] || CONF.LOW)[1]}" title="AI 확신도">${(CONF[c] || CONF.LOW)[0]}</span>`;
 
-/** "예상 30 크레딧 · 잔액 4,230 크레딧" — price and balance come from the server (feature config + account), never hard-coded here.
- * Credits are a usage unit on every user screen: no won amount (batch7 #7).
- * The click is the consent (AI-credits-only billing §5). Amber below the low-balance threshold; at 0 / below the price the button is disabled with [크레딧 충전]. */
-/** Home header: the workspace's remaining balance (owner and member alike) — never an offer like '… 무료 제공' (P2, Jim prod 10-21 #2). */
-export const homeCreditLine = (c) => `AI 크레딧 잔액 ${Number((c && c.balance) || 0).toLocaleString('ko-KR')}`;
-export const CREDITS_URL = '/app/settings/credits';
-export const PLANS_URL = '/app/billing/plans';   // batch7 T5 upsell target (payments off)
-const fmt = (v) => Number(v).toLocaleString('ko-KR');
-export const creditLine = (st, feature) => {
-  if (!st?.enabled) return '';
-  const cost = st.costs?.[feature]; const bal = st.credits?.available;
-  const short = typeof cost === 'number' && typeof bal === 'number' && bal < cost;
-  const low = !short && typeof bal === 'number' && typeof st.low_balance_threshold === 'number' && bal < st.low_balance_threshold;
-  const pay = st.payments_enabled !== false;   // v1: payments off → no 충전 link
-  if (short) return html`<span class="ai-credit is-short" title="AI 사용량은 워크스페이스 크레딧으로 집계됩니다">크레딧이 모자라요 (필요 <b>${fmt(cost)}</b> · 잔액 <b>${fmt(bal)}</b>) · ${raw(pay ? html`<a href="${CREDITS_URL}" data-link>크레딧 충전</a>` : html`<a href="${PLANS_URL}" data-link data-upsell-cta>플랜 살펴보기</a>`)}</span>`;
-  return html`<span class="ai-credit ${low ? 'is-low' : ''}" title="실행하면 이 크레딧만 차감됩니다. 실패하면 차감하지 않습니다.">예상 <b>${typeof cost === 'number' ? fmt(cost) : '-'}</b> 크레딧 · 잔액 <b>${typeof bal === 'number' ? fmt(bal) : '-'}</b> 크레딧${raw(low && pay ? ` · <a href="${CREDITS_URL}" data-link>충전</a>` : '')}</span>`;
+export const AI_USAGE_URL = '/app/settings/ai-usage';
+/** @deprecated kept for older imports; 설정 › AI 이용 현황. */
+export const CREDITS_URL = AI_USAGE_URL;
+export const PLANS_URL = '/app/billing/plans';   // batch7 T5 upsell target
+export const UPGRADE_URL = AI_USAGE_URL;
+const pct = (v) => `${Number(v || 0).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}%`;
+const day = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}월 ${d.getDate()}일`; };
+/** Home header: "AI 이용량 67.5% 남음" (or nothing when the plan has no limit). */
+export const homeUsageLine = (u) => (u && !u.unlimited ? `AI 이용량 ${pct(u.remaining_pct)} 남음` : '');
+/** @deprecated name kept for older imports. */
+export const homeCreditLine = homeUsageLine;
+/** One line for AI dialogs: "AI 이용량 32.5% 사용" — amber at 80 %, red at 95 %, blocked at 100 % with the way out. */
+export const usageLine = (st) => {
+  const u = st?.usage;
+  if (!st?.enabled || !u || u.unlimited) return '';
+  if (u.blocked) {
+    const why = u.allowance === 'ONCE' ? html`무료 AI 이용량을 모두 사용했어요 · <a href="${PLANS_URL}" data-link data-upsell-cta>플랜 살펴보기</a>`
+      : html`AI 이용량을 모두 사용했어요${raw(u.resets_at ? ` · ${day(u.resets_at)}에 다시 제공` : '')}`;
+    return html`<span class="ai-credit is-short" title="워크스페이스 공용 AI 이용량">${raw(why)}</span>`;
+  }
+  const cls = u.tier === 'critical' ? 'is-short' : u.tier === 'warn' ? 'is-low' : '';
+  return html`<span class="ai-credit ${cls}" title="워크스페이스 공용 AI 이용량 · 실행한 만큼 사용률이 올라갑니다"><a href="${AI_USAGE_URL}" data-link>AI 이용량</a> <b>${pct(u.used_pct)}</b> 사용</span>`;
 };
-/** Kept for older imports: credits are bought on the AI 크레딧 page. */
-export const UPGRADE_URL = CREDITS_URL;
-export const canRun = (st, feature) => Boolean(st?.enabled) && !(typeof st.costs?.[feature] === 'number' && typeof st.credits?.available === 'number' && st.credits.available < st.costs[feature]);
+/** @deprecated name kept for older imports (the feature argument is ignored: no per-feature price any more). */
+export const creditLine = (st) => usageLine(st);
+export const canRun = (st) => Boolean(st?.enabled) && !st?.usage?.blocked;
 
 /** Human copy for AI error codes (the API message is kept as detail). */
 export function aiErrorMessage(e) {
   const code = e?.code;
-  if (code === 'AI_CREDIT_INSUFFICIENT') return `크레딧이 모자라요 (필요 ${e.error?.required ?? '?'} · 잔액 ${e.error?.balance ?? '?'}). 플랜 페이지에서 크레딧 안내를 확인해 주세요.`;
+  if (code === 'AI_USAGE_LIMIT_REACHED') return e.message || 'AI 이용량을 모두 사용했습니다.';
   if (code === 'AI_DISABLED') return 'AI 기능을 사용할 수 없습니다. 관리자에게 문의하세요.';
   if (code === 'AI_RATE_LIMITED') return e.message || 'AI 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'AI_INPUT_TOO_LARGE') return e.message;
-  // failed runs are never charged (the reservation is released server-side); the server message is already plain Korean
-  if (['AI_TIMEOUT', 'AI_PROVIDER_ERROR', 'AI_INVALID_OUTPUT', 'AI_INTERNAL_ERROR'].includes(code)) return `${e.message || 'AI 응답을 생성하지 못했습니다. 다시 시도해 주세요.'} 크레딧은 차감되지 않았습니다.`;
+  if (['AI_TIMEOUT', 'AI_PROVIDER_ERROR', 'AI_INVALID_OUTPUT', 'AI_INTERNAL_ERROR'].includes(code)) return e.message || 'AI 응답을 생성하지 못했습니다. 다시 시도해 주세요.';
   return e?.message || '요청을 처리하지 못했습니다.';
 }
 /**
@@ -54,7 +61,7 @@ export function aiDialog({ title, subtitle = '', feature, status, size = 'lg' })
   const el = document.createElement('div'); el.className = 'scrim scrim--ai';
   el.innerHTML = html`<div class="dialog dialog--ai dialog--ai-${size}" role="dialog" aria-modal="true" aria-labelledby="aiT">
     <div class="aid__h"><div><h3 id="aiT">${title} <span class="aid__tag">AI 초안·후보</span></h3>${raw(subtitle ? html`<p class="aid__sub">${subtitle}</p>` : '')}</div>
-      <div class="aid__hr">${raw(creditLine(status, feature))}<button type="button" class="drawer__x" data-close aria-label="닫기">×</button></div></div>
+      <div class="aid__hr">${raw(usageLine(status))}<button type="button" class="drawer__x" data-close aria-label="닫기">×</button></div></div>
     <div class="aid__b"></div>
     <div class="aid__f"></div></div>`;
   let busy = false; let guard = null; let guarding = false;
@@ -72,18 +79,14 @@ export function aiDialog({ title, subtitle = '', feature, status, size = 'lg' })
   return {
     el, body: $('.aid__b', el), foot: $('.aid__f', el), close,
     setGuard(fn) { guard = fn || null; },
-    /** After a charged run: the header credit line shows the new balance (it was the balance when the dialog opened). */
-    setBalance(bal) { if (typeof bal !== 'number' || !status?.credits) return; const hr = $('.aid__hr', el); const old = $('.ai-credit', hr); if (!old) return; old.outerHTML = creditLine({ ...status, credits: { ...status.credits, available: bal } }, feature); },
+    /** After a run: the header usage line shows the new percentage (it was the usage when the dialog opened). */
+    setUsage(usage) { if (!usage || !status) return; status.usage = usage; const hr = $('.aid__hr', el); const old = $('.ai-credit', hr); const next = usageLine(status); if (old) old.outerHTML = next || ''; else if (next) hr.insertAdjacentHTML('afterbegin', next); },
     busy(on, label = 'AI가 분석하는 중입니다…') { busy = on; el.classList.toggle('is-busy', on); let o = $('.aid__busy', el); if (on) { if (!o) { o = document.createElement('div'); o.className = 'aid__busy'; $('.dialog', el).append(o); } o.innerHTML = html`<span class="spin"></span><span>${label}</span>`; } else if (o) o.remove(); },
   };
 }
 
-/** " · 30 크레딧 사용 · 잔액 4,230" after a run; also refreshes the dialog's header balance. */
-export const runLine = (run, d) => {
-  if (!run) return '';
-  d?.setBalance?.(run.balance);
-  return html`<small class="dim"> · ${fmt(run.credit_cost)} 크레딧 사용 · 잔액 ${fmt(run.balance)}</small>`;
-};
+/** After a run: refreshes the dialog's header usage line; prints nothing (users never see a per-run amount). */
+export const runLine = (run, d) => { if (run?.usage) d?.setUsage?.(run.usage); return ''; };
 /** Standard "no result" / warnings blocks. */
 export const warningsHtml = (w) => (w && w.length ? html`<ul class="aid__warn">${raw(w.map((x) => html`<li>${x}</li>`).join(''))}</ul>` : '');
 export const aiNotice = (st) => html`<p class="aid__notice">${st?.notice || '현재 프로젝트의 요구사항, WBS, 이슈 데이터를 참고합니다.'}</p>`;

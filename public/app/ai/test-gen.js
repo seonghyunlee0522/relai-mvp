@@ -1,27 +1,22 @@
-/* batch7 #18 (B8) — AI로 시나리오 만들기. 요구사항 선택 (기본: 확정 · 범위 내 · 테스트 미연결, 최대 20) → 생성 (30 크레딧) →
+/* batch7 #18 (B8) — AI로 시나리오 만들기. 요구사항 선택 (기본: 확정 · 범위 내 · 테스트 미연결, 최대 20) → 생성 (AI 이용량) →
  * 요구사항별 카드에 시나리오 표 (유형 · 사전 조건 · 테스트 계정·데이터 · 단계·예상 결과 · 최종 예상 결과 · 대상 환경) → 체크한 것만 저장.
- * Nothing is saved until 저장; saving reuses POST /ai/tests/commit (test_cases + test_links REQUIREMENT). Credits are shown in 크레딧 only. */
+ * Nothing is saved until 저장; saving reuses POST /ai/tests/commit (test_cases + test_links REQUIREMENT). AI usage is shown as a percentage only. */
 import { api, wsApi } from '../core/api.js';
 import { $, html, raw } from '../core/dom.js';
 import { toast } from '../shared/dialogs.js';
 import { tag } from '../shared/badges.js';
-import { aiDialog, aiNotice, aiStatus, aiStatusReset, canRun, reportError, warningsHtml } from '../shared/ai.js';
+import { aiDialog, aiNotice, aiStatus, aiStatusReset, canRun, reportError, usageLine, warningsHtml } from '../shared/ai.js';
 
 export const TEST_GEN_MAX = 20;
 const fmt = (v) => Number(v || 0).toLocaleString('ko-KR');
 const TYPE_TONE = { 정상: 'done', 예외: 'bad', 경계: 'hold' };   // batch7 B2 tones (--tag-*)
 
-/** "30 크레딧 · 잔액 70" — never a money amount (#7). */
-const costLine = (st) => {
-  const cost = st?.costs?.TEST_GENERATION; const bal = st?.credits?.available;
-  if (typeof cost !== 'number') return '';
-  const short = typeof bal === 'number' && bal < cost;
-  return html`<span class="ai-credit ${short ? 'is-short' : ''}" data-tg-cost>${short ? '크레딧이 부족합니다 · ' : '실행하면 '}<b>${fmt(cost)}</b> 크레딧${typeof bal === 'number' ? html` · 잔액 <b>${fmt(bal)}</b>` : ''}${raw(short ? ' · <a href="/app/billing/plans" data-link data-upsell-cta>플랜 살펴보기</a>' : '')}</span>`;
-};
+/** The workspace's AI usage % (no amount, no per-run price). */
+const costLine = (st) => { const l = usageLine(st); return l ? l.replace('<span class="ai-credit', '<span data-tg-cost class="ai-credit') : ''; };
 
 export async function openTestGenDialog({ pid, onDone, preselect = null }) {
   const st = await aiStatus(pid, { fresh: true });
-  // aiDialog without `status` → no header price line; ours (costLine) never shows ₩
+  // aiDialog without `status` → no header usage line; ours (costLine) sits next to the selection count
   const d = aiDialog({ title: 'AI로 테스트 시나리오 만들기', subtitle: '요구사항의 설명과 완료 조건, 01 적용 환경을 바탕으로 요구사항마다 1~3개의 시나리오 초안을 만듭니다. 검토하고 고른 것만 테스트로 저장됩니다.', feature: 'TEST_GENERATION', status: null });
   d.el.querySelector('.dialog').setAttribute('data-dialog', 'test-gen');
   let cov = [];
@@ -62,7 +57,7 @@ export async function openTestGenDialog({ pid, onDone, preselect = null }) {
   const cell = (label, v) => html`<tr><th scope="row">${label}</th><td>${raw(v)}</td></tr>`;
   const drawResult = (r) => {
     const n = groups.reduce((a, g) => a + g.scenarios.length, 0);
-    d.body.innerHTML = html`<div class="aid__sum"><b>시나리오 ${n}개 · 요구사항 ${groups.length}건</b>${raw(r.run ? html`<small class="dim" data-tg-used> · ${fmt(r.run.credit_cost)} 크레딧 사용 · 잔액 ${fmt(r.run.balance)}</small>` : '')}<span class="aid__sp"></span>
+    d.body.innerHTML = html`<div class="aid__sum"><b>시나리오 ${n}개 · 요구사항 ${groups.length}건</b>${raw(r.run?.usage && !r.run.usage.unlimited ? html`<small class="dim" data-tg-used> · AI 이용량 ${fmt(r.run.usage.used_pct)}% 사용</small>` : '')}<span class="aid__sp"></span>
         <label class="toggle"><input type="checkbox" id="tg-all" checked> 전체 선택</label></div>
       ${raw(warningsHtml(r.warnings))}
       ${raw(r.environments && r.environments.length ? html`<p class="hint" data-tg-env>적용 환경: ${r.environments.join(' · ')}</p>` : '')}

@@ -39,7 +39,7 @@ const ICONS = {
 const BENEFITS = [
   ['next', '오늘 할 일을 먼저 알려줍니다', '착수부터 운영까지 7단계마다 해야 할 일과 바로 가는 버튼. PM 경험이 없어도 순서대로 진행합니다.'],
   ['flow', '요구사항부터 검수까지 한 흐름', '요구사항 · WBS · 시험 · 변경 · 주간보고가 서로 이어져, 빠진 것과 늦어지는 것을 바로 찾습니다.'],
-  ['ai', 'AI가 초안을 몇 분 만에', '문서에서 요구사항 추출, WBS 초안, 변경 영향 분석. 실행 전에 드는 크레딧을 먼저 보여 드립니다.'],
+  ['ai', 'AI가 초안을 몇 분 만에', '문서에서 요구사항 추출, WBS 초안, 변경 영향 분석. 모든 요금제에 AI 이용량이 포함돼 있습니다.'],
 ];
 const benefitsHtml = () => html`<ul class="sell__ben">${raw(BENEFITS.map(([ic, t, d]) => html`<li><i class="sell__ic">${raw(ICONS[ic])}</i><div><b>${t}</b><span>${d}</span></div></li>`).join(''))}</ul>`;
 const trustHtml = () => '<p class="sell__trust"><span>카드 등록 없이 시작</span><span>설치 없이 웹에서</span><span>언제든 Excel · Word로 내보내기</span></p>';

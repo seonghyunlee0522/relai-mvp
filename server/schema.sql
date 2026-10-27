@@ -1435,10 +1435,10 @@ CREATE INDEX IF NOT EXISTS idx_promotions_active ON promotions(active, sort_orde
 -- early-access {until} rows since migration 53, which rewrites / deactivates unedited older rows). Runs only while migration 47 is not yet recorded, so an operator's later edits or deletions stay.
 INSERT INTO promotions (id, title, body, badge, link_url, link_label, placements, sort_order)
 SELECT v.id, v.title, v.body, v.badge, v.link_url, v.link_label, v.placements::text[], v.sort_order FROM (VALUES
-  ('promo-early-access', '무료 플랜으로 시작', '프로젝트 2개까지 결제 정보 없이 바로 씁니다.', '무료 플랜', NULL, NULL, '{signup,landing}', 10),
-  ('promo-ai-credits', '가입하면 AI 크레딧 500 무료', '요구사항 추출·WBS 초안 같은 AI 기능에 바로 씁니다.', 'AI 크레딧', NULL, NULL, '{signup,landing}', 20),
-  ('promo-ai-payg', '이후 AI는 쓴 만큼만', '월 기본료 없이 쓴 만큼만 크레딧이 차감됩니다.', '이후 AI', NULL, NULL, '{signup,landing}', 30),
-  ('promo-login', '지금 가입하면 무료 플랜으로 시작', 'AI 크레딧 500도 함께 드립니다.', '무료 플랜', '/signup', '무료로 시작하기', '{login}', 40)
+  ('promo-early-access', '무료 플랜으로 시작', '활성 프로젝트 1개, 사용자 3명까지 결제 정보 없이 바로 씁니다.', '무료 플랜', NULL, NULL, '{signup,landing}', 10),
+  ('promo-ai-credits', 'AI 기능도 무료로 체험', '요구사항 추출·WBS 초안 같은 AI 기능을 처음 한 번 제공되는 이용량 안에서 써 볼 수 있습니다.', 'AI 이용량', NULL, NULL, '{signup,landing}', 20),
+  ('promo-ai-payg', 'Pro · Team은 AI 이용량 포함', '매월 AI 이용량이 새로 제공됩니다. 남은 이용량은 사용률(%)로 확인합니다.', '유료 플랜', NULL, NULL, '{signup,landing}', 30),
+  ('promo-login', '지금 가입하면 무료 플랜으로 시작', 'AI 기능도 처음 한 번 무료로 체험할 수 있습니다.', '무료 플랜', '/signup', '무료로 시작하기', '{login}', 40)
 ) AS v(id, title, body, badge, link_url, link_label, placements, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version >= 47)
 ON CONFLICT (id) DO NOTHING;
@@ -1793,3 +1793,19 @@ CREATE TABLE IF NOT EXISTS ai_prompt_versions (
   UNIQUE (key, version)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_key ON ai_prompt_versions(key, version DESC);
+
+/* AI usage metering (migration 72, ai/usage-limit.js): AI credits retired 2026-10-27. A workspace's AI allowance is a USD budget per plan
+ * measured on ai_runs.provider_cost_amount (failed runs included). credit_* tables stay as read-only history. Additive only. */
+ALTER TABLE ai_runs ADD COLUMN IF NOT EXISTS cached_input_tokens INTEGER;               -- part of input_tokens billed at the cached rate
+ALTER TABLE ai_runs ADD COLUMN IF NOT EXISTS reserved_usd NUMERIC(12,6);                -- worst-case cost held while PENDING
+ALTER TABLE ai_runs ADD COLUMN IF NOT EXISTS plan_key TEXT;                             -- effective plan at run time; NULL = before metering (never counted)
+ALTER TABLE ai_runs ADD COLUMN IF NOT EXISTS cost_estimated BOOLEAN NOT NULL DEFAULT false;  -- cost is the worst case (timeout, no usage reported)
+CREATE INDEX IF NOT EXISTS idx_ai_runs_ws_metered ON ai_runs(workspace_id, created_at) WHERE plan_key IS NOT NULL;
+/* USD/KRW 매매기준율 from 한국수출입은행 (server/fx.js, daily 10:00 KST cron). Admin display only — never used for limits. */
+CREATE TABLE IF NOT EXISTS fx_rates (
+  rate_date    date PRIMARY KEY,               -- 고시일 (Asia/Seoul)
+  currency     text NOT NULL DEFAULT 'USD',
+  krw_per_unit NUMERIC(12,4) NOT NULL,
+  source       text NOT NULL DEFAULT 'KOREAEXIM',
+  fetched_at   timestamptz NOT NULL DEFAULT now()
+);

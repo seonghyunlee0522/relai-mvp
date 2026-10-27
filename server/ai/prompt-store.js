@@ -24,9 +24,9 @@ export const PROMPT_META = {
   WBS_GENERATION: { label: 'WBS 초안', where: 'WBS › 선택한 요구사항으로 AI 초안', feature: 'WBS_GENERATION', schema: () => SCHEMAS.WBS_GENERATION, schemaName: 'wbs_draft' },
   CHANGE_IMPACT: { label: '변경 영향 분석', where: '변경 요청 › AI 영향 분석', feature: 'CHANGE_IMPACT', schema: () => SCHEMAS.CHANGE_IMPACT, schemaName: 'change_impact' },
   PROJECT_QA: { label: 'RELAI에게 물어보기', where: '프로젝트 › RELAI에게 물어보기 (질문 답변)', feature: 'PROJECT_QA', schema: () => SCHEMAS.PROJECT_QA, schemaName: 'project_answer' },
-  WBS_PLAN_QUESTIONS: { label: 'WBS 플래너 · 영역 판단과 질문', where: 'WBS › AI WBS 플래너 1단계 (무과금)', feature: 'WBS_PLAN_QUESTIONS', schema: () => SCHEMAS.WBS_PLAN_QUESTIONS, schemaName: 'wbs_planning_questions' },
-  PROJECT_WBS_DRAFT: { label: 'WBS 플래너 · 전체 WBS 초안', where: 'WBS › AI WBS 플래너 2단계 (WBS 초안 크레딧으로 과금)', feature: 'WBS_GENERATION', schema: () => PLANNER_SCHEMAS.project_wbs_draft, schemaName: 'project_wbs_draft' },
-  WBS_PLAN_FIX: { label: 'WBS 플래너 · 누락 보완', where: 'WBS › AI WBS 플래너 검토 단계의 누락 보완 (무과금)', feature: 'WBS_PLAN_FIX', schema: () => SCHEMAS.WBS_PLAN_FIX, schemaName: 'wbs_plan_fix' },
+  WBS_PLAN_QUESTIONS: { label: 'WBS 플래너 · 영역 판단과 질문', where: 'WBS › AI WBS 플래너 1단계', feature: 'WBS_PLAN_QUESTIONS', schema: () => SCHEMAS.WBS_PLAN_QUESTIONS, schemaName: 'wbs_planning_questions' },
+  PROJECT_WBS_DRAFT: { label: 'WBS 플래너 · 전체 WBS 초안', where: 'WBS › AI WBS 플래너 2단계 (AI 이용량에 반영)', feature: 'WBS_GENERATION', schema: () => PLANNER_SCHEMAS.project_wbs_draft, schemaName: 'project_wbs_draft' },
+  WBS_PLAN_FIX: { label: 'WBS 플래너 · 누락 보완', where: 'WBS › AI WBS 플래너 검토 단계의 누락 보완', feature: 'WBS_PLAN_FIX', schema: () => SCHEMAS.WBS_PLAN_FIX, schemaName: 'wbs_plan_fix' },
   TEST_GENERATION: { label: '테스트 시나리오', where: '테스트 › AI 시나리오 만들기', feature: 'TEST_GENERATION', schema: () => SCHEMAS.TEST_GENERATION, schemaName: 'test_scenarios' },
 };
 
