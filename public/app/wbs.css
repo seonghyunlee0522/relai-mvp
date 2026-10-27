@@ -16,9 +16,18 @@
 /* ---------- AI WBS planner: full sheet ---------- */
 .dialog.dialog--ai-sheet { width: min(1440px, calc(100vw - 48px)); max-width: min(1440px, calc(100vw - 48px)); height: calc(100vh - 48px); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
 .dialog--ai-sheet .aid__b, .dialog--ai-sheet .dialog__b { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* The body is a column so the review tree takes exactly the height left under the steps/summary — the old fixed calc(100vh − 290px)
+   overflowed whenever a warning or note was shown, which scrolled the step bar out of view and cut the tree off under the footer. */
+.dialog--ai-sheet .aid__b { display: flex; flex-direction: column; }
+.dialog--ai-sheet .aid__b > * { flex: none; }
+.dialog--ai-sheet .aid__b > .wps { flex: 1 1 auto; min-height: 260px; }
+.dialog--ai-sheet p { margin-bottom: 8px; }   /* .dialog p adds 24px under every hint/help text */
+.dialog--ai-sheet .aid__b > :last-child { margin-bottom: 0; }
 .wps { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; min-height: 0; margin-top: 8px; }
-.wps__tree { border: 1px solid var(--border); border-radius: var(--r-lg, 10px); overflow: auto; max-height: calc(100vh - 290px); min-width: 0; }
-.wps__side { border: 1px solid var(--border); border-radius: var(--r-lg, 10px); padding: 14px; background: var(--bg-alt); overflow: auto; max-height: calc(100vh - 290px); }
+.wps__tree { border: 1px solid var(--border); border-radius: var(--r-lg, 10px); overflow: auto; min-height: 0; min-width: 0; }
+.wps__side { border: 1px solid var(--border); border-radius: var(--r-lg, 10px); padding: 14px; background: var(--bg-alt); overflow: auto; min-height: 0; }
+.wps__side .field > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wps__side .field .linkbtn { width: auto; }
 .wps__side h4 { margin: 0 0 10px; font-size: 14px; word-break: keep-all; }
 .wps__side .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .wps__side .field > span { font-size: 12px; color: var(--text-2, #475467); }
@@ -51,7 +60,7 @@
 .wpr__per { font-size: 12px; color: var(--text-2, #475467); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .wpr__chip { display: flex; justify-content: flex-end; overflow: hidden; }
 .wpr__chip .chip { white-space: nowrap; }
-@media (max-width: 900px) { .wps { grid-template-columns: 1fr; } .wpr { grid-template-columns: 26px 18px 44px minmax(0, 1fr) 110px; } .wpr__chip { display: none; } }
+@media (max-width: 900px) { .wps { grid-template-columns: 1fr; } .dialog--ai-sheet .aid__b > .wps { flex: none; } .wps__tree { max-height: 60vh; } .wpr { grid-template-columns: 26px 18px 44px minmax(0, 1fr) 110px; } .wpr__chip { display: none; } }
 
 /* ---------- Overview: 진척 편차 '이유 보기' (#21) ---------- */
 .vwhy { margin-top: 10px; }
