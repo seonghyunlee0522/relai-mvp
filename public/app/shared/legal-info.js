@@ -18,7 +18,7 @@ export const LEGAL = {
   effectiveDate: '2026-10-22',          // 시행일 of /privacy (and of /terms unless termsEffectiveDate is set) (YYYY-MM-DD). v2026-10-22: 제3조 보유기간 — 이용 분석·AI 실행·이메일 발송 기록 1년, 만료 초대 30일, 1년 미이용 계정 삭제(30일 전 안내), 운영자 접속기록 2년, 결제 기록 법정 신고기한 기준 (retention gaps G-1..G-6, G-8). v2026-10-21: 결제·정기결제 동의 기록, 가입 크레딧 중복 지급 방지(이메일 해시), NicePay 환불 위탁 (pricing v3)
   termsEffectiveDate: '2026-10-21',     // 이용약관 v2026-10-21: pricing v3 (Free/Pro/Team/Enterprise, VAT 포함, 추가 이용, AI 크레딧 정책, 정기결제 안내, 환불 — legal-review.md §8/§10)
   /** Version recorded with each signup consent. Bump when the text of /terms or /privacy changes. */
-  termsVersion: '2026-10-27',   // v2026-10-27: AI 크레딧 → AI 이용량 (제2조·제7조·제8조·제8조의2·제12조·제13조·부칙 3). 시행일(termsEffectiveDate)은 공지 기간 결정 후 갱신
+  termsVersion: '2026-10-28',   // v2026-10-28: 해지 = 기간 만료 시 종료만(즉시 종료·일할 환불 삭제), 청약철회 7일 · AI 사용 시 제한 (제11조·제12조·제13조). v2026-10-27: AI 크레딧 → AI 이용량 (제2조·제7조·제8조·제8조의2·제12조·제13조·부칙 3). 시행일(termsEffectiveDate)은 공지 기간 결정 후 갱신
   privacyVersion: '2026-10-27',   // v2026-10-27: AI 기능 사용 기록 항목(차감 크레딧 → 처리량·비용), 무료 AI 이용량 중복 제공 방지
   dbLocation: '해외 클라우드 데이터센터(리전 확인 후 고지)',         // 국외 이전 표: Neon 프로젝트 리전의 국가 (Neon console → Project settings → Region). Vercel functions run in sin1 (vercel.json)
   courtSeat:'수원지방법원 성남지원',     // 관할: 회사 소재지(성남시 수정구) 관할 법원

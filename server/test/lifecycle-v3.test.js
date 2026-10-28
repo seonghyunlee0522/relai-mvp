@@ -13,6 +13,8 @@ import { resetBillingCache } from '../billing-admin.js';
 import { prorate } from '../billing/prorate.js';
 import { effectivePlan } from '../billing/subscriptions.js';
 
+process.env.CHECKOUT_OPTIONS_ENABLED = 'true';   // these tests cover 연간 / 추가 이용 (월간 결제만 is the default)
+process.env.REFUND_IMMEDIATE_ENABLED = 'true';   // the closed 즉시 해지 + 일할 환불 path stays covered (admin / flag)
 process.env.PAYMENTS_ENABLED = 'true';
 process.env.PLAN_LIMITS = 'on';
 process.env.CRON_SECRET = 'cron-test-secret';

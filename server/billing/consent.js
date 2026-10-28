@@ -23,8 +23,8 @@ const won = (n) => `${Number(n || 0).toLocaleString('ko-KR')}원`;
 const kday = (d) => new Date(d).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric' });
 const sha = (s) => createHash('sha256').update(String(s), 'utf8').digest('hex');
 
-export const CANCEL_TEXT = '설정 › 플랜 · 결제에서 언제든 해지할 수 있습니다(월간 · 연간 모두). 해지하면 자동 갱신이 즉시 중단되고, 이미 결제한 기간이 끝날 때까지 이용합니다.';
-export const REFUND_TEXT = `결제일부터 ${WITHDRAWAL_DAYS}일 이내에는 청약철회할 수 있습니다. 해지와 함께 환불을 요청하면 남은 기간을 일할 계산해 환불하며 위약금은 없습니다(연간도 월 정상가로 다시 계산하지 않습니다). 해지 후 ${RETENTION_DAYS}일 동안 프로젝트 데이터를 조회하고 내보낼 수 있습니다.`;
+export const CANCEL_TEXT = '설정 › 플랜 · 결제에서 언제든 해지할 수 있습니다. 해지하면 다음 결제일부터 자동 결제가 중단되고, 이미 결제한 기간이 끝날 때까지 이용합니다.';
+export const REFUND_TEXT = `결제일부터 ${WITHDRAWAL_DAYS}일 이내이고 결제 후 AI 기능을 사용하지 않았다면 청약철회하여 전액 환불받을 수 있습니다. 결제 후 AI 기능을 한 번이라도 사용하면 서비스 제공이 시작된 것으로 보아 청약철회가 제한됩니다(전자상거래법 제17조 제2항 제5호). 해지해도 이미 결제한 기간은 환불하지 않으며 그 기간이 끝날 때까지 이용합니다. 위약금은 없습니다. 이용이 끝난 뒤 ${RETENTION_DAYS}일 동안 프로젝트 데이터를 조회하고 내보낼 수 있습니다.`;
 
 /**
  * Disclosure for a quote. `kind`: CHECKOUT (new subscription: plan + add-ons), ADDON, UPGRADE, PRICE_INCREASE.

@@ -11,7 +11,7 @@ import { state } from './core/state.js';
 import { navigate } from './core/router.js';
 import { toast, confirmDialog } from './shared/dialogs.js';
 import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
-import { pricingHtml, bindCycleToggle, soonCta, FAQ, FAQ_ONE_TIME } from './shared/pricing.js';
+import { pricingHtml, bindCycleToggle, soonCta, FAQ, FAQ_ONE_TIME, FAQ_MONTHLY } from './shared/pricing.js';
 
 export const SUBSCRIBE_SOON = '결제 준비 중입니다. 곧 오픈 예정이에요.';
 
@@ -37,14 +37,14 @@ export async function plansPage(main = $('#main')) {
     if (p.key === 'FREE') return '';
     if (!open) return soonCta(p);
     if (!owner) return '<p class="hint" style="margin:0">요금제 변경은 소유자만 할 수 있어요</p>';
-    return html`<a class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--sm btn--block" href="/app/billing/subscribe?plan=${p.key}" data-plan-cta="${p.key}">${p.label} 선택</a>`;
+    return html`<a class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--sm btn--block" href="/app/billing/subscribe?plan=${p.key}" data-plan-cta="${p.key}">결제하기</a>`;
   };
   main.innerHTML = html`<div class="page page--plans" id="plans-page">
     <div class="page__head"><div><a class="link" href="/app/settings?tab=plan" data-link>← 플랜 · 결제</a><h1 style="margin-top:4px">요금제</h1>
       <p class="dim" style="margin-top:4px">${oneTime ? '워크스페이스 단위 요금제예요. Pro·Team은 1개월 이용권으로 신용카드 1회 결제하며 자동으로 다시 결제되지 않아요.' : '워크스페이스 단위 요금제예요. 활성 프로젝트와 사용자 수로 고르세요. 모든 요금제에 AI 이용량이 포함돼 있어요.'}</p></div></div>
-    <div id="pl-cards">${raw(b?.catalogue ? pricingHtml(b.catalogue, { current: cur, cta, oneTime }) : '<p class="hint">요금 정보를 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p>')}</div>
+    <div id="pl-cards">${raw(b?.catalogue ? pricingHtml(b.catalogue, { current: cur, cta, oneTime, monthlyOnly: !oneTime && b?.flags?.monthly_only !== false }) : '<p class="hint">요금 정보를 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p>')}</div>
     <div class="panel" style="margin-top:20px" id="pl-faq"><div class="panel__h">자주 묻는 질문</div><div class="panel__b">
-      ${raw((oneTime ? FAQ_ONE_TIME : FAQ).map(([q, a]) => html`<details class="pl-faq"><summary>${q}</summary><p class="dim">${a}</p></details>`).join(''))}</div></div>
+      ${raw((oneTime ? FAQ_ONE_TIME : b?.flags?.monthly_only !== false ? FAQ_MONTHLY : FAQ).map(([q, a]) => html`<details class="pl-faq"><summary>${q}</summary><p class="dim">${a}</p></details>`).join(''))}</div></div>
     ${raw(legalFooterHtml(LEGAL))}
   </div>`;
   bindCycleToggle(main);

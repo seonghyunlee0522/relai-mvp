@@ -23,7 +23,7 @@ const BLURB = {
 };
 
 /** Feature rows of one plan: [label, monthly value, annual value]. */
-export function planRows(p, cat, { oneTime = false } = {}) {
+export function planRows(p, cat, { oneTime = false, monthlyOnly = false } = {}) {
   const inc = p.included || {};
   const lim = (v, unit) => (v === null || v === undefined ? '협의' : `${num(v)}${unit}`);
   // AI (2026-10-27): "AI 이용량 포함" on every plan — never an amount, no difference shown between Pro and Team (founder).
@@ -31,7 +31,7 @@ export function planRows(p, cat, { oneTime = false } = {}) {
   const rows = [['활성 프로젝트', lim(inc.projects, '개')], ['기본 사용자', lim(inc.users, '명')], ['AI 이용량', ai]];
   const a = p.addons;
   const out = rows.map(([k, v]) => [k, v, v]);
-  if (a && !oneTime) {   // 단건결제 모드: no add-on is sold
+  if (a && !oneTime && !monthlyOnly) {   // 단건결제 모드 · 월간 결제만: no add-on is sold
     out.push(['추가 사용자 1명', `월 ${krw(a.user.MONTHLY)}`, `월 ${krw(a.user.monthly_equivalent)} 환산`]);
     out.push(['추가 프로젝트 1개', `월 ${krw(a.project.MONTHLY)}`, `월 ${krw(a.project.monthly_equivalent)} 환산`]);
   }
@@ -55,31 +55,36 @@ function priceHtml(p, cycle, oneTime = false) {
  *   cta(p)   — HTML of the card's button for plan p (default: none)
  *   cycle    — initial cycle (default MONTHLY)
  *   oneTime  — 단건결제 모드: paid plans are 1개월 이용권 (one-time card payment, no auto renewal): no 월간/연간 switch, no add-on rows
+ *   monthlyOnly — 월간 결제만 (founder 2026-10-28): 정기결제 monthly only — no 월간/연간 switch, no 연간 price, no add-on rows
  */
-export function pricingHtml(cat, { current = null, cta = () => '', cycle = 'MONTHLY', oneTime = false } = {}) {
+export function pricingHtml(cat, { current = null, cta = () => '', cycle = 'MONTHLY', oneTime = false, monthlyOnly = false } = {}) {
   if (!cat?.plans?.length) return '';
+  const single = oneTime || monthlyOnly;   // one cycle shown
   const pct = cat.annual_discount_pct;
   const card = (p) => {
-    const rows = planRows(p, cat, { oneTime });
+    const rows = planRows(p, cat, { oneTime, monthlyOnly });
     const li = (i) => rows.map((r) => `<li><span class="pc__k">${esc(r[0])}</span><span class="pc__v">${esc(r[i])}</span></li>`).join('');
     return `<div class="pc pc--${p.key.toLowerCase()}${current === p.key ? ' is-current' : ''}" data-plan="${p.key}">
   <div class="pc__n">${esc(p.label)}${current === p.key ? '<span class="pc__badge">현재 플랜</span>' : ''}${p.key === 'PRO' ? '<span class="pc__tag">추천</span>' : ''}</div>
-  <div class="pc-m">${priceHtml(p, 'MONTHLY', oneTime)}</div>${oneTime ? '' : `<div class="pc-a">${priceHtml(p, 'ANNUAL')}</div>`}
+  <div class="pc-m">${priceHtml(p, 'MONTHLY', oneTime)}</div>${single ? '' : `<div class="pc-a">${priceHtml(p, 'ANNUAL')}</div>`}
   <p class="pc__d">${esc(BLURB[p.key] || '')}</p>
-  <ul class="pc__l pc-m">${li(1)}</ul>${oneTime ? '' : `<ul class="pc__l pc-a">${li(2)}</ul>`}
+  <ul class="pc__l pc-m">${li(1)}</ul>${single ? '' : `<ul class="pc__l pc-a">${li(2)}</ul>`}
   <div class="pc__cta">${cta(p) || ''}</div>
 </div>`;
   };
-  const toggle = oneTime ? '' : `<div class="pc-cycle" role="radiogroup" aria-label="결제 주기">
+  const toggle = single ? '' : `<div class="pc-cycle" role="radiogroup" aria-label="결제 주기">
   <button type="button" role="radio" class="pc-cycle__b" data-cycle-set="MONTHLY" aria-checked="${cycle !== 'ANNUAL'}">월간 결제</button>
   <button type="button" role="radio" class="pc-cycle__b" data-cycle-set="ANNUAL" aria-checked="${cycle === 'ANNUAL'}">연간 결제 <span class="pc-cycle__off">${pct}% 할인</span></button>
 </div>
 `;
-  return `<div class="pcw" data-cycle="${oneTime || cycle !== 'ANNUAL' ? 'MONTHLY' : 'ANNUAL'}">
+  return `<div class="pcw" data-cycle="${single || cycle !== 'ANNUAL' ? 'MONTHLY' : 'ANNUAL'}">
 ${toggle}<div class="pc-grid">${cat.plans.map(card).join('\n')}</div>
-${oneTime ? oneTimeNote() : `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. AI 이용량은 워크스페이스 공용이며 Pro·Team은 매월 새로 제공되고(연간 결제 포함) 남은 이용량은 이월되지 않습니다. Free는 처음 한 번 제공됩니다. 한도를 넘어도 데이터는 삭제되지 않습니다. 해지·환불 기준은 <a href="/terms#billing">이용약관</a>과 <a href="/terms#recurring">정기결제 안내</a>를 확인해 주세요.</p>`}
+${oneTime ? oneTimeNote() : monthlyOnly ? monthlyNote() : `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. AI 이용량은 워크스페이스 공용이며 Pro·Team은 매월 새로 제공되고(연간 결제 포함) 남은 이용량은 이월되지 않습니다. Free는 처음 한 번 제공됩니다. 한도를 넘어도 데이터는 삭제되지 않습니다. 해지·환불 기준은 <a href="/terms#billing">이용약관</a>과 <a href="/terms#recurring">정기결제 안내</a>를 확인해 주세요.</p>`}
 </div>`;
 }
+
+/** 월간 결제만 note under the cards: no 연간 wording. */
+const monthlyNote = () => `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. Pro·Team은 매월 같은 날 등록한 신용카드로 자동 결제되며 언제든 해지할 수 있습니다(해지하면 결제한 달까지 이용, 남은 기간 환불 없음). 결제일부터 7일 이내이고 AI 기능을 사용하지 않았다면 청약철회할 수 있습니다. AI 이용량은 워크스페이스 공용이며 Pro·Team은 매월 새로 제공되고 남은 이용량은 이월되지 않습니다. Free는 처음 한 번 제공됩니다. 한도를 넘어도 데이터는 삭제되지 않습니다. 해지·환불 기준은 <a href="/terms#billing">이용약관</a>과 <a href="/terms#recurring">정기결제 안내</a>를 확인해 주세요.</p>`;
 
 /** 단건결제 모드 note under the cards: no 정기결제 / 연간 / 해지 wording. */
 const oneTimeNote = () => `<p class="pc-note">모든 금액은 부가가치세(VAT 10%) 포함 금액이며 실제 카드 결제 금액입니다. Pro·Team은 1개월 이용권으로 신용카드 1회 결제하며 자동으로 다시 결제되지 않습니다. 이용 기간이 끝나면 Free로 바뀌고 데이터는 삭제되지 않습니다. AI 이용량은 워크스페이스 공용이며 Pro·Team은 이용 기간 동안 매월 새로 제공되고 남은 이용량은 이월되지 않습니다. Free는 처음 한 번 제공됩니다. 환불 기준은 <a href="/terms#billing">이용약관</a>을 확인해 주세요.</p>`;
@@ -141,7 +146,11 @@ export const FAQ = [
   ['한도를 넘으면 데이터는 어떻게 되나요?', '데이터는 삭제되지 않아요. 요금제를 낮추거나 이용 기간이 끝나 활성 프로젝트가 한도를 넘으면, 생성일이 가장 최근인 프로젝트부터 한도만큼만 편집할 수 있고 나머지는 자동으로 조회 전용이 돼요(편집할 프로젝트는 고를 수 없어요). 모든 프로젝트는 계속 조회·내보내기·보관할 수 있고, 한도 안으로 정리될 때까지 새 프로젝트·초대만 막혀요. 다시 구독하거나 플랜을 올리면 한도만큼 최근 프로젝트부터 편집 권한이 돌아와요.'],
   ['AI는 얼마나 쓸 수 있나요?', '모든 요금제에 AI 이용량이 포함돼 있어요. 기능별 횟수 제한 없이 쓴 만큼 사용률(%)이 올라가고, 설정 › AI 이용 현황에서 사용률과 다음 제공일을 확인할 수 있어요. Free는 처음 한 번, Pro·Team은 매월 새로 제공돼요.'],
   ['AI 이용량을 다 쓰면 어떻게 되나요?', '다음 제공일까지 AI 기능만 쉬고, 직접 입력하는 기능은 그대로 쓸 수 있어요. 사용률이 80%, 95%에 이르면 미리 알려 드려요. 남은 이용량은 다음 달로 이월되지 않고, 따로 충전하는 상품은 없어요.'],
-  ['연간 결제는 어떻게 다른가요?', '12개월분을 한 번에 결제하고 20% 할인돼요. AI 이용량은 연간 결제에도 매월 새로 제공돼요. 언제든 해지할 수 있고, 남은 기간은 실제 결제 금액 기준으로 일할 계산해 위약금 없이 환불해요.'],
+  ['연간 결제는 어떻게 다른가요?', '12개월분을 한 번에 결제하고 20% 할인돼요. AI 이용량은 연간 결제에도 매월 새로 제공돼요. 언제든 해지할 수 있고, 해지하면 결제한 12개월이 끝날 때까지 이용해요. 남은 기간은 환불하지 않아요.'],
   ['해지하면 어떻게 되나요?', '월간·연간 모두 언제든 해지할 수 있고 자동 갱신은 바로 멈춰요. 위약금은 없어요. 이용 기간이 끝나면 Free로 바뀌고, 생성일이 가장 최근인 프로젝트 1개만 편집할 수 있으며 나머지는 조회 전용이 돼요. 데이터는 삭제되지 않고 계속 조회·내보내기할 수 있으며, 다시 구독하면 한도만큼 최근 프로젝트부터 편집 권한이 돌아와요.'],
+  ['환불받을 수 있나요?', '결제일부터 7일 이내이고 결제 후 AI 기능을 사용하지 않았다면 설정 › 플랜 · 결제에서 청약철회해 전액 환불받을 수 있어요. AI 기능을 한 번이라도 사용했거나 7일이 지났다면 환불되지 않고, 해지하면 결제한 기간이 끝날 때까지 이용해요.'],
   ['추가 사용자·프로젝트는 얼마인가요?', '추가 사용자는 1명당 월 1,000원, 추가 프로젝트는 Pro 월 10,000원 · Team 월 8,000원이에요. 이용 기간 중간에 사면 남은 일수만큼만 결제하고, 결제 전에 금액과 다음 갱신 금액을 보여 드려요.'],
 ];
+/** 월간 결제만 (founder 2026-10-28): no 연간 / 추가 이용 questions. */
+export const FAQ_MONTHLY = FAQ.filter(([q]) => !q.startsWith('연간 결제') && !q.startsWith('추가 사용자'))
+  .map(([q, a]) => [q, a.replace('월간·연간 모두 언제든 해지할 수 있고', '언제든 해지할 수 있고')]);

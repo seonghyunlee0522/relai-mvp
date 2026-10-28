@@ -16,6 +16,8 @@ import { syncAllDue } from '../integrations/jira/sync.js';
 import { setEmailProvider } from '../email/service.js';
 import { fakeEmailProvider } from '../email/provider.js';
 
+process.env.CHECKOUT_OPTIONS_ENABLED = 'true';   // these tests cover 연간 / 추가 이용 (월간 결제만 is the default)
+process.env.REFUND_IMMEDIATE_ENABLED = 'true';   // the closed 즉시 해지 + 일할 환불 path stays covered (admin / flag)
 process.env.PAYMENTS_ENABLED = 'true';
 process.env.PLAN_LIMITS = 'on';
 process.env.CRON_SECRET = 'cron-test-secret';
