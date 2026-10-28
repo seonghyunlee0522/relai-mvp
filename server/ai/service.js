@@ -40,6 +40,8 @@ async function checkLimits(db, cfg, { wid, userId }) {
  * check, rate limits, allowance check, ai_runs row and provider call, and hands back exactly what would have been sent. */
 const previewStore = new AsyncLocalStorage();
 class PromptPreview extends Error { constructor(payload) { super('prompt preview'); this.payload = payload; } }
+/** True inside previewPrompt() — feature builders skip anything that would reach the network (knowledge embedding). */
+export const isPreview = () => Boolean(previewStore.getStore());
 export async function previewPrompt(fn) {
   try { await previewStore.run({}, fn); } catch (e) { if (e instanceof PromptPreview) return e.payload; throw e; }
   throw new Error('the feature returned without reaching the AI call');

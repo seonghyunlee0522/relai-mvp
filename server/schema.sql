@@ -1882,3 +1882,34 @@ RELAI 베타 서비스를 오픈했습니다. RELAI는 프로젝트 생애주기
 고맙습니다.$notice$, '/img/notices/relai-beta-open.png', now(), '{landing,app_home}', 0
 WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version >= 74)
 ON CONFLICT (id) DO NOTHING;
+
+-- PM 지식 (RAG, founder 2026-10-28): background knowledge for 'RELAI에게 물어보기'. Only paraphrased knowledge cards are stored —
+-- the source books are reference material for card generation (scripts/kb/) and never enter the database, the repository or an answer.
+-- Answers do not cite sources. workspace_id NULL = RELAI-wide knowledge (workspace-owned documents are a later phase).
+CREATE TABLE IF NOT EXISTS kb_documents (
+  id              TEXT PRIMARY KEY,
+  doc_key         TEXT NOT NULL UNIQUE,
+  title           TEXT NOT NULL,                       -- operator label, never shown to users
+  workspace_id    TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  active          boolean NOT NULL DEFAULT true,
+  embedding_model TEXT,
+  card_count      INTEGER NOT NULL DEFAULT 0,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS kb_cards (
+  id               TEXT PRIMARY KEY,
+  document_id      TEXT NOT NULL REFERENCES kb_documents(id) ON DELETE CASCADE,
+  card_key         TEXT NOT NULL,                      -- "<section>#<part>.<n>" — stable across rebuilds of the same source chunk
+  source_hash      TEXT NOT NULL,
+  knowledge_area   TEXT,
+  lifecycle_phases TEXT[] NOT NULL DEFAULT '{}',      -- RELAI phase keys (INITIATION … OPERATIONS) the card is most useful in
+  topic            TEXT NOT NULL,
+  body             TEXT NOT NULL,
+  keywords         TEXT[] NOT NULL DEFAULT '{}',
+  embedding        real[],                             -- in-process cosine (a few thousand cards); pgvector when the corpus outgrows it
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (document_id, card_key)
+);
+CREATE INDEX IF NOT EXISTS idx_kb_cards_document ON kb_cards(document_id);

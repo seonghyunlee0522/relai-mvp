@@ -213,6 +213,41 @@ export function autoReply({ schemaName, user }) {
   return { answer: top.length ? `현재 확인할 항목은 ${top.length}건입니다.\n${top.map((t, i) => `${i + 1}. ${t.display_id}`).join('\n')}` : '현재 프로젝트 데이터에서 특별히 확인할 항목이 없습니다.', references: top, warnings: ['데모용 자동 응답입니다.'] };
 }
 
+/* ---------- Embeddings (PM 지식 RAG, ai/knowledge.js · scripts/kb/) ----------
+ * OpenAI only (Anthropic has no embedding API), so the embedder runs on OPENAI_API_KEY whatever AI_PROVIDER is. AI_PROVIDER=fake gets
+ * the fake embedder: hashed character bigrams — deterministic, no network, and texts sharing words land close together.
+ * embed(texts) → { vectors: number[][], usage: { input_tokens } }. Errors are AiProviderError like the chat adapters. */
+export const EMBEDDING_PRICES = { 'text-embedding-3-small': 0.02, 'text-embedding-3-large': 0.13, 'fake-embedding': 0 };   // USD per 1M tokens
+export const FAKE_EMBEDDING_DIMS = 256;
+export function fakeEmbedding(text) {
+  const v = new Array(FAKE_EMBEDDING_DIMS).fill(0);
+  const s = String(text || '').toLowerCase().replace(/[^0-9a-z가-힣]+/g, ' ');
+  for (const w of s.split(' ').filter(Boolean)) {
+    const grams = w.length < 2 ? [w] : [...Array(w.length - 1).keys()].map((i) => w.slice(i, i + 2));
+    for (const g of grams) { let h = 2166136261; for (const ch of g) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } v[h % FAKE_EMBEDDING_DIMS] += 1; }
+  }
+  const n = Math.hypot(...v) || 1; return v.map((x) => x / n);
+}
+export function createEmbedder(env = process.env) {
+  if (String(env.AI_PROVIDER || '').toLowerCase() === 'fake') {
+    return { name: 'fake', model: 'fake-embedding', async embed(texts) { return { vectors: texts.map(fakeEmbedding), usage: { input_tokens: texts.reduce((n, t) => n + Math.ceil(String(t).length / 2), 0) } }; } };
+  }
+  const apiKey = env.OPENAI_API_KEY; if (!apiKey) return null;
+  const model = String(env.KB_EMBEDDING_MODEL || 'text-embedding-3-small').trim();
+  const timeoutMs = Math.min(60_000, Math.max(1_000, Number(env.KB_EMBEDDING_TIMEOUT_MS) || 8_000));
+  return {
+    name: 'openai', model,
+    async embed(texts) {
+      const res = await call(`${openaiBase()}/embeddings`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, input: texts }) }, timeoutMs);
+      const json = await readJson(res);
+      const rows = [...(json.data || [])].sort((a, b) => a.index - b.index);
+      if (rows.length !== texts.length || rows.some((r) => !Array.isArray(r.embedding))) throw new AiProviderError('AI_INVALID_OUTPUT', '임베딩 응답 형식이 올바르지 않습니다.');
+      return { vectors: rows.map((r) => r.embedding), usage: { input_tokens: json.usage?.prompt_tokens ?? null } };
+    },
+  };
+}
+
 export function createProvider(cfg) {
   if (cfg.provider === 'anthropic') return anthropicProvider(cfg);
   if (cfg.provider === 'openai') return openaiProvider(cfg);

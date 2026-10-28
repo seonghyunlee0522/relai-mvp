@@ -82,5 +82,5 @@ export function adminAiConfig() { const c = aiConfig(); return { enabled: c.enab
 export function publicConfig() {
   const c = aiConfig();
   return { enabled: c.enabled,
-    notice: '현재 프로젝트의 요구사항, WBS, 이슈·리스크, 테스트, 변경 데이터를 참고합니다. AI 결과는 초안·후보이며 사용자가 검토·승인한 항목만 저장됩니다.' };
+    notice: '현재 프로젝트의 요구사항, WBS, 이슈·리스크, 테스트, 변경 데이터와 RELAI의 PM 실무 지식을 참고합니다. AI 결과는 초안·후보이며 사용자가 검토·승인한 항목만 저장됩니다.' };
 }
