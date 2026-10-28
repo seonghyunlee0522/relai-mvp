@@ -31,6 +31,10 @@ const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 /** Opt-in (review P1-1): only the exact value 'true' opens checkout. Unset, 'false' or anything else keeps it closed. */
 export const servicePayEnabled = () => String(process.env.SERVICE_PAY_ENABLED ?? '').trim().toLowerCase() === 'true';
 const checkoutReady = (provider) => servicePayEnabled() && Boolean(provider?.payWindowParams && provider?.completeReturn);
+/** 월 구독 (founder 2026-10-29): open whenever NicePay recurring billing is on — independent of SERVICE_PAY_ENABLED, which still gates
+ * the 1회 결제 (NicePay window). SERVICE_PAY_MONTHLY_ENABLED=false closes it again without a deploy. */
+export const monthlyReady = (provider) => String(process.env.SERVICE_PAY_MONTHLY_ENABLED ?? '').trim().toLowerCase() !== 'false'
+  && Boolean(provider?.recurringEnabled && provider?.registerBillingKey);
 const done = (id) => `/pay/agent/done?order=${encodeURIComponent(id)}`;
 const failed = (reason, id) => `/pay/agent/failed?reason=${encodeURIComponent(reason || 'failed')}${id ? `&order=${encodeURIComponent(id)}` : ''}`;
 
@@ -102,8 +106,11 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
 
   app.get('/pay/agent', (req, res) => {
     res.set('Cache-Control', 'no-store');
-    const sel = productFor(String(req.query.plan || 'once'), String(req.query.product || 'agent')) || SERVICE_PRODUCTS['agent-once'];
-    res.type('html').send(pricingPage({ selected: sel, recurring: Boolean(provider?.recurringEnabled), open: checkoutReady(provider), meta: shareMeta(req, { title: '서비스 결제 — RELAI', description: 'RELAI AI Agent 개발 및 운영 서비스 결제', path: '/pay/agent' }) }));
+    const open = checkoutReady(provider); const openMonthly = monthlyReady(provider);
+    // No plan in the URL: start on the product that can actually be bought (월 구독 while only it is open).
+    const defPlan = !open && openMonthly ? 'monthly' : 'once';
+    const sel = productFor(String(req.query.plan || defPlan), String(req.query.product || 'agent')) || SERVICE_PRODUCTS['agent-once'];
+    res.type('html').send(pricingPage({ selected: sel, recurring: Boolean(provider?.recurringEnabled), open, openMonthly, meta: shareMeta(req, { title: '서비스 결제 — RELAI', description: 'RELAI AI Agent 개발 및 운영 서비스 결제', path: '/pay/agent' }) }));
   });
   app.get('/pay/agent/done', wrap(async (req, res) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
@@ -145,7 +152,7 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
     try { card = parseCard(req.body?.card); } catch (e) { if (!(e instanceof BillingError)) throw e; for (const [k, v] of Object.entries(e.fields || {})) fields[{ number: 'card_number', expiry: 'card_expiry', id_no: 'card_id_no', password2: 'card_pw' }[k] || k] = v; }
     if (!['true', true, 'on', '1', 1].includes(req.body?.agree_recurring)) fields.agree_recurring = '정기결제에 동의해 주세요.';
     if (Object.keys(fields).length) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields });
-    if (!checkoutReady(provider)) return fail(res, 503, 'service_pay_unavailable', `지금은 온라인 결제를 받을 수 없습니다. ${LEGAL.contactEmail}로 문의해 주세요.`);
+    if (!monthlyReady(provider)) return fail(res, 503, 'service_pay_unavailable', `지금은 온라인 결제를 받을 수 없습니다. ${LEGAL.contactEmail}로 문의해 주세요.`);
     if (await cardIp.blocked(req.ip) || await cardEmail.blocked(buyer.email)) return fail(res, 429, 'card_attempts_exceeded', '카드 등록 시도가 너무 많습니다. 1시간 후 다시 시도해 주세요.');
     await cardIp.hit(req.ip); await cardEmail.hit(buyer.email);
     try {
@@ -200,14 +207,15 @@ const field = (id, label, attrs, hint = '') => `<label class="sp-f" for="${id}">
 const check = (id, label, link = '') => `<label class="sp-chk"><input type="checkbox" id="${id}" name="${id}" data-consent><span>${label}${link}</span></label><em class="sp-err" data-err="${id}"></em>`;
 
 export const CLOSED_LABEL = '결제 준비 중';
-export function pricingPage({ selected, recurring, open = false, meta = '' }) {
+export function pricingPage({ selected, recurring, open = false, openMonthly = false, meta = '' }) {
+  const openSel = selected.kind === 'RECURRING' ? openMonthly : open;
   const prods = Object.values(SERVICE_PRODUCTS);
   return `${head('서비스 결제 — RELAI', meta)}<body class="sp">${topbar()}
 <main class="sp-wrap">
 <section class="sp-hero"><p class="sp-eyebrow">RELAI · SERVICE PLANS</p><h1>AI Agent 개발과 운영,<br>맞는 방식으로 시작하세요.</h1>
 <p class="sp-sub">업무에 맞는 AI Agent를 만들고, 안정적으로 운영합니다. 1개월 단위로 결제하거나 월 구독으로 이용할 수 있습니다.</p></section>
 <section class="sp-cards" aria-label="상품">${prods.map((p) => card(p, p.key === selected.key, recurring)).join('')}</section>
-<section class="sp-pay" id="pay" data-recurring="${recurring ? '1' : '0'}" data-open="${open ? '1' : '0'}" data-selected="${selected.key}">
+<section class="sp-pay" id="pay" data-recurring="${recurring ? '1' : '0'}" data-open="${open ? '1' : '0'}" data-open-monthly="${openMonthly ? '1' : '0'}" data-selected="${selected.key}">
 <div class="sp-pay__sum"><h2>주문 정보</h2>
 ${prods.map((p) => `<div class="sp-sum" data-sum="${p.key}"${p.key === selected.key ? '' : ' hidden'}><p class="sp-sum__t">${esc(p.title)}</p>
 <dl><dt>이용 기간</dt><dd>${p.kind === 'RECURRING' ? '매월 자동 결제' : '1개월 · 자동 갱신 없음'}</dd><dt>공급가액</dt><dd>${won(p.supply_amount)}</dd><dt>부가세</dt><dd>${won(p.vat_amount)}</dd>
@@ -231,9 +239,9 @@ ${check('agree_privacy', '[필수] 개인정보 수집·이용에 동의합니�
 <tr><th>동의 거부</th><td>동의를 거부할 수 있으나, 거부하면 결제를 진행할 수 없습니다.</td></tr></table> <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a></div>
 ${check('agree_payment', '[필수] 주문 내용과 결제 금액을 확인했으며 결제 진행에 동의합니다.')}
 <p class="sp-msg" id="sp-msg" role="alert"></p>
-<button class="sp-btn sp-btn--pri" id="sp-submit" type="submit" disabled data-label-once="${won(SERVICE_PRODUCTS['agent-once'].amount)} 결제하기" data-label-monthly="카드 등록하고 구독하기" data-label-closed="${CLOSED_LABEL}">${!open ? CLOSED_LABEL : selected.kind === 'RECURRING' ? '카드 등록하고 구독하기' : `${won(selected.amount)} 결제하기`}</button>
-${open ? '' : `<p class="sp-note" id="sp-closed">지금은 온라인 결제를 받지 않습니다. <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 문의해 주세요.</p>`}
-<p class="sp-note">결제는 NICEPAY 결제창에서 신용카드로 진행됩니다.</p>
+<button class="sp-btn sp-btn--pri" id="sp-submit" type="submit" disabled data-label-once="${won(SERVICE_PRODUCTS['agent-once'].amount)} 결제하기" data-label-monthly="카드 등록하고 구독하기" data-label-closed="${CLOSED_LABEL}">${!openSel ? CLOSED_LABEL : selected.kind === 'RECURRING' ? '카드 등록하고 구독하기' : `${won(selected.amount)} 결제하기`}</button>
+<p class="sp-note" id="sp-closed"${openSel ? ' hidden' : ''}>선택한 상품은 지금 온라인 결제를 받지 않습니다. <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 문의해 주세요.</p>
+<p class="sp-note">1회 결제는 NICEPAY 결제창에서 신용카드로 진행됩니다.</p>
 </form></section>
 <section class="sp-notes"><h2>결제 전 확인해주세요</h2><ul>
 <li>결제 전에 서비스 범위와 시작일을 담당자와 협의해 주세요. 협의 없이 결제한 경우에도 담당자가 연락드려 확정합니다.</li>

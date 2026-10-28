@@ -6,19 +6,23 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const pay = $('#pay'); const form = $('#sp-form'); const msg = $('#sp-msg'); const submit = $('#sp-submit');
 const SOON = '월 구독은 준비 중입니다.';
-// Checkout opens only when the server says so (SERVICE_PAY_ENABLED + provider). The button ships disabled, so the form
-// can never be submitted natively (no GET/POST of buyer or card fields without this script).
-const OPEN = pay.dataset.open === '1';
-if (OPEN) submit.disabled = false;
+// Checkout opens only when the server says so, per product: 1회 결제 = SERVICE_PAY_ENABLED + provider (data-open), 월 구독 =
+// NicePay recurring (data-open-monthly). The button ships disabled, so the form can never be submitted natively (no GET/POST
+// of buyer or card fields without this script).
 let selected = pay.dataset.selected;
 const isMonthly = () => selected === 'agent-monthly';
+const isOpen = () => (isMonthly() ? pay.dataset.openMonthly : pay.dataset.open) === '1';
+const closedNote = $('#sp-closed');
+function syncOpen() { submit.disabled = !isOpen(); if (closedNote) closedNote.hidden = isOpen(); }
+syncOpen();
 
 function select(key) {
   selected = key; pay.dataset.selected = key;
   $$('.sp-card').forEach((c) => { const on = c.dataset.product === key; c.classList.toggle('is-on', on); const b = $('[data-pick]', c); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '선택됨' : (c.dataset.plan === 'monthly' ? '월 구독 선택' : '1회 결제 선택'); });
   $$('[data-sum]').forEach((s) => { s.hidden = s.dataset.sum !== key; });
   $('#sp-cardf').hidden = !isMonthly();
-  submit.textContent = !OPEN ? submit.dataset.labelClosed : isMonthly() ? submit.dataset.labelMonthly : submit.dataset.labelOnce;
+  submit.textContent = !isOpen() ? submit.dataset.labelClosed : isMonthly() ? submit.dataset.labelMonthly : submit.dataset.labelOnce;
+  syncOpen();
   setMsg('');
   const c = $(`.sp-card[data-product="${key}"]`);
   try { history.replaceState(null, '', `/pay/agent?plan=${c.dataset.plan}&product=agent`); } catch { /* ignore */ }
@@ -66,7 +70,7 @@ const loadSdk = (url) => new Promise((resolve, reject) => {
 
 let busy = false;
 form.addEventListener('submit', async (e) => {
-  e.preventDefault(); if (busy || !OPEN) return;
+  e.preventDefault(); if (busy || !isOpen()) return;
   setMsg('');
   // 월 구독 before NicePay opens recurring billing: say so and call nothing (no order, no card data sent).
   if (isMonthly() && pay.dataset.recurring !== '1') { setErrors({}); setMsg(SOON, true); return; }
@@ -83,7 +87,7 @@ form.addEventListener('submit', async (e) => {
     await loadSdk(j.sdk_url).catch(() => { throw new Error('결제창을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); });
     window.AUTHNICE.requestPay({ ...j.pay, fnError: (res) => { setMsg((res && (res.errorMsg || res.msg)) || '결제가 취소되었습니다.'); } });
   } catch (err) { setMsg(err.message || '결제를 시작하지 못했습니다.'); }
-  finally { busy = false; submit.disabled = !OPEN; }
+  finally { busy = false; submit.disabled = !isOpen(); }
 });
 
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
@@ -104,5 +108,5 @@ async function subscribe() {
     if (!r.ok) { setErrors(j.error?.fields || {}); setMsg(j.error?.message || '결제하지 못했습니다. 잠시 후 다시 시도해 주세요.'); return; }
     location.href = j.done_url;
   } catch { clearCard(); setMsg('결제하지 못했습니다. 잠시 후 다시 시도해 주세요.'); }
-  finally { busy = false; submit.disabled = !OPEN; submit.textContent = label; }
+  finally { busy = false; submit.disabled = !isOpen(); submit.textContent = label; }
 }
