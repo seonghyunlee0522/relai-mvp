@@ -292,6 +292,7 @@ export const migrations = [
   } },
   { version: 73, name: 'Service 월 구독 (founder 2026-10-28): service_subscriptions (buyer without an account, NicePay billing key encrypted, monthly renewal) + service_orders.subscription_id (schema.sql, additive)', up() {} },
   { version: 74, name: '공지사항 (founder 2026-10-28): notices table (title · body for the in-app list, image for the landing / app Home modal, period, active) + beta-open notice seed (schema.sql, additive)', up() {} },
+  { version: 75, name: 'PM 지식 RAG (founder 2026-10-28): kb_documents + kb_cards — paraphrased knowledge cards for RELAI에게 물어보기, no source text, no citations (schema.sql, additive; loaded by scripts/kb/load-cards.mjs)', up() {} },
 ];
 
 /** Migration 72: [id, every seeded copy it may still have (seed / 49 / 64 / 66), AI-usage copy]. Never an amount (users see percentages). */
