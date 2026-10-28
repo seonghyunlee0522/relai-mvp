@@ -436,3 +436,26 @@ test('P2-6 audit: each 관리자 service-order view writes SERVICE_ORDERS_VIEW w
     assert.equal(a[0].metadata.searched, true); assert.equal(a[0].metadata.shown, 1);
   } finally { server.close(); }
 });
+
+test('월 구독 opens with NicePay recurring alone (founder 2026-10-29): 1회 결제 stays closed without SERVICE_PAY_ENABLED; SERVICE_PAY_MONTHLY_ENABLED=false closes it', async () => {
+  const saved = process.env.SERVICE_PAY_ENABLED;
+  delete process.env.SERVICE_PAY_ENABLED;
+  const { server, client } = await boot({ NICEPAY_RECURRING_ENABLED: 'true' });
+  try {
+    const c = client();
+    const page = (await c('GET', '/pay/agent')).text;   // no plan → the product that can be bought
+    assert.match(page, /data-open="0"/); assert.match(page, /data-open-monthly="1"/); assert.match(page, /data-selected="agent-monthly"/);
+    assert.match(page, /id="sp-closed" hidden/); assert.match(page, />카드 등록하고 구독하기</);
+    const once = (await c('GET', '/pay/agent?plan=once&product=agent')).text;
+    assert.match(once, />결제 준비 중</); assert.doesNotMatch(once, /id="sp-closed" hidden/);
+    assert.equal((await c('POST', '/api/service-pay/orders', ORDER())).status, 503);
+    const CARD = { number: '5361120000001234', expiry: '12/29', id_no: '900101', password2: '12' };
+    const r = await c('POST', '/api/service-pay/subscriptions', { ...ORDER({ product: 'agent-monthly', agree_recurring: true }), card: CARD });
+    assert.equal(r.status, 201, r.text);
+    process.env.SERVICE_PAY_MONTHLY_ENABLED = 'false';
+    try {
+      assert.match((await c('GET', '/pay/agent')).text, /data-open-monthly="0"/);
+      assert.equal((await client()('POST', '/api/service-pay/subscriptions', { ...ORDER({ product: 'agent-monthly', agree_recurring: true, email: 'other@example.com' }), card: CARD })).status, 503);
+    } finally { delete process.env.SERVICE_PAY_MONTHLY_ENABLED; }
+  } finally { if (saved === undefined) delete process.env.SERVICE_PAY_ENABLED; else process.env.SERVICE_PAY_ENABLED = saved; server.close(); }
+});
