@@ -18,7 +18,7 @@ const TONE = { RECONNECT_REQUIRED: 'warn', ERROR: 'bad', DISABLED: 'muted', PART
 const LABEL = { RECONNECT_REQUIRED: '재연결 필요', ERROR: '오류', DISABLED: '해제됨', PARTIAL: '부분 실패', SUCCESS: '성공', RUNNING: '실행 중', ACTIVE: '정상', SUSPENDED: '정지', DEACTIVATED: '탈퇴', CLOSED: '종료', SYSTEM_ADMIN: '시스템 관리자', NONE: '-', REGISTERED: '가입', WORKSPACE_CREATED: '워크스페이스 생성', PROJECT_CREATED: '프로젝트 생성', ACTIVE_USER: '활성 사용자', ok: '정상', warn: '주의', attention: '확인 필요' };
 export const chip = (v, label) => html`<span class="achip achip--${TONE[v] || 'muted'}">${label ?? LABEL[v] ?? v ?? '-'}</span>`;
 export { ACTIONS } from '../shared/admin-labels.js';
-export const TARGET = { DELIVERABLE: '산출물 목록', FEEDBACK: '의견', PROMOTION: '프로모션', USER: '사용자', WORKSPACE: '워크스페이스', SUBSCRIPTION: '구독', PAYMENT: '결제', EMAIL: '이메일', SYSTEM: '시스템', SERVICE_ORDER: '서비스 결제', AI_PROMPT: 'AI 프롬프트', PROJECT: '프로젝트' };
+export const TARGET = { DELIVERABLE: '산출물 목록', FEEDBACK: '의견', PROMOTION: '프로모션', NOTICE: '공지사항', USER: '사용자', WORKSPACE: '워크스페이스', SUBSCRIPTION: '구독', PAYMENT: '결제', EMAIL: '이메일', SYSTEM: '시스템', SERVICE_ORDER: '서비스 결제', AI_PROMPT: 'AI 프롬프트', PROJECT: '프로젝트' };
 
 /* ---- query string state (list pages keep filters in the URL so reloads and back navigation keep them) ---- */
 export const qs = () => Object.fromEntries(new URLSearchParams(location.search));

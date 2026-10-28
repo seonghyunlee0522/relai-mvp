@@ -13,6 +13,7 @@ import { mountAdminInvitationRoutes } from './auth/routes.js';
 import { funnelReport, funnelCsv } from './analytics.js';
 import { mountAdminPromotionRoutes } from './promotions.js';
 import { mountAdminFeedbackRoutes } from './feedback.js';
+import { mountAdminNoticeRoutes } from './notices.js';
 import { mountAdminEmailTestRoutes } from './email/admin-test.js';
 import { mountAdminDeliverableRoutes } from './deliverables.js';
 import { mountAdminPurgeRoutes } from './purge.js';
@@ -79,6 +80,9 @@ export function mountAdminRoutes(app, db, { requireAuth, wrap, fail }) {
 
   /* In-app feedback (migration 48): 의견 남기기 → 관리자 › 의견. */
   mountAdminFeedbackRoutes(app, db, { guard, wrap, fail });
+
+  /* 공지사항 (migration 74): list content + landing / Home image modal. */
+  mountAdminNoticeRoutes(app, db, { guard, wrap, fail });
 
   /* 산출물 목록 (migration 49): the standard deliverable catalog every project picks from. */
   mountAdminDeliverableRoutes(app, db, { guard, wrap, fail });

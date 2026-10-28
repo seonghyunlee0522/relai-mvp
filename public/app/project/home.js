@@ -19,6 +19,7 @@ import { homeUsageLine } from '../shared/ai.js';
 import { upcomingList, activityList } from './next.js';
 import { isSample, sampleChip, readOnlyChip, deleteAllSamples } from './samples.js';
 import { loadPromos, promoHtml } from '../shared/promo.js';
+import { showNoticePopup } from '../shared/notice-popup.js';
 
 /** Default workspace names were created as '홍길동님의 Workspace' — shown in Korean on Home (L-C6; the stored name is the user's and stays). */
 const wsName = (v) => wsLabel(v);
@@ -216,4 +217,6 @@ export async function homePage(main = $('#main')) {
     // the offer next to the balance comes from 관리자 › 프로모션 (placement home)
     loadPromos('home').then((list) => { const p = promoHtml(list, { placement: 'home', variant: 'line' }); const slot = $('.home__promo', el); if (slot && p) slot.innerHTML = ` · ${p}`; });
   }).catch(() => {});
+  // 공지 팝업 (관리자 › 공지사항, placement app_home): once per session; the image opens the notice in 공지사항
+  showNoticePopup('app_home', { detailHref: (n) => `/app/notices?id=${encodeURIComponent(n.id)}`, stillWanted: () => /^\/app\/?$/.test(location.pathname) });
 }

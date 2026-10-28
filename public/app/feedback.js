@@ -11,7 +11,7 @@ const MAX = 2000;
 const ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"/><path d="M7 8.5h6M7 11h4"/></svg>';
 
 /** Desktop rail: the last item of both rails (frame.js mountGlobalRail / mountProjectRail). */
-export const railFeedback = () => html`<div class="rail__fb"><button type="button" class="rail__i" data-feedback title="RELAI 팀에 의견 보내기">${raw(ICON)}<span>의견 남기기</span></button></div>`;
+export const railFeedback = (above = '') => html`<div class="rail__fb">${raw(above)}<button type="button" class="rail__i" data-feedback title="RELAI 팀에 의견 보내기">${raw(ICON)}<span>의견 남기기</span></button></div>`;
 /** Phone (view mode, no rail): a full-width button on 설정, next to 로그아웃 (settings.js). */
 export const phoneFeedback = () => html`<button type="button" class="btn btn--secondary phone-feedback" data-feedback data-phone-ok>의견 남기기</button>`;
 

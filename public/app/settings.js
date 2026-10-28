@@ -7,6 +7,7 @@ import { relTime } from './shared/jira.js';
 import { formDialog, inviteStatusChip, emailStatusChip } from './shared/forms.js';
 import { addSamples, deleteAllSamples } from './project/samples.js';
 import { phoneFeedback } from './feedback.js';
+import { phoneNotices } from './notices.js';
 import { LEGAL, legalFooterHtml } from './shared/legal-info.js';
 import { mountBilling } from './billing.js';
 
@@ -143,7 +144,7 @@ export async function settingsPage(main = $('#main')) {
           <td class="dim">${fmtShort(m.created_at)}</td>
           ${raw(perm.member_manage ? html`<td><button class="link linkbtn" data-remove="${m.id}" style="width:auto;color:#B42318">제거</button></td>` : '')}</tr>`).join(''))}</tbody></table></div>
         ${raw(perm.member_manage ? html`<form id="addm" class="crit-add" style="padding:12px 20px;border-top:1px solid var(--border-soft)"><input class="input input--sm" name="email" type="email" placeholder="가입된 사용자 이메일" required style="flex:1"><select class="select select--sm" name="role"><option value="MEMBER">멤버</option><option value="ADMIN">관리자</option>${raw(perm.owner_grant ? '<option value="OWNER">소유자</option>' : '')}</select><button class="btn btn--secondary btn--sm">멤버 추가</button></form><div class="err" id="adderr" style="padding:0 20px 12px"></div>` : '')}
-      </div>${raw(inviteTable())}${raw(isPhone() ? '' : jiraCard())}${raw(isPhone() ? phoneFeedback() + '<button type="button" class="btn btn--secondary phone-logout" data-logout data-phone-ok>로그아웃</button>' : '')}</div>`;
+      </div>${raw(inviteTable())}${raw(isPhone() ? '' : jiraCard())}${raw(isPhone() ? phoneNotices() + phoneFeedback() + '<button type="button" class="btn btn--secondary phone-logout" data-logout data-phone-ok>로그아웃</button>' : '')}</div>`;
     }
     members0 = members;
     const br = $('#billing'); if (br) mountBilling(br, { wid });

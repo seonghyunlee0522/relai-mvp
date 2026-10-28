@@ -46,6 +46,7 @@ import { mountAdminRoutes, isSystemAdmin } from './admin-routes.js';
 import { adminAccessLogger } from './retention.js';
 import { mountPublicPromotionRoutes, promoBlockHtml } from './promotions.js';
 import { mountFeedbackRoutes } from './feedback.js';
+import { mountPublicNoticeRoutes, NOTICE_IMAGE_PATH } from './notices.js';
 import { AdminError } from './admin.js';
 import { mountAiRoutes } from './ai/routes.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
@@ -115,7 +116,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountServicePayReturn(app, db, { provider: billingProvider });   // 서비스 결제 (/pricing): NicePay window result, cross-site form POST
   // 64 KB for every JSON body except the Excel import endpoints (base64 xlsx), which parse their own larger body after auth.
   const smallJson = express.json({ limit: '64kb' });
-  app.use((req, res, next) => (req.method === 'POST' && BIG_JSON_PATH.test(req.path) ? next() : smallJson(req, res, next)));
+  app.use((req, res, next) => ((req.method === 'POST' && BIG_JSON_PATH.test(req.path)) || (req.method === 'PUT' && NOTICE_IMAGE_PATH.test(req.path)) ? next() : smallJson(req, res, next)));   // 공지 이미지: notices.js parses ≤ 3 MB after the operator guard
   app.use((req, res, next) => {
     res.set({
       'X-Content-Type-Options': 'nosniff',
@@ -319,6 +320,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
   mountPublicPromotionRoutes(app, db, { wrap });   // GET /api/promotions?placement= (public; migration 47)
   mountAnalyticsRoutes(app, db, { requireAuth, wrap });
   mountFeedbackRoutes(app, db, { requireAuth, wrap, fail });   // POST /api/feedback (의견 남기기; migration 48)
+  mountPublicNoticeRoutes(app, db, { requireAuth, wrap, fail });   // GET /api/notices (list), /api/notices/popup (landing · Home modal), image (migration 74)
 
   /* ---------- projects (always workspace-scoped) ---------- */
   const base = '/api/workspaces/:wid/projects';

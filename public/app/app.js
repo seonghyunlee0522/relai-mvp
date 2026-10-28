@@ -27,7 +27,9 @@ import { aiUsagePage } from './ai-usage.js';
 import { plansPage } from './plans.js';
 import { billingPage } from './billing.js';   // 설정 › 플랜 · 결제 (pricing v3 T4)
 import { subscribePage } from './subscribe.js';   // 구독 · 카드 등록 (NicePay 정기결제)
-import { sampleGuidePage } from './project/sample-guide.js';   // RELAI 가이드 · 샘플로 보기
+import { sampleGuidePage } from './project/sample-guide.js';
+import { noticesPage } from './notices.js';   // 공지사항 (rail, above 의견 남기기)
+import { adminNoticesPage } from './admin/notices.js';   // RELAI 가이드 · 샘플로 보기
 import './shared/upgrade.js';   // 402 plan_limit_reached → upgrade prompt (Phase 10)
 import { adminShell } from './admin/shell.js';
 import { adminDashboardPage } from './admin/dashboard.js';
@@ -65,6 +67,7 @@ registerRoutes([
   [/^\/app\/projects\/([\w-]+)\/changes\/?$/, changesPage],
   [/^\/app\/projects\/([\w-]+)\/issues\/?$/, raidPage],
   [/^\/app\/projects\/([\w-]+)\/tests\/?$/, testsPage],
+  [/^\/app\/notices\/?$/, noticesPage],
   [/^\/app\/settings\/?$/, settingsPage],
   [/^\/app\/settings\/billing\/?$/, billingPage],     // 워크스페이스 Billing (pricing v3 T4)
   [/^\/app\/settings\/(?:ai-usage|credits)\/?$/, aiUsagePage],      // 설정 › AI 이용 현황 (AI credits retired 2026-10-27; the old /credits path lands here)
@@ -86,6 +89,7 @@ registerRoutes([
   [/^\/admin\/ai-prompts\/([A-Z_]+)\/?$/, adminPromptPage],
   [/^\/admin\/funnel\/?$/, adminFunnelPage],
   [/^\/admin\/promotions\/?$/, adminPromotionsPage],
+  [/^\/admin\/notices\/?$/, adminNoticesPage],
   [/^\/admin\/feedback\/?$/, adminFeedbackPage],
   [/^\/admin\/feedback\/([\w-]+)\/?$/, adminFeedbackDetailPage],
   [/^\/admin\/invitations\/?$/, adminInvitationsPage],

@@ -1,0 +1,32 @@
+/* 공지사항: rail entry + dot (notices.js), the list page (/app/notices), 관리자 › 공지사항 (admin/notices.js). The modal styles itself (shared/notice-popup.js). */
+.rail__fb .rail__nt{position:relative}
+.rail__dot{position:absolute;top:7px;right:calc(50% - 15px);width:7px;height:7px;border-radius:50%;background:var(--crit-fg,#D92D20);box-shadow:0 0 0 2px var(--bg,#fff)}
+.rail__dot[hidden]{display:none}
+.phone-notices{display:flex;justify-content:center;width:100%;margin-top:10px}
+
+.ntl{max-width:860px}
+.ntl__l{list-style:none;margin:0;padding:0;border-top:1px solid var(--border)}
+.ntl__i{border-bottom:1px solid var(--border)}
+.ntl__i summary{display:flex;align-items:center;gap:12px;padding:16px 6px;cursor:pointer;list-style:none}
+.ntl__i summary::-webkit-details-marker{display:none}
+.ntl__i summary:hover{background:var(--bg-alt)}
+.ntl__i summary:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.ntl__t{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-size:var(--fs-md);color:var(--navy)}
+.ntl__t b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ntl__i[open] .ntl__t b,.ntl__i details[open] .ntl__t b{white-space:normal}
+.ntl__new{flex:none;font-size:var(--fs-2xs);font-weight:800;letter-spacing:.04em;color:#fff;background:var(--blue);border-radius:var(--r-sm);padding:2px 6px}
+.ntl__d{flex:none;font-size:var(--fs-sm);color:var(--text-3)}
+.ntl__i summary::after{content:"";flex:none;width:8px;height:8px;border-right:1.6px solid var(--text-3);border-bottom:1.6px solid var(--text-3);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.ntl__i details[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
+.ntl__b{padding:4px 6px 22px;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;line-height:1.7;color:var(--text-2);font-size:var(--fs-md)}
+
+.ant__th{display:block;width:72px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border-soft)}
+.ant__body{min-height:180px;resize:vertical;line-height:1.6}
+.ant__pv{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg-alt);margin-bottom:8px}
+.ant__pv img{display:block;width:100%;height:auto;max-height:260px;object-fit:contain}
+.ant__none{border:1px dashed var(--border);border-radius:10px;padding:14px;font-size:var(--fs-sm);color:var(--text-3);background:var(--bg-alt);margin-bottom:8px}
+.ant__ib{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.ant__ib label.btn{cursor:pointer}
+#notice-tbl td{vertical-align:middle}
+.ant__period>.field{min-width:0}
+.ant__period input{width:100%;min-width:0}

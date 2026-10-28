@@ -1107,5 +1107,9 @@ for(var j=0;j<bs.length;j++)bs[j].setAttribute('aria-checked',String(bs[j]===b))
   document.addEventListener('click', function(e){ var a = e.target.closest('a[href="#preview"]'); if (a && mq.matches) { e.preventDefault(); document.getElementById('mpreview').scrollIntoView({behavior:'smooth', block:'center'}); } });
 })();
 </script>
+<script type="module">
+/* 공지 팝업 (관리자 › 공지사항, placement landing): images only, once per browser session, '오늘 하루 보지 않기'. Never blocks the page. */
+import('/assets/shared/notice-popup.js').then(function (m) { m.showNoticePopup('landing'); }).catch(function () {});
+</script>
 </body>
 </html>

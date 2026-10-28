@@ -1837,3 +1837,48 @@ CREATE TABLE IF NOT EXISTS service_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_service_subscriptions_due ON service_subscriptions (next_billing_at) WHERE auto_renew AND billing_key_enc IS NOT NULL;
 ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS subscription_id TEXT;
+/* 공지사항 (migration 74, server/notices.js): edited in 관리자 › 공지사항. title + body → in-app list (/app/notices);
+ * the image → a modal on the landing page and app Home only (popup_placements: landing | app_home; empty = no modal).
+ * starts_at / ends_at: NULL = open. Image: uploaded bytes (image_data, ≤ 2 MB) or a static file path (image_path, seed only). */
+CREATE TABLE IF NOT EXISTS notices (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  image_data bytea,
+  image_type TEXT,
+  image_size integer,
+  image_path TEXT,
+  image_updated_at timestamptz,
+  popup_placements TEXT[] NOT NULL DEFAULT '{landing,app_home}',
+  starts_at timestamptz,
+  ends_at timestamptz,
+  active boolean NOT NULL DEFAULT true,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_by TEXT,
+  updated_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notices_active ON notices(active, starts_at);
+-- Seed (once, while migration 74 is not yet recorded — an operator's later edits or deletion stay): the beta-open notice.
+INSERT INTO notices (id, title, body, image_path, image_updated_at, popup_placements, sort_order)
+SELECT 'notice-beta-open', 'RELAI 베타 서비스를 오픈합니다', $notice$안녕하세요, RELAI 팀입니다.
+
+RELAI 베타 서비스를 오픈했습니다. RELAI는 프로젝트 생애주기(착수 → 요구사항 정의 → 분석·설계 → 구현 → 시험 → 전환 및 오픈 → 운영 및 유지보수)를 따라 지금 해야 할 일을 안내하는 PM 가이드입니다.
+
+■ 베타에서 쓸 수 있는 기능
+· What's Next: 현재 단계와 다음 할 일 안내
+· 요구사항 관리와 Excel 가져오기, 요구사항 ↔ WBS 연결
+· WBS · 간트 일정 관리
+· 테스트 · 검수, 변경 · 이슈 관리
+· 주간보고 초안 작성
+· AI 요구사항 추출 · WBS 초안 (플랜별 AI 이용량 안에서)
+
+■ 이용 안내
+· 무료 플랜으로 결제 정보 없이 바로 시작할 수 있습니다.
+· 베타 기간에는 화면과 기능이 자주 개선됩니다.
+· 불편한 점이나 바라는 점은 왼쪽 메뉴의 [의견 남기기]로 알려 주세요.
+
+고맙습니다.$notice$, '/img/notices/relai-beta-open.png', now(), '{landing,app_home}', 0
+WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version >= 74)
+ON CONFLICT (id) DO NOTHING;

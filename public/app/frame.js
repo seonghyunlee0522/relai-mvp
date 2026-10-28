@@ -7,6 +7,7 @@ import { state } from './core/state.js';
 import { helpButton, wireHelp } from './onboarding/ui.js';
 import { DOORS, PHASE_ITEMS, doorOf } from './shared/lifecycle.js';
 import { railFeedback } from './feedback.js';
+import { railNotices, refreshNoticeDot } from './notices.js';
 import { closeOnOutsideTap } from './core/outside.js';
 
 const SV = (d) => `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -152,13 +153,15 @@ export function mountGlobalRail(path) {
   const rail = $('#rail'); if (!rail) return;
   const key = path === '/app' || path === '/app/' ? 'home' : path.startsWith('/app/projects') ? 'projects' : '';
   rail.dataset.pid = '';
-  rail.innerHTML = html`<nav class="rail__nav" aria-label="주요 메뉴">${raw(railItem('home', '홈', '/app', key === 'home', 'nav-home') + railItem('projects', '프로젝트', '/app/projects', key === 'projects', 'nav-projects'))}</nav>${raw(railFeedback())}`;
+  rail.innerHTML = html`<nav class="rail__nav" aria-label="주요 메뉴">${raw(railItem('home', '홈', '/app', key === 'home', 'nav-home') + railItem('projects', '프로젝트', '/app/projects', key === 'projects', 'nav-projects'))}</nav>${raw(railFeedback(railNotices(/^\/app\/notices/.test(path))))}`;
+  refreshNoticeDot();
 }
 /** Inside a project: exactly the 7 doors; one is active. */
 export function mountProjectRail(pid, door) {
   const rail = $('#rail'); if (!rail) return;
   rail.dataset.pid = pid;
-  rail.innerHTML = html`<nav class="rail__nav" aria-label="프로젝트 메뉴">${raw(DOORS(pid).map((d) => railItem(d.key, d.label, d.href, d.key === door, `rail-${d.key}`)).join(''))}</nav>${raw(railFeedback())}`;
+  rail.innerHTML = html`<nav class="rail__nav" aria-label="프로젝트 메뉴">${raw(DOORS(pid).map((d) => railItem(d.key, d.label, d.href, d.key === door, `rail-${d.key}`)).join(''))}</nav>${raw(railFeedback(railNotices()))}`;
+  refreshNoticeDot();
 }
 
 /* ---------- page header ---------- */
