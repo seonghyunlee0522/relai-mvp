@@ -290,6 +290,7 @@ export const migrations = [
       for (const f of froms) await db.run('UPDATE promotions SET title = ?, body = ?, badge = ?, updated_at = now() WHERE id = ? AND title = ? AND body = ?', [to.title, to.body, to.badge, id, f.title, f.body]);
     }
   } },
+  { version: 73, name: 'Service 월 구독 (founder 2026-10-28): service_subscriptions (buyer without an account, NicePay billing key encrypted, monthly renewal) + service_orders.subscription_id (schema.sql, additive)', up() {} },
 ];
 
 /** Migration 72: [id, every seeded copy it may still have (seed / 49 / 64 / 66), AI-usage copy]. Never an amount (users see percentages). */

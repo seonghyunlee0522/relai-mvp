@@ -3,7 +3,9 @@
  *   GET  /pay/agent[?plan=once|monthly&product=agent]   product cards, buyer form, consents, 결제 전 확인해주세요, business footer
  *   POST /api/service-pay/orders                       { product, buyer, agree_* } → service_orders row (catalogue amount) + NicePay window params
  *   POST /api/service-pay/nicepay/return               NicePay window result (form POST, cross-site): verify → approve (amount from the order) → apply → 303
- *   POST /api/service-pay/subscriptions                월 구독 (billing key). Refused while NICEPAY_RECURRING_ENABLED is off; the page never calls it then
+ *   POST /api/service-pay/subscriptions                월 구독 (founder 2026-10-28): card → NicePay billing key → first charge → service_subscriptions
+ *                                                      (billing/service-subscriptions.js; renewals in the daily billing cron). Refused while recurring is off.
+ *   GET  /pay/agent/subscription?id=&t=                구독 확인 · 해지 (link in every receipt; t = HMAC of the id) · POST …/cancel (form)
  *   GET  /pay/agent/done?order=…  · /pay/agent/failed?reason=…
  *   GET  /api/admin/service-orders                     SYSTEM_ADMIN, read-only (관리자 › 결제)
  * The NicePay webhook stays /api/billing/webhook/nicepay; billing/routes.js hands service orders to applyServiceEvent.
@@ -20,6 +22,8 @@ import { shareMeta } from './share-meta.js';
 import { writeAudit } from './admin.js';
 import { SERVICE_PRODUCTS, productFor, RECURRING_SOON, ServiceOrderError, parseBuyer, createServiceOrder, getServiceOrder, failServiceOrder, claimServiceOrder, markRefundFailed,
   applyServiceEvent, listServiceOrders, serviceBaseUrl, alertOperator } from './billing/service-orders.js';
+import { parseCard } from './billing/nicepay.js';
+import { startServiceSubscription, cancelServiceSubscription, getServiceSubscription, validToken } from './billing/service-subscriptions.js';
 
 const ORDER_TTL_MS = 60 * 60e3;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -128,11 +132,43 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
     res.status(201).json({ order: { id: order.id, goods_name: order.goods_name, amount: order.amount }, pay, sdk_url: provider.sdkUrl });
   }));
 
-  /** 월 구독: the card form posts here only once NicePay approves recurring billing. Until then nothing is called. */
+  /** 월 구독: card → billing key → first charge. The amount is the catalogue's; card data goes only to NicePay (encData), never stored or logged. */
+  const cardIp = rateLimiter(db, { name: 'service-pay-card-ip', max: 10, windowMs: 60 * 60 * 1000 });
+  const cardEmail = rateLimiter(db, { name: 'service-pay-card-email', max: 5, windowMs: 60 * 60 * 1000 });
   app.post('/api/service-pay/subscriptions', wrap(async (req, res) => {
-    if (!provider?.recurringEnabled) return fail(res, 409, 'recurring_unavailable', RECURRING_SOON);
-    // Registration + monthly charging for buyers without an account is a follow-up (needs a billing-key column + renewal job).
-    return fail(res, 409, 'recurring_unavailable', RECURRING_SOON);
+    if (!provider?.recurringEnabled || !provider.registerBillingKey) return fail(res, 409, 'recurring_unavailable', RECURRING_SOON);
+    const product = SERVICE_PRODUCTS[String(req.body?.product || 'agent-monthly')];
+    if (!product || product.kind !== 'RECURRING') return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { product: '월 구독 상품을 선택해 주세요.' } });
+    let buyer; let card;
+    const fields = {};
+    try { buyer = parseBuyer(req.body); } catch (e) { if (!(e instanceof ServiceOrderError)) throw e; Object.assign(fields, e.fields); }
+    try { card = parseCard(req.body?.card); } catch (e) { if (!(e instanceof BillingError)) throw e; for (const [k, v] of Object.entries(e.fields || {})) fields[{ number: 'card_number', expiry: 'card_expiry', id_no: 'card_id_no', password2: 'card_pw' }[k] || k] = v; }
+    if (!['true', true, 'on', '1', 1].includes(req.body?.agree_recurring)) fields.agree_recurring = '정기결제에 동의해 주세요.';
+    if (Object.keys(fields).length) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields });
+    if (!checkoutReady(provider)) return fail(res, 503, 'service_pay_unavailable', `지금은 온라인 결제를 받을 수 없습니다. ${LEGAL.contactEmail}로 문의해 주세요.`);
+    if (await cardIp.blocked(req.ip) || await cardEmail.blocked(buyer.email)) return fail(res, 429, 'card_attempts_exceeded', '카드 등록 시도가 너무 많습니다. 1시간 후 다시 시도해 주세요.');
+    await cardIp.hit(req.ip); await cardEmail.hit(buyer.email);
+    try {
+      const { order } = await startServiceSubscription(db, provider, { product, buyer, card });
+      res.status(201).json({ order: { id: order.id, goods_name: order.goods_name, amount: order.amount }, done_url: done(order.id) });
+    } catch (e) {
+      if (e instanceof BillingError) return fail(res, e.status, e.code, e.message);
+      throw e;
+    }
+  }));
+
+  /** 구독 확인 · 해지 (manage link in every receipt). Wrong id or token → the same not-found page. */
+  app.get('/pay/agent/subscription', wrap(async (req, res) => {
+    res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+    const id = String(req.query.id || ''); const t = String(req.query.t || '');
+    const sub = validToken(id, t) ? await getServiceSubscription(db, id) : null;
+    res.status(sub ? 200 : 404).type('html').send(managePage({ sub, t, canceled: req.query.canceled === '1' }));
+  }));
+  app.post('/pay/agent/subscription/cancel', express.urlencoded({ extended: false, limit: '4kb' }), wrap(async (req, res) => {
+    const id = String(req.body?.id || ''); const t = String(req.body?.t || '');
+    if (!validToken(id, t) || !(await getServiceSubscription(db, id))) return res.status(404).type('html').send(managePage({ sub: null }));
+    await cancelServiceSubscription(db, provider, id);
+    res.redirect(303, `/pay/agent/subscription?id=${encodeURIComponent(id)}&t=${encodeURIComponent(t)}&canceled=1`);
   }));
 
 }
@@ -149,12 +185,12 @@ const payFooter = () => legalFooterHtml(LEGAL).replace('class="legal-foot"', 'cl
 
 const CARDS = {
   'agent-once': { unit: '1회', badge: '1회 결제', bullets: ['AI Agent 개발 및 운영 지원 (협의한 범위)', '1개월 이용 · 자동 갱신 없음', '신용카드 결제 · 부가세 포함'], cta: '1회 결제 선택' },
-  'agent-monthly': { unit: '월', badge: '준비 중', bullets: ['AI Agent 개발 및 운영 · 부가세 포함', '카드 등록 시 첫 결제 · 이후 월 1회', '다음 결제일 전에 해지 가능'], cta: '월 구독 선택' },
+  'agent-monthly': { unit: '월', badge: '월 구독', bullets: ['AI Agent 개발 및 운영 · 부가세 포함', '카드 등록 시 첫 결제 · 이후 월 1회', '다음 결제일 전에 해지 가능'], cta: '월 구독 선택' },
 };
-function card(p, selected) {
-  const c = CARDS[p.key];
+function card(p, selected, recurring = true) {
+  const c = { ...CARDS[p.key], ...(p.kind === 'RECURRING' && !recurring ? { badge: '준비 중' } : {}) };
   return `<article class="sp-card${selected ? ' is-on' : ''}" data-product="${p.key}" data-plan="${p.plan}">
-<div class="sp-card__top"><h3>${esc(p.title)}</h3><span class="sp-badge${p.kind === 'RECURRING' ? ' sp-badge--soon' : ''}">${c.badge}</span></div>
+<div class="sp-card__top"><h3>${esc(p.title)}</h3><span class="sp-badge${p.kind === 'RECURRING' && !recurring ? ' sp-badge--soon' : ''}">${c.badge}</span></div>
 <p class="sp-price"><b>${won(p.amount)}</b><span> / ${c.unit}</span></p><p class="sp-vat">부가세 포함</p>
 <ul>${c.bullets.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
 <a class="sp-btn sp-btn--line" href="/pay/agent?plan=${p.plan}&amp;product=${p.product}" data-pick="${p.key}" aria-pressed="${selected}">${selected ? '선택됨' : c.cta}</a></article>`;
@@ -170,13 +206,13 @@ export function pricingPage({ selected, recurring, open = false, meta = '' }) {
 <main class="sp-wrap">
 <section class="sp-hero"><p class="sp-eyebrow">RELAI · SERVICE PLANS</p><h1>AI Agent 개발과 운영,<br>맞는 방식으로 시작하세요.</h1>
 <p class="sp-sub">업무에 맞는 AI Agent를 만들고, 안정적으로 운영합니다. 1개월 단위로 결제하거나 월 구독으로 이용할 수 있습니다.</p></section>
-<section class="sp-cards" aria-label="상품">${prods.map((p) => card(p, p.key === selected.key)).join('')}</section>
+<section class="sp-cards" aria-label="상품">${prods.map((p) => card(p, p.key === selected.key, recurring)).join('')}</section>
 <section class="sp-pay" id="pay" data-recurring="${recurring ? '1' : '0'}" data-open="${open ? '1' : '0'}" data-selected="${selected.key}">
 <div class="sp-pay__sum"><h2>주문 정보</h2>
 ${prods.map((p) => `<div class="sp-sum" data-sum="${p.key}"${p.key === selected.key ? '' : ' hidden'}><p class="sp-sum__t">${esc(p.title)}</p>
 <dl><dt>이용 기간</dt><dd>${p.kind === 'RECURRING' ? '매월 자동 결제' : '1개월 · 자동 갱신 없음'}</dd><dt>공급가액</dt><dd>${won(p.supply_amount)}</dd><dt>부가세</dt><dd>${won(p.vat_amount)}</dd>
 <dt class="sp-sum__tot">결제 금액</dt><dd class="sp-sum__tot">${won(p.amount)}${p.kind === 'RECURRING' ? ' / 월' : ''}</dd></dl>
-${p.kind === 'RECURRING' ? `<p class="sp-soon" role="note">${RECURRING_SOON} 정기결제 심사가 끝나면 열립니다.</p>` : ''}</div>`).join('')}</div>
+${p.kind === 'RECURRING' && !recurring ? `<p class="sp-soon" role="note">${RECURRING_SOON} 정기결제 심사가 끝나면 열립니다.</p>` : ''}</div>`).join('')}</div>
 <form class="sp-form" id="sp-form" method="post" action="/pay/agent" novalidate>
 <h2>구매자 정보</h2>
 <div class="sp-grid">${field('name', '이름', 'autocomplete="name" maxlength="40" required')}${field('company', '회사명 <i>(선택)</i>', 'autocomplete="organization" maxlength="80"')}
@@ -202,7 +238,7 @@ ${open ? '' : `<p class="sp-note" id="sp-closed">지금은 온라인 결제를 �
 <section class="sp-notes"><h2>결제 전 확인해주세요</h2><ul>
 <li>결제 전에 서비스 범위와 시작일을 담당자와 협의해 주세요. 협의 없이 결제한 경우에도 담당자가 연락드려 확정합니다.</li>
 <li>1회 결제는 1개월 이용이며 자동으로 갱신되지 않습니다.</li>
-<li>월 구독은 카드 등록 시 첫 결제가 이루어지고 이후 매월 같은 날 결제됩니다. 다음 결제일 전에 해지할 수 있습니다.</li>
+<li>월 구독은 카드 등록 시 첫 결제가 이루어지고 이후 매월 같은 날 결제됩니다. 결제 확인 메일의 '구독 확인 · 해지' 링크에서 다음 결제일 전에 해지할 수 있으며, 해지하면 결제한 달까지 이용하고 이미 결제한 금액은 환불되지 않습니다.</li>
 <li>이미 결제한 이용료의 취소·환불은 서비스 제공 여부와 계약 내용, 관련 법령에 따라 처리합니다.</li>
 <li>결제 금액은 모두 부가세 포함 금액입니다.</li></ul></section>
 </main>
@@ -223,11 +259,31 @@ export function resultPage({ ok, order, reason = '' }) {
   const receiptSent = ok && Boolean(order.receipt_email_sent_at);
   const title = ok ? (pending ? '결제를 확인하고 있습니다' : order.status === 'REFUNDED' ? '환불된 주문입니다' : '결제가 완료되었습니다') : '결제가 완료되지 않았습니다';
   const body = ok ? (pending ? '<p>결제 확인까지 잠시 걸릴 수 있습니다. 잠시 후 이 페이지를 새로고침해 주세요.</p>'
-    : `<p>${receiptSent ? '결제 확인 메일을 보냈습니다.' : '결제 확인 메일을 보내 드립니다.'} 서비스 범위와 시작일은 담당자가 연락드려 확정합니다.</p>`)
+    : `<p>${receiptSent ? '결제 확인 메일을 보냈습니다.' : '결제 확인 메일을 보내 드립니다.'} 서비스 범위와 시작일은 담당자가 연락드려 확정합니다.</p>${order.subscription_id ? '<p class="sp-note">월 구독입니다. 매월 같은 날 같은 카드로 자동 결제되며, 결제 확인 메일의 \'구독 확인 · 해지\' 링크에서 해지할 수 있습니다.</p>' : ''}`)
     : `<p>${esc(REASON[reason] || '결제 중 문제가 발생했습니다. 다시 시도해 주세요.')}</p>${MAYBE_CHARGED.has(reason)
       ? `<p class="sp-note">결제 내역은 담당자가 확인해 정리합니다. 급하면 <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 주문번호와 함께 연락해 주세요.</p>`
       : '<p class="sp-note">결제가 완료되지 않았으므로 청구되지 않습니다.</p>'}`;
   return `${head(`${title} — RELAI`)}<body class="sp">${topbar()}<main class="sp-wrap"><section class="sp-result ${ok ? 'is-ok' : 'is-bad'}" id="sp-result" data-status="${esc(order?.status || 'NONE')}">
 <div class="sp-result__icon" aria-hidden="true">${ok ? '✓' : '!'}</div><h1>${title}</h1>${body}${rows}
 <div class="sp-result__a">${ok || MAYBE_CHARGED.has(reason) ? '<a class="sp-btn sp-btn--line" href="/pay/agent">서비스 결제로 돌아가기</a>' : '<a class="sp-btn sp-btn--pri" href="/pay/agent">다시 결제하기</a>'}</div></section></main>${payFooter()}</body></html>`;
+}
+
+const STATUS = { ACTIVE: '이용 중', PAST_DUE: '결제 재시도 중', ENDED: '종료' };
+/** 구독 확인 · 해지 page (no script: a plain form POST). */
+export function managePage({ sub, t = '', canceled = false }) {
+  const kday = (d) => (d ? new Date(d).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric' }) : '-');
+  if (!sub) {
+    return `${head('구독을 찾을 수 없습니다 — RELAI')}<body class="sp">${topbar()}<main class="sp-wrap"><section class="sp-result is-bad"><div class="sp-result__icon" aria-hidden="true">!</div>
+<h1>구독을 찾을 수 없습니다</h1><p>결제 확인 메일의 링크로 다시 열어 주세요. 문제가 계속되면 <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 문의해 주세요.</p></section></main>${payFooter()}</body></html>`;
+  }
+  const renewing = sub.auto_renew && sub.status !== 'ENDED';
+  const rows = [['상품', sub.goods_name], ['상태', renewing ? STATUS[sub.status] : sub.status === 'ENDED' ? '종료' : '해지됨 (결제한 달까지 이용)'], ['월 결제 금액', `${won(sub.amount)} (부가세 포함)`],
+    ['이용 기간', `${kday(sub.current_period_end)}까지`], ['다음 결제일', renewing ? kday(sub.next_billing_at) : '없음'], ['결제 카드', sub.card_summary || '등록한 카드']];
+  return `${head('월 구독 확인 — RELAI')}<body class="sp">${topbar()}<main class="sp-wrap"><section class="sp-result is-ok" id="sp-sub" data-status="${esc(sub.status)}" data-renew="${renewing ? '1' : '0'}">
+<h1>월 구독 확인</h1>${canceled ? '<p class="sp-msg is-info" role="status">해지했습니다. 결제한 달까지 이용하며 이후 자동 결제되지 않습니다.</p>' : ''}
+<dl class="sp-dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+${renewing ? `<form method="post" action="/pay/agent/subscription/cancel" class="sp-result__a"><input type="hidden" name="id" value="${esc(sub.id)}"><input type="hidden" name="t" value="${esc(t)}">
+<p class="sp-note">해지하면 ${esc(kday(sub.current_period_end))}까지 이용하고 이후 결제되지 않습니다. 이미 결제한 금액은 환불되지 않습니다.</p>
+<button class="sp-btn sp-btn--line" type="submit" id="sp-sub-cancel">월 구독 해지</button></form>` : ''}
+</section></main>${payFooter()}</body></html>`;
 }

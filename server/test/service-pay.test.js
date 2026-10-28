@@ -7,6 +7,7 @@ import { createApp } from '../app.js';
 import { setup } from './api-helpers.js';
 import { createNicepayProvider, windowSignature, paymentSignature } from '../billing/nicepay.js';
 import { SERVICE_PRODUCTS, serviceOrdersDaily } from '../billing/service-orders.js';
+import { serviceSubscriptionsDaily, manageToken } from '../billing/service-subscriptions.js';
 import { setEmailProvider } from '../email/service.js';
 import { fakeEmailProvider } from '../email/provider.js';
 import { LEGAL } from '../../public/app/shared/legal-info.js';
@@ -28,6 +29,12 @@ function stubNicepay() {
       if (st.onApprove) await st.onApprove(st.orders.get(m[1]));
       return json(payObj({ tid: m[1], orderId: st.orders.get(m[1]), status: 'paid', amount: st.approveAmount ?? body.amount, paidAt: new Date().toISOString() }));
     }
+    if (u.pathname === '/v1/subscribe/regist') return json({ resultCode: '0000', resultMsg: 'ok', bid: `BIKY_${calls.length}`, cardName: '삼성' });
+    if ((m = u.pathname.match(/^\/v1\/subscribe\/([^/]+)\/payments$/))) {
+      if (st.declineBilling) return json({ resultCode: 'F113', resultMsg: '한도초과', tid: `t_${calls.length}`, orderId: body.orderId, status: 'failed', amount: body.amount });
+      return json(payObj({ tid: `bt_${calls.length}`, orderId: body.orderId, status: 'paid', amount: body.amount, paidAt: new Date().toISOString() }));
+    }
+    if (/^\/v1\/subscribe\/[^/]+\/expire$/.test(u.pathname)) return json({ resultCode: '0000', resultMsg: 'ok' });
     if ((m = u.pathname.match(/^\/v1\/payments\/([^/]+)\/cancel$/))) return st.cancelFails ? json({ resultCode: '2015', resultMsg: '취소 실패' }) : json(payObj({ tid: m[1], cancelledTid: `c_${m[1]}`, orderId: body.orderId, status: 'cancelled', amount: 0 }));
     return json({ resultCode: '9999', resultMsg: 'unknown' });
   };
@@ -195,6 +202,47 @@ test('월 구독 while NICEPAY_RECURRING_ENABLED is off: refused, no order row, 
     assert.equal(np.calls.length, 0);
     assert.equal(Number((await db.get('SELECT COUNT(*) AS n FROM service_orders')).n), 0);
   } finally { server.close(); }
+});
+
+test('월 구독 (2026-10-28): card → billing key → first charge → subscription; receipt has the manage link; 해지 keeps the month; daily renewal charges the key', async () => {
+  process.env.APP_BASE_URL = 'https://relai.test';
+  const { db, server, client, np, mail } = await boot({ NICEPAY_RECURRING_ENABLED: 'true' });
+  try {
+    const c = client();
+    const page = (await c('GET', '/pay/agent?plan=monthly&product=agent')).text;
+    assert.match(page, /data-recurring="1"/); assert.doesNotMatch(visible(page), /준비 중입니다/);
+    const CARD = { number: '5361120000001234', expiry: '12/29', id_no: '900101', password2: '12' };
+    const bad = await c('POST', '/api/service-pay/subscriptions', { ...ORDER({ product: 'agent-monthly' }), card: CARD });
+    assert.equal(bad.status, 400); assert.ok(bad.json.error.fields.agree_recurring);
+    const r = await c('POST', '/api/service-pay/subscriptions', { ...ORDER({ product: 'agent-monthly', agree_recurring: true }), card: CARD, amount: 1 });
+    assert.equal(r.status, 201, r.text); assert.match(r.json.done_url, /^\/pay\/agent\/done\?order=/);
+    const o = await db.get('SELECT * FROM service_orders WHERE id = ?', [r.json.order.id]);
+    assert.equal(o.status, 'PAID'); assert.equal(o.amount, 400000); assert.equal(o.kind, 'RECURRING'); assert.ok(o.subscription_id);
+    const sub = await db.get('SELECT * FROM service_subscriptions WHERE id = ?', [o.subscription_id]);
+    assert.equal(sub.status, 'ACTIVE'); assert.equal(sub.auto_renew, true); assert.ok(sub.billing_key_enc); assert.ok(!sub.billing_key_enc.includes('BIKY_'));
+    const reg = np.called(/\/v1\/subscribe\/regist$/)[0]; assert.ok(reg.body.encData); assert.ok(!JSON.stringify(reg.body).includes('5361120000001234'));
+    for (const t of ['service_orders', 'service_subscriptions', 'billing_events']) assert.ok(!JSON.stringify(await db.all(`SELECT * FROM ${t}`)).includes('5361120000001234'), t);
+    const receipt = mail.find((m) => m.to === BUYER.email && /결제가 완료/.test(m.subject))[0];
+    const link = `https://relai.test/pay/agent/subscription?id=${sub.id}&t=${manageToken(sub.id)}`;
+    assert.ok(receipt.html.includes(link.replace(/&/g, '&amp;')), 'manage link in receipt');
+    assert.match((await c('GET', r.json.done_url)).text, /월 구독입니다/);
+    // manage page: right token only
+    assert.equal((await c('GET', `/pay/agent/subscription?id=${sub.id}&t=wrong`)).status, 404);
+    const m1 = await c('GET', `/pay/agent/subscription?id=${sub.id}&t=${manageToken(sub.id)}`); assert.equal(m1.status, 200); assert.match(m1.text, /월 구독 해지/);
+    // daily renewal (due now) → a second PAID order, period +1 month
+    await db.run(`UPDATE service_subscriptions SET next_billing_at = now() - interval '1 minute', current_period_end = now() - interval '1 minute'`);
+    const out = await serviceSubscriptionsDaily(db, (await import('../billing/nicepay.js')).createNicepayProvider({ env: { ...ENV, NICEPAY_RECURRING_ENABLED: 'true' }, fetch: np.fetch }));
+    assert.equal(out.paid, 1, JSON.stringify(out));
+    assert.equal(Number((await db.get(`SELECT COUNT(*) AS n FROM service_orders WHERE subscription_id = ? AND status = 'PAID'`, [sub.id])).n), 2);
+    const after = await db.get('SELECT * FROM service_subscriptions WHERE id = ?', [sub.id]);
+    assert.ok(new Date(after.next_billing_at) > new Date(Date.now() + 25 * 86400e3));
+    // 해지: form POST → auto-renew off, key expired at NicePay, month kept, no refund
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/pay/agent/subscription/cancel`, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: `http://127.0.0.1:${server.address().port}` }, body: new URLSearchParams({ id: sub.id, t: manageToken(sub.id) }).toString() });
+    assert.equal(res.status, 303);
+    const ended = await db.get('SELECT * FROM service_subscriptions WHERE id = ?', [sub.id]);
+    assert.equal(ended.auto_renew, false); assert.equal(ended.billing_key_enc, null); assert.equal(ended.status, 'ACTIVE');
+    assert.equal(np.called(/\/expire$/).length, 1); assert.equal(np.called(/\/cancel$/).length, 0);
+  } finally { server.close(); delete process.env.APP_BASE_URL; }
 });
 
 test('SERVICE_PAY_ENABLED=false closes checkout; 관리자 list is SYSTEM_ADMIN only with buyer name/email/amount/status', async () => {

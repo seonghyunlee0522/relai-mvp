@@ -1,4 +1,6 @@
-/* RELAI 서비스 결제 (/pricing). The page sends a product key and buyer info; the server decides the amount and returns the
+/* RELAI 서비스 결제 (/pay/agent). 월 구독 (2026-10-28): card → POST /api/service-pay/subscriptions (billing key + first charge) after a
+ * confirm; the card values are cleared after every attempt and never stored here.
+ * Earlier:  The page sends a product key and buyer info; the server decides the amount and returns the
  * NicePay window parameters. 월 구독: while recurring is not open the submit only shows '월 구독은 준비 중입니다.' and calls nothing. */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -19,7 +21,7 @@ function select(key) {
   submit.textContent = !OPEN ? submit.dataset.labelClosed : isMonthly() ? submit.dataset.labelMonthly : submit.dataset.labelOnce;
   setMsg('');
   const c = $(`.sp-card[data-product="${key}"]`);
-  try { history.replaceState(null, '', `/pricing?plan=${c.dataset.plan}&product=agent`); } catch { /* ignore */ }
+  try { history.replaceState(null, '', `/pay/agent?plan=${c.dataset.plan}&product=agent`); } catch { /* ignore */ }
 }
 $$('[data-pick]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); select(a.dataset.pick); pay.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 
@@ -70,7 +72,7 @@ form.addEventListener('submit', async (e) => {
   if (isMonthly() && pay.dataset.recurring !== '1') { setErrors({}); setMsg(SOON, true); return; }
   const f = localCheck(); setErrors(f);
   if (Object.keys(f).length) { setMsg('입력값을 확인해 주세요.'); return; }
-  if (isMonthly()) { setMsg(SOON, true); return; }   // recurring registration for this page is not open yet
+  if (isMonthly()) return subscribe();
   busy = true; submit.disabled = true;
   try {
     const r = await fetch('/api/service-pay/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
@@ -83,3 +85,24 @@ form.addEventListener('submit', async (e) => {
   } catch (err) { setMsg(err.message || '결제를 시작하지 못했습니다.'); }
   finally { busy = false; submit.disabled = !OPEN; }
 });
+
+const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
+const clearCard = () => ['card_number', 'card_expiry', 'card_id_no', 'card_pw'].forEach((id) => { document.getElementById(id).value = ''; });
+async function subscribe() {
+  const amount = Number(document.querySelector('.sp-card[data-product="agent-monthly"] .sp-price b')?.textContent.replace(/\D/g, '') || 0);
+  const digits = val('card_number').replace(/\D/g, '');
+  const ok = window.confirm(`월 구독을 결제할까요?\n\n결제 금액: ${won(amount)} (부가세 포함)\n결제 주기: 매월 같은 날 자동 결제\n결제 카드: ${digits.slice(0, 4)} **** **** ${digits.slice(-4)}\n\n해지하면 결제한 달까지 이용하고, 이미 결제한 금액은 환불되지 않습니다.`);
+  if (!ok) return;
+  busy = true; submit.disabled = true; const label = submit.textContent; submit.textContent = '결제하는 중…';
+  try {
+    const r = await fetch('/api/service-pay/subscriptions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ product: 'agent-monthly', buyer: { name: val('name'), company: val('company'), email: val('email'), phone: val('phone') },
+        card: { number: digits, expiry: val('card_expiry'), id_no: val('card_id_no'), password2: val('card_pw') },
+        agree_terms: $('#agree_terms').checked, agree_privacy: $('#agree_privacy').checked, agree_payment: $('#agree_payment').checked, agree_recurring: $('#agree_recurring').checked }) });
+    const j = await r.json().catch(() => ({}));
+    clearCard();
+    if (!r.ok) { setErrors(j.error?.fields || {}); setMsg(j.error?.message || '결제하지 못했습니다. 잠시 후 다시 시도해 주세요.'); return; }
+    location.href = j.done_url;
+  } catch { clearCard(); setMsg('결제하지 못했습니다. 잠시 후 다시 시도해 주세요.'); }
+  finally { busy = false; submit.disabled = !OPEN; submit.textContent = label; }
+}
