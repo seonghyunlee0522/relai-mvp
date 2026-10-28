@@ -124,7 +124,7 @@ export async function authPage(mode) {
       ${raw(google.enabled ? googleButton(googleHref) : '')}
       ${raw(google.enabled && !isSignup ? '<p class="hint auth__gnote">Google 계정으로 처음 이용하면 회원가입 화면에서 이용약관과 개인정보 수집·이용에 동의한 뒤 계속합니다.</p>' : '')}
       <p class="auth__alt">${isSignup ? '이미 계정이 있나요?' : '아직 계정이 없나요?'}
-        <a class="link" href="${isSignup ? `/login${inviteToken ? `?next=${encodeURIComponent(`/invite/${inviteToken}`)}` : ''}` : `/signup${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`}">${isSignup ? '로그인' : '회원가입'}</a></p>
+        <a class="link" href="${isSignup ? `/login${inviteToken ? `?next=${encodeURIComponent(`/invite/${inviteToken}`)}` : safeNext ? `?next=${encodeURIComponent(safeNext)}` : ''}` : `/signup${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : safeNext ? `?next=${encodeURIComponent(safeNext)}` : ''}`}">${isSignup ? '로그인' : '회원가입'}</a></p>
       ${raw(valueMobile(isSignup))}
       ${raw(legalFooterHtml(undefined, { compact: true }))}
     </main>

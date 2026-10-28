@@ -114,6 +114,82 @@ test('정기결제 decline: 402, nothing stored, card data not in the log', asyn
   done();
 });
 
+test('월간 결제만 (default): no 연간 / 추가 이용 — quote is monthly, recurring refuses ANNUAL and add-ons before NicePay; flags say so', async () => {
+  delete process.env.CHECKOUT_OPTIONS_ENABLED;
+  const { c, w, np, done } = await boot();
+  try {
+    const b = (await c('GET', `/api/workspaces/${w}/billing`)).json.billing;
+    assert.equal(b.flags.monthly_only, true); assert.equal(b.flags.addons, false);
+    const q = (await c('GET', `/api/workspaces/${w}/billing/quote?plan=PRO&cycle=ANNUAL&extra_users=3&extra_projects=1`)).json;
+    assert.equal(q.quote.cycle, 'MONTHLY'); assert.equal(q.quote.total, 30000); assert.equal(q.quote.extra_users, 0);
+    for (const body of [{ cycle: 'ANNUAL' }, { extra_users: 2 }, { extra_projects: 1 }]) {
+      const r = await c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'PRO', cycle: 'MONTHLY', card: CARD, agree: true, disclosure_hash: q.disclosure.hash, ...body });
+      assert.equal(r.status, 400, r.text); assert.equal(r.json.error.code, 'validation_error');
+    }
+    assert.equal(np.calls.length, 0);
+    const ok = await c('POST', `/api/workspaces/${w}/billing/recurring`, { plan: 'PRO', cycle: 'MONTHLY', card: CARD, agree: true, disclosure_hash: q.disclosure.hash });
+    assert.equal(ok.status, 201, ok.text);
+  } finally { done(); }
+});
+
+test('landing Pro / Team → 결제하기: signed out → /login?next=checkout; the login ↔ signup switch keeps next', async () => {
+  const { landingPricingHtml } = await import('../legal.js');
+  const html = landingPricingHtml(undefined, { open: true, oneTime: false, monthly: true });
+  for (const k of ['PRO', 'TEAM']) {
+    assert.ok(html.includes(`href="/login?next=${encodeURIComponent(`/app/billing/subscribe?plan=${k}`)}"`), k);
+    assert.ok(html.includes(`data-buy="/app/billing/subscribe?plan=${k}"`), k);
+  }
+  assert.ok(!html.includes('무료로 시작하고')); assert.ok(!html.includes('data-cycle-set')); assert.ok(!html.includes('연 288,000원'));
+  const landing = readFileSync(join(root, 'public/index.html'), 'utf8');
+  assert.match(landing, /data-auth="buy"[^]*data-buy/);   // a session points 결제하기 straight at checkout
+  assert.match(readFileSync(join(root, 'public/app/auth.js'), 'utf8'), /safeNext \? `\?next=\$\{encodeURIComponent\(safeNext\)\}`/);
+});
+
+test('checkout card helpers: 4-box number masked as 1234 **** **** 5678; client checks match the server rules', async () => {
+  const src = readFileSync(join(root, 'public/app/subscribe.js'), 'utf8');
+  const mask = new Function(`${src.match(/const digitsOf[^\n]*\n/)[0]}${src.match(/export function maskCard[^]*?\n}\n/)[0].replace('export ', '')}return maskCard;`)();
+  assert.equal(mask('1234567812345678'), '1234 **** **** 5678');
+  for (const d of ['12345678901234', '123456789012345']) {   // 14 / 15 digits: first 4 and last 4 only
+    const m = mask(d).replace(/ /g, '');
+    assert.equal(m, `${d.slice(0, 4)}${'*'.repeat(d.length - 8)}${d.slice(-4)}`);
+  }
+  assert.match(src, /confirmDialog\(\{ title: '결제 정보를 확인해 주세요'/);   // pay asks once more before POST …/recurring
+  assert.ok(src.indexOf("confirmDialog({ title: '결제 정보를") < src.indexOf("billing/recurring`"));
+});
+
+test('해지 · 청약철회 (founder 2026-10-28): no 즉시 해지 환불; 청약철회 = full refund within 7 days, refused once AI was used', async () => {
+  delete process.env.CHECKOUT_OPTIONS_ENABLED; delete process.env.REFUND_IMMEDIATE_ENABLED;
+  const pay = async (env) => {
+    const q = (await env.c('GET', `/api/workspaces/${env.w}/billing/quote?plan=PRO&cycle=MONTHLY`)).json;
+    const r = await env.c('POST', `/api/workspaces/${env.w}/billing/recurring`, { plan: 'PRO', cycle: 'MONTHLY', card: CARD, agree: true, disclosure_hash: q.disclosure.hash });
+    assert.equal(r.status, 201, r.text); return r.json.billing;
+  };
+  const A = await boot();
+  try {
+    const b = await pay(A);
+    assert.equal(b.refund_quote_url, null); assert.equal(b.withdrawal.eligible, true); assert.equal(b.withdrawal.total, 30000);
+    const no = await A.c('POST', `/api/workspaces/${A.w}/billing/cancel`, { refund: true });
+    assert.equal(no.status, 409); assert.equal(no.json.error.code, 'refund_not_offered');
+    assert.equal((await A.c('GET', `/api/workspaces/${A.w}/billing/refund-quote`)).status, 409);
+    const w = await A.c('POST', `/api/workspaces/${A.w}/billing/withdraw`, {});
+    assert.equal(w.status, 200, w.text); assert.equal(w.json.cancel.refund_total, 30000); assert.equal(w.json.billing.plan, 'FREE');
+    const rows = await A.db.all('SELECT kind, amount FROM subscription_refunds');
+    assert.deepEqual(rows.map((r) => [r.kind, Number(r.amount)]), [['WITHDRAWAL', 30000]]);
+  } finally { A.done(); }
+  const B = await boot();
+  try {
+    await pay(B);
+    await B.db.run(`INSERT INTO ai_runs (id, workspace_id, feature, provider, model, status) VALUES ('run1', ?, 'PROJECT_QA', 'fake', 'm', 'SUCCEEDED')`, [B.w]);
+    const b = (await B.c('GET', `/api/workspaces/${B.w}/billing`)).json.billing;
+    assert.equal(b.withdrawal.eligible, false); assert.equal(b.withdrawal.reason, 'used');
+    const w = await B.c('POST', `/api/workspaces/${B.w}/billing/withdraw`, {});
+    assert.equal(w.status, 409); assert.equal(w.json.error.code, 'withdrawal_used');
+    const c = await B.c('POST', `/api/workspaces/${B.w}/billing/cancel`, {});   // 해지: auto-renew off, plan to period end, no refund
+    assert.equal(c.status, 200, c.text); assert.equal(c.json.billing.plan, 'PRO'); assert.equal(c.json.cancel.immediate, false);
+    assert.equal((await B.db.all('SELECT id FROM subscription_refunds')).length, 0);
+  } finally { B.done(); }
+});
+
 test('card registration attempts are limited: after the limit 429 card_attempts_exceeded and NicePay is never called', async () => {
   process.env.CARD_ATTEMPTS_USER = '2';
   const { c, w, np, done } = await boot({ decline: true });

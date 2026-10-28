@@ -10,6 +10,8 @@
  *                      Within WITHDRAWAL_DAYS of the payment the same row is recorded as 청약철회 (WITHDRAWAL). The refund is executed as
  *                      a NicePay partial cancel with a new orderId when REFUND_PARTIAL_ENABLED=true; otherwise it stays REQUESTED for the
  *                      operator (관리자) and the owner is told it will be paid within 3 business days.
+ *   청약철회         (founder 2026-10-28) within 7 days of payment and only if no AI was used since: ends now, full refund (withdrawalQuote).
+ *                      The customer's 즉시 해지 + 일할 환불 is closed (REFUND_IMMEDIATE_ENABLED re-opens it); admins can still refund.
  *   after the end      ended_at + data_retention_until (30 days of 조회 · 내보내기); nothing is deleted by billing.
  */
 import { randomUUID } from 'node:crypto';
@@ -24,6 +26,8 @@ import { WITHDRAWAL_DAYS } from './consent.js';
 export const CHANGE_KINDS = ['DOWNGRADE', 'CYCLE', 'ADDON_REDUCE'];
 export const PERIOD_KINDS = ['ONE_TIME', 'RECURRING_FIRST', 'RECURRING_RENEWAL', 'ADDON', 'UPGRADE'];
 export const refundPartialEnabled = () => process.env.REFUND_PARTIAL_ENABLED === 'true';
+/** 즉시 해지 + 일할 환불 by the customer (founder 2026-10-28: closed — 해지 = 이번 기간까지 이용, 남은 기간 환불 없음). REFUND_IMMEDIATE_ENABLED=true re-opens it. */
+export const immediateRefundEnabled = () => process.env.REFUND_IMMEDIATE_ENABLED === 'true';
 const DAY = 86400e3;
 
 const stateOf = (s) => ({ plan: s.plan, cycle: s.billing_cycle || 'MONTHLY', extra_users: Number(s.extra_users || 0), extra_projects: Number(s.extra_projects || 0) });
@@ -143,19 +147,47 @@ export async function refundQuote(db, workspaceId, { at = new Date() } = {}) {
 }
 
 /**
+ * 청약철회 (founder 2026-10-28): within WITHDRAWAL_DAYS (KST days) of payment and only while the service has not been used since —
+ * "used" = any AI run of the workspace since the payment (전자상거래법 제17조 제2항 제5호: disclosed before payment on the checkout screen and in
+ * the terms; Free is the trial). Every paid order of the current period must be inside the window; each is refunded in full (what is left
+ * of it). → { eligible, reason: null | 'no_subscription' | 'expired' | 'used', deadline, used_at, lines, total }.
+ */
+export async function withdrawalQuote(db, workspaceId, { at = new Date() } = {}) {
+  const sub = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [workspaceId]);
+  const none = (reason, extra = {}) => ({ sub, eligible: false, reason, deadline: null, used_at: null, lines: [], total: 0, ...extra });
+  if (!sub || !['ACTIVE', 'PAST_DUE'].includes(sub.status) || !PAID_PLANS.includes(sub.plan)) return none('no_subscription');
+  const orders = (await db.all(`SELECT * FROM billing_orders WHERE workspace_id = ? AND status = 'PAID' AND kind IN (${PERIOD_KINDS.map(() => '?').join(',')}) ORDER BY paid_at`, [workspaceId, ...PERIOD_KINDS]))
+    .filter((o) => { const per = orderPeriod(o, sub); return per && new Date(per.end) > at && Number(o.amount) - Number(o.refunded_amount || 0) > 0; });
+  if (!orders.length) return none('no_subscription');
+  const first = orders.find((o) => o.paid_at)?.paid_at;
+  if (!first || orders.some((o) => !o.paid_at || kstDaysBetween(o.paid_at, at) >= WITHDRAWAL_DAYS)) return none('expired');
+  const deadline = new Date(new Date(first).getTime() + (WITHDRAWAL_DAYS - 1) * DAY);   // last KST day it is still allowed (결제일 포함 7일)
+  const used = await db.get('SELECT MIN(created_at) AS at FROM ai_runs WHERE workspace_id = ? AND created_at >= ?', [workspaceId, first]);
+  if (used?.at) return none('used', { deadline, used_at: used.at });
+  const lines = orders.map((o) => {
+    const per = orderPeriod(o, sub);
+    return { order_id: o.id, kind: 'WITHDRAWAL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
+      days: kstDaysBetween(per.start, per.end), period_days: kstDaysBetween(per.start, per.end), amount: Number(o.amount) - Number(o.refunded_amount || 0) };
+  });
+  return { sub, eligible: true, reason: null, deadline, used_at: null, lines, total: lines.reduce((s2, l) => s2 + l.amount, 0) };
+}
+
+/**
  * Immediate cancel with the refund of unused days. provider.cancel (billing key expiry) runs first, outside the DB lock; then in one
  * transaction the subscription ends now (CANCELED, ended_at, 30-day retention), scheduled changes lapse and one
  * subscription_refunds row per order is written (REQUESTED). After the commit, when REFUND_PARTIAL_ENABLED, each refund is sent as a
  * partial cancel with a new orderId; a failure leaves the row FAILED for the operator (never retried blindly).
  */
-export async function cancelWithRefund(db, provider, { workspaceId, userId = null, reason = '고객 해지 환불' }) {
+export async function cancelWithRefund(db, provider, { workspaceId, userId = null, reason = '고객 해지 환불', withdrawal = false }) {
   const pre = await db.get('SELECT * FROM subscriptions WHERE workspace_id = ?', [workspaceId]);
   if (!pre || !['ACTIVE', 'PAST_DUE'].includes(pre.status) || !PAID_PLANS.includes(pre.plan)) return { error: 'no_active_subscription' };
+  if (withdrawal) { const w = await withdrawalQuote(db, workspaceId); if (!w.eligible) return { error: `withdrawal_${w.reason}` }; }
   if (pre.billing_key_enc && provider?.cancel) await provider.cancel({ subscription: pre });
   const out = await tx(db, async (t) => {
     const sub = await t.get('SELECT * FROM subscriptions WHERE workspace_id = ? FOR UPDATE', [workspaceId]);
     if (!sub || !['ACTIVE', 'PAST_DUE'].includes(sub.status)) return { error: 'no_active_subscription' };
-    const q = await refundQuote(t, workspaceId);
+    const q = withdrawal ? await withdrawalQuote(t, workspaceId) : await refundQuote(t, workspaceId);
+    if (withdrawal && !q.eligible) return { error: `withdrawal_${q.reason}` };   // used in between (AI run after the check)
     for (const l of q.lines) await t.get('SELECT id FROM billing_orders WHERE id = ? FOR UPDATE', [l.order_id]);
     const rows = [];
     for (const l of q.lines) {
@@ -167,7 +199,7 @@ export async function cancelWithRefund(db, provider, { workspaceId, userId = nul
     await transition(t, sub, 'subscription.canceled', { immediate: true });
     await t.run(`UPDATE subscriptions SET auto_renew = false, cancel_at_period_end = false, billing_key_enc = NULL, current_period_end = LEAST(current_period_end, now()) WHERE id = ?`, [sub.id]);
     await t.run(`UPDATE subscription_changes SET status = 'CANCELED', closed_at = now() WHERE subscription_id = ? AND status = 'SCHEDULED'`, [sub.id]);
-    return { refunds: rows, total: q.total, withdrawal: q.withdrawal, subscription_id: sub.id };
+    return { refunds: rows, total: q.total, withdrawal: withdrawal || q.withdrawal, subscription_id: sub.id };
   });
   if (out.error) return out;
   out.executed = false;

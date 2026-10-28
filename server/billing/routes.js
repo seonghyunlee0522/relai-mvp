@@ -11,7 +11,7 @@
 import express from 'express';
 import { rateLimiter } from '../security.js';
 import { requireAction, can } from '../authz.js';
-import { PLANS, PAID_PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, catalogue as planCatalogue, oneTimeMode } from '../plans.js';
+import { PLANS, PAID_PLANS, USAGE_DIMS, CYCLES, FOUNDING_OFFER, VAT_RATE, catalogue as planCatalogue, oneTimeMode, monthlyOnly } from '../plans.js';
 import { workspaceUsage } from '../usage.js';
 import { writeAudit } from '../admin.js';
 import { emailConfig } from '../email/config.js';
@@ -24,7 +24,7 @@ import { FREE_POLICY, FREE_KEEP } from '../email/templates.js';
 import { effectivePlan, getSubscription, processWebhookEvent, requestCancel } from './subscriptions.js';
 import { sendRenewalReminders, chargeDueRenewals, sendEarlyAccessNotices, expireEndedSubscriptions, notifyPriceIncreases, sendCancelNotice } from './cron.js';
 import { disclosure, checkConsent, recordConsent } from './consent.js';
-import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange, refundQuote, cancelWithRefund, executeRefund, markRefundDone, listRefunds, refundPartialEnabled } from './lifecycle.js';
+import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange, refundQuote, cancelWithRefund, executeRefund, markRefundDone, listRefunds, refundPartialEnabled, immediateRefundEnabled, withdrawalQuote } from './lifecycle.js';
 import { usageSummary, publicUsage } from '../ai/usage-limit.js';
 import { applyServiceEvent, serviceOrdersDaily } from './service-orders.js';
 
@@ -139,7 +139,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
    * ONE_TIME_PLANS_ENABLED=true re-opens the retired one-time plan checkout (kept for the existing tests; never set in prod).
    */
   const flags = () => ({ payments: paymentsEnabled(), recurring: Boolean(provider?.recurringEnabled), checkout_open: checkoutOpen(),
-    one_time: oneTimeMode(), addons: process.env.ADDONS_ENABLED === 'true' && !oneTimeMode(), plan_change: process.env.PLAN_CHANGE_ENABLED === 'true', refund_partial: refundPartialEnabled() });
+    one_time: oneTimeMode(), monthly_only: monthlyOnly(), addons: process.env.ADDONS_ENABLED === 'true' && !monthlyOnly(), plan_change: process.env.PLAN_CHANGE_ENABLED === 'true', refund_partial: refundPartialEnabled() });
   const checkoutOpen = () => paymentsEnabled() && Boolean(provider?.recurringEnabled && provider.registerBillingKey);
   // 단건결제 모드 (ONE_TIME_PAYMENT_MODE) opens the one-time plan checkout as Pro / Team 1개월 이용권.
   const oneTimeOpen = () => process.env.ONE_TIME_PLANS_ENABLED === 'true' || oneTimeMode();
@@ -190,7 +190,9 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
       addons, scheduled: changes.map((c) => ({ id: c.id, kind: c.kind, from: c.from, to: c.kind === 'DOWNGRADE' ? c.to.plan : c.kind === 'CYCLE' ? c.to.cycle : null, to_state: c.to,
         effective_at: c.effective_at, cancel_url: `/api/workspaces/${wid}/billing/changes/${c.id}/cancel` })), ai_usage: publicUsage(await usageSummary(db, wid, { plan })),
       // 해지: POST cancel_url (auto-renew stops, plan to period end) · POST cancel_url { refund: true } (ends now + unused days refunded; preview: refund_quote_url).
-      cancel_url: paid && renews ? `/api/workspaces/${wid}/billing/cancel` : null, refund_quote_url: paid ? `/api/workspaces/${wid}/billing/refund-quote` : null,
+      cancel_url: paid && renews ? `/api/workspaces/${wid}/billing/cancel` : null, refund_quote_url: paid && immediateRefundEnabled() ? `/api/workspaces/${wid}/billing/refund-quote` : null,
+      // 청약철회 (founder 2026-10-28): within 7 days of payment and only without AI use since — eligible → withdraw_url (full refund, ends now)
+      withdrawal: paid ? await withdrawalView(wid) : null, withdraw_url: paid ? `/api/workspaces/${wid}/billing/withdraw` : null,
       catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null,
       read_only_projects: roRows.length ? { limit: access.limit, editable: edRows, read_only: roRows } : null,
       cancel_policy: { free: FREE_POLICY, keep: FREE_KEEP }, price_version: row?.price_version || null,
@@ -216,7 +218,9 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
         : quoteUpgrade({ wid, sub, plan: String(src.plan || 'TEAM') });
       return { quote: q, disclosure: disclosure(kind, q), sub };
     }
-    const q = await quoteFor(db, wid, { plan: String(src.plan || 'PRO'), cycle: String(src.cycle || 'MONTHLY'), users: src.users ?? src.seats, extra_users: src.extra_users, extra_projects: src.extra_projects });
+    const mo = monthlyOnly();   // 월간 결제만: the quote is always MONTHLY with the plan's included users / projects
+    const q = await quoteFor(db, wid, { plan: String(src.plan || 'PRO'), cycle: mo ? 'MONTHLY' : String(src.cycle || 'MONTHLY'), users: mo ? undefined : src.users ?? src.seats,
+      extra_users: mo ? 0 : src.extra_users, extra_projects: mo ? 0 : src.extra_projects });
     return { quote: q, disclosure: disclosure('CHECKOUT', q) };
   };
   app.get(`${b}/quote`, guard, wrap(async (req, res) => {
@@ -237,6 +241,13 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (recurring && PAID_PLANS.includes(current) && sub?.auto_renew && !sub.cancel_at_period_end) { fail(res, 409, 'already_subscribed', `이미 ${PLANS[current].label} 플랜을 구독 중입니다. 플랜 변경을 이용해 주세요.`); return null; }
     // 단건결제 모드: 1개월 이용권 only — MONTHLY, the plan's included users and projects, no add-ons
     if (!recurring && oneTimeMode() && String(req.body?.cycle || 'MONTHLY') !== 'MONTHLY') { fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { cycle: '1개월 이용권만 구매할 수 있습니다.' } }); return null; }
+    // 월간 결제만 (founder 2026-10-28): 연간 · 추가 사용자 · 추가 프로젝트 are not sold; a request for them is refused, never silently changed
+    if (recurring && monthlyOnly()) {
+      const fields = {};
+      if (String(req.body?.cycle || 'MONTHLY') !== 'MONTHLY') fields.cycle = '지금은 월간 결제만 할 수 있습니다.';
+      if (Number(req.body?.extra_users || 0) > 0 || Number(req.body?.extra_projects || 0) > 0) fields.extra = '추가 사용자 · 프로젝트는 지금 구매할 수 없습니다.';
+      if (Object.keys(fields).length) { fail(res, 400, 'validation_error', Object.values(fields)[0], { fields }); return null; }
+    }
     const one = !recurring && oneTimeMode();
     try { return await quoteFor(db, req.params.wid, { plan, cycle: one ? 'MONTHLY' : String(req.body?.cycle || 'MONTHLY'), users: one ? undefined : req.body?.users ?? req.body?.seats, extra_users: one ? 0 : req.body?.extra_users, extra_projects: one ? 0 : req.body?.extra_projects }); }
     catch (e) { if (e instanceof OrderError) { orderFail(res, e); return null; } throw e; }
@@ -266,6 +277,8 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
   app.post(`${b}/cancel`, payer, wrap(async (req, res) => {
     if (!provider) return unavailable(res);
     if (req.body?.refund === true || req.body?.refund === 'true') {
+      // founder 2026-10-28: no 즉시 해지 + 일할 환불 for customers (해지 = 이번 기간까지 이용). 청약철회 is POST …/withdraw.
+      if (!immediateRefundEnabled()) return fail(res, 409, 'refund_not_offered', '해지하면 이번 결제 기간이 끝날 때까지 이용하며 남은 기간은 환불되지 않습니다. 결제일부터 7일 이내이고 AI 기능을 사용하지 않았다면 청약철회할 수 있습니다.');
       const out = await cancelWithRefund(db, provider, { workspaceId: req.params.wid, userId: req.user.id, reason: String(req.body?.reason || '고객 해지 환불').slice(0, 100) });
       if (out.error) return fail(res, 409, out.error, '해지할 구독이 없습니다.');
       await sendCancelNotice(db, req.params.wid, { immediate: true, refunds: out.refunds, total: out.total, executed: out.executed }).catch((e) => console.error('[billing] cancel mail failed', e.message));
@@ -279,8 +292,25 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     res.json({ ...(await summary(req.params.wid, req.role)), cancel: { immediate: false } });
   }));
 
+  async function withdrawalView(wid) {
+    const w = await withdrawalQuote(db, wid);
+    return { eligible: w.eligible, reason: w.reason, deadline: w.deadline, used_at: w.used_at, total: w.total };
+  }
+  const WITHDRAW_ERR = { withdrawal_used: '결제 후 AI 기능을 사용해 청약철회할 수 없습니다. 해지하면 이번 결제 기간이 끝날 때까지 이용할 수 있습니다.',
+    withdrawal_expired: '결제일부터 7일이 지나 청약철회할 수 없습니다. 해지하면 이번 결제 기간이 끝날 때까지 이용할 수 있습니다.',
+    withdrawal_no_subscription: '청약철회할 결제가 없습니다.', no_active_subscription: '청약철회할 결제가 없습니다.' };
+  /** POST …/billing/withdraw — 청약철회: ends now, every paid order of the period refunded in full. Refused once AI was used or after 7 days. */
+  app.post(`${b}/withdraw`, payer, wrap(async (req, res) => {
+    if (!provider) return unavailable(res);
+    const out = await cancelWithRefund(db, provider, { workspaceId: req.params.wid, userId: req.user.id, reason: '청약철회', withdrawal: true });
+    if (out.error) return fail(res, 409, out.error, WITHDRAW_ERR[out.error] || '청약철회할 수 없습니다.');
+    await sendCancelNotice(db, req.params.wid, { immediate: true, refunds: out.refunds, total: out.total, executed: out.executed }).catch((e) => console.error('[billing] cancel mail failed', e.message));
+    res.json({ ...(await summary(req.params.wid, req.role)), cancel: { immediate: true, withdrawal: true, refund_total: out.total, refunds: out.refunds.map((r) => ({ id: r.id, kind: r.kind, amount: r.amount, status: r.status || 'REQUESTED' })) } });
+  }));
+
   /** GET …/billing/refund-quote — what 해지 + 환불 would refund right now (per order: unused days / period days, amount). */
   app.get(`${b}/refund-quote`, owner, wrap(async (req, res) => {
+    if (!immediateRefundEnabled()) return fail(res, 409, 'refund_not_offered', '즉시 해지 환불은 제공하지 않습니다.');
     const q = await refundQuote(db, req.params.wid);
     res.json({ refund: { total: q.total, withdrawal: Boolean(q.withdrawal), lines: q.lines.map(({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount }) => ({ order_id, kind, order_kind, label, paid, paid_at, days, period_days, amount })) } });
   }));

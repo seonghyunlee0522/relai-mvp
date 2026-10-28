@@ -137,6 +137,11 @@ export const PLANS_URL = '/app/billing/plans';
  * Read per call so a redeploy can flip it; turn it off once NicePay approves 정기결제.
  */
 export const oneTimeMode = () => /^(1|true|yes|on)$/i.test(String(process.env.ONE_TIME_PAYMENT_MODE || '').trim());
+/**
+ * 월간 결제만 (founder 2026-10-28): new subscriptions are MONTHLY with the plan's included users / projects only — no 연간, no 추가
+ * 사용자 · 프로젝트 — until the price structure is decided again. CHECKOUT_OPTIONS_ENABLED=true re-opens 연간 and add-ons.
+ */
+export const monthlyOnly = () => oneTimeMode() || !/^(1|true|yes|on)$/i.test(String(process.env.CHECKOUT_OPTIONS_ENABLED || '').trim());
 /** 설정 › AI 이용 현황 (the old /app/settings/credits path redirects here). */
 export const AI_USAGE_URL = '/app/settings/ai-usage';
 

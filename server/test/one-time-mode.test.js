@@ -74,6 +74,6 @@ test('one-time mode off: unchanged', async () => {
     assert.equal(co.status, 409); assert.equal(co.json.error.code, 'checkout_not_open');
     assert.equal((await env.c('POST', `/api/workspaces/${env.w}/credits/checkout`, { amount: 10000 })).status, 410);
     const sec = pricingSection((await env.c('GET', '/')).text);
-    assert.ok(!sec.includes('data-credit-pack')); assert.match(sec, /연간 결제/);
+    assert.ok(!sec.includes('data-credit-pack')); assert.doesNotMatch(sec, /연간 결제|1개월 이용권/);   // 월간 결제만 (default)
   } finally { env.done(); }
 });

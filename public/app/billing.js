@@ -119,19 +119,23 @@ function actionsPanel(b) {
   const f = b.flags || {};
   const s = b.subscription;
   const canCancel = paid && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && s.auto_renew && !s.cancel_at_period_end;
-  const canRefund = paid && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && Boolean(b.refund_quote_url);
+  const canRefund = paid && s && ['ACTIVE', 'PAST_DUE'].includes(s.status) && Boolean(b.refund_quote_url);   // closed by default (founder 2026-10-28)
+  const w = paid ? b.withdrawal : null;   // 청약철회: 7 days from payment, only without AI use since
   const btns = [
     html`<a class="btn btn--primary btn--sm" id="bl-change" href="/app/billing/plans" data-link>${b.plan === 'FREE' ? '요금제 살펴보기' : '요금제 변경'}</a>`,
     paid && f.addons ? html`<a class="btn btn--secondary btn--sm" id="bl-addon" href="/app/billing/subscribe?addon=1" data-link>사용자 · 프로젝트 추가</a>` : '',
     canCancel ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel" data-phone-ok>해지</button>` : '',
     // 이용약관 제11조 2항: end now + unused days refunded (also after a period-end cancel); shown only when the server sends refund_quote_url
     canRefund ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-cancel-refund" data-phone-ok>지금 해지하고 환불</button>` : '',
+    w?.eligible && b.withdraw_url ? html`<button class="btn btn--ghost btn--sm is-danger" id="bl-withdraw" data-phone-ok>청약철회</button>` : '',
   ].filter(Boolean).join('');
   const free = b.plan === 'FREE' ? html`<p class="bl-upsell" id="bl-free-upsell">${raw(f.one_time ? 'Pro·Team 1개월 이용권을 구매하면' : '<a class="link" href="/app/billing/plans" data-link>Pro로 업그레이드</a>하면')} 매월 AI 이용량이 새로 제공돼요.</p>` : '';
   // D3 (founder 2026-10-20): no one-time passes — a paid plan without auto renewal has been cancelled
   const pass = paid && s && !s.auto_renew && !s.cancel_at_period_end ? html`<p class="hint" id="bl-pass">${f.one_time ? '1개월 이용권이에요.' : '자동 갱신이 꺼져 있어요.'} ${day(s.current_period_end)}까지 이용하고 이후 Free로 바뀌어요. 이후에는 최근 프로젝트 1개만 편집하고 나머지는 조회 전용이 돼요(데이터는 삭제되지 않아요).</p>` : '';
+  const wHint = w?.eligible ? html`<p class="hint" id="bl-withdraw-hint">${day(w.deadline)}까지 청약철회할 수 있어요(전액 환불, 바로 Free로 전환). AI 기능을 한 번이라도 사용하면 청약철회할 수 없어요.</p>`
+    : w?.reason === 'used' ? html`<p class="hint" id="bl-withdraw-used">결제 후 AI 기능을 사용해 청약철회는 할 수 없어요. 해지하면 이번 결제 기간이 끝날 때까지 쓸 수 있어요.</p>` : '';
   const pending = paid && s?.cancel_at_period_end ? html`<p class="hint" id="bl-cancel-pending">해지가 예약됐어요. ${day(s.current_period_end)}까지 ${b.plan_label || b.plan}를 그대로 쓰고 이후 Free로 바뀌어요.</p>` : '';
-  return html`<div class="panel bl-panel" id="bl-actions"><div class="panel__h">관리</div><div class="panel__b">${raw(free)}${raw(pass)}${raw(pending)}<div class="actions">${raw(btns)}</div>
+  return html`<div class="panel bl-panel" id="bl-actions"><div class="panel__h">관리</div><div class="panel__b">${raw(free)}${raw(pass)}${raw(pending)}${raw(wHint)}<div class="actions">${raw(btns)}</div>
     <p class="hint" style="margin-top:10px">${raw(f.one_time ? '환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>을 확인하세요.' : '해지·환불 기준은 <a class="link" href="/terms#refund" target="_blank" rel="noopener">이용약관</a>, 자동 결제는 <a class="link" href="/terms#recurring" target="_blank" rel="noopener">정기결제 안내</a>를 확인하세요.')}</p></div></div>`;
 }
 
@@ -156,7 +160,7 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
   if (cancel) cancel.onclick = async () => {
     const end = day(b.subscription?.current_period_end);
     const p = policy(b);
-    const bodyHtml = html`<p>${end}까지 ${b.plan_label}를 그대로 쓰고, 이후 Free로 바뀌어요. 자동 갱신은 바로 멈추고 위약금은 없어요. 지금 끝내고 남은 기간을 일할 환불받으려면 "지금 해지하고 환불"을 쓰세요.</p>
+    const bodyHtml = html`<p>${end}까지 ${b.plan_label}를 그대로 쓰고, 이후 Free로 바뀌어요. 다음 결제일부터 자동 결제가 멈추고, 이미 결제한 기간은 환불되지 않아요. 위약금은 없어요.</p>
       <ul class="bl-list" id="bl-cancel-policy"><li>${p.free}</li><li>${p.keep}</li></ul>`;
     if (!(await confirmDialog({ title: `${b.plan_label} 구독을 해지할까요?`, bodyHtml, confirm: '해지', danger: true }))) return;
     try { await api('POST', b.cancel_url || `/api/workspaces/${wid}/billing/cancel`, {}); toast('해지가 예약됐어요.'); await mountBilling(el, { wid }); } catch (e) { toast(e.message); }
@@ -173,6 +177,16 @@ export async function mountBilling(el, { wid = state.workspace.id } = {}) {
       const r = await api('POST', `/api/workspaces/${wid}/billing/cancel`, { refund: true });
       toast(r.cancel?.refund_total ? `해지했어요. ${krw(r.cancel.refund_total)} 환불을 진행해요.` : '해지했어요.'); await mountBilling(el, { wid });
     } catch (e) { toast(e.message); }
+  };
+  const wd = el.querySelector('#bl-withdraw');
+  if (wd) wd.onclick = async () => {
+    const bodyHtml = html`<p>${b.plan_label} 이용이 지금 끝나고 Free로 바뀌어요. 결제한 <b id="bl-withdraw-total">${krw(b.withdrawal.total)}</b> 전액을 환불해요.</p>
+      <ul class="bl-list"><li>${policy(b).free}</li><li>${policy(b).keep}</li></ul>`;
+    if (!(await confirmDialog({ title: '청약철회할까요?', bodyHtml, confirm: '청약철회', danger: true }))) return;
+    try {
+      const r = await api('POST', b.withdraw_url, {});
+      toast(`청약철회했어요. ${krw(r.cancel?.refund_total || 0)} 환불을 진행해요.`); await mountBilling(el, { wid });
+    } catch (e) { toast(e.message); await mountBilling(el, { wid }); }
   };
   el.querySelectorAll('[data-sched-cancel]').forEach((btn) => { btn.onclick = async () => {
     const c = b.scheduled[Number(btn.dataset.schedCancel)];

@@ -13,6 +13,7 @@ import { migrations } from '../migrations.js';
 import { createOrder, quotePlan } from '../billing/orders.js';
 import { limitsFor } from '../plans.js';
 
+process.env.CHECKOUT_OPTIONS_ENABLED = 'true';   // these tests cover 연간 / 추가 이용 (월간 결제만 is the default)
 process.env.PLAN_LIMITS = 'on';
 process.env.APP_BASE_URL = 'https://relai.test'; process.env.EMAIL_PROVIDER = 'fake';
 delete process.env.OVER_LIMIT_LOCK;
@@ -173,7 +174,7 @@ test('PRO with add-ons: limits = included + extra; plan limits from the subscrip
   assert.deepEqual([b.usage.projects_active, b.usage.members, b.usage.pending_invites], [4, 1, 0]);
   assert.deepEqual(b.scheduled, []); assert.equal(typeof b.ai_usage.used_pct, 'number'); assert.equal(b.credits, undefined);
   assert.deepEqual(b.catalogue.plans.map((p) => p.key), ['FREE', 'PRO', 'TEAM', 'ENTERPRISE']);
-  assert.deepEqual(Object.keys(b.flags).sort(), ['addons', 'checkout_open', 'one_time', 'payments', 'plan_change', 'recurring', 'refund_partial']);
+  assert.deepEqual(Object.keys(b.flags).sort(), ['addons', 'checkout_open', 'monthly_only', 'one_time', 'payments', 'plan_change', 'recurring', 'refund_partial']);
   assert.equal(b.over_limit, null);
   // FREE workspace: no cycle, no payment
   const F = await setup(client, 'free@x.com');

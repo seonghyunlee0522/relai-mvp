@@ -975,6 +975,9 @@ fetch('/api/me?optional=1', {credentials:'same-origin'}).then(function(r){ retur
     el.setAttribute('href', '/app/projects');
     el.textContent = '프로젝트로 이동';
   });
+  document.querySelectorAll('[data-auth="buy"]').forEach(function(el){   // 결제하기 → straight to checkout
+    var to = el.getAttribute('data-buy'); if (to && /^\/app\//.test(to)) el.setAttribute('href', to);
+  });
 }).catch(function(){});
 
 /* ---------- ask relay demo ---------- */

@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { LEGAL, koDate, legalFooterHtml } from '../public/app/shared/legal-info.js';
-import { PLANS, annualView, catalogue, ANNUAL_DISCOUNT_PCT, MIN_CARD_KRW, oneTimeMode, PLANS_URL } from './plans.js';
+import { PLANS, annualView, catalogue, ANNUAL_DISCOUNT_PCT, MIN_CARD_KRW, oneTimeMode, monthlyOnly, PLANS_URL } from './plans.js';
 import { pricingHtml, PRICING_CSS, soonCta } from '../public/app/shared/pricing.js';
 import { paymentsEnabled } from './billing/provider.js';
 import { shareMeta } from './share-meta.js';
@@ -188,22 +188,20 @@ export function termsMarkdown(L = LEGAL) {
 
 ### 제11조 (해지)
 1. 고객은 월간·연간 요금제 모두 설정 › 플랜 · 결제 화면에서 언제든지 해지할 수 있으며, 이메일(${L.contactEmail})로도 요청할 수 있습니다. 해지하면 자동 갱신은 즉시 중단됩니다. 회사는 해지를 막기 위한 반복 안내나 설문을 요구하지 않으며, 위약금을 받지 않습니다.
-2. 고객은 해지할 때 다음 중 하나를 선택합니다.
-   - 기간 만료 시 종료: 이미 결제한 이용기간이 끝날 때까지 유료 요금제를 이용한 뒤 Free 요금제로 전환됩니다.
-   - 즉시 종료: 해지일에 이용을 끝내고 사용하지 않은 기간의 요금을 제13조에 따라 일할 계산하여 환불받습니다. 즉시 Free 요금제로 전환되고 AI 이용량은 Free 요금제 기준을 따릅니다.
+2. 해지하면 이미 결제한 이용기간이 끝날 때까지 유료 요금제를 이용한 뒤 Free 요금제로 전환되며, 다음 결제일부터 결제되지 않습니다. 이미 결제한 이용기간의 요금은 제12조의 청약철회에 해당하는 경우를 제외하고 환불하지 않습니다.
 3. 해지나 전환만으로 프로젝트 데이터는 삭제되지 않습니다. 워크스페이스의 모든 프로젝트 데이터는 계속 조회하고 내보낼 수 있으며, Free 요금제의 한도를 넘는 프로젝트는 제7조의3 제4항에 따라 조회 전용으로 유지합니다. 워크스페이스 삭제는 해지와 별도로 처리합니다.
 
 ### 제12조 (청약철회)
-1. 고객은 유료 요금제 또는 추가 이용의 결제일부터 7일 이내에 청약을 철회할 수 있습니다. 서비스는 기간에 따라 나눌 수 있는 용역이므로, 이미 이용한 일수에 해당하는 금액(결제 금액 × 이용 일수 ÷ 이용기간 일수, 원 미만 버림)만 공제하고 나머지를 환불하며 위약금은 없습니다(전자상거래법 제17조 제2항 제5호 단서, 제18조).
+1. 고객은 유료 요금제 또는 추가 이용의 결제일부터 7일 이내에 청약을 철회할 수 있으며, 이 경우 결제 금액 전액을 환불하고 즉시 Free 요금제로 전환합니다. 다만 결제 후 해당 워크스페이스에서 AI 기능을 한 번이라도 사용한 경우에는 디지털콘텐츠의 제공이 개시된 것으로 보아 청약철회가 제한됩니다(전자상거래법 제17조 제2항 제5호). 회사는 이 제한을 결제 화면의 정기결제 안내에 미리 표시하며, Free 요금제로 서비스를 미리 이용해 볼 수 있도록 합니다.
 2. 회사는 청약철회 요청을 받은 날부터 3영업일 이내에 결제 취소 또는 환불 절차를 진행합니다.
 3. 이 조는 회원이 사업자인지와 관계없이 서비스 화면에서 결제한 모든 고객에게 적용합니다. 다만 Enterprise 개별 계약은 그 계약에 따릅니다.
 
 ### 제13조 (환불) {#refund}
 1. 법정 청약철회권(제12조)을 먼저 적용하며, 결제 취소와 환불은 관련 법령에 따라 처리합니다.
-2. 구독 환불(월간·연간 공통): 즉시 종료를 선택하면 사용하지 않은 기간에 대해 일할 계산하여 환불하며, 위약금이나 수수료를 공제하지 않습니다. 환불액 = 결제 금액 × 남은 일수 ÷ 이용기간 일수(한국 시간 기준)입니다. 연간 결제도 실제로 결제한 금액을 기준으로 계산하며 월간 정상가로 다시 계산하지 않습니다. 예: Pro 연간 ${n(P.price.ANNUAL)}원을 결제하고 365일 중 100일 이용 후 해지하면 환불액은 ${n(Math.ceil(P.price.ANNUAL * 265 / 365))}원입니다.
-3. 요금제를 즉시 종료하면 추가 이용도 같은 방법으로 일할 계산하여 환불합니다. 추가 이용만 줄이는 경우는 제7조의2 제5항에 따릅니다.
+2. 구독 환불: 해지는 제11조 제2항에 따라 이용기간이 끝날 때 적용되며, 이미 결제한 이용기간에 대해서는 일할 환불하지 않습니다(월간·연간 공통). 청약철회는 제12조에 따릅니다.
+3. 청약철회로 요금제를 종료하면 같은 이용기간에 결제한 추가 이용도 함께 전액 환불합니다. 추가 이용만 줄이는 경우는 제7조의2 제5항에 따릅니다.
 4. 결제 오류·중복 결제: 회사 또는 결제 시스템의 오류로 이중 결제되거나 정해진 금액보다 많이 결제된 경우, 회사는 확인 즉시(늦어도 3영업일 이내) 초과 결제분 전액을 결제 취소로 환불하며 수수료를 공제하지 않습니다. 결제가 승인되었는데 요금제가 반영되지 않은 경우에도 같습니다.
-5. 요금제에 포함된 AI 이용량은 별도로 환불하지 않습니다. 요금제를 환불하는 경우 제2항에 따릅니다.
+5. 요금제에 포함된 AI 이용량은 별도로 환불하지 않습니다.
 6. 회사의 귀책으로 서비스를 정상적으로 이용하지 못한 경우에는 제18조에 따라 보상하거나 해당 기간 요금을 환불합니다.
 7. 환불 금액의 원 미만은 올리며, 환불액은 결제 금액을 넘지 않습니다. 환불은 원래의 결제수단(카드 전체 또는 부분 취소)으로 하며, 카드 취소 기간(결제일부터 1년)이 지났거나 결제수단 사정으로 불가능한 경우 고객이 지정한 계좌로 송금합니다.
 
@@ -470,18 +468,21 @@ ${legalFooterHtml(L)}
 </body></html>`;
 }
 
+export const subscribeUrl = (plan) => `/app/billing/subscribe?plan=${plan}`;
 /** Landing #pricing (pricing v3): the shared plan cards from the server catalogue + their CSS. No price is typed in index.html.
  * 단건결제 모드: Pro / Team as 1개월 이용권 (one-time) with a buy CTA (sign up / log in → 요금제 page). AI is "AI 이용량 포함" on every card
  * (credits retired 2026-10-27; no amount is ever shown). */
-export function landingPricingHtml(cat = catalogue(), { open = paymentsEnabled() && process.env.NICEPAY_RECURRING_ENABLED === 'true', oneTime = oneTimeMode() } = {}) {
+export function landingPricingHtml(cat = catalogue(), { open = paymentsEnabled() && process.env.NICEPAY_RECURRING_ENABLED === 'true', oneTime = oneTimeMode(), monthly = monthlyOnly() } = {}) {
   const buyNext = (key) => `/signup?next=${encodeURIComponent(`${PLANS_URL}?buy=${key}`)}`;   // signed in → straight to the plans page with the purchase dialog open
   const cta = (p) => (p.contact_sales
     ? '<a href="mailto:__CONTACT_EMAIL__?subject=RELAI%20Enterprise%20%EB%AC%B8%EC%9D%98" class="btn btn--secondary btn--block" data-loc="pricing_enterprise">도입 문의</a>'
     : p.key === 'FREE' ? '<a href="/signup" class="btn btn--secondary btn--block" data-auth="start" data-loc="pricing_free">무료로 시작하기</a>'
       : oneTime ? `<a href="${buyNext(p.key)}" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-loc="pricing_${p.key.toLowerCase()}">${esc(p.label)} 1개월 이용권 구매</a>`
       : !open ? soonCta(p, '')
-      : `<a href="/signup" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-auth="start" data-loc="pricing_${p.key.toLowerCase()}">무료로 시작하고 ${esc(p.label)} 선택</a>`);
-  return `<style>${PRICING_CSS}</style>${pricingHtml(cat, { cta, oneTime })}`;
+      // 결제하기 (founder 2026-10-28): signed in → the checkout page for this plan; signed out → 로그인 (회원가입 link keeps next) → checkout.
+      // data-auth="buy" + data-buy keep the landing script from turning it into 프로젝트로 이동 and let it point a session straight at checkout.
+      : `<a href="/login?next=${encodeURIComponent(subscribeUrl(p.key))}" class="btn ${p.key === 'PRO' ? 'btn--primary' : 'btn--secondary'} btn--block" data-auth="buy" data-buy="${esc(subscribeUrl(p.key))}" data-loc="pricing_${p.key.toLowerCase()}">결제하기</a>`);
+  return `<style>${PRICING_CSS}</style>${pricingHtml(cat, { cta, oneTime, monthlyOnly: monthly && !oneTime })}`;
 }
 
 /** Mounts /terms, /privacy, /pricing and the landing page (with the footer filled in). Call before express.static. */

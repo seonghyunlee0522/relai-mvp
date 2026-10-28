@@ -16,6 +16,7 @@ import { effectivePlan } from '../billing/subscriptions.js';
 import { setEmailProvider } from '../email/service.js';
 import { fakeEmailProvider } from '../email/provider.js';
 import { resetBillingCache } from '../billing-admin.js';
+process.env.CHECKOUT_OPTIONS_ENABLED = 'true';   // these tests cover 연간 / 추가 이용 (월간 결제만 is the default)
 process.env.EARLY_ACCESS_CUTOFF = '2000-01-01T00:00:00Z';   // these suites test FREE/TEAM on fresh workspaces: no early access (AI-credits billing is in credits-billing.test.js)
 
 process.env.PLAN_LIMITS = 'on';
