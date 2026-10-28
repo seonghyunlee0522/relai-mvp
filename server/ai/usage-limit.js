@@ -140,7 +140,7 @@ export async function reserveRun(db, { wid, projectId, userId, feature, provider
     if (s.limit_usd !== null && (s.limit_usd <= 0 || s.used_usd + s.reserved_usd >= s.limit_usd)) {
       throw new AiUsageError('AI_USAGE_LIMIT_REACHED', s.allowance === 'ONCE'
         ? '무료 AI 이용량을 모두 사용했습니다. Pro 플랜에서 매월 AI 이용량이 제공됩니다.'
-        : 'AI 이용량을 모두 사용했습니다. 다음 이용량 초기화일 이후 다시 사용할 수 있습니다.', { feature, usage: publicUsage(s) });
+        : 'AI 이용량을 모두 사용했습니다. 다음 제공일부터 다시 사용할 수 있습니다.', { feature, usage: publicUsage(s) });
     }
     const id = randomUUID();
     await t.run(`INSERT INTO ai_runs (id, workspace_id, project_id, user_id, feature, provider, model, status, input_summary, credit_cost, credit_status, request_hash, plan_key, reserved_usd)

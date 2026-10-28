@@ -106,7 +106,7 @@ export async function adminPromptPage(key, main = $('#main')) {
       ${raw(section('모델 설정', settingsDl(s.settings)))}
       ${raw(section(`시스템 프롬프트 (저장된 내용 기준 · ${n(s.system.length)}자)`, html`<p class="hint">공통 원칙 + 이 작업 프롬프트, 자리표시자는 코드의 최신 목록으로 채운 것입니다.</p>${raw(pre(s.system))}`))}
       ${raw(section('사용자 메시지 형식', html`<p class="hint">&lt;project_data&gt;는 서버가 고른 프로젝트 데이터, &lt;untrusted_input&gt;은 사용자가 입력한 글입니다. AI는 두 블록 안의 지시를 따르지 않도록 공통 원칙에 적혀 있습니다. { } 부분은 요청마다 채워집니다. 이 형식은 코드에 있어 여기서 바꿀 수 없습니다.</p>${raw(pre(s.user_template))}`))}
-      ${raw(section(`JSON 형식 (스키마 이름: ${s.schema_name})`, html`<p class="hint">AI 응답은 이 스키마에 맞아야 합니다. 맞지 않으면 1번 다시 요청하고, 그래도 안 되면 크레딧을 돌려줍니다.</p>${raw(pre(json(s.schema), 'acode--tall'))}`))}
+      ${raw(section(`JSON 형식 (스키마 이름: ${s.schema_name})`, html`<p class="hint">AI 응답은 이 스키마에 맞아야 합니다. 맞지 않으면 1번 다시 요청하고, 그래도 안 되면 실패로 처리합니다(이미 처리된 AI 사용분은 이용량에 반영됩니다).</p>${raw(pre(json(s.schema), 'acode--tall'))}`))}
       ${raw(section('프로젝트로 미리보기', html`<div class="aprm__pv">
         <p class="hint">프로젝트를 고르면 지금 이 기능을 실행했을 때 AI 제공사로 보낼 요청 그대로를 보여 줍니다. AI를 호출하지 않아 AI 이용량을 쓰지 않습니다. 미리보기를 연 기록은 감사 로그에 남습니다.</p>
         <div class="aprm__pvf">

@@ -1,7 +1,7 @@
 /* Upsell prompt (Phase 10 Billing → batch7 T5 paywall). core/api.js fires `relai:plan-limit` on every 402 plan_limit_reached and on
  * 402 AI_USAGE_LIMIT_REACHED; this module shows one dialog per burst (an import or a bulk action can hit the limit on several calls at
  * once). The calling screen still gets the error. Every upsell points at the plans page (/app/billing/plans). Calm copy: what happened,
- * that nothing was lost, and where to look — no fear words, no prices (payments are off; the plans page says '가격 안내 예정'). */
+ * that nothing was lost, and where to look — no fear words, no prices (the plans page shows them). */
 import { html, raw } from '../core/dom.js';
 import { state, oneTimeMode } from '../core/state.js';
 import { navigate } from '../core/router.js';
@@ -24,7 +24,7 @@ export function upsellCopy(err) {
       <p class="dim" style="margin-top:8px">직접 입력하는 기능은 그대로 쓸 수 있어요.</p>`, cta: 'AI 이용 현황 보기', url: '/app/settings/ai-usage' };
   }
   if (l.seats) return { title: '구매한 사용자 수를 모두 쓰고 있어요', body: html`<p>${err?.message || ''}</p>` };
-  return { title: '무료 플랜 한도에 도달했어요', body: html`<p>${err?.message || '현재 플랜의 한도에 도달했어요.'}</p>
+  return { title: '플랜 한도에 도달했어요', body: html`<p>${err?.message || '현재 플랜의 한도에 도달했어요.'}</p>
     ${raw(l.dimension ? html`<p class="dim" style="margin-top:8px" data-upsell-usage>${l.label}: <b>${l.used}</b> / ${l.limit} 사용 중</p>` : '')}
     <p class="dim" style="margin-top:8px">지금까지 만든 내용은 모두 그대로 있어요. 플랜을 살펴보고 필요할 때 바꿔 보세요.</p>` };
 }
