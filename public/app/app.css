@@ -3811,6 +3811,19 @@ pre.acode--tall{max-height:640px}
   html:not(.is-phone) .page.page--form,html:not(.is-phone) .page.page--narrow,html:not(.is-phone) .page.page--doc{max-width:1600px}
 }
 
+/* Rail flyout (rail-flyout.js): a door's sub-menu next to the rail on hover */
+.rfly{position:fixed;z-index:60;min-width:188px;max-width:280px;padding:6px;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:0 12px 32px -8px rgba(16,24,40,.22);animation:rfly-in .12s ease-out}
+.rfly[hidden]{display:none}
+@keyframes rfly-in{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
+.rfly::before{content:"";position:absolute;left:-8px;top:0;bottom:0;width:8px}   /* hover bridge from the rail */
+.rfly__h{padding:6px 10px 6px;font-size:var(--fs-xs);font-weight:700;color:var(--text-3);letter-spacing:.02em}
+.rfly__l,.rfly__f{display:flex;flex-direction:column;gap:1px}
+.rfly__f{margin-top:4px;padding-top:4px;border-top:1px solid var(--border-soft)}
+.rfly__i{display:block;padding:8px 10px;border-radius:var(--r);font-size:var(--fs-sm);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rfly__i:hover,.rfly__i:focus-visible{background:var(--bg-alt);color:var(--navy);outline:none}
+.rfly__i.is-active{background:var(--bg-tint);color:var(--blue-deep);font-weight:700}
+.rfly__f .rfly__i{color:var(--text-2)}
+.rfly__e{margin:0;padding:6px 10px 8px;font-size:var(--fs-sm);color:var(--text-3)}
 /* Jim mobile 10-21 #4: small links / icons get a 44×44px tap area on phones (Apple HIG minimum). html.is-phone only — the PC layout is untouched. */
 html.is-phone :is(.sg-end a, .ovsec__ctx a, .ovsec__more, .pv__charter a, .actrow__h a, .appfoot a, .hc__attmore a, .sbanner p a, .hsum__smp a, .defsec__pg a, .home__credits){display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;vertical-align:middle;gap:.3em}
 html.is-phone .actrow__h{align-items:center}html.is-phone .actrow__h a{justify-content:flex-start}
