@@ -1809,3 +1809,31 @@ CREATE TABLE IF NOT EXISTS fx_rates (
   source       text NOT NULL DEFAULT 'KOREAEXIM',
   fetched_at   timestamptz NOT NULL DEFAULT now()
 );
+
+-- v73 서비스 월 구독 (/pay/agent, founder 2026-10-28): buyers without a RELAI account. The billing key is stored encrypted (integrations/crypto.js),
+-- never the card. Renewals run in the daily billing cron; the buyer cancels from the e-mailed manage link (HMAC of the id, nothing stored).
+CREATE TABLE IF NOT EXISTS service_subscriptions (
+  id                    TEXT PRIMARY KEY,
+  product               TEXT NOT NULL,
+  provider              TEXT NOT NULL,
+  goods_name            TEXT NOT NULL,
+  amount                INTEGER NOT NULL,                -- monthly, VAT included (catalogue price at subscription)
+  buyer_name            TEXT NOT NULL,
+  buyer_company         TEXT NOT NULL DEFAULT '',
+  buyer_email           TEXT NOT NULL,
+  buyer_phone           TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','PAST_DUE','ENDED')),
+  auto_renew            BOOLEAN NOT NULL DEFAULT true,
+  billing_key_enc       TEXT,
+  card_summary          TEXT,
+  current_period_start  timestamptz NOT NULL,
+  current_period_end    timestamptz NOT NULL,
+  next_billing_at       timestamptz,
+  retry_count           INTEGER NOT NULL DEFAULT 0,
+  canceled_at           timestamptz,
+  ended_at              timestamptz,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_service_subscriptions_due ON service_subscriptions (next_billing_at) WHERE auto_renew AND billing_key_enc IS NOT NULL;
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS subscription_id TEXT;

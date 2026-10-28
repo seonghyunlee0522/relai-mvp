@@ -160,7 +160,8 @@ async function refundMismatch(db, refunder, orderId, tid, amount) {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
-export function serviceReceiptEmail(o, L = LEGAL) {
+const kday = (d) => new Date(d).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric' });
+export function serviceReceiptEmail(o, L = LEGAL, { sub = null, manage = null } = {}) {
   const subject = `[RELAI] 결제가 완료되었습니다 (주문번호 ${o.id})`;
   const rows = [['상품', o.goods_name], ['주문번호', o.id], ['결제 금액', `${won(o.amount)} (부가세 포함)`], ['공급가액', won(o.supply_amount)], ['부가세', won(o.vat_amount)],
     ['결제 수단', o.payment_method_summary || '신용카드'], ['결제 일시', new Date(o.paid_at || Date.now()).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })]];
@@ -172,10 +173,11 @@ export function serviceReceiptEmail(o, L = LEGAL) {
 <p>${esc(o.buyer_name)}님, RELAI 서비스를 결제해 주셔서 감사합니다. 서비스 범위와 시작일은 담당자가 연락드려 확정합니다.</p>
 <table role="presentation" width="100%" style="font-size:14px;border-collapse:collapse">${rows.map(([k, v]) => `<tr><td style="padding:6px 0;color:#667085">${esc(k)}</td><td style="padding:6px 0;text-align:right">${esc(v)}</td></tr>`).join('')}</table>
 ${o.receipt_url ? `<p style="margin-top:16px"><a href="${esc(o.receipt_url)}" style="color:#1B4FD8">카드 매출전표 보기</a></p>` : ''}
-<p style="font-size:13px;color:#667085">자동 갱신되지 않습니다. 취소·환불은 서비스 제공 여부와 계약 내용, 관련 법령에 따라 처리합니다.</p></td></tr>
+${sub ? `<p style="font-size:13px;color:#667085">월 구독입니다. 다음 결제일(${esc(kday(sub.next_billing_at || sub.current_period_end))})에 같은 카드로 ${esc(won(sub.amount))}이 자동 결제됩니다. 해지하면 결제한 달까지 이용하고 이후 결제되지 않으며, 이미 결제한 금액은 환불되지 않습니다.</p>${manage ? `<p style="margin-top:8px"><a href="${esc(manage)}" style="color:#1B4FD8">구독 확인 · 해지</a></p>` : ''}`
+  : '<p style="font-size:13px;color:#667085">자동 갱신되지 않습니다. 취소·환불은 서비스 제공 여부와 계약 내용, 관련 법령에 따라 처리합니다.</p>'}</td></tr>
 <tr><td style="padding:16px 32px 24px;border-top:1px solid #EEF1F6;font-size:12px;color:#667085;line-height:1.6">${esc(L.company)} · 대표 ${esc(L.ceo)} · 사업자등록번호 ${esc(L.bizNo)} · 통신판매업 신고번호 ${esc(L.mailOrderNo)}<br>${esc(L.address)}<br>문의: ${esc(L.contactEmail)}</td></tr>
 </table></td></tr></table></body></html>`;
-  const text = `결제가 완료되었습니다.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}\n${o.receipt_url ? `매출전표: ${o.receipt_url}\n` : ''}\n서비스 범위와 시작일은 담당자가 연락드려 확정합니다.\n문의: ${L.contactEmail}\n`;
+  const text = `결제가 완료되었습니다.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}\n${o.receipt_url ? `매출전표: ${o.receipt_url}\n` : ''}${sub ? `\n월 구독: 다음 결제일 ${kday(sub.next_billing_at || sub.current_period_end)}, 해지하면 결제한 달까지 이용(환불 없음).${manage ? `\n구독 확인 · 해지: ${manage}` : ''}\n` : ''}\n서비스 범위와 시작일은 담당자가 연락드려 확정합니다.\n문의: ${L.contactEmail}\n`;
   return { subject, html, text };
 }
 
@@ -187,7 +189,16 @@ export async function sendServiceReceipt(db, id, env = process.env) {
   const claimed = await db.get(`UPDATE service_orders SET receipt_email_sent_at = now() WHERE id = ? AND status = 'PAID' AND receipt_email_sent_at IS NULL RETURNING *`, [id]);
   if (!claimed) return null;
   let r;
-  try { r = await sendEmail(db, { type: 'SERVICE_RECEIPT', to: claimed.buyer_email, ...serviceReceiptEmail(claimed), tags: ['service-pay'] }, env); }
+  try {
+    let extra = {};
+    if (claimed.subscription_id) {   // 월 구독: next payment + the manage (해지) link
+      const { getServiceSubscription, manageUrl } = await import('./service-subscriptions.js');
+      const sub = await getServiceSubscription(db, claimed.subscription_id);
+      const base = emailConfig(env).appBaseUrl;
+      extra = { sub, manage: sub && base ? manageUrl(base, sub.id, env) : null };
+    }
+    r = await sendEmail(db, { type: 'SERVICE_RECEIPT', to: claimed.buyer_email, ...serviceReceiptEmail(claimed, LEGAL, extra), tags: ['service-pay'] }, env);
+  }
   finally { if (r?.status !== 'SENT') await db.run('UPDATE service_orders SET receipt_email_sent_at = NULL WHERE id = ?', [id]); }
   return r;
 }

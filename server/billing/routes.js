@@ -27,6 +27,7 @@ import { disclosure, checkConsent, recordConsent } from './consent.js';
 import { scheduledChanges, composeTarget, scheduleChange, cancelScheduledChange, refundQuote, cancelWithRefund, executeRefund, markRefundDone, listRefunds, refundPartialEnabled, immediateRefundEnabled, withdrawalQuote } from './lifecycle.js';
 import { usageSummary, publicUsage } from '../ai/usage-limit.js';
 import { applyServiceEvent, serviceOrdersDaily } from './service-orders.js';
+import { serviceSubscriptionsDaily } from './service-subscriptions.js';
 
 /** Card registration attempts allowed: per user / per IP per hour, per workspace per day (env CARD_ATTEMPTS_USER / _IP / _WORKSPACE). */
 const envN = (k, d) => { const n = Number(process.env[k]); return Number.isInteger(n) && n > 0 ? n : d; };
@@ -524,6 +525,6 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     if (!safeEqual(req.get('authorization'), `Bearer ${secret}`)) return fail(res, 401, 'unauthenticated', '인증이 필요합니다.');
     res.json({ reminders: await sendRenewalReminders(db), price_notices: await notifyPriceIncreases(db), renewals: await chargeDueRenewals(db, provider),
       expired: await expireEndedSubscriptions(db, provider), early_access: await sendEarlyAccessNotices(db),
-      service_orders: await serviceOrdersDaily(db) });
+      service_orders: await serviceOrdersDaily(db), service_subscriptions: await serviceSubscriptionsDaily(db, provider) });
   }));
 }
