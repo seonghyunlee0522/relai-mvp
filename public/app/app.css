@@ -1378,7 +1378,7 @@ a.akpi__i:hover{border-color:var(--border-blue)}
 .aid__h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:14px 18px 12px;border-bottom:1px solid var(--border-soft);flex:none}
 .aid__h h3{margin:0;font-size:var(--fs-lg);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .aid__tag{font-size:var(--fs-2xs);font-weight:700;color:var(--blue-deep);background:var(--bg-tint);border:1px solid var(--border-blue);border-radius:var(--r-sm);padding:1px 6px;letter-spacing:.02em}
-.aid__sub{margin:4px 0 0;font-size:var(--fs-sm);color:var(--text-3);line-height:1.45}
+.aid__h .aid__sub{margin:4px 0 0;font-size:var(--fs-sm);color:var(--text-3);line-height:1.45}
 .aid__hr{display:flex;align-items:center;gap:10px;flex:none}
 .aid__b{padding:14px 18px;overflow:auto;flex:1;min-height:120px}
 .aid__f{display:flex;align-items:center;gap:10px;padding:10px 18px;border-top:1px solid var(--border-soft);background:var(--bg-alt);flex:none;flex-wrap:wrap}
@@ -2072,7 +2072,11 @@ a.kv:hover{background:var(--bg-alt);margin:0 -6px;padding-left:6px;padding-right
 .wpz__known{font-size:var(--fs-sm);color:var(--text-2);margin:0 0 12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .wpz__qs{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px}
 .wpz__q{border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px 10px;margin:0;min-width:0}
-.wpz__q legend{font-weight:600;color:var(--navy);font-size:var(--fs-md);padding:0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wpz__q legend{float:left;width:100%;margin:0 0 6px;font-weight:600;color:var(--navy);font-size:var(--fs-md);line-height:1.45;padding:0;display:flex;gap:8px;align-items:flex-start;word-break:keep-all}   /* float: the question sits inside the card instead of cutting its top border (long questions wrapped and shifted the border) */
+.wpz__q legend .chip{flex:none;margin-top:1px}
+.wpz__q legend + *{clear:both}
+.wpz__q .hint{margin:0 0 4px}
+.wpz__q > .input{width:100%;max-width:none}
 .wpz__opts{display:flex;flex-direction:column;gap:4px;margin:6px 0}
 .wpz__optw{display:flex;flex-direction:column}
 .wpz__opt{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);padding:4px 6px;border-radius:var(--r);cursor:pointer}.wpz__opt:hover{background:var(--bg-alt)}.wpz__opt input{margin:0}
@@ -3207,9 +3211,11 @@ a.nxt:hover,button.nxt:hover{border-color:var(--border-blue);background:#fff}
 .hdash{display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,24vw,400px);gap:14px;align-items:start}
 .hdash .hgrid__sec{min-width:0;margin:0}
 .hc--r2{gap:12px;padding:16px 20px;border-left:1px solid var(--border)}
-.hc--r2 .hc__h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hc--r2 .hc__name{font-size:var(--fs-lg);font-weight:800;color:var(--navy)}
-.hc__pos{margin-left:auto;font-size:var(--fs-xs);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);border-radius:var(--r);padding:3px 8px;white-space:nowrap}
+.hc--r2 .hc__h{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0}
+.hc--r2 .hc__name{font-size:var(--fs-lg);font-weight:800;color:var(--navy);flex:0 1 auto;min-width:0}
+.hc--r2 .hc__client{flex:0 0 auto;max-width:30%}
+.hc--r2 .hc__h > .chip,.hc--r2 .hc__h > .hc__prio{flex:none}
+.hc__pos{flex:none;margin-left:auto;font-size:var(--fs-xs);font-weight:700;color:var(--blue-deep);background:var(--blue-soft);border-radius:var(--r);padding:3px 8px;white-space:nowrap}
 .hc--r2 .hc__prio{background:var(--crit-bg,#FDECEC);color:var(--crit-fg,#C0262D)}
 .hmini{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
 .hmini li{font-size:var(--fs-xs);padding:3px 10px;border:1px solid var(--border);border-radius:999px;color:var(--text-3);white-space:nowrap}
