@@ -1864,15 +1864,15 @@ CREATE INDEX IF NOT EXISTS idx_notices_active ON notices(active, starts_at);
 INSERT INTO notices (id, title, body, image_path, image_updated_at, popup_placements, sort_order)
 SELECT 'notice-beta-open', 'RELAI 베타 서비스를 오픈합니다', $notice$안녕하세요, RELAI 팀입니다.
 
-RELAI 베타 서비스를 오픈했습니다. RELAI는 프로젝트 생애주기(착수 → 요구사항 정의 → 분석·설계 → 구현 → 시험 → 전환 및 오픈 → 운영 및 유지보수)를 따라 지금 해야 할 일을 안내하는 PM 가이드입니다.
+RELAI 베타 서비스를 오픈했습니다. RELAI는 프로젝트 생애주기(착수 → 요구사항 정의 → 분석·설계 → 구현 → 시험 → 전환 및 오픈 → 운영 및 유지보수)를 따라 지금 해야 할 일을 안내하는 프로젝트 길잡이입니다.
 
 ■ 베타에서 쓸 수 있는 기능
-· What's Next: 현재 단계와 다음 할 일 안내
+· 지금 할 일: 현재 단계와 다음 할 일 안내
 · 요구사항 관리와 Excel 가져오기, 요구사항 ↔ WBS 연결
 · WBS · 간트 일정 관리
 · 테스트 · 검수, 변경 · 이슈 관리
 · 주간보고 초안 작성
-· AI 요구사항 추출 · WBS 초안 (플랜별 AI 이용량 안에서)
+· AI 요구사항 추출 · WBS 초안 (AI 이용량 안에서)
 
 ■ 이용 안내
 · 무료 플랜으로 결제 정보 없이 바로 시작할 수 있습니다.

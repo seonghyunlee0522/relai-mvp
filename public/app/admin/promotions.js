@@ -1,4 +1,4 @@
-/* 관리자 › 프로모션 (migration 47): the offers shown on signup, login, landing pricing, 설정 › AI 크레딧 and Home.
+/* 관리자 › 프로모션 (migration 47): the offers shown on signup, login, landing pricing, 설정 › AI 이용 현황 and Home.
  * List on the left, editor with a live preview (the same shared component the placements render) on the right.
  * Display only — editing here never changes credit grants or early-access dates. */
 import { $, html, raw } from '../core/dom.js';
@@ -57,7 +57,7 @@ export async function adminPromotionsPage(main = $('#main')) {
   const draw = () => {
     main.innerHTML = html`<div class="apage">
       ${raw(head('프로모션', '<button class="btn btn--primary btn--sm" id="p-new">새 프로모션</button>'))}
-      <p class="hint" style="margin:-6px 0 12px">회원가입 · 로그인 · 랜딩 요금 · 설정 › AI 크레딧 · 홈에 보이는 혜택 문구입니다. 화면 표시만 바뀌며, 크레딧 지급과 플랜 한도는 바뀌지 않습니다. 기간은 한국 시간 기준이며 시작일과 종료일을 포함합니다.</p>
+      <p class="hint" style="margin:-6px 0 12px">회원가입 · 로그인 · 랜딩 요금 · 설정 › AI 이용 현황 · 홈에 보이는 혜택 문구입니다. 화면 표시만 바뀌며, AI 이용량과 플랜 한도는 바뀌지 않습니다. 기간은 한국 시간 기준이며 시작일과 종료일을 포함합니다.</p>
       <div class="apromo">
         <div>${raw(table([
           { key: 'state', label: '상태', w: 80, render: (p) => chip(...stateOf(p, data.today)) },

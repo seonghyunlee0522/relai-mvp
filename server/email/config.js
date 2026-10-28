@@ -3,6 +3,8 @@
  * sent to the browser or logged). Links are always built from APP_BASE_URL — never from a request Host header.
  */
 const str = (v) => String(v ?? '').trim();
+import { LEGAL } from '../../public/app/shared/legal-info.js';
+
 export const DEFAULT_EMAIL_FROM = 'RELAI <noreply@relai.kr>';
 export class EmailConfigError extends Error { constructor(msg) { super(msg); this.code = 'email_config'; } }
 export function emailConfig(env = process.env) {
@@ -10,6 +12,8 @@ export function emailConfig(env = process.env) {
   const appBaseUrl = str(env.APP_BASE_URL).replace(/\/+$/, '');
   return {
     provider, resendApiKey: str(env.RESEND_API_KEY), from: str(env.EMAIL_FROM) || DEFAULT_EMAIL_FROM, supportEmail: str(env.SUPPORT_EMAIL) || '',
+    // noreply@relai.kr has no mailbox (relai.kr has no MX): customer replies go to the support / 문의 address instead of bouncing.
+    replyTo: str(env.EMAIL_REPLY_TO) || str(env.SUPPORT_EMAIL) || LEGAL.contactEmail,
     appBaseUrl, inviteExpiryDays: Number(env.INVITE_EXPIRY_DAYS) > 0 ? Number(env.INVITE_EXPIRY_DAYS) : 7,
     timeoutMs: Number(env.EMAIL_HTTP_TIMEOUT_MS) > 0 ? Number(env.EMAIL_HTTP_TIMEOUT_MS) : 10000,
   };

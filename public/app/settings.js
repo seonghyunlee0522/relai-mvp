@@ -70,7 +70,7 @@ export async function settingsPage(main = $('#main')) {
   };
   // Redesign R3 §5.7 (desktop): four tabs — 내 정보 · 팀원 · 요금제 · 연동; each with a title, purpose line and one primary.
   // The phone keeps the single long page below (view mode).
-  const TABS = [['me', '내 정보', '내 계정과 워크스페이스 정보를 관리합니다.'], ['team', '팀원', '함께 일할 팀원과 초대 현황을 한곳에서 관리합니다.'], ['plan', '요금제', '플랜, 사용량, AI 이용량을 확인하고 결제합니다.'], ['integrations', '연동', '외부 도구를 연결해 프로젝트와 동기화합니다.']];
+  const TABS = [['me', '내 정보', '내 계정과 워크스페이스 정보를 관리합니다.'], ['team', '팀원', '함께 일할 팀원과 초대 현황을 한곳에서 관리합니다.'], ['plan', '플랜 · 결제', '요금제, 사용량, AI 이용량을 확인하고 결제를 관리합니다.'], ['integrations', '연동', '외부 도구를 연결해 프로젝트와 동기화합니다.']];
   const tabOf = () => { const t = qp0().get('tab'); if (TABS.some(([k]) => k === t)) return t; if (location.hash === '#billing' || qp0().get('checkout')) return 'plan'; if (qp0().get('jira')) return 'integrations'; return 'me'; };
   let tab = tabOf();
   const daysLeft = (d) => Math.max(0, Math.ceil((new Date(d) - Date.now()) / 86400000));

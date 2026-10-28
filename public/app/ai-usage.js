@@ -57,7 +57,7 @@ export async function aiUsagePage(main = $('#main')) {
     <div class="panel au-sum ${tone}"><div class="panel__b">
       ${raw(u.unlimited ? html`<p class="au-big" id="au-unlimited">AI 이용량 제한 없음</p><p class="hint">${period}</p>` : html`
       <div class="au-kpis">
-        <div class="au-kpi"><span class="au-kpi__l">${u.allowance === 'ONCE' ? '사용한 AI 이용량' : '이번 기간 사용량'}</span><b class="au-kpi__v" id="au-used">${pct(u.used_pct)}</b></div>
+        <div class="au-kpi"><span class="au-kpi__l">${u.allowance === 'ONCE' ? '사용한 AI 이용량' : '이번 기간 사용률'}</span><b class="au-kpi__v" id="au-used">${pct(u.used_pct)}</b></div>
         <div class="au-kpi"><span class="au-kpi__l">남은 이용량</span><b class="au-kpi__v" id="au-left">${pct(u.remaining_pct)}</b></div>
       </div>
       <div class="au-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${used}" aria-label="AI 이용량 사용률"><span style="width:${Math.min(100, used)}%"></span><i style="left:80%"></i></div>

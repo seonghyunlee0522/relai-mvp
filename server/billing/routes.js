@@ -192,7 +192,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
         effective_at: c.effective_at, cancel_url: `/api/workspaces/${wid}/billing/changes/${c.id}/cancel` })), ai_usage: publicUsage(await usageSummary(db, wid, { plan })),
       // 해지: POST cancel_url (auto-renew stops, plan to period end) · POST cancel_url { refund: true } (ends now + unused days refunded; preview: refund_quote_url).
       cancel_url: paid && renews ? `/api/workspaces/${wid}/billing/cancel` : null, refund_quote_url: paid && immediateRefundEnabled() ? `/api/workspaces/${wid}/billing/refund-quote` : null,
-      // 청약철회 (founder 2026-10-28): within 7 days of payment and only without AI use since — eligible → withdraw_url (full refund, ends now)
+      // 청약철회 (founder 2026-10-28): within 7 days of payment and only without use since (AI · project writes, lifecycle.firstUseSince) — eligible → withdraw_url (full refund, ends now)
       withdrawal: paid ? await withdrawalView(wid) : null, withdraw_url: paid ? `/api/workspaces/${wid}/billing/withdraw` : null,
       catalogue: planCatalogue(), flags: flags(), over_limit: over ? { projects: over.projects, members: over.members } : null,
       read_only_projects: roRows.length ? { limit: access.limit, editable: edRows, read_only: roRows } : null,
@@ -297,7 +297,7 @@ export function mountBillingRoutes({ app, db, guard, wrap, fail, provider, requi
     const w = await withdrawalQuote(db, wid);
     return { eligible: w.eligible, reason: w.reason, deadline: w.deadline, used_at: w.used_at, total: w.total };
   }
-  const WITHDRAW_ERR = { withdrawal_used: '결제 후 AI 기능을 사용해 청약철회할 수 없습니다. 해지하면 이번 결제 기간이 끝날 때까지 이용할 수 있습니다.',
+  const WITHDRAW_ERR = { withdrawal_used: '결제 후 서비스를 이용한 이력(AI 사용, 프로젝트 생성·입력·수정·삭제)이 있어 청약철회할 수 없습니다. 해지하면 이번 결제 기간이 끝날 때까지 이용할 수 있습니다.',
     withdrawal_expired: '결제일부터 7일이 지나 청약철회할 수 없습니다. 해지하면 이번 결제 기간이 끝날 때까지 이용할 수 있습니다.',
     withdrawal_no_subscription: '청약철회할 결제가 없습니다.', no_active_subscription: '청약철회할 결제가 없습니다.' };
   /** POST …/billing/withdraw — 청약철회: ends now, every paid order of the period refunded in full. Refused once AI was used or after 7 days. */

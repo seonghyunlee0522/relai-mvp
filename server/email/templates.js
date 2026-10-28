@@ -107,14 +107,17 @@ export function freeTransitionEmail({ workspaceName, planLabel, limit = 1, edita
 /** 해지 확인 (§13② 계약 내용 고지): period-end cancel, or immediate cancel with the refund lines. */
 export function cancelEmail({ workspaceName, planLabel, immediate, periodEnd, refundTotal = 0, refundLines = [], executed, retentionUntil, link, support }) {
   const subject = `[RELAI] ${workspaceName} ${planLabel} 플랜 해지 안내`;
+  const wd = refundLines.some((l) => l.kind === 'WITHDRAWAL');   // 청약철회 = full refund, not unused days
+  const refundWhat = wd ? '청약철회 환불' : '미사용 기간 환불';
   const what = immediate
-    ? `구독을 해지해 지금 Free 플랜이 되었습니다. ${refundTotal > 0 ? `미사용 기간 환불 ${wonKr(refundTotal)}을(를) ${executed ? '결제한 카드로 취소 처리했습니다' : '3영업일 안에 결제한 카드로 취소해 드립니다'}(위약금 없음).` : '환불할 미사용 기간이 없습니다.'}`
-    : `자동 갱신을 중단했습니다. ${periodEnd ? `${kDate(periodEnd)}까지` : '결제한 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 더 이상 결제되지 않습니다.`;
-  const lines = refundLines.map((l) => `<li>${esc(l.label || '결제')}: ${esc(wonKr(l.amount))} (미사용 ${esc(l.days)}/${esc(l.period_days)}일${l.kind === 'WITHDRAWAL' ? ', 청약철회' : ''})</li>`).join('');
+    ? `${wd ? '청약철회 요청에 따라' : '구독을 해지해'} 지금 Free 플랜이 되었습니다. ${refundTotal > 0 ? `${refundWhat} ${wonKr(refundTotal)}은(는) ${executed ? '결제한 카드로 취소 처리했습니다' : '요청 내용을 확인한 뒤 3영업일 안에 결제한 카드로 취소해 드립니다'}(위약금 없음).` : '환불할 미사용 기간이 없습니다.'}`
+    : `다음 정기결제를 중단했습니다. ${periodEnd ? `${kDate(periodEnd)}까지` : '이번 이용 기간이 끝날 때까지'} 지금 플랜을 이용하고, 이후 Free 플랜이 됩니다. 더 이상 결제되지 않습니다.`;
+  const lineNote = (l) => (l.kind === 'WITHDRAWAL' ? '청약철회 · 전액' : `미사용 ${l.days}/${l.period_days}일`);
+  const lines = refundLines.map((l) => `<li>${esc(l.label || '결제')}: ${esc(wonKr(l.amount))} (${esc(lineNote(l))})</li>`).join('');
   void retentionUntil;   // TODO(retention-legal, research/relai-retention-legal.md): personal-data retention periods are set after the legal review — never here
   const keep = `${FREE_POLICY} ${FREE_KEEP}`;
   const html = shell('구독 해지 안내', `<p><b>${esc(wsLabel(workspaceName))}</b>의 ${esc(planLabel)} 플랜: ${esc(what)}</p>${lines ? `<ul>${lines}</ul>` : ''}<p>${esc(keep)}</p>${link ? button(link, '플랜 · 결제 열기') : ''}`, support);
-  const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜: ${what}\n${refundLines.map((l) => `- ${l.label || '결제'}: ${wonKr(l.amount)} (미사용 ${l.days}/${l.period_days}일)`).join('\n')}\n${keep}\n${link ? `\n열기: ${link}\n` : ''}`;
+  const text = `${workspaceName} 워크스페이스의 ${planLabel} 플랜: ${what}\n${refundLines.map((l) => `- ${l.label || '결제'}: ${wonKr(l.amount)} (${lineNote(l)})`).join('\n')}\n${keep}\n${link ? `\n열기: ${link}\n` : ''}`;
   return { subject, html, text };
 }
 

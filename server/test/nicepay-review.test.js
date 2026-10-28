@@ -188,6 +188,17 @@ test('해지 · 청약철회 (founder 2026-10-28): no 즉시 해지 환불; 청�
     assert.equal(c.status, 200, c.text); assert.equal(c.json.billing.plan, 'PRO'); assert.equal(c.json.cancel.immediate, false);
     assert.equal((await B.db.all('SELECT id FROM subscription_refunds')).length, 0);
   } finally { B.done(); }
+  const C = await boot();   // 사용 이력 = 프로젝트 생성·입력·수정·삭제 too (조회 제외)
+  try {
+    await pay(C);
+    await C.c('GET', `/api/workspaces/${C.w}/projects`);   // 단순 조회 → still eligible
+    assert.equal((await C.c('GET', `/api/workspaces/${C.w}/billing`)).json.billing.withdrawal.eligible, true);
+    const p = await C.c('POST', `/api/workspaces/${C.w}/projects`, { name: '결제 후 프로젝트', client_name: '고객사', project_type: 'NEW_BUILD', planned_start_date: '2026-11-01', planned_end_date: '2027-01-31' });
+    assert.equal(p.status, 201, p.text);
+    const b = (await C.c('GET', `/api/workspaces/${C.w}/billing`)).json.billing;
+    assert.equal(b.withdrawal.eligible, false); assert.equal(b.withdrawal.reason, 'used');
+    assert.equal((await C.c('POST', `/api/workspaces/${C.w}/billing/withdraw`, {})).status, 409);
+  } finally { C.done(); }
 });
 
 test('card registration attempts are limited: after the limit 429 card_attempts_exceeded and NicePay is never called', async () => {

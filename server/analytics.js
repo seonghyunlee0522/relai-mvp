@@ -68,7 +68,7 @@ export const FEATURE_LABELS = {
 const SCREEN_LABELS = {
   '/app': '홈', '/app/projects': '프로젝트 목록', '/app/projects/new': '새 프로젝트', '/app/projects/:id': '프로젝트 개요', '/app/projects/:id/requirements': '요구사항',
   '/app/projects/:id/wbs': 'WBS', '/app/projects/:id/issues': '이슈·리스크', '/app/projects/:id/changes': '변경 요청', '/app/projects/:id/tests': '테스트',
-  '/app/projects/:id/reports': '보고서', '/app/projects/:id/definition': '프로젝트 정의', '/app/projects/:id/charter': '사업수행계획서', '/app/settings': '설정', '/app/credits': 'AI 크레딧',
+  '/app/projects/:id/reports': '보고서', '/app/projects/:id/definition': '프로젝트 정의', '/app/projects/:id/charter': '사업수행계획서', '/app/settings': '설정', '/app/credits': 'AI 이용 현황 (구 AI 크레딧)',
 };
 export const featureLabel = (kind, key) => (kind === 'screen' ? `화면 · ${SCREEN_LABELS[key] || key}` : FEATURE_LABELS[key] || key);
 

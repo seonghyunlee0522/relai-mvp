@@ -1,5 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
+import { cspMiddleware } from './csp.js';
 import { resolve, dirname } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -111,6 +112,7 @@ export function createApp(db, { secureCookies = process.env.NODE_ENV === 'produc
     res.set('X-Request-Id', req.id);
     next();
   });
+  app.use(cspMiddleware());   // strict nonce CSP on every server-rendered HTML page (server/csp.js)
   // Billing webhook first: raw body for signature checks, outside JSON parsing / CSRF / auth (docs/production-readiness.md §8).
   mountBillingWebhook(app, db, { provider: billingProvider, fail: (res, status, code, message) => res.status(status).json({ error: { code, message } }) });
   mountServicePayReturn(app, db, { provider: billingProvider });   // 서비스 결제 (/pricing): NicePay window result, cross-site form POST

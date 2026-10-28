@@ -17,7 +17,7 @@ export const SUBSCRIBE_SOON = '결제 준비 중입니다. 곧 오픈 예정이�
 
 
 export async function plansPage(main = $('#main')) {
-  document.title = '플랜 — RELAI';
+  document.title = '요금제 — RELAI';
   let b = null;
   try { b = (await api('GET', `/api/workspaces/${state.workspace.id}/billing`)).billing; } catch { b = null; }
   const cur = b?.plan || 'FREE';

@@ -147,9 +147,21 @@ export async function refundQuote(db, workspaceId, { at = new Date() } = {}) {
 }
 
 /**
+ * "Used" since `since` (청약철회 제한, founder 2026-10-28): the first AI run of the workspace, or the first successful project write
+ * recorded by the analytics middleware — 프로젝트 생성 (POST /projects) or any create / update / delete inside a non-sample project.
+ * 단순 조회 and downloads (GET exports) do not count. → ISO time or null.
+ */
+export async function firstUseSince(db, workspaceId, since) {
+  const ai = await db.get('SELECT MIN(created_at) AS at FROM ai_runs WHERE workspace_id = ? AND created_at >= ?', [workspaceId, since]);
+  const write = await db.get(`SELECT MIN(created_at) AS at FROM analytics_events WHERE name = 'feature' AND workspace_id = ? AND created_at >= ? AND NOT sample
+    AND key NOT LIKE 'GET %' AND (project_id IS NOT NULL OR key = 'POST /projects')`, [workspaceId, since]);
+  const ats = [ai?.at, write?.at].filter(Boolean).map((v) => new Date(v));
+  return ats.length ? new Date(Math.min(...ats)).toISOString() : null;
+}
+
+/**
  * 청약철회 (founder 2026-10-28): within WITHDRAWAL_DAYS (KST days) of payment and only while the service has not been used since —
- * "used" = any AI run of the workspace since the payment (전자상거래법 제17조 제2항 제5호: disclosed before payment on the checkout screen and in
- * the terms; Free is the trial). Every paid order of the current period must be inside the window; each is refunded in full (what is left
+ * "used" = firstUseSince(): AI 사용, 프로젝트 생성, 기존 프로젝트의 입력·수정·삭제 (단순 조회 제외) (전자상거래법 제17조 제2항 제5호; Free is the trial). Every paid order of the current period must be inside the window; each is refunded in full (what is left
  * of it). → { eligible, reason: null | 'no_subscription' | 'expired' | 'used', deadline, used_at, lines, total }.
  */
 export async function withdrawalQuote(db, workspaceId, { at = new Date() } = {}) {
@@ -162,8 +174,8 @@ export async function withdrawalQuote(db, workspaceId, { at = new Date() } = {})
   const first = orders.find((o) => o.paid_at)?.paid_at;
   if (!first || orders.some((o) => !o.paid_at || kstDaysBetween(o.paid_at, at) >= WITHDRAWAL_DAYS)) return none('expired');
   const deadline = new Date(new Date(first).getTime() + (WITHDRAWAL_DAYS - 1) * DAY);   // last KST day it is still allowed (결제일 포함 7일)
-  const used = await db.get('SELECT MIN(created_at) AS at FROM ai_runs WHERE workspace_id = ? AND created_at >= ?', [workspaceId, first]);
-  if (used?.at) return none('used', { deadline, used_at: used.at });
+  const usedAt = await firstUseSince(db, workspaceId, first);
+  if (usedAt) return none('used', { deadline, used_at: usedAt });
   const lines = orders.map((o) => {
     const per = orderPeriod(o, sub);
     return { order_id: o.id, kind: 'WITHDRAWAL', order_kind: o.kind, label: o.goods_name, paid: Number(o.amount), paid_at: o.paid_at,
