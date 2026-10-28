@@ -20,7 +20,7 @@ export const LEGAL = {
   /** Version recorded with each signup consent. Bump when the text of /terms or /privacy changes. */
   termsVersion: '2026-10-29',   // v2026-10-29: 월간 정기결제만(연간·추가 이용 조항 삭제, 제7조의2 삭제), 청약철회 제한 = AI 사용·프로젝트 생성·입력·수정·삭제(조회 제외), 청약철회 요청·처리 절차, '정기결제 준비 중' 조항 삭제. v2026-10-28: 해지 = 기간 만료 시 종료만(즉시 종료·일할 환불 삭제), 청약철회 7일 · AI 사용 시 제한 (제11조·제12조·제13조). v2026-10-27: AI 크레딧 → AI 이용량 (제2조·제7조·제8조·제8조의2·제12조·제13조·부칙 3). 시행일(termsEffectiveDate)은 공지 기간 결정 후 갱신
   privacyVersion: '2026-10-29',   // v2026-10-29: 추가 이용 항목 삭제, 청약철회 처리 내역, 처리 목적 번호 정리, OpenAI 위탁·국외이전 업무에 WBS 보완·테스트 시나리오 생성 추가. v2026-10-27: AI 기능 사용 기록 항목(차감 크레딧 → 처리량·비용), 무료 AI 이용량 중복 제공 방지
-  dbLocation: '해외 클라우드 데이터센터(리전 확인 후 고지)',         // 국외 이전 표: Neon 프로젝트 리전의 국가 (Neon console → Project settings → Region). Vercel functions run in sin1 (vercel.json)
+  dbLocation: '싱가포르',         // 국외 이전 표: Neon 프로젝트 리전의 국가 (Neon console → Project settings → Region). Vercel functions run in sin1 (vercel.json)
   courtSeat:'수원지방법원 성남지원',     // 관할: 회사 소재지(성남시 수정구) 관할 법원
 };
 
