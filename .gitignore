@@ -8,3 +8,7 @@ data/
 .vercel-static/brand
 .vercel-static/img
 .vercel-static/service
+
+# PM 지식 RAG: source chunks / cards never enter the repository (docs/pm-knowledge-rag.md)
+*.chunks.jsonl
+kb-data/

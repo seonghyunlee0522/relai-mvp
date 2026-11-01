@@ -147,7 +147,7 @@ const block = (tag, text) => `<${tag}>\n${text}\n</${tag}>`;
 export const dataBlock = (text) => block('project_data', text);
 export const inputBlock = (text) => block('untrusted_input', text);
 /** Text pasted by users or read from DB fields is wrapped so a stray closing tag cannot break out of its block. */
-export const neutralize = (s) => String(s ?? '').replace(/<\/?(project_data|untrusted_input)>/gi, (m) => m.replace('<', '〈').replace('>', '〉'));
+export const neutralize = (s) => String(s ?? '').replace(/<\/?(project_data|untrusted_input|pm_knowledge)>/gi, (m) => m.replace('<', '〈').replace('>', '〉'));
 
 /** Second attempt after a schema-validation failure: same request plus the concrete problems to fix. */
 export const retryHint = (errors) => `\n\n이전 응답이 요구된 JSON 구조를 만족하지 않았습니다. 아래 문제를 고쳐 다시 반환하세요:\n- ${errors.slice(0, 8).join('\n- ')}`;

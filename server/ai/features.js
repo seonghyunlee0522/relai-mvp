@@ -15,7 +15,8 @@ import * as X from '../raid.js';
 import { addWbsHistory } from '../wbs-history.js';
 import { nodeIdFor } from '../wbs-structure.js';
 import { inferPlanPhase, sameAsNode, nodeByPlan } from '../../public/app/shared/wbs-structure.js';
-import { runAiFeature, AiError } from './service.js';
+import { runAiFeature, AiError, isPreview } from './service.js';
+import { searchKnowledge, knowledgeBlock, knowledgeSummary } from './knowledge.js';
 import { dataBlock, inputBlock, neutralize } from './prompts.js';
 import { systemPrompt } from './prompt-store.js';
 import { extractionContext, wbsGenerationContext, changeImpactContext, assistantContext } from './context.js';
@@ -274,6 +275,13 @@ export async function commitImpact(db, { project, userId, change, requirements =
 /* =========================================================================
  * 4. Project Q&A
  * ========================================================================= */
+/* PM 지식 rules travel with the knowledge block in the user message (not in the admin-editable system prompt), so they apply exactly
+ * when cards are present and survive any operator override of the PROJECT_QA prompt. */
+const KNOWLEDGE_RULES = `위 <untrusted_input>의 질문에 답하세요.
+- 이 프로젝트의 사실(일정·건수·상태·담당·진척)은 <project_data>만 근거로 삼습니다. 데이터에 없는 프로젝트 사실은 추측하지 않습니다.
+- 프로젝트 관리 방법·절차·개념을 묻는 질문은 <pm_knowledge>를 배경 지식으로 삼아 답하고, 가능하면 <project_data>의 현재 상황(단계, 관련 항목)에 맞춰 적용 방법을 제안합니다. 이런 질문에는 "데이터에 없습니다"라고 답하지 않습니다.
+- <pm_knowledge>의 문장을 그대로 옮기지 말고 자신의 말로 짧게 풀어 씁니다. 출처(책·표준·저자·장 번호)나 "참고 자료에 따르면" 같은 표현은 쓰지 않고, references에는 <project_data>의 항목만 넣습니다.
+- 질문과 관련 없는 <pm_knowledge>는 무시합니다.`;
 export async function askProject(db, { project, wid, userId, question, history = [] }) {
   const q = str(question);
   if (q.length < 2) throw new ValidationError({ question: '질문을 입력해 주세요.' });
@@ -285,9 +293,13 @@ export async function askProject(db, { project, wid, userId, question, history =
     wid, projectId: project.id, userId, feature: 'PROJECT_QA',
     build: async () => {
       ctx = await assistantContext(db, project, q);
+      // PM 지식 (RAG): background knowledge cards, never cited. Retrieval failures degrade to no knowledge (knowledge.js).
+      const kb = await searchKnowledge(db, q, { phase: project.current_phase, preview: isPreview() });
+      const kbText = knowledgeBlock(kb.cards);
       return { system: await systemPrompt(db, 'PROJECT_QA'), schemaName: 'project_answer', schemaDescription: '프로젝트 질문에 대한 근거 기반 답변',
-        user: `${dataBlock(ctx.text)}${prior.length ? `\n\n<untrusted_input>\n이전 대화 (데이터):\n${prior.join('\n')}\n</untrusted_input>` : ''}\n\n${inputBlock(neutralize(q))}\n\n위 <untrusted_input>의 질문에 <project_data>만 근거로 답하세요.`,
-        inputSummary: `question ${q.length} chars, intents ${ctx.intents.join('+')}`, inputChars: q.length };
+        user: `${dataBlock(ctx.text)}${kbText ? `\n\n${kbText}` : ''}${prior.length ? `\n\n<untrusted_input>\n이전 대화 (데이터):\n${prior.join('\n')}\n</untrusted_input>` : ''}\n\n${inputBlock(neutralize(q))}\n\n`
+          + (kbText ? KNOWLEDGE_RULES : '위 <untrusted_input>의 질문에 <project_data>만 근거로 답하세요.'),
+        inputSummary: `question ${q.length} chars, intents ${ctx.intents.join('+')}; ${knowledgeSummary(kb)}`, inputChars: q.length };
     },
     postValidate: async (data) => {
       const warnings = [...data.warnings]; const refs = []; const seen = new Set(); const unknown = [];
