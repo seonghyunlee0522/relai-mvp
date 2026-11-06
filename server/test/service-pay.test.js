@@ -151,6 +151,60 @@ test('amount tamper: a window result for another amount is rejected without appr
   } finally { server.close(); }
 });
 
+test('금액 입력 결제: page card + field, ?amount pre-fill; amount bounded server-side; paid for exactly the typed amount', async () => {
+  const { db, server, client, np, mail, returnPost, windowResult } = await boot();
+  try {
+    const c = client();
+    const page = await c('GET', '/pay/agent?plan=custom&product=agent&amount=550000');
+    assert.equal(page.status, 200);
+    assert.match(page.text, /data-selected="agent-custom"/);
+    assert.match(page.text, /id="amount"[^>]*value="550,000"/);
+    assert.match(page.text, /550,000원 결제하기/);
+    assert.ok(page.text.includes('협의 금액'));
+    assert.doesNotMatch((await c('GET', '/pay/agent?plan=custom&product=agent&amount=5')).text, /id="amount"[^>]*value=/, 'out-of-range pre-fill is dropped');
+    assert.match((await c('GET', '/pay/agent?plan=once&product=agent')).text, /id="sp-amountf" hidden/);
+
+    for (const amount of [undefined, '', 'abc', 0, -1000, 9999, 10000001, 1.5, '550000.5']) {
+      const r = await c('POST', '/api/service-pay/orders', ORDER({ product: 'agent-custom', amount }));
+      assert.equal(r.status, 400, String(amount)); assert.ok(r.json.error.fields.amount, String(amount));
+    }
+    // amount and buyer errors come back together
+    const both = await c('POST', '/api/service-pay/orders', ORDER({ product: 'agent-custom', amount: 1, buyer: { ...BUYER, email: 'x' } }));
+    assert.deepEqual(Object.keys(both.json.error.fields).sort(), ['amount', 'email']);
+    // catalogue products still ignore a client amount
+    assert.equal((await c('POST', '/api/service-pay/orders', ORDER({ amount: 550000 }))).json.order.amount, 400000);
+
+    const r = await c('POST', '/api/service-pay/orders', ORDER({ product: 'agent-custom', amount: '550,000' }));
+    assert.equal(r.status, 201);
+    assert.equal(r.json.order.amount, 550000); assert.equal(r.json.pay.amount, 550000);
+    const row = await db.get('SELECT * FROM service_orders WHERE id = ?', [r.json.order.id]);
+    assert.deepEqual([row.product, row.kind, row.amount, row.supply_amount, row.vat_amount, row.goods_name], ['agent-custom', 'ONE_TIME', 550000, 500000, 50000, 'AI Agent 개발 및 운영 (협의 금액)']);
+
+    // a window re-signed for another amount is refused without approving
+    const bad = await returnPost(windowResult({ ...r.json.order, amount: 400000 }));
+    assert.match(bad.location, /^\/pay\/agent\/failed\?reason=amount_mismatch/);
+    assert.equal(np.called(/^\/v1\/payments\/[^/]+$/).length, 0);
+
+    const o = (await c('POST', '/api/service-pay/orders', ORDER({ product: 'agent-custom', amount: 1234567 }))).json.order;
+    const ok = await returnPost(windowResult(o));
+    assert.equal(ok.location, `/pay/agent/done?order=${o.id}`);
+    const paid = await db.get('SELECT status, amount FROM service_orders WHERE id = ?', [o.id]);
+    assert.deepEqual([paid.status, paid.amount], ['PAID', 1234567]);
+    assert.equal(np.called(/^\/v1\/payments\/[^/]+$/)[0].body.amount, 1234567);
+    assert.match(mail.find((m) => m.to === 'buyer@example.com').at(-1).text, /1,234,567원/);
+    assert.match((await c('GET', `/pay/agent/done?order=${o.id}`)).text, /1,234,567원/);
+  } finally { server.close(); }
+});
+
+test('금액 입력 결제 limits follow SERVICE_PAY_CUSTOM_MIN / _MAX', async () => {
+  const { parseCustomAmount, customLimits } = await import('../billing/service-orders.js');
+  const env = { SERVICE_PAY_CUSTOM_MIN: '100000', SERVICE_PAY_CUSTOM_MAX: '2000000' };
+  assert.deepEqual(customLimits(env), { min: 100000, max: 2000000 });
+  assert.equal(parseCustomAmount('1,000,000원', env), 1000000);
+  assert.throws(() => parseCustomAmount(50000, env)); assert.throws(() => parseCustomAmount(2000001, env));
+  assert.deepEqual(customLimits({}), { min: 10000, max: 10000000 });
+});
+
 test('approve is idempotent: replayed return and the NicePay webhook for the same payment apply once, one receipt e-mail; done page shows order + amount', async () => {
   const { db, server, client, np, mail, returnPost, windowResult, webhook } = await boot();
   try {

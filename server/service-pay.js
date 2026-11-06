@@ -1,7 +1,9 @@
 /**
  * RELAI 서비스 결제 — a public page, no RELAI login (founder 2026-10-20; layout after docreel.kr/pay/agent).
- *   GET  /pay/agent[?plan=once|monthly&product=agent]   product cards, buyer form, consents, 결제 전 확인해주세요, business footer
+ *   GET  /pay/agent[?plan=once|monthly|custom&product=agent]   product cards, buyer form, consents, 결제 전 확인해주세요, business footer
  *   POST /api/service-pay/orders                       { product, buyer, agree_* } → service_orders row (catalogue amount) + NicePay window params
+ *                                                      product 'agent-custom' (금액 입력 결제, 2026-11-06): + { amount } typed by the buyer,
+ *                                                      parsed and bounded server-side (customLimits), then stored on the order like any other
  *   POST /api/service-pay/nicepay/return               NicePay window result (form POST, cross-site): verify → approve (amount from the order) → apply → 303
  *   POST /api/service-pay/subscriptions                월 구독 (founder 2026-10-28): card → NicePay billing key → first charge → service_subscriptions
  *                                                      (billing/service-subscriptions.js; renewals in the daily billing cron). Refused while recurring is off.
@@ -20,7 +22,7 @@ import { BillingError } from './billing/provider.js';
 import { LEGAL, legalFooterHtml } from '../public/app/shared/legal-info.js';
 import { shareMeta } from './share-meta.js';
 import { writeAudit } from './admin.js';
-import { SERVICE_PRODUCTS, productFor, RECURRING_SOON, ServiceOrderError, parseBuyer, createServiceOrder, getServiceOrder, failServiceOrder, claimServiceOrder, markRefundFailed,
+import { SERVICE_PRODUCTS, productFor, CUSTOM_KEY, CUSTOM_PRODUCT, customProduct, customLimits, parseCustomAmount, RECURRING_SOON, ServiceOrderError, parseBuyer, createServiceOrder, getServiceOrder, failServiceOrder, claimServiceOrder, markRefundFailed,
   applyServiceEvent, listServiceOrders, serviceBaseUrl, alertOperator } from './billing/service-orders.js';
 import { parseCard } from './billing/nicepay.js';
 import { startServiceSubscription, cancelServiceSubscription, getServiceSubscription, validToken } from './billing/service-subscriptions.js';
@@ -110,7 +112,9 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
     // No plan in the URL: start on the product that can actually be bought (월 구독 while only it is open).
     const defPlan = !open && openMonthly ? 'monthly' : 'once';
     const sel = productFor(String(req.query.plan || defPlan), String(req.query.product || 'agent')) || SERVICE_PRODUCTS['agent-once'];
-    res.type('html').send(pricingPage({ selected: sel, recurring: Boolean(provider?.recurringEnabled), open, openMonthly, meta: shareMeta(req, { title: '서비스 결제 — RELAI', description: 'RELAI AI Agent 개발 및 운영 서비스 결제', path: '/pay/agent' }) }));
+    // ?amount= pre-fills the 금액 입력 field (a link sent to one client); it is only a default the buyer sees and can change.
+    const preset = sel.key === CUSTOM_KEY ? String(req.query.amount || '').replace(/\D/g, '').slice(0, 12) : '';
+    res.type('html').send(pricingPage({ selected: sel, preset, recurring: Boolean(provider?.recurringEnabled), open, openMonthly, meta: shareMeta(req, { title: '서비스 결제 — RELAI', description: 'RELAI AI Agent 개발 및 운영 서비스 결제', path: '/pay/agent' }) }));
   });
   app.get('/pay/agent/done', wrap(async (req, res) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
@@ -127,10 +131,15 @@ export function mountServicePay({ app, db, wrap, fail, provider }) {
   }));
 
   app.post('/api/service-pay/orders', wrap(async (req, res) => {
-    const product = SERVICE_PRODUCTS[String(req.body?.product || '')];
+    const key = String(req.body?.product || '');
+    let product = SERVICE_PRODUCTS[key] || (key === CUSTOM_KEY ? CUSTOM_PRODUCT : null);
     if (!product) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields: { product: '상품을 선택해 주세요.' } });
     if (product.kind !== 'ONE_TIME') return fail(res, 409, 'recurring_unavailable', RECURRING_SOON);
-    let buyer; try { buyer = parseBuyer(req.body); } catch (e) { if (e instanceof ServiceOrderError) return fieldsFail(res, e); throw e; }
+    // Catalogue products ignore any client amount; only 금액 입력 결제 reads it, and only through parseCustomAmount.
+    const fields = {}; let buyer;
+    if (key === CUSTOM_KEY) { try { product = customProduct(parseCustomAmount(req.body?.amount)); } catch (e) { if (!(e instanceof ServiceOrderError)) throw e; Object.assign(fields, e.fields); } }
+    try { buyer = parseBuyer(req.body); } catch (e) { if (!(e instanceof ServiceOrderError)) throw e; Object.assign(fields, e.fields); }
+    if (Object.keys(fields).length) return fail(res, 400, 'validation_error', '입력값을 확인해 주세요.', { fields });
     if (!checkoutReady(provider)) return fail(res, 503, 'service_pay_unavailable', `지금은 온라인 결제를 받을 수 없습니다. ${LEGAL.contactEmail}로 문의해 주세요.`);
     if (await orderLimit.blocked(req.ip) || await emailLimit.blocked(buyer.email)) return fail(res, 429, 'rate_limited', '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.');
     await orderLimit.hit(req.ip); await emailLimit.hit(buyer.email);
@@ -193,42 +202,51 @@ const payFooter = () => legalFooterHtml(LEGAL).replace('class="legal-foot"', 'cl
 const CARDS = {
   'agent-once': { unit: '1회', badge: '1회 결제', bullets: ['AI Agent 개발 및 운영 지원 (협의한 범위)', '1개월 이용 · 자동 갱신 없음', '신용카드 결제 · 부가세 포함'], cta: '1회 결제 선택' },
   'agent-monthly': { unit: '월', badge: '월 구독', bullets: ['AI Agent 개발 및 운영 · 부가세 포함', '카드 등록 시 첫 결제 · 이후 월 1회', '다음 결제일 전에 해지 가능'], cta: '월 구독 선택' },
+  [CUSTOM_KEY]: { unit: '1회', badge: '금액 입력', bullets: ['담당자와 협의한 금액으로 결제', '자동 갱신 없음', '신용카드 결제 · 부가세 포함'], cta: '금액 입력 선택' },
 };
 function card(p, selected, recurring = true) {
   const c = { ...CARDS[p.key], ...(p.kind === 'RECURRING' && !recurring ? { badge: '준비 중' } : {}) };
   return `<article class="sp-card${selected ? ' is-on' : ''}" data-product="${p.key}" data-plan="${p.plan}">
 <div class="sp-card__top"><h3>${esc(p.title)}</h3><span class="sp-badge${p.kind === 'RECURRING' && !recurring ? ' sp-badge--soon' : ''}">${c.badge}</span></div>
-<p class="sp-price"><b>${won(p.amount)}</b><span> / ${c.unit}</span></p><p class="sp-vat">부가세 포함</p>
+<p class="sp-price">${p.amount == null ? '<b>협의 금액</b>' : `<b>${won(p.amount)}</b><span> / ${c.unit}</span>`}</p><p class="sp-vat">부가세 포함</p>
 <ul>${c.bullets.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
-<a class="sp-btn sp-btn--line" href="/pay/agent?plan=${p.plan}&amp;product=${p.product}" data-pick="${p.key}" aria-pressed="${selected}">${selected ? '선택됨' : c.cta}</a></article>`;
+<a class="sp-btn sp-btn--line" href="/pay/agent?plan=${p.plan}&amp;product=${p.product}" data-pick="${p.key}" aria-pressed="${selected}" data-cta="${esc(c.cta)}">${selected ? '선택됨' : c.cta}</a></article>`;
 }
 // Card inputs carry no name: they are read by id in pricing.js and can never be part of a native form submission.
 const field = (id, label, attrs, hint = '') => `<label class="sp-f" for="${id}"><span class="sp-f__l">${label}</span><input class="sp-in" id="${id}"${id.startsWith('card_') ? '' : ` name="${id}"`} ${attrs}>${hint ? `<small>${hint}</small>` : ''}<em class="sp-err" data-err="${id}"></em></label>`;
 const check = (id, label, link = '') => `<label class="sp-chk"><input type="checkbox" id="${id}" name="${id}" data-consent><span>${label}${link}</span></label><em class="sp-err" data-err="${id}"></em>`;
 
 export const CLOSED_LABEL = '결제 준비 중';
-export function pricingPage({ selected, recurring, open = false, openMonthly = false, meta = '' }) {
+export function pricingPage({ selected, preset = '', recurring, open = false, openMonthly = false, meta = '' }) {
   const openSel = selected.kind === 'RECURRING' ? openMonthly : open;
   const prods = Object.values(SERVICE_PRODUCTS);
+  const cards = [...prods, CUSTOM_PRODUCT];
+  const lim = customLimits(); const isCustom = selected.key === CUSTOM_KEY;
+  const presetN = preset && Number(preset) >= lim.min && Number(preset) <= lim.max ? Number(preset) : null;
   return `${head('서비스 결제 — RELAI', meta)}<body class="sp">${topbar()}
 <main class="sp-wrap">
 <section class="sp-hero"><p class="sp-eyebrow">RELAI · SERVICE PLANS</p><h1>AI Agent 개발과 운영,<br>맞는 방식으로 시작하세요.</h1>
 <p class="sp-sub">업무에 맞는 AI Agent를 만들고, 안정적으로 운영합니다. 1개월 단위로 결제하거나 월 구독으로 이용할 수 있습니다.</p></section>
-<section class="sp-cards" aria-label="상품">${prods.map((p) => card(p, p.key === selected.key, recurring)).join('')}</section>
+<section class="sp-cards" aria-label="상품">${cards.map((p) => card(p, p.key === selected.key, recurring)).join('')}</section>
 <section class="sp-pay" id="pay" data-recurring="${recurring ? '1' : '0'}" data-open="${open ? '1' : '0'}" data-open-monthly="${openMonthly ? '1' : '0'}" data-selected="${selected.key}">
 <div class="sp-pay__sum"><h2>주문 정보</h2>
 ${prods.map((p) => `<div class="sp-sum" data-sum="${p.key}"${p.key === selected.key ? '' : ' hidden'}><p class="sp-sum__t">${esc(p.title)}</p>
 <dl><dt>이용 기간</dt><dd>${p.kind === 'RECURRING' ? '매월 자동 결제' : '1개월 · 자동 갱신 없음'}</dd><dt>공급가액</dt><dd>${won(p.supply_amount)}</dd><dt>부가세</dt><dd>${won(p.vat_amount)}</dd>
 <dt class="sp-sum__tot">결제 금액</dt><dd class="sp-sum__tot">${won(p.amount)}${p.kind === 'RECURRING' ? ' / 월' : ''}</dd></dl>
-${p.kind === 'RECURRING' && !recurring ? `<p class="sp-soon" role="note">${RECURRING_SOON} 정기결제 심사가 끝나면 열립니다.</p>` : ''}</div>`).join('')}</div>
+${p.kind === 'RECURRING' && !recurring ? `<p class="sp-soon" role="note">${RECURRING_SOON} 정기결제 심사가 끝나면 열립니다.</p>` : ''}</div>`).join('')}
+<div class="sp-sum" data-sum="${CUSTOM_KEY}"${isCustom ? '' : ' hidden'}><p class="sp-sum__t">${esc(CUSTOM_PRODUCT.title)}</p>
+<dl><dt>이용 기간</dt><dd>협의한 범위 · 자동 갱신 없음</dd><dt>공급가액</dt><dd id="sum-custom-supply">${presetN ? won(Math.round(presetN / 1.1)) : '-'}</dd><dt>부가세</dt><dd id="sum-custom-vat">${presetN ? won(presetN - Math.round(presetN / 1.1)) : '-'}</dd>
+<dt class="sp-sum__tot">결제 금액</dt><dd class="sp-sum__tot" id="sum-custom-total">${presetN ? won(presetN) : '-'}</dd></dl></div></div>
 <form class="sp-form" id="sp-form" method="post" action="/pay/agent" novalidate>
 <h2>구매자 정보</h2>
 <div class="sp-grid">${field('name', '이름', 'autocomplete="name" maxlength="40" required')}${field('company', '회사명 <i>(선택)</i>', 'autocomplete="organization" maxlength="80"')}
 ${field('email', '이메일', 'type="email" autocomplete="email" maxlength="120" required', '결제 확인 메일을 이 주소로 보냅니다.')}${field('phone', '연락처', 'type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" required')}</div>
+<fieldset class="sp-cardf" id="sp-amountf"${isCustom ? '' : ' hidden'}><legend>결제 금액</legend>
+${field('amount', '결제 금액 (원, 부가세 포함)', `inputmode="numeric" autocomplete="off" maxlength="16" placeholder="예: 550,000" data-min="${lim.min}" data-max="${lim.max}"${presetN ? ` value="${presetN.toLocaleString('ko-KR')}"` : ''}`, `담당자와 협의한 금액을 입력해 주세요. ${won(lim.min)} ~ ${won(lim.max)}`)}</fieldset>
 <fieldset class="sp-cardf" id="sp-cardf"${selected.kind === 'RECURRING' ? '' : ' hidden'}><legend>정기결제 카드 등록</legend>
 <div class="sp-grid">${field('card_number', '카드번호', 'inputmode="numeric" autocomplete="cc-number" maxlength="19" placeholder="0000 0000 0000 0000"')}${field('card_expiry', '유효기간', 'inputmode="numeric" autocomplete="cc-exp" maxlength="5" placeholder="MM/YY"')}
 ${field('card_id_no', '생년월일 6자리 또는 사업자번호 10자리', 'inputmode="numeric" maxlength="10" placeholder="YYMMDD"')}${field('card_pw', '카드 비밀번호 앞 2자리', 'type="password" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="••"')}</div>
-${check('agree_recurring', '[필수] 정기결제에 동의합니다. 등록한 카드로 매월 400,000원(부가세 포함)이 자동 결제되며, 다음 결제일 전에 해지할 수 있습니다.')}
+${check('agree_recurring', `[필수] 정기결제에 동의합니다. 등록한 카드로 매월 ${won(SERVICE_PRODUCTS['agent-monthly'].amount)}(부가세 포함)이 자동 결제되며, 다음 결제일 전에 해지할 수 있습니다.`)}
 <p class="sp-note">카드 정보는 결제사(NICEPAY)로 암호화해 전달하며 RELAI에 저장하지 않습니다.</p></fieldset>
 <h2>약관 동의</h2>
 <label class="sp-chk sp-chk--all"><input type="checkbox" id="agree_all"><span><b>전체 동의</b></span></label>
@@ -239,7 +257,7 @@ ${check('agree_privacy', '[필수] 개인정보 수집·이용에 동의합니�
 <tr><th>동의 거부</th><td>동의를 거부할 수 있으나, 거부하면 결제를 진행할 수 없습니다.</td></tr></table> <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a></div>
 ${check('agree_payment', '[필수] 주문 내용과 결제 금액을 확인했으며 결제 진행에 동의합니다.')}
 <p class="sp-msg" id="sp-msg" role="alert"></p>
-<button class="sp-btn sp-btn--pri" id="sp-submit" type="submit" disabled data-label-once="${won(SERVICE_PRODUCTS['agent-once'].amount)} 결제하기" data-label-monthly="카드 등록하고 구독하기" data-label-closed="${CLOSED_LABEL}">${!openSel ? CLOSED_LABEL : selected.kind === 'RECURRING' ? '카드 등록하고 구독하기' : `${won(selected.amount)} 결제하기`}</button>
+<button class="sp-btn sp-btn--pri" id="sp-submit" type="submit" disabled data-label-once="${won(SERVICE_PRODUCTS['agent-once'].amount)} 결제하기" data-label-monthly="카드 등록하고 구독하기" data-label-custom="결제하기" data-label-closed="${CLOSED_LABEL}">${!openSel ? CLOSED_LABEL : selected.kind === 'RECURRING' ? '카드 등록하고 구독하기' : isCustom ? (presetN ? `${won(presetN)} 결제하기` : '결제하기') : `${won(selected.amount)} 결제하기`}</button>
 <p class="sp-note" id="sp-closed"${openSel ? ' hidden' : ''}>선택한 상품은 지금 온라인 결제를 받지 않습니다. <a href="mailto:${esc(LEGAL.contactEmail)}">${esc(LEGAL.contactEmail)}</a>로 문의해 주세요.</p>
 <p class="sp-note">1회 결제는 NICEPAY 결제창에서 신용카드로 진행됩니다.</p>
 </form></section>
@@ -248,6 +266,7 @@ ${check('agree_payment', '[필수] 주문 내용과 결제 금액을 확인했�
 <li>1회 결제는 1개월 이용이며 자동으로 갱신되지 않습니다.</li>
 <li>월 구독은 카드 등록 시 첫 결제가 이루어지고 이후 매월 같은 날 결제됩니다. 결제 확인 메일의 '구독 확인 · 해지' 링크에서 다음 결제일 전에 해지할 수 있으며, 해지하면 결제한 달까지 이용하고 이미 결제한 금액은 환불되지 않습니다.</li>
 <li>이미 결제한 이용료의 취소·환불은 서비스 제공 여부와 계약 내용, 관련 법령에 따라 처리합니다.</li>
+<li>금액 입력 결제는 담당자와 협의한 금액을 입력해 결제하며 자동으로 갱신되지 않습니다. 협의한 금액과 다르게 결제한 경우 담당자가 확인해 차액을 정리합니다.</li>
 <li>결제 금액은 모두 부가세 포함 금액입니다.</li></ul></section>
 </main>
 ${payFooter()}

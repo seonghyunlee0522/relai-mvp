@@ -22,7 +22,33 @@ export const SERVICE_PRODUCTS = {
   'agent-monthly': { key: 'agent-monthly', plan: 'monthly', product: 'agent', kind: 'RECURRING', title: 'AI Agent 개발 및 운영 월 구독', months: 1,
     goods_name: 'AI Agent 개발 및 운영 월 구독', ...VAT_INCLUDED(400000) },
 };
-export const productFor = (plan, product = 'agent') => Object.values(SERVICE_PRODUCTS).find((p) => p.plan === plan && p.product === product) || null;
+/**
+ * 금액 입력 결제 (founder 2026-11-06): for clients whose agreed price is not 400,000원. A 1회 card payment for an amount the
+ * buyer types; not part of the fixed catalogue above. The server parses and bounds the amount (integer 원, VAT included,
+ * SERVICE_PAY_CUSTOM_MIN..SERVICE_PAY_CUSTOM_MAX), stores it on the order, and from there on the order amount is the only
+ * source of truth exactly as for the catalogue products (window, approval and webhook all check against it).
+ */
+export const CUSTOM_KEY = 'agent-custom';
+const envInt = (name, def, env) => { const n = Number.parseInt(String(env[name] ?? ''), 10); return Number.isInteger(n) && n > 0 ? n : def; };
+export const customLimits = (env = process.env) => {
+  const min = envInt('SERVICE_PAY_CUSTOM_MIN', 10000, env); const max = envInt('SERVICE_PAY_CUSTOM_MAX', 10000000, env);
+  return { min, max: Math.max(min, max) };
+};
+export const CUSTOM_PRODUCT = { key: CUSTOM_KEY, plan: 'custom', product: 'agent', kind: 'ONE_TIME', title: '협의 금액 결제', months: 1,
+  goods_name: 'AI Agent 개발 및 운영 (협의 금액)', amount: null, supply_amount: null, vat_amount: null };
+/** Buyer-typed amount → integer 원 within the limits. Accepts digits with commas/spaces/'원'; throws ServiceOrderError(400) { amount }. */
+export function parseCustomAmount(v, env = process.env) {
+  const { min, max } = customLimits(env);
+  const raw = String(v ?? '').replace(/[,\s원]/g, '');
+  const n = /^\d{1,12}$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(n) || n < min || n > max) {
+    throw new ServiceOrderError(400, 'validation_error', '입력값을 확인해 주세요.', { amount: `결제 금액을 ${won(min)} ~ ${won(max)} 사이로 입력해 주세요.` });
+  }
+  return n;
+}
+export const customProduct = (amount) => ({ ...CUSTOM_PRODUCT, ...VAT_INCLUDED(amount) });
+
+export const productFor = (plan, product = 'agent') => (plan === 'custom' && product === 'agent' ? CUSTOM_PRODUCT : Object.values(SERVICE_PRODUCTS).find((p) => p.plan === plan && p.product === product) || null);
 export const RECURRING_SOON = '월 구독은 준비 중입니다.';
 
 export class ServiceOrderError extends Error {

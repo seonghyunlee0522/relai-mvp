@@ -1,4 +1,5 @@
-/* RELAI 서비스 결제 (/pay/agent). 월 구독 (2026-10-28): card → POST /api/service-pay/subscriptions (billing key + first charge) after a
+/* RELAI 서비스 결제 (/pay/agent). 금액 입력 결제 (2026-11-06): the buyer types the amount; it is sent as `amount` with product
+ * 'agent-custom' and the server re-validates and bounds it (the range shown here is only a convenience check). 월 구독 (2026-10-28): card → POST /api/service-pay/subscriptions (billing key + first charge) after a
  * confirm; the card values are cleared after every attempt and never stored here.
  * Earlier:  The page sends a product key and buyer info; the server decides the amount and returns the
  * NicePay window parameters. 월 구독: while recurring is not open the submit only shows '월 구독은 준비 중입니다.' and calls nothing. */
@@ -6,11 +7,15 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const pay = $('#pay'); const form = $('#sp-form'); const msg = $('#sp-msg'); const submit = $('#sp-submit');
 const SOON = '월 구독은 준비 중입니다.';
+const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 // Checkout opens only when the server says so, per product: 1회 결제 = SERVICE_PAY_ENABLED + provider (data-open), 월 구독 =
 // NicePay recurring (data-open-monthly). The button ships disabled, so the form can never be submitted natively (no GET/POST
 // of buyer or card fields without this script).
 let selected = pay.dataset.selected;
 const isMonthly = () => selected === 'agent-monthly';
+const isCustom = () => selected === 'agent-custom';
+const amountIn = $('#amount');
+const amountOf = () => { const d = amountIn.value.replace(/\D/g, ''); return d ? Number(d) : 0; };
 const isOpen = () => (isMonthly() ? pay.dataset.openMonthly : pay.dataset.open) === '1';
 const closedNote = $('#sp-closed');
 function syncOpen() { submit.disabled = !isOpen(); if (closedNote) closedNote.hidden = isOpen(); }
@@ -18,15 +23,29 @@ syncOpen();
 
 function select(key) {
   selected = key; pay.dataset.selected = key;
-  $$('.sp-card').forEach((c) => { const on = c.dataset.product === key; c.classList.toggle('is-on', on); const b = $('[data-pick]', c); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '선택됨' : (c.dataset.plan === 'monthly' ? '월 구독 선택' : '1회 결제 선택'); });
+  $$('.sp-card').forEach((c) => { const on = c.dataset.product === key; c.classList.toggle('is-on', on); const b = $('[data-pick]', c); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '선택됨' : b.dataset.cta; });
   $$('[data-sum]').forEach((s) => { s.hidden = s.dataset.sum !== key; });
   $('#sp-cardf').hidden = !isMonthly();
-  submit.textContent = !isOpen() ? submit.dataset.labelClosed : isMonthly() ? submit.dataset.labelMonthly : submit.dataset.labelOnce;
+  $('#sp-amountf').hidden = !isCustom();
+  label();
   syncOpen();
   setMsg('');
   const c = $(`.sp-card[data-product="${key}"]`);
   try { history.replaceState(null, '', `/pay/agent?plan=${c.dataset.plan}&product=agent`); } catch { /* ignore */ }
 }
+function label() {
+  submit.textContent = !isOpen() ? submit.dataset.labelClosed : isMonthly() ? submit.dataset.labelMonthly
+    : isCustom() ? (amountOf() ? `${won(amountOf())} 결제하기` : submit.dataset.labelCustom) : submit.dataset.labelOnce;
+}
+function syncAmount() {
+  const n = amountOf(); const supply = Math.round(n / 1.1);
+  $('#sum-custom-total').textContent = n ? won(n) : '-';
+  $('#sum-custom-supply').textContent = n ? won(supply) : '-';
+  $('#sum-custom-vat').textContent = n ? won(n - supply) : '-';
+  if (isCustom()) label();
+}
+amountIn.addEventListener('input', () => { const d = amountIn.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 12); amountIn.value = d ? Number(d).toLocaleString('ko-KR') : ''; syncAmount();
+  const n = amountOf(); if (n >= Number(amountIn.dataset.min) && n <= Number(amountIn.dataset.max)) { $('[data-err="amount"]').textContent = ''; amountIn.setAttribute('aria-invalid', 'false'); } });
 $$('[data-pick]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); select(a.dataset.pick); pay.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 
 function setMsg(text, info = false) { msg.textContent = text; msg.classList.toggle('is-info', info); }
@@ -56,6 +75,10 @@ function localCheck() {
     if (!/^\d{2}$/.test(val('card_pw'))) f.card_pw = '카드 비밀번호 앞 2자리를 입력해 주세요.';
     if (!$('#agree_recurring').checked) f.agree_recurring = '정기결제에 동의해 주세요.';
   }
+  if (isCustom()) {
+    const n = amountOf(); const min = Number(amountIn.dataset.min); const max = Number(amountIn.dataset.max);
+    if (!n || n < min || n > max) f.amount = `결제 금액을 ${won(min)} ~ ${won(max)} 사이로 입력해 주세요.`;
+  }
   if (!$('#agree_terms').checked) f.agree_terms = '이용약관에 동의해 주세요.';
   if (!$('#agree_privacy').checked) f.agree_privacy = '개인정보 수집·이용에 동의해 주세요.';
   if (!$('#agree_payment').checked) f.agree_payment = '결제 진행에 동의해 주세요.';
@@ -77,10 +100,11 @@ form.addEventListener('submit', async (e) => {
   const f = localCheck(); setErrors(f);
   if (Object.keys(f).length) { setMsg('입력값을 확인해 주세요.'); return; }
   if (isMonthly()) return subscribe();
+  if (isCustom() && !window.confirm(`입력한 금액으로 결제할까요?\n\n결제 금액: ${won(amountOf())} (부가세 포함)\n\n담당자와 협의한 금액이 맞는지 확인해 주세요.`)) return;
   busy = true; submit.disabled = true;
   try {
     const r = await fetch('/api/service-pay/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-      body: JSON.stringify({ product: selected, buyer: { name: val('name'), company: val('company'), email: val('email'), phone: val('phone') },
+      body: JSON.stringify({ product: selected, ...(isCustom() ? { amount: amountOf() } : {}), buyer: { name: val('name'), company: val('company'), email: val('email'), phone: val('phone') },
         agree_terms: $('#agree_terms').checked, agree_privacy: $('#agree_privacy').checked, agree_payment: $('#agree_payment').checked }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { setErrors(j.error?.fields || {}); setMsg(j.error?.message || '결제를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.'); return; }
@@ -90,7 +114,6 @@ form.addEventListener('submit', async (e) => {
   finally { busy = false; submit.disabled = !isOpen(); }
 });
 
-const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
 const clearCard = () => ['card_number', 'card_expiry', 'card_id_no', 'card_pw'].forEach((id) => { document.getElementById(id).value = ''; });
 async function subscribe() {
   const amount = Number(document.querySelector('.sp-card[data-product="agent-monthly"] .sp-price b')?.textContent.replace(/\D/g, '') || 0);
