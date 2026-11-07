@@ -17,6 +17,21 @@ export function redactSecrets(text, key = process.env.RESEND_API_KEY) {
   return out;
 }
 
+/**
+ * Resend tags need unique names (a repeated name is a 422 validation_error, which is how every service-pay mail failed:
+ * ['SERVICE_RECEIPT', 'service-pay'] went out as two `type` tags). First tag is `type`, the rest `category`, `category_2`, …;
+ * values keep only the characters Resend accepts (ASCII letters, digits, _ and -).
+ */
+export function resendTags(tags = []) {
+  const clean = (v) => String(v ?? '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 256);
+  const seen = new Set(); const out = [];
+  for (const v of tags.map(clean).filter(Boolean)) {
+    if (seen.has(v)) continue; seen.add(v);
+    const i = out.length; out.push({ name: i === 0 ? 'type' : i === 1 ? 'category' : `category_${i}`, value: v });
+  }
+  return out;
+}
+
 export function resendProvider(cfg, fetchImpl = globalThis.fetch) {
   return {
     name: 'resend',
@@ -25,7 +40,7 @@ export function resendProvider(cfg, fetchImpl = globalThis.fetch) {
       let res; let body = null;
       try {
         res = await fetchImpl('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${cfg.resendApiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: cfg.from, to: [to], ...(cfg.replyTo ? { reply_to: cfg.replyTo } : {}), subject, html, text, tags: tags.map((name) => ({ name: 'type', value: name })) }), signal: ac.signal });
+          body: JSON.stringify({ from: cfg.from, to: [to], ...(cfg.replyTo ? { reply_to: cfg.replyTo } : {}), subject, html, text, tags: resendTags(tags) }), signal: ac.signal });
         body = await res.json().catch(() => null);
       } catch (e) { clearTimeout(t); const timeout = e.name === 'AbortError'; throw new EmailSendError(timeout ? 'timeout' : 'network', timeout ? '메일 서버 응답 시간이 초과되었습니다.' : '메일 서버에 연결할 수 없습니다.', { retryable: true }); }
       clearTimeout(t);

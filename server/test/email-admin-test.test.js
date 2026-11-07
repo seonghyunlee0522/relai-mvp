@@ -211,3 +211,12 @@ test('server-only: nothing under public/ imports server e-mail code or holds a k
     assert.ok(!/re_[A-Za-z0-9_]{12,}/.test(s), `${f} holds a key-shaped string`);
   }
 });
+
+test('resend: tag names are unique (service-pay mails sent two `type` tags → Resend 422)', async () => {
+  const { resendTags } = await import('../email/provider.js');
+  assert.deepEqual(resendTags(['SERVICE_RECEIPT', 'service-pay']), [{ name: 'type', value: 'SERVICE_RECEIPT' }, { name: 'category', value: 'service-pay' }]);
+  assert.deepEqual(resendTags(['A', 'A', 'b c', '']), [{ name: 'type', value: 'A' }, { name: 'category', value: 'b_c' }]);
+  let sent; const f = async (url, init) => { sent = JSON.parse(init.body); return { ok: true, json: async () => ({ id: 'x' }) }; };
+  await resendProvider({ ...emailConfig({ RESEND_API_KEY: FAKE_KEY }), timeoutMs: 1000 }, f).send({ to: 'a@b.co', subject: 's', html: 'h', text: 't', tags: ['SERVICE_RECEIPT', 'service-pay'] });
+  assert.equal(new Set(sent.tags.map((t) => t.name)).size, sent.tags.length);
+});
